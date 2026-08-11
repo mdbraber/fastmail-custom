@@ -36,6 +36,8 @@ Each app target is multiplatform, declaring both iOS and macOS as supported dest
 
 Rejected alternatives: the Userscripts Safari extension (no native bridge, no app identity); a Capacitor/Tauri wrapper (a JS toolchain wrapped around a few hundred lines of Swift); and Mac Catalyst, which would remove the three platform shims below at the cost of an iPad-flavoured window on the Mac.
 
+A Safari Web Extension of this script already exists at `~/src/fastmail-customized/safari-extension`, with an Xcode host app. It remains useful for Safari itself. It cannot serve a Home Screen web app, which is what prompted this project: Safari extensions do not run in Home Screen web apps, so on iOS the script has nowhere to run today.
+
 ## Project layout
 
 ```
@@ -114,28 +116,68 @@ A single asset catalog per target holds both, using platform-specific icon sets.
 
 **`SharePresenter`** — presents `UIActivityViewController` or `NSSharingServicePicker` behind one interface, so `NativeBridge` has no platform branches.
 
-**`ScriptStore`** — resolves the iCloud container via `FileManager.url(forUbiquityContainerIdentifier:)`, calls `startDownloadingUbiquitousItem` for items not yet local, and observes `Documents/` with an `NSMetadataQuery` scoped to `NSMetadataQueryUbiquitousDocumentsScope`. Publishes `ScriptBundle(shared: String?, overlay: String?)`.
+**`ScriptStore`** — a protocol with two implementations behind one publisher of `ScriptBundle(shared: String?, overlay: String?)`. `RepositoryScriptStore` (macOS) watches the repository file with a `DispatchSource` on its directory, which survives the write-and-rename that editors perform on save. `UbiquitousScriptStore` (iOS) resolves the container via `FileManager.url(forUbiquityContainerIdentifier:)`, calls `startDownloadingUbiquitousItem` for items not yet local, and observes `Documents/` with an `NSMetadataQuery`.
 
-**`ScriptInjector`** — builds the `WKUserScript` list in order: bundled `harness.js`, then `userscript.js`, then the profile overlay. All at `.atDocumentStart`, `forMainFrameOnly: true`. On any change it calls `removeAllUserScripts()`, re-adds the list, and reloads the web view.
+**`ScriptPublisher`** — macOS only. Writes the repository content into the iCloud container so iOS receives it. The single direction of flow, repository to container, is what keeps the two stores from fighting.
 
-**`NativeBridge`** — a single `WKScriptMessageHandlerWithReply` registered as `native`. Message body is `["action": String, "payload": [String: Any]]`. Unknown actions and malformed payloads reply with an error string, surfacing in JS as a rejected promise.
+**`ScriptInjector`** — parses the metadata block, then builds one `WKUserScript`: the bundled `harness.js` with the user script and overlay embedded as JSON-encoded string literals. Injected at `.atDocumentStart`, `forMainFrameOnly: true`, into `WKContentWorld.page`. On any change it calls `removeAllUserScripts()`, re-adds, and reloads the web view.
+
+**`NativeBridge`** — a single `WKScriptMessageHandlerWithReply` registered as `native` via `addScriptMessageHandler(_:contentWorld:name:)` against `WKContentWorld.page`, so the page-world script can see it. Message body is `["action": String, "payload": [String: Any]]`. Unknown actions and malformed payloads reply with an error string, surfacing in JS as a rejected promise.
 
 **`NavigationPolicy`** — in `decidePolicyFor`, allows `fastmail.com` and its subdomains; everything else is cancelled and opened in the default browser, via `UIApplication.open` or `NSWorkspace.open`.
 
-## Script pipeline
+## Script source
+
+The script to run is an existing one: `~/src/fastmail-customized/fastmail-inbox-mode.user.js`, which adds a sticky Inbox filter on labels and Inbox-only sidebar badge counts. The repository stays canonical and versioned; the app never becomes the place the script lives.
+
+A symlink from the iCloud container to the repository does not work. iCloud Drive does not sync a symlink as content, and an iOS device has no `~/src/fastmail-customized` to resolve it against. Hard links fail for a different reason: editors that save atomically write a new file and rename over the old one, severing the link on first save.
+
+The source therefore differs per platform:
+
+| Platform | Source | Watched with |
+|---|---|---|
+| macOS | the repository file directly | `DispatchSource` on the containing directory |
+| iOS | the iCloud container | `NSMetadataQuery` |
+
+The macOS app closes the gap by acting as the publisher: on seeing the repository file change, it copies the content into the iCloud container, from which iOS syncs it. This keeps the moving parts to one and requires no launchd agent, git hook, or manual copy step. iOS is a consumer only and never writes.
 
 ```
-iCloud Documents/userscript.js
-  → NSMetadataQuery change
+repo/fastmail-inbox-mode.user.js
+  → macOS: DispatchSource change    iOS: NSMetadataQuery change
   → debounce 300ms
   → reject empty or unreadable content, retain last good copy
-  → removeAllUserScripts() + re-add harness/shared/overlay
+  → parse metadata block
+  → removeAllUserScripts() + re-add bootstrap
   → reload
+  → (macOS only) publish content to the iCloud container
 ```
 
-The debounce and last-good retention exist because the file will be written from a Mac editor while the app is foregrounded; a partially written file must never replace a working script. This matters most on macOS, where the editor and the running app share a disk and the window is visibly reloading as you save. The refresh affordance forces a re-read from disk for when iCloud sync lags.
+The debounce and last-good retention exist because the file is written from an editor while the app is running; a partially written file must never replace a working script. This matters most on macOS, where the editor and the app share a disk and the window visibly reloads as you save. The refresh affordance forces a re-read for when iCloud sync lags.
 
-If the container is unavailable (not signed into iCloud, first launch before download), the site still loads with harness only and the banner explains why.
+When the iCloud container is unavailable on iOS (not signed in, or first launch before download), the site loads with harness only and the banner explains why.
+
+## User script metadata
+
+The file carries a Greasemonkey-style metadata block, which the harness honours rather than ignores:
+
+```
+// @match        https://app.fastmail.com/*
+// @run-at       document-idle
+// @inject-into  context
+// @grant        none
+```
+
+**`@run-at`** is why the user script is not added as its own `WKUserScript`. Only the harness is injected, at `.atDocumentStart`; `ScriptInjector` embeds the user script's text into the harness bootstrap as a JSON-encoded string literal, and the harness evaluates it at the moment the metadata asks for — `document-idle` meaning after the `load` event. Injecting this particular script at document start would run it before `document.body` exists, and its observer setup would throw. Evaluating from the harness also gives the try/catch wrapper and the error reporting for free.
+
+**Content world.** The script requires `window.FastMail` — it reads `FastMail.store`, `FastMail.classes`, `FastMail.router`, and `FastMail.getViewFromNode` to patch Fastmail's own badge drawing, source navigation, and drag handling. That is only reachable from the page content world, which is what `@inject-into context` requests. `WKUserScript` injects into the page world by default, so this works, but it must be explicit and must not be "improved" later by moving to an isolated world.
+
+The message handler is consequently registered with `addScriptMessageHandler(_:contentWorld:name:)` against `WKContentWorld.page`, since a handler registered in a different world is invisible to the script.
+
+The trade-off is that Fastmail's own JavaScript can also see `window.native` and could call `share`. For a personal client against a trusted first-party site this is accepted; it is noted so the decision is deliberate rather than accidental.
+
+**`@grant none`** means the script uses no GM APIs. The GM compatibility shims are therefore dropped from the harness rather than written speculatively; they can be added when a script that needs them appears.
+
+**`@match`** is checked against the loaded URL before evaluating, so a script written for a different site fails loudly rather than silently doing nothing.
 
 ## Harness API
 
@@ -149,9 +191,9 @@ If the container is unavailable (not signed into iCloud, first launch before dow
 - `log(...args)` → Xcode console.
 - `onRoute(cb)` → fires on route change. Implemented by patching `history.pushState` and `history.replaceState`, listening for `popstate`, and running a debounced `MutationObserver` on `document.body`. Necessary because `WKUserScript` runs once per document load and Fastmail is client-routed.
 
-GM compatibility shims, so most Greasy Fork scripts run unmodified: `GM_addStyle`, `GM_setValue`, `GM_getValue`, `GM_deleteValue` over `localStorage` under a namespaced key prefix, and `GM_xmlhttpRequest` over `fetch`.
+User scripts are evaluated by the harness inside a try/catch; a throw is reported to native and shown in the banner rather than failing silently as WebKit would otherwise do. See User script metadata for when evaluation happens.
 
-User scripts are wrapped in a try/catch inside an IIFE; a throw is reported to native and shown in the banner rather than failing silently as WebKit would otherwise do.
+No GM API shims. The target script declares `@grant none` and needs none.
 
 ## Shortcuts
 
@@ -298,7 +340,7 @@ Manual verification uses `isInspectable` and Safari Web Inspector.
 
 - **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app, re-verify the subject selector chain inside `WKWebView` (it was verified in Safari, and Fastmail may serve different markup to a non-Safari user agent), and capture the message actions menu: which container it renders into, that `Show details` identifies it, and whether an `i-share` icon exists in the sprite. Decision gate before further work.
 - **M1** — Package plus two multiplatform targets, profiles, navigation policy, persistent sessions. Both destinations build and run.
-- **M2** — `ScriptStore` and `ScriptInjector`, iCloud container, reload pipeline.
+- **M2** — `ScriptStore` in both forms, `ScriptPublisher`, `ScriptInjector`, metadata parsing, reload pipeline. Ends with the Inbox mode script running unmodified on both platforms.
 - **M3** — `harness.js`: route hooks, GM shims, subject resolution, error reporting.
 - **M4** — `NativeBridge`, `SharePresenter`, and the web view shims.
 - **M5** — App Intents.
@@ -313,3 +355,5 @@ Within each milestone the macOS build is brought up first where the work is plat
 3. Fastmail ships UI changes that break selectors. Inherent to the approach; mitigated by keeping scripts defensive and reloadable without a rebuild.
 4. Fastmail serves different markup or a different layout to the macOS user agent, so one selector chain does not cover both platforms. Checked in M0 on both; if it holds, the chain moves into the per-profile overlay rather than the shared script.
 5. Developing primarily on macOS hides an iOS-only failure. Mitigated by closing each milestone on both platforms rather than at the end.
+6. `window.FastMail` is absent or shaped differently under a `WKWebView` user agent, which would stop the Inbox mode script outright. Checked first in M0, since the whole project is pointless if it fails.
+7. The publish step masks a stale script on iOS: the Mac app must be running for a repository edit to reach the phone. Accepted, and made visible by showing the script's timestamp in the iOS error banner when it is older than the app's launch.
