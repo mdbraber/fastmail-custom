@@ -9,9 +9,18 @@ public enum ScriptInjector {
         ]
         guard matches(bundle.metadata.matches, url: url) else { return scripts }
         let time = injectionTime(for: bundle.metadata.runAt)
-        scripts.append(WKUserScript(source: guarded(bundle.userScript), injectionTime: time, forMainFrameOnly: true))
+        let patterns = bundle.metadata.matches
+        scripts.append(WKUserScript(
+            source: guarded(bundle.userScript, patterns: patterns, label: "userscript"),
+            injectionTime: time,
+            forMainFrameOnly: true
+        ))
         if let overlay = bundle.overlay {
-            scripts.append(WKUserScript(source: guarded(overlay), injectionTime: time, forMainFrameOnly: true))
+            scripts.append(WKUserScript(
+                source: guarded(overlay, patterns: patterns, label: "overlay"),
+                injectionTime: time,
+                forMainFrameOnly: true
+            ))
         }
         return scripts
     }
@@ -22,7 +31,7 @@ public enum ScriptInjector {
 
     static func matches(_ patterns: [String], url: URL) -> Bool {
         guard !patterns.isEmpty else { return true }
-        let href = url.absoluteString
+        let href = normalizedHref(url)
         return patterns.contains { pattern in
             let escaped = NSRegularExpression.escapedPattern(for: pattern)
                 .replacingOccurrences(of: "\\*", with: ".*")
@@ -30,7 +39,48 @@ public enum ScriptInjector {
         }
     }
 
-    static func guarded(_ source: String) -> String {
-        "try {\n" + source + "\n} catch (error) {\n  window.__fmshell && window.__fmshell.report(error);\n}"
+    static func normalizedHref(_ url: URL) -> String {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url.absoluteString
+        }
+        components.host = components.host?.lowercased()
+        if components.path.isEmpty {
+            components.path = "/"
+        }
+        return components.url?.absoluteString ?? url.absoluteString
+    }
+
+    static func guarded(_ source: String, patterns: [String], label: String) -> String {
+        let patternsLiteral = jsonLiteral(patterns) ?? "[]"
+        return #"""
+        var __fmshellPatterns = \#(patternsLiteral);
+        if (!__fmshellPatterns.length || __fmshellPatterns.some(function (pattern) {
+        var escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+        return new RegExp('^' + escaped + '$').test(location.href);
+        })) {
+        try {\#(source)
+        } catch (error) {
+        var reported = {
+        message: '\#(label): ' + (error && error.message ? error.message : String(error)),
+        stack: error && error.stack ? error.stack : ''
+        };
+        if (window.__fmshell && window.__fmshell.report) {
+        window.__fmshell.report(reported);
+        } else {
+        console.error(reported.message, error);
+        }
+        }
+        }
+        """#
+    }
+
+    static func jsonLiteral(_ value: Any) -> String? {
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]),
+            let text = String(data: data, encoding: .utf8)
+        else {
+            return nil
+        }
+        return text
     }
 }

@@ -36,7 +36,7 @@
 | `.../UserScriptMetadata.swift` | Parsed representation of a user script metadata block |
 | `.../MetadataParser.swift` | Parses `==UserScript==` blocks |
 | `.../ScriptStore.swift` | Loads harness, user script, and overlay from a resource loader |
-| `.../ScriptInjector.swift` | Assembles the bootstrap JavaScript source |
+| `.../ScriptInjector.swift` | Builds the harness/user-script/overlay `WKUserScript`s: `@match` gate, `@run-at` mapping, per-document match re-check, try/catch guard |
 | `.../NavigationPolicy.swift` | Decides allow / open externally / download |
 | `.../NativeBridge.swift` | `WKScriptMessageHandlerWithReply` for `log` and `error` |
 | `.../WebCoordinator.swift` | `WKNavigationDelegate` and `WKUIDelegate` |

@@ -178,7 +178,7 @@ repo/fastmail-inbox-mode.user.js
   → build phase copies into each app bundle
   → read from Bundle at launch
   → parse metadata block
-  → build bootstrap, inject at document start
+  → build WKUserScripts (harness, user script, overlay), inject per @run-at
 ```
 
 This was deliberately chosen over live reloading from iCloud or a watched repository file. Those were specified earlier in this design and removed. What they bought was editing the script without a rebuild; what they cost was an iCloud container and entitlement, `NSMetadataQuery` and `DispatchSource` watchers, debounce and last-good-copy handling for partially written files, a publish path from macOS to iOS, and a class of failure where the running script is not the one in the repository. On macOS a rebuild is seconds, and the script is mature rather than under active development.
@@ -202,7 +202,9 @@ The file carries a Greasemonkey-style metadata block, which the harness honours 
 // @grant        none
 ```
 
-**`@run-at`** is why the user script is not added as its own `WKUserScript`. Only the harness is injected, at `.atDocumentStart`; `ScriptInjector` embeds the user script's text into the harness bootstrap as a JSON-encoded string literal, and the harness evaluates it at the moment the metadata asks for — `document-idle` meaning after the `load` event. Injecting this particular script at document start would run it before `document.body` exists, and its observer setup would throw. Evaluating from the harness also gives the try/catch wrapper and the error reporting for free.
+**`@run-at`** decides the injection time WebKit gives the user script's own `WKUserScript`, not just the harness's. The harness is always injected at `.atDocumentStart`; `ScriptInjector` maps the metadata's `@run-at` to a second `WKUserScriptInjectionTime` for the user script and overlay: `document-start` to `.atDocumentStart`, `document-end` and `document-idle` both to `.atDocumentEnd`, since WebKit offers no later injection point. Fastmail's script self-defers past that through its own `isReady()` check and `MutationObserver`, so it still only starts once the page is actually ready.
+
+**`@match`** is checked twice. `ScriptInjector` evaluates it once in Swift, against the URL the web view is being configured for, before the user script and overlay are handed to WebKit at all — a non-matching configuration yields the harness alone. Because a `WKWebView`'s `WKUserScript`s persist across every subsequent navigation, each injected script also re-checks `location.href` against the same pattern list inline, at the top of its own source, and no-ops if the document it actually landed on doesn't match. Each injected script is wrapped in its own local try/catch that reports through `window.__fmshell.report()`, because WebKit mutes an uncaught throw from an injected `WKUserScript` to `"Script error."` with an empty stack — the same treatment as a cross-origin script — so a bare `window.onerror` listener in the harness cannot see it.
 
 **Content world.** The script requires `window.FastMail` — it reads `FastMail.store`, `FastMail.classes`, `FastMail.router`, and `FastMail.getViewFromNode` to patch Fastmail's own badge drawing, source navigation, and drag handling. That is only reachable from the page content world, which is what `@inject-into context` requests. `WKUserScript` injects into the page world by default, so this works, but it must be explicit and must not be "improved" later by moving to an isolated world.
 
@@ -211,8 +213,6 @@ The message handler is consequently registered with `addScriptMessageHandler(_:c
 The trade-off is that Fastmail's own JavaScript can also see `window.native` and could call `share`. For a personal client against a trusted first-party site this is accepted; it is noted so the decision is deliberate rather than accidental.
 
 **`@grant none`** means the script uses no GM APIs. The GM compatibility shims are therefore dropped from the harness rather than written speculatively; they can be added when a script that needs them appears.
-
-**`@match`** is checked against the loaded URL before evaluating, so a script written for a different site fails loudly rather than silently doing nothing.
 
 ## Harness API
 
@@ -631,7 +631,8 @@ A count of zero clears the badge rather than displaying `0`. The badge deliberat
 |---|---|
 | Script missing from bundle | Cannot occur; the build phase fails first |
 | Metadata block unparseable | Build-time check in the copy phase, so it fails before shipping |
-| `@match` does not match the loaded URL | Script not evaluated; reported to the banner |
+| `@match` does not match the configured URL | Script not injected; reported to the banner |
+| `@match` matches at configuration time but not the loaded document | Script no-ops for that document; logged, not banner |
 | User script throws | Caught in harness, reported to native, shown in banner |
 | Unknown or malformed bridge action | Rejected promise with a descriptive message |
 | Network failure | Retry view replacing the WebKit error page |

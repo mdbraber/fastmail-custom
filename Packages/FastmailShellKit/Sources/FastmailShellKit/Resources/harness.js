@@ -81,6 +81,10 @@
     };
 
     window.addEventListener('error', function (event) {
+        if (!event.error && event.message === 'Script error.') {
+            report('a script failed but WebKit suppressed the details; check Web Inspector');
+            return;
+        }
         report(event.error || event.message);
     });
     window.addEventListener('unhandledrejection', function (event) {

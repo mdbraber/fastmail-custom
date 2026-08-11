@@ -30,7 +30,11 @@ final class HarnessTests: XCTestCase {
         UserScriptMetadata(name: "T", matches: matches, runAt: runAt, grants: ["none"])
     }
 
-    private func makeWebView(userScript: String, metadata: UserScriptMetadata) throws -> WKWebView {
+    private func makeWebView(
+        userScript: String,
+        metadata: UserScriptMetadata,
+        configURL: URL? = nil
+    ) throws -> WKWebView {
         let harnessURL = Bundle(for: HarnessTests.self).url(forResource: "harness", withExtension: "js")!
         let harness = try String(contentsOf: harnessURL, encoding: .utf8)
         let bundle = ScriptBundle(
@@ -47,7 +51,7 @@ final class HarnessTests: XCTestCase {
             contentWorld: .page,
             name: "native"
         )
-        for script in try ScriptInjector.userScripts(from: bundle, url: Self.fixtureURL) {
+        for script in try ScriptInjector.userScripts(from: bundle, url: configURL ?? Self.fixtureURL) {
             configuration.userContentController.addUserScript(script)
         }
         return WKWebView(frame: .zero, configuration: configuration)
@@ -92,7 +96,7 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(native, "function")
     }
 
-    func testDocumentIdleScriptRunsAfterLoadNotAtStart() async throws {
+    func testDocumentIdleScriptRunsAtDocumentEndTiming() async throws {
         let script = "window.__readyStateWhenRun = document.readyState;"
         webView = try makeWebView(userScript: script, metadata: Self.meta())
         try await load(webView)
@@ -141,6 +145,18 @@ final class HarnessTests: XCTestCase {
             metadata: Self.meta(matches: ["https://example.com/*"])
         )
         XCTAssertEqual(webView.configuration.userContentController.userScripts.count, 1)
+    }
+
+    func testPerDocumentMatchGateBlocksExecutionWhenLocationDiverges() async throws {
+        webView = try makeWebView(
+            userScript: "window.__ranAnyway = true;",
+            metadata: Self.meta(matches: ["https://app.fastmail.com/*"]),
+            configURL: URL(string: "https://app.fastmail.com/")!
+        )
+        XCTAssertEqual(webView.configuration.userContentController.userScripts.count, 2)
+        try await load(webView)
+        let ranAnyway = try await evaluate(webView, "window.__ranAnyway")
+        XCTAssertNil(ranAnyway)
     }
 
     func testDocumentStartScriptRunsWhileDocumentIsLoading() async throws {

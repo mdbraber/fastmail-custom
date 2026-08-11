@@ -42,7 +42,11 @@ public struct WebContainer {
                 loader: loader,
                 overlayName: profile.overlayScriptName
             ).load()
-            for script in try ScriptInjector.userScripts(from: scripts, url: profile.startURL) {
+            let userScripts = try ScriptInjector.userScripts(from: scripts, url: profile.startURL)
+            if userScripts.count == 1 {
+                model.show("User script @match does not cover \(profile.startURL.absoluteString)")
+            }
+            for script in userScripts {
                 configuration.userContentController.addUserScript(script)
             }
         } catch {

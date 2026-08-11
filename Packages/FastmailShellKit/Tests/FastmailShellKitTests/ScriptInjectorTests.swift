@@ -64,3 +64,24 @@ private let fastmail = URL(string: "https://app.fastmail.com/mail/Inbox")!
     let scripts = try ScriptInjector.userScripts(from: bundle(overlay: "OVERLAY"), url: fastmail)
     #expect(scripts.allSatisfy { $0.isForMainFrameOnly })
 }
+
+@Test @MainActor func guardedSourceCarriesLabelAndPatternsForTheRuntimeGate() throws {
+    let scripts = try ScriptInjector.userScripts(from: bundle(overlay: "OVERLAY"), url: fastmail)
+    #expect(scripts[1].source.contains("userscript: "))
+    #expect(scripts[1].source.contains("app.fastmail.com"))
+    #expect(scripts[2].source.contains("overlay: "))
+}
+
+@Test func matchesNormalizesEmptyPathToRoot() {
+    #expect(ScriptInjector.matches(["https://app.fastmail.com/*"], url: URL(string: "https://app.fastmail.com")!))
+    #expect(ScriptInjector.matches(["https://app.fastmail.com/*"], url: URL(string: "https://app.fastmail.com?u=1")!))
+}
+
+@Test func matchesNormalizesHostCase() {
+    #expect(ScriptInjector.matches(["https://app.fastmail.com/*"], url: URL(string: "https://APP.FASTMAIL.COM/")!))
+}
+
+@Test func matchesCoversBothProfileStartURLs() {
+    #expect(ScriptInjector.matches(["https://app.fastmail.com/*"], url: Profile.personal(accountID: nil).startURL))
+    #expect(ScriptInjector.matches(["https://app.fastmail.com/*"], url: Profile.work(accountID: nil).startURL))
+}
