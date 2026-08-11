@@ -2408,3 +2408,183 @@ Deliberately **not** in this plan, and belonging to Plans 2 and 3: subject resol
 **Placeholder scan.** No TBDs. Every code step carries the actual source. Task 1 is a spike whose deliverable is a findings document with a named gate condition rather than tests, which is intentional.
 
 **Type consistency.** `ScriptBundle(harness:userScript:overlay:metadata:)` is constructed identically in Tasks 5, 6, and 8. `UserScriptMetadata(name:matches:runAt:grants:)` matches across Tasks 4, 6, and 8. `NavigationDecision` cases `allow`/`openExternally`/`download` are used consistently in Tasks 7 and 9. `ShellModel.banner` is declared in Task 9's `WebContainer.swift` and consumed by `WebCoordinator` and `AppShell` in the same task. `Profile.accountID(from:)` defined in Task 3, used in Task 10.
+
+---
+
+### Task 11: Inject the user script directly instead of evaluating it
+
+Found at first launch: the app loads, the harness installs, and the error banner reports the user script blocked. Fastmail serves
+
+```
+script-src 'self' https://hcaptcha.com https://*.hcaptcha.com 'sha256-…'
+```
+
+with no `'unsafe-eval'`, so the harness's `(0, eval)(source)` cannot run. The harness itself runs fine and is what reported the failure, which establishes the important fact: **`WKUserScript` injection bypasses page CSP; only `eval` inside it does not.**
+
+The fix is to stop evaluating and let WebKit inject the user script the same way it injects the harness. This deletes the run-at scheduling, the `@match` gate, and the eval from JavaScript.
+
+**Files:**
+- Modify: `Packages/FastmailShellKit/Sources/FastmailShellKit/ScriptInjector.swift`
+- Modify: `Packages/FastmailShellKit/Sources/FastmailShellKit/Resources/harness.js`
+- Modify: `Packages/FastmailShellKit/Sources/FastmailShellKit/WebContainer.swift`
+- Modify: `Packages/FastmailShellKit/Tests/FastmailShellKitTests/ScriptInjectorTests.swift`
+- Modify: `Tests/IntegrationTests/HarnessTests.swift`
+
+**Interfaces:**
+- Consumes: `ScriptBundle`, `UserScriptMetadata`
+- Produces: `ScriptInjector.userScripts(from: ScriptBundle, url: URL) throws -> [WKUserScript]`
+
+- [ ] **Step 1: Replace the bootstrap tests**
+
+`bootstrap(from:)` and its JSON-literal encoding go away entirely — nothing is embedded in a string any more, so the hostile-input and encoding tests have nothing left to protect. Replace `ScriptInjectorTests.swift` with tests for the new shape:
+
+```swift
+import Testing
+import WebKit
+@testable import FastmailShellKit
+
+private func bundle(
+    userScript: String = "BODY",
+    overlay: String? = nil,
+    runAt: UserScriptMetadata.RunAt = .documentIdle,
+    matches: [String] = ["https://app.fastmail.com/*"]
+) -> ScriptBundle {
+    ScriptBundle(
+        harness: "HARNESS",
+        userScript: userScript,
+        overlay: overlay,
+        metadata: UserScriptMetadata(name: "T", matches: matches, runAt: runAt, grants: ["none"])
+    )
+}
+
+private let fastmail = URL(string: "https://app.fastmail.com/mail/Inbox")!
+
+@Test func harnessIsAlwaysFirstAndAtDocumentStart() throws {
+    let scripts = try ScriptInjector.userScripts(from: bundle(), url: fastmail)
+    #expect(scripts.first?.source == "HARNESS")
+    #expect(scripts.first?.injectionTime == .atDocumentStart)
+}
+
+@Test func userScriptIsInjectedVerbatimNotEmbedded() throws {
+    let source = "var s = \"a'b\\\"c\";\nif (a </script> b) {}\n\u{2028} 🙂"
+    let scripts = try ScriptInjector.userScripts(from: bundle(userScript: source), url: fastmail)
+    #expect(scripts.contains { $0.source == source })
+}
+
+@Test func documentIdleAndDocumentEndBothMapToDocumentEnd() throws {
+    for runAt in [UserScriptMetadata.RunAt.documentIdle, .documentEnd] {
+        let scripts = try ScriptInjector.userScripts(from: bundle(runAt: runAt), url: fastmail)
+        #expect(scripts.last?.injectionTime == .atDocumentEnd)
+    }
+}
+
+@Test func documentStartMapsToDocumentStart() throws {
+    let scripts = try ScriptInjector.userScripts(from: bundle(runAt: .documentStart), url: fastmail)
+    #expect(scripts.last?.injectionTime == .atDocumentStart)
+}
+
+@Test func overlayFollowsTheUserScript() throws {
+    let scripts = try ScriptInjector.userScripts(from: bundle(overlay: "OVERLAY"), url: fastmail)
+    #expect(scripts.map(\.source) == ["HARNESS", "BODY", "OVERLAY"])
+}
+
+@Test func nonMatchingURLYieldsHarnessOnly() throws {
+    let scripts = try ScriptInjector.userScripts(from: bundle(), url: URL(string: "https://example.com/")!)
+    #expect(scripts.map(\.source) == ["HARNESS"])
+}
+
+@Test func emptyMatchListMatchesEverything() throws {
+    let scripts = try ScriptInjector.userScripts(from: bundle(matches: []), url: URL(string: "https://example.com/")!)
+    #expect(scripts.count == 2)
+}
+
+@Test func allScriptsAreMainFrameOnly() throws {
+    let scripts = try ScriptInjector.userScripts(from: bundle(overlay: "OVERLAY"), url: fastmail)
+    #expect(scripts.allSatisfy(\.isForMainFrameOnly))
+}
+```
+
+`nonMatchingURLYieldsHarnessOnly` is the replacement for the JavaScript `@match` gate, and it is stronger: the script is never handed to WebKit at all rather than being handed over and asked not to run.
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: FAIL, no member `userScripts(from:url:)`.
+
+- [ ] **Step 3: Rewrite ScriptInjector**
+
+Replace the whole file:
+
+```swift
+import Foundation
+import WebKit
+
+public enum ScriptInjector {
+    public static func userScripts(from bundle: ScriptBundle, url: URL) throws -> [WKUserScript] {
+        var scripts = [
+            WKUserScript(source: bundle.harness, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        ]
+        guard matches(bundle.metadata.matches, url: url) else { return scripts }
+        let time = injectionTime(for: bundle.metadata.runAt)
+        scripts.append(WKUserScript(source: bundle.userScript, injectionTime: time, forMainFrameOnly: true))
+        if let overlay = bundle.overlay {
+            scripts.append(WKUserScript(source: overlay, injectionTime: time, forMainFrameOnly: true))
+        }
+        return scripts
+    }
+
+    static func injectionTime(for runAt: UserScriptMetadata.RunAt) -> WKUserScriptInjectionTime {
+        runAt == .documentStart ? .atDocumentStart : .atDocumentEnd
+    }
+
+    static func matches(_ patterns: [String], url: URL) -> Bool {
+        guard !patterns.isEmpty else { return true }
+        let href = url.absoluteString
+        return patterns.contains { pattern in
+            let escaped = NSRegularExpression.escapedPattern(for: pattern)
+                .replacingOccurrences(of: "\\*", with: ".*")
+            return href.range(of: "^" + escaped + "$", options: .regularExpression) != nil
+        }
+    }
+}
+```
+
+`document-idle` maps to `.atDocumentEnd` because WebKit offers no later injection point. The Inbox mode script self-defers through its own `isReady()` and `MutationObserver`, so it still starts only once Fastmail is ready.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: PASS.
+
+- [ ] **Step 5: Strip the dead machinery from harness.js**
+
+Delete `boot`, `runWhenReady`, `matchesAny`, and `evaluate` — every one of them exists only to serve the eval path. Keep `post`, `report`, `notifyRoute`, `installRouteHooks`, the `window.native` surface, and the two global listeners, and call `installRouteHooks()` directly from the IIFE. The global `error` and `unhandledrejection` listeners are what now report a failing user script, since an uncaught throw in an injected script reaches `window.onerror` exactly as it would from a page script.
+
+Leave `window.__fmshell` in place exposing `onRoute` and `report`; the integration tests and any future user script use it.
+
+- [ ] **Step 6: Update WebContainer**
+
+Replace the single `addUserScript` call with iteration over the new list, passing the profile's start URL:
+
+```swift
+for script in try ScriptInjector.userScripts(from: scripts, url: profile.startURL) {
+    configuration.userContentController.addUserScript(script)
+}
+```
+
+- [ ] **Step 7: Update the harness integration tests**
+
+`HarnessTests` builds its own bootstrap through `ScriptInjector.bootstrap`, which no longer exists. Rework `makeWebView` to add the scripts from `userScripts(from:url:)`, using the fixture's own URL so the match test is meaningful. The tests asserting eval-time behaviour — `testDocumentIdleScriptRunsAfterLoadNotAtStart`, `testDocumentStartScriptRunsWhileDocumentIsLoading`, `testDocumentEndScriptNeverRunsBeforeDOMContentLoaded` — now assert WebKit's injection timing rather than the harness's scheduling, which is what they should have been testing all along. `testMatchMismatchPreventsEvaluation` becomes an assertion that the script was never added.
+
+Keep `testThrowingUserScriptIsReportedNotSilent`: it must still pass, now via `window.onerror` rather than the harness catch block. If it does not, stop and report — that would mean losing error visibility, which is what surfaced this defect in the first place.
+
+- [ ] **Step 8: Verify against the real site**
+
+Build and launch the Mac app, log in, and confirm in Web Inspector that `window.mdbraberInboxMode` is an object and no CSP error appears in the console. This is the only proof that matters.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add Packages Tests
+git commit -m "fix: inject the user script directly, since CSP forbids eval"
+```
