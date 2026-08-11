@@ -118,7 +118,9 @@ A single asset catalog per target holds both, using platform-specific icon sets.
 
 **`ScriptStore`** — a protocol with two implementations behind one publisher of `ScriptBundle(shared: String?, overlay: String?)`. `RepositoryScriptStore` (macOS) watches the repository file with a `DispatchSource` on its directory, which survives the write-and-rename that editors perform on save. `UbiquitousScriptStore` (iOS) resolves the container via `FileManager.url(forUbiquityContainerIdentifier:)`, calls `startDownloadingUbiquitousItem` for items not yet local, and observes `Documents/` with an `NSMetadataQuery`.
 
-**`ScriptPublisher`** — macOS only. Writes the repository content into the iCloud container so iOS receives it. The single direction of flow, repository to container, is what keeps the two stores from fighting.
+**`ScriptPublisher`** — macOS only. Writes the repository content into the iCloud container so iOS receives edits between builds. The single direction of flow, repository to container, is what keeps the two stores from fighting.
+
+**`BundledScriptStore`** — reads the copy placed in the app bundle by the build phase. The fallback under both platform stores, and the reason no state exists in which the app has no script.
 
 **`ScriptInjector`** — parses the metadata block, then builds one `WKUserScript`: the bundled `harness.js` with the user script and overlay embedded as JSON-encoded string literals. Injected at `.atDocumentStart`, `forMainFrameOnly: true`, into `WKContentWorld.page`. On any change it calls `removeAllUserScripts()`, re-adds, and reloads the web view.
 
@@ -132,29 +134,40 @@ The script to run is an existing one: `~/src/fastmail-customized/fastmail-inbox-
 
 A symlink from the iCloud container to the repository does not work. iCloud Drive does not sync a symlink as content, and an iOS device has no `~/src/fastmail-customized` to resolve it against. Hard links fail for a different reason: editors that save atomically write a new file and rename over the old one, severing the link on first save.
 
-The source therefore differs per platform:
+Every build therefore embeds the current script, and the live sources layer on top of it.
 
-| Platform | Source | Watched with |
+**Build-phase copy.** A `Copy User Script` run-script phase copies the repository file into the app bundle's resources on every build of every target. The source path comes from a `USERSCRIPT_PATH` build setting in an xcconfig rather than being hardcoded in the phase. The phase declares its input and output files so incremental builds behave, and it fails the build when the source is missing — an app silently shipping a stale script is the failure worth preventing.
+
+This makes the bundled copy a guaranteed-current baseline. There is no state in which the app has no script, so iCloud availability, sync lag, and whether the Mac app has run recently all stop being correctness concerns and become convenience ones.
+
+**Runtime override.** On top of the baseline, each platform watches a live source so edits land without a rebuild:
+
+| Platform | Live source | Watched with |
 |---|---|---|
 | macOS | the repository file directly | `DispatchSource` on the containing directory |
 | iOS | the iCloud container | `NSMetadataQuery` |
 
-The macOS app closes the gap by acting as the publisher: on seeing the repository file change, it copies the content into the iCloud container, from which iOS syncs it. This keeps the moving parts to one and requires no launchd agent, git hook, or manual copy step. iOS is a consumer only and never writes.
+Resolution order is live source, then bundled copy. The live source wins when it is non-empty and its metadata block parses; otherwise the bundle is used. On macOS the two are the same file, so they only diverge if a build is older than the working tree.
+
+The macOS app additionally publishes the repository content into the iCloud container when it changes, so iOS picks up edits between builds. This is now a convenience path rather than the only path.
 
 ```
 repo/fastmail-inbox-mode.user.js
-  → macOS: DispatchSource change    iOS: NSMetadataQuery change
+  → build phase copies into each app bundle
+  → at runtime: macOS DispatchSource / iOS NSMetadataQuery, else bundled copy
   → debounce 300ms
-  → reject empty or unreadable content, retain last good copy
+  → reject empty or unparseable content, retain last good copy
   → parse metadata block
   → removeAllUserScripts() + re-add bootstrap
   → reload
   → (macOS only) publish content to the iCloud container
 ```
 
+**macOS sandboxing.** Reading the repository directly is outside an app container, so it requires either the App Sandbox switched off or a security-scoped bookmark from a user-selected file. Distribution is local and signed with a Developer ID, never the App Store, so the sandbox is switched off and the complexity of bookmarks avoided. Recorded here because it is the kind of decision that looks arbitrary later.
+
 The debounce and last-good retention exist because the file is written from an editor while the app is running; a partially written file must never replace a working script. This matters most on macOS, where the editor and the app share a disk and the window visibly reloads as you save. The refresh affordance forces a re-read for when iCloud sync lags.
 
-When the iCloud container is unavailable on iOS (not signed in, or first launch before download), the site loads with harness only and the banner explains why.
+When the iCloud container is unavailable on iOS, the bundled copy is used and nothing is reported. That is a normal state, not an error.
 
 ## User script metadata
 
@@ -338,7 +351,7 @@ Manual verification uses `isInspectable` and Safari Web Inspector.
 
 ## Milestones
 
-- **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app, re-verify the subject selector chain inside `WKWebView` (it was verified in Safari, and Fastmail may serve different markup to a non-Safari user agent), and capture the message actions menu: which container it renders into, that `Show details` identifies it, and whether an `i-share` icon exists in the sprite. Decision gate before further work.
+- **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app, re-verify the subject selector chain inside `WKWebView` (it was verified in Safari, and Fastmail may serve different markup to a non-Safari user agent), and capture the message actions menu: which container it renders into, that `Show details` identifies it, and whether an `i-share` icon exists in the sprite. `window.FastMail` is already confirmed present under a `WKWebView` user agent and is not re-checked. Decision gate before further work.
 - **M1** — Package plus two multiplatform targets, profiles, navigation policy, persistent sessions. Both destinations build and run.
 - **M2** — `ScriptStore` in both forms, `ScriptPublisher`, `ScriptInjector`, metadata parsing, reload pipeline. Ends with the Inbox mode script running unmodified on both platforms.
 - **M3** — `harness.js`: route hooks, GM shims, subject resolution, error reporting.
@@ -355,5 +368,5 @@ Within each milestone the macOS build is brought up first where the work is plat
 3. Fastmail ships UI changes that break selectors. Inherent to the approach; mitigated by keeping scripts defensive and reloadable without a rebuild.
 4. Fastmail serves different markup or a different layout to the macOS user agent, so one selector chain does not cover both platforms. Checked in M0 on both; if it holds, the chain moves into the per-profile overlay rather than the shared script.
 5. Developing primarily on macOS hides an iOS-only failure. Mitigated by closing each milestone on both platforms rather than at the end.
-6. `window.FastMail` is absent or shaped differently under a `WKWebView` user agent, which would stop the Inbox mode script outright. Checked first in M0, since the whole project is pointless if it fails.
-7. The publish step masks a stale script on iOS: the Mac app must be running for a repository edit to reach the phone. Accepted, and made visible by showing the script's timestamp in the iOS error banner when it is older than the app's launch.
+6. Retired. `window.FastMail` was confirmed present under a `WKWebView` user agent on 2026-08-11, so the Inbox mode script's central dependency holds.
+7. Retired. The build-phase copy means a build always carries the current script, so a stale script on iOS is bounded by install time rather than by whether the Mac app has run.
