@@ -105,7 +105,7 @@ Everything except these three is platform-agnostic — `ScriptStore`, `ScriptInj
 | | Personal | Work |
 |---|---|---|
 | Bundle ID | `com.mdbraber.fastmail.personal` | `com.mdbraber.fastmail.work` |
-| Display name | Fastmail | Fastmail Work |
+| Display name | mdbraber.com | nexthealth.nl |
 | Overlay script | `userscript.personal.js` | `userscript.work.js` |
 | URL scheme | `fastmail-personal` | `fastmail-work` |
 | Account (`u=`) | from the environment, see Account identifiers | from the environment |

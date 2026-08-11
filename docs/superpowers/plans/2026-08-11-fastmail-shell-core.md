@@ -349,7 +349,7 @@ Create `Apps/Personal/Info.plist`:
 </plist>
 ```
 
-Create `Apps/Work/Info.plist` identically, but with `CFBundleDisplayName` of `Fastmail Work` and `FMAccountID` of `$(WORK_ACCOUNT_ID)`.
+Create `Apps/Work/Info.plist` identically, but with `CFBundleDisplayName` of `nexthealth.nl` and `FMAccountID` of `$(WORK_ACCOUNT_ID)`.
 
 `UILaunchScreen` and `CFBundleIconName` are both required because `GENERATE_INFOPLIST_FILE` is `NO`: without the first, an iOS app runs letterboxed at a smaller size; without the second, the asset-catalog icon is not picked up.
 
@@ -428,7 +428,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.personal
-        PRODUCT_NAME: Fastmail
+        PRODUCT_NAME: mdbraber.com
         INFOPLIST_FILE: Apps/Personal/Info.plist
 
   Work:
@@ -438,7 +438,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.work
-        PRODUCT_NAME: Fastmail Work
+        PRODUCT_NAME: nexthealth.nl
         INFOPLIST_FILE: Apps/Work/Info.plist
 
 aggregateTargets:
@@ -485,17 +485,17 @@ build-macos: generate
 	xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release build
 
 install-macos: build-macos
-	rm -rf "/Applications/Fastmail.app" "/Applications/Fastmail Work.app"
-	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail.app" /Applications/
-	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail Work.app" /Applications/
+	rm -rf "/Applications/mdbraber.com.app" "/Applications/nexthealth.nl.app"
+	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/mdbraber.com.app" /Applications/
+	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/nexthealth.nl.app" /Applications/
 
 build-ios: generate
 	xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release build
 	xcodebuild -project $(PROJECT) -scheme Work -destination 'generic/platform=iOS' -configuration Release build
 
 install-ios: build-ios
-	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail.app"
-	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail Work.app"
+	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/mdbraber.com.app"
+	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/nexthealth.nl.app"
 
 install: install-macos install-ios
 
@@ -522,7 +522,7 @@ Expected: `** BUILD SUCCEEDED **` twice.
 - [ ] **Step 13: Verify the build phase actually copied the script**
 
 ```bash
-find ~/Library/Developer/Xcode/DerivedData -name userscript.js -path '*Fastmail.app*' | head -1 | xargs head -3
+find ~/Library/Developer/Xcode/DerivedData -name userscript.js -path '*mdbraber.com.app*' | head -1 | xargs head -3
 ```
 
 Expected: the first lines of the Inbox mode user script, starting `// ==UserScript==`.
@@ -566,7 +566,7 @@ import Foundation
 @Test func personalProfileHasExpectedIdentity() {
     let profile = Profile.personal(accountID: nil)
     #expect(profile.id == "personal")
-    #expect(profile.displayName == "Fastmail")
+    #expect(profile.displayName == "mdbraber.com")
     #expect(profile.urlScheme == "fastmail-personal")
     #expect(profile.overlayScriptName == "userscript.personal.js")
     #expect(profile.startURL.absoluteString == "https://app.fastmail.com")
@@ -575,7 +575,7 @@ import Foundation
 @Test func workProfileHasExpectedIdentity() {
     let profile = Profile.work(accountID: nil)
     #expect(profile.id == "work")
-    #expect(profile.displayName == "Fastmail Work")
+    #expect(profile.displayName == "nexthealth.nl")
     #expect(profile.urlScheme == "fastmail-work")
     #expect(profile.overlayScriptName == "userscript.work.js")
 }
@@ -635,7 +635,7 @@ extension Profile {
     public static func personal(accountID: String?) -> Profile {
         Profile(
             id: "personal",
-            displayName: "Fastmail",
+            displayName: "mdbraber.com",
             startURL: URL(string: "https://app.fastmail.com")!,
             overlayScriptName: "userscript.personal.js",
             urlScheme: "fastmail-personal",
@@ -646,7 +646,7 @@ extension Profile {
     public static func work(accountID: String?) -> Profile {
         Profile(
             id: "work",
-            displayName: "Fastmail Work",
+            displayName: "nexthealth.nl",
             startURL: URL(string: "https://app.fastmail.com")!,
             overlayScriptName: "userscript.work.js",
             urlScheme: "fastmail-work",
@@ -2175,6 +2175,20 @@ git commit -m "feat: add web container, navigation coordinator, and error banner
 - Consumes: `AppShell`, `Profile`
 - Produces: four installable products
 
+- [ ] **Step 0: Rename the apps**
+
+The products are named for the accounts they hold, not for Fastmail. Three places shipped with the old names and must be updated together:
+
+1. `Packages/FastmailShellKit/Sources/FastmailShellKit/Profile.swift` — `displayName` becomes `mdbraber.com` for personal and `nexthealth.nl` for work.
+2. `Packages/FastmailShellKit/Tests/FastmailShellKitTests/ProfileTests.swift` — the two `displayName` assertions.
+3. `Apps/Personal/Info.plist` and `Apps/Work/Info.plist` — `CFBundleDisplayName`.
+
+`project.yml` already carries the matching `PRODUCT_NAME` values, so the built bundles become `mdbraber.com.app` and `nexthealth.nl.app`.
+
+Run `cd Packages/FastmailShellKit && swift test` and confirm the profile tests pass with the new names before continuing.
+
+This collides by name with the existing Safari web apps in `~/Applications`, which are also called `mdbraber.com.app` and `nexthealth.nl.app` and carry the same icons. The new apps install to `/Applications`, so both sets coexist and are told apart only by location. Accepted deliberately; retiring the old web apps is out of scope for this plan.
+
 - [ ] **Step 1: Point the apps at the shell**
 
 Replace `Apps/Personal/PersonalApp.swift`:
@@ -2314,7 +2328,7 @@ Expected: schemes `Personal`, `Work`, `All`, `IntegrationTests`.
 
 ```bash
 make build-macos
-open "$(xcodebuild -project FastmailShell.xcodeproj -scheme Personal -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $3}')/Fastmail.app"
+open "$(xcodebuild -project FastmailShell.xcodeproj -scheme Personal -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $3}')/mdbraber.com.app"
 ```
 
 Expected: a window opens on the Fastmail login page, with the green icon in the Dock.
@@ -2337,7 +2351,7 @@ If it is `undefined`, check the Xcode console for a `[userscript]` line or a ban
 make install-macos
 ```
 
-Expected: `Fastmail.app` and `Fastmail Work.app` in `/Applications`.
+Expected: `mdbraber.com.app` and `nexthealth.nl.app` in `/Applications`.
 
 For iOS, connect and unlock the device, then:
 
