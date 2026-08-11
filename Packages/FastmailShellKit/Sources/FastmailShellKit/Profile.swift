@@ -30,7 +30,7 @@ extension Profile {
         Profile(
             id: "personal",
             displayName: "mdbraber.com",
-            startURL: URL(string: "https://app.fastmail.com")!,
+            startURL: URL(string: "https://app.fastmail.com/")!,
             overlayScriptName: "userscript.personal.js",
             urlScheme: "fastmail-personal",
             accountID: normalizedAccountID(accountID)
@@ -41,7 +41,7 @@ extension Profile {
         Profile(
             id: "work",
             displayName: "nexthealth.nl",
-            startURL: URL(string: "https://app.fastmail.com")!,
+            startURL: URL(string: "https://app.fastmail.com/")!,
             overlayScriptName: "userscript.work.js",
             urlScheme: "fastmail-work",
             accountID: normalizedAccountID(accountID)

@@ -1,5 +1,5 @@
 (function () {
-    if (window.__fmshell && window.__fmshell.boot) return;
+    if (window.__fmshell && window.__fmshell.report) return;
 
     var routeCallbacks = [];
     var lastHref = location.href;
@@ -64,55 +64,7 @@
         else document.addEventListener('DOMContentLoaded', observe);
     }
 
-    function matchesAny(patterns, href) {
-        for (var i = 0; i < patterns.length; i += 1) {
-            var escaped = patterns[i].replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-            if (new RegExp('^' + escaped + '$').test(href)) return true;
-        }
-        return false;
-    }
-
-    function runWhenReady(runAt, fn) {
-        if (runAt === 'document-start') {
-            fn();
-            return;
-        }
-        if (runAt === 'document-end') {
-            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
-            else fn();
-            return;
-        }
-        if (document.readyState === 'complete') fn();
-        else window.addEventListener('load', fn);
-    }
-
-    function evaluate(source, label) {
-        try {
-            (0, eval)(source);
-        } catch (error) {
-            var message = error && error.message ? error.message : String(error);
-            var stack = error && error.stack ? error.stack : '';
-            post('error', { message: label + ': ' + message, stack: stack });
-        }
-    }
-
     window.__fmshell = {
-        boot: function (userScript, overlay, metadata) {
-            var patterns = (metadata && metadata.matches) || [];
-            if (patterns.length && !matchesAny(patterns, location.href)) {
-                post('error', {
-                    message: 'user script @match does not cover ' + location.href,
-                    stack: ''
-                });
-                return;
-            }
-            installRouteHooks();
-            var runAt = (metadata && metadata.runAt) || 'document-idle';
-            runWhenReady(runAt, function () {
-                if (userScript) evaluate(userScript, 'userscript');
-                if (overlay) evaluate(overlay, 'overlay');
-            });
-        },
         onRoute: function (callback) {
             routeCallbacks.push(callback);
         },
@@ -134,4 +86,6 @@
     window.addEventListener('unhandledrejection', function (event) {
         report(event.reason);
     });
+
+    installRouteHooks();
 })();

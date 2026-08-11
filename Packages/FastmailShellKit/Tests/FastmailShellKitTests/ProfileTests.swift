@@ -8,7 +8,7 @@ import Foundation
     #expect(profile.displayName == "mdbraber.com")
     #expect(profile.urlScheme == "fastmail-personal")
     #expect(profile.overlayScriptName == "userscript.personal.js")
-    #expect(profile.startURL.absoluteString == "https://app.fastmail.com")
+    #expect(profile.startURL.absoluteString == "https://app.fastmail.com/")
 }
 
 @Test func workProfileHasExpectedIdentity() {

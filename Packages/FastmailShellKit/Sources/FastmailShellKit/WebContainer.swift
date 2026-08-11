@@ -42,13 +42,9 @@ public struct WebContainer {
                 loader: loader,
                 overlayName: profile.overlayScriptName
             ).load()
-            configuration.userContentController.addUserScript(
-                WKUserScript(
-                    source: try ScriptInjector.bootstrap(from: scripts),
-                    injectionTime: .atDocumentStart,
-                    forMainFrameOnly: true
-                )
-            )
+            for script in try ScriptInjector.userScripts(from: scripts, url: profile.startURL) {
+                configuration.userContentController.addUserScript(script)
+            }
         } catch {
             let message = "User script not loaded: \(error)"
             Task { @MainActor in model.show(message) }

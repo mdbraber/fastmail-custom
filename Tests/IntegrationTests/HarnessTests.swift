@@ -19,6 +19,10 @@ final class HarnessTests: XCTestCase {
         }
     }
 
+    private static var fixtureURL: URL {
+        Bundle(for: HarnessTests.self).url(forResource: "fixture", withExtension: "html")!
+    }
+
     private static func meta(
         matches: [String] = [],
         runAt: UserScriptMetadata.RunAt = .documentIdle
@@ -43,18 +47,14 @@ final class HarnessTests: XCTestCase {
             contentWorld: .page,
             name: "native"
         )
-        configuration.userContentController.addUserScript(
-            WKUserScript(
-                source: try ScriptInjector.bootstrap(from: bundle),
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: true
-            )
-        )
+        for script in try ScriptInjector.userScripts(from: bundle, url: Self.fixtureURL) {
+            configuration.userContentController.addUserScript(script)
+        }
         return WKWebView(frame: .zero, configuration: configuration)
     }
 
     private func load(_ webView: WKWebView) async throws {
-        let url = Bundle(for: HarnessTests.self).url(forResource: "fixture", withExtension: "html")!
+        let url = Self.fixtureURL
         webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         try await waitUntil {
             try await self.evaluate(
@@ -100,7 +100,7 @@ final class HarnessTests: XCTestCase {
             try await self.evaluate(self.webView, "window.__readyStateWhenRun") != nil
         }
         let state = try await evaluate(webView, "window.__readyStateWhenRun") as? String
-        XCTAssertEqual(state, "complete")
+        XCTAssertTrue(state == "interactive" || state == "complete")
     }
 
     func testThrowingUserScriptIsReportedNotSilent() async throws {
@@ -135,24 +135,12 @@ final class HarnessTests: XCTestCase {
         }
     }
 
-    func testMatchMismatchPreventsEvaluation() async throws {
+    func testMatchMismatchPreventsInjection() throws {
         webView = try makeWebView(
             userScript: "window.__ranAnyway = true;",
             metadata: Self.meta(matches: ["https://example.com/*"])
         )
-        try await load(webView)
-        let installed = try await evaluate(webView, "typeof window.__fmshell") as? String
-        XCTAssertEqual(installed, "object")
-        let ran = try await evaluate(webView, "window.__ranAnyway")
-        XCTAssertNil(ran)
-        try await waitUntil {
-            self.received.contains { entry in
-                guard entry["action"] as? String == "error" else { return false }
-                let payload = entry["payload"] as? [String: Any]
-                let message = payload?["message"] as? String ?? ""
-                return message.contains("@match does not cover")
-            }
-        }
+        XCTAssertEqual(webView.configuration.userContentController.userScripts.count, 1)
     }
 
     func testDocumentStartScriptRunsWhileDocumentIsLoading() async throws {

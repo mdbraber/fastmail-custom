@@ -1,46 +1,36 @@
 import Foundation
-
-public enum ScriptInjectorError: Error, Equatable {
-    case encodingFailed(String)
-}
+import WebKit
 
 public enum ScriptInjector {
-    public static func bootstrap(from bundle: ScriptBundle) throws -> String {
-        guard let userScript = jsonLiteral(bundle.userScript) else {
-            throw ScriptInjectorError.encodingFailed("userScript")
+    @MainActor
+    public static func userScripts(from bundle: ScriptBundle, url: URL) throws -> [WKUserScript] {
+        var scripts = [
+            WKUserScript(source: bundle.harness, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        ]
+        guard matches(bundle.metadata.matches, url: url) else { return scripts }
+        let time = injectionTime(for: bundle.metadata.runAt)
+        scripts.append(WKUserScript(source: guarded(bundle.userScript), injectionTime: time, forMainFrameOnly: true))
+        if let overlay = bundle.overlay {
+            scripts.append(WKUserScript(source: guarded(overlay), injectionTime: time, forMainFrameOnly: true))
         }
-        let overlay: String
-        if let bundleOverlay = bundle.overlay {
-            guard let encodedOverlay = jsonLiteral(bundleOverlay) else {
-                throw ScriptInjectorError.encodingFailed("overlay")
-            }
-            overlay = encodedOverlay
-        } else {
-            overlay = "null"
-        }
-        guard let metadata = jsonLiteral([
-            "runAt": bundle.metadata.runAt.rawValue,
-            "matches": bundle.metadata.matches
-        ]) else {
-            throw ScriptInjectorError.encodingFailed("metadata")
-        }
-        return """
-        \(bundle.harness)
-        window.__fmshell.boot(\(userScript), \(overlay), \(metadata));
-        """
+        return scripts
     }
 
-    static func jsonLiteral(_ value: String) -> String? {
-        jsonLiteral(value as Any)
+    static func injectionTime(for runAt: UserScriptMetadata.RunAt) -> WKUserScriptInjectionTime {
+        runAt == .documentStart ? .atDocumentStart : .atDocumentEnd
     }
 
-    static func jsonLiteral(_ value: Any) -> String? {
-        guard
-            let data = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]),
-            let text = String(data: data, encoding: .utf8)
-        else {
-            return nil
+    static func matches(_ patterns: [String], url: URL) -> Bool {
+        guard !patterns.isEmpty else { return true }
+        let href = url.absoluteString
+        return patterns.contains { pattern in
+            let escaped = NSRegularExpression.escapedPattern(for: pattern)
+                .replacingOccurrences(of: "\\*", with: ".*")
+            return href.range(of: "^" + escaped + "$", options: .regularExpression) != nil
         }
-        return text
+    }
+
+    static func guarded(_ source: String) -> String {
+        "try {\n" + source + "\n} catch (error) {\n  window.__fmshell && window.__fmshell.report(error);\n}"
     }
 }
