@@ -240,7 +240,13 @@ Create `Packages/FastmailShellKit/Sources/FastmailShellKit/Resources/harness.js`
 })();
 ```
 
-- [ ] **Step 3: Verify the package builds**
+- [ ] **Step 3: Create the test directory and verify the package builds**
+
+`Package.swift` declares a test target, and SwiftPM treats a declared target with no directory as a hard "overlapping sources" error rather than a warning, so the directory must exist before the package will build:
+
+```bash
+mkdir -p Packages/FastmailShellKit/Tests/FastmailShellKitTests
+```
 
 Run: `cd Packages/FastmailShellKit && swift build`
 Expected: `Build complete!`
@@ -335,11 +341,17 @@ Create `Apps/Personal/Info.plist`:
     <string>1.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
+    <key>UILaunchScreen</key>
+    <dict/>
 </dict>
 </plist>
 ```
 
 Create `Apps/Work/Info.plist` identically, but with `CFBundleDisplayName` of `Fastmail Work` and `FMAccountID` of `$(WORK_ACCOUNT_ID)`.
+
+`UILaunchScreen` and `CFBundleIconName` are both required because `GENERATE_INFOPLIST_FILE` is `NO`: without the first, an iOS app runs letterboxed at a smaller size; without the second, the asset-catalog icon is not picked up.
 
 - [ ] **Step 8: Write the app entry points**
 
@@ -429,14 +441,9 @@ targets:
         PRODUCT_NAME: Fastmail Work
         INFOPLIST_FILE: Apps/Work/Info.plist
 
+aggregateTargets:
   All:
-    type: ""
-    platform: macOS
-    dependencies:
-      - target: Personal
-        embed: false
-      - target: Work
-        embed: false
+    targets: [Personal, Work]
 
 schemes:
   Personal:
@@ -1359,20 +1366,21 @@ final class HarnessTests: XCTestCase {
         }
     }
 
-    private func makeWebView(userScript: String, runAt: UserScriptMetadata.RunAt) throws -> WKWebView {
-        let harnessURL = Bundle(for: HarnessTests.self).url(forResource: "harness", withExtension: "js")
-            ?? Bundle.module.url(forResource: "harness", withExtension: "js")!
+    private static func meta(
+        matches: [String] = [],
+        runAt: UserScriptMetadata.RunAt = .documentIdle
+    ) -> UserScriptMetadata {
+        UserScriptMetadata(name: "T", matches: matches, runAt: runAt, grants: ["none"])
+    }
+
+    private func makeWebView(userScript: String, metadata: UserScriptMetadata) throws -> WKWebView {
+        let harnessURL = Bundle(for: HarnessTests.self).url(forResource: "harness", withExtension: "js")!
         let harness = try String(contentsOf: harnessURL, encoding: .utf8)
         let bundle = ScriptBundle(
             harness: harness,
             userScript: userScript,
             overlay: nil,
-            metadata: UserScriptMetadata(
-                name: "T",
-                matches: [],
-                runAt: runAt,
-                grants: ["none"]
-            )
+            metadata: metadata
         )
         let configuration = WKWebViewConfiguration()
         let recorder = Recorder()
@@ -1415,7 +1423,7 @@ final class HarnessTests: XCTestCase {
     }
 
     func testHarnessInstallsAndExposesNative() async throws {
-        webView = try makeWebView(userScript: "window.__ran = true;", runAt: .documentIdle)
+        webView = try makeWebView(userScript: "window.__ran = true;", metadata: Self.meta())
         try await load(webView)
         let installed = try await evaluate(webView, "typeof window.__fmshell") as? String
         XCTAssertEqual(installed, "object")
@@ -1425,7 +1433,7 @@ final class HarnessTests: XCTestCase {
 
     func testDocumentIdleScriptRunsAfterLoadNotAtStart() async throws {
         let script = "window.__readyStateWhenRun = document.readyState;"
-        webView = try makeWebView(userScript: script, runAt: .documentIdle)
+        webView = try makeWebView(userScript: script, metadata: Self.meta())
         try await load(webView)
         try await waitUntil {
             try await self.evaluate(self.webView, "window.__readyStateWhenRun") != nil
@@ -1435,7 +1443,7 @@ final class HarnessTests: XCTestCase {
     }
 
     func testThrowingUserScriptIsReportedNotSilent() async throws {
-        webView = try makeWebView(userScript: "throw new Error('boom');", runAt: .documentIdle)
+        webView = try makeWebView(userScript: "throw new Error('boom');", metadata: Self.meta())
         try await load(webView)
         try await waitUntil { self.received.contains { $0["action"] as? String == "error" } }
         let error = received.first { $0["action"] as? String == "error" }
@@ -1445,7 +1453,7 @@ final class HarnessTests: XCTestCase {
 
     func testRouteHookFiresOnPushState() async throws {
         let script = "window.native.onRoute(function () { window.__fixtureRouted += 1; });"
-        webView = try makeWebView(userScript: script, runAt: .documentIdle)
+        webView = try makeWebView(userScript: script, metadata: Self.meta())
         try await load(webView)
         try await waitUntil {
             try await self.evaluate(self.webView, "typeof window.__fixtureRouted") as? String == "number"
@@ -1457,34 +1465,10 @@ final class HarnessTests: XCTestCase {
     }
 
     func testMatchMismatchPreventsEvaluation() async throws {
-        let bundleMeta = UserScriptMetadata(
-            name: "T",
-            matches: ["https://example.com/*"],
-            runAt: .documentIdle,
-            grants: []
-        )
-        let harnessURL = Bundle(for: HarnessTests.self).url(forResource: "harness", withExtension: "js")!
-        let harness = try String(contentsOf: harnessURL, encoding: .utf8)
-        let bundle = ScriptBundle(
-            harness: harness,
+        webView = try makeWebView(
             userScript: "window.__ranAnyway = true;",
-            overlay: nil,
-            metadata: bundleMeta
+            metadata: Self.meta(matches: ["https://example.com/*"])
         )
-        let configuration = WKWebViewConfiguration()
-        let recorder = Recorder()
-        recorder.onMessage = { [weak self] body in self?.received.append(body) }
-        configuration.userContentController.addScriptMessageHandler(
-            recorder, contentWorld: .page, name: "native"
-        )
-        configuration.userContentController.addUserScript(
-            WKUserScript(
-                source: ScriptInjector.bootstrap(from: bundle),
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: true
-            )
-        )
-        webView = WKWebView(frame: .zero, configuration: configuration)
         try await load(webView)
         let ran = try await evaluate(webView, "window.__ranAnyway")
         XCTAssertNil(ran)
