@@ -58,6 +58,8 @@ A Safari Web Extension of this script already exists at `~/src/fastmail-customiz
   Packages/FastmailShellKit/Resources/harness.js
   Apps/Personal/{Info.plist, Assets.xcassets, PersonalApp.swift}
   Apps/Work/{Info.plist, Assets.xcassets, WorkApp.swift}
+  Extensions/PersonalShare/
+  Extensions/WorkShare/
   tools/extract-icons.swift
   Makefile
   Config/Shared.xcconfig
@@ -98,13 +100,15 @@ Everything except these three is platform-agnostic — `ScriptStore`, `ScriptInj
 
 ## Profile model
 
-`Profile` is a struct with `id`, `displayName`, `startURL`, and `overlayScriptName`. Each app target instantiates exactly one, on both platforms.
+`Profile` is a struct with `id`, `displayName`, `startURL`, `overlayScriptName`, `urlScheme`, and `accountId`. Each app target instantiates exactly one, on both platforms.
 
 | | Personal | Work |
 |---|---|---|
 | Bundle ID | `com.mdbraber.fastmail.personal` | `com.mdbraber.fastmail.work` |
 | Display name | Fastmail | Fastmail Work |
 | Overlay script | `userscript.personal.js` | `userscript.work.js` |
+| URL scheme | `fastmail-personal` | `fastmail-work` |
+| Account (`u=`) | from the environment, see Account identifiers | from the environment |
 | Icon source | `~/Applications/mdbraber.com.app` | `~/Applications/nexthealth.nl.app` |
 
 Separate bundle IDs give separate app containers, so `WKWebsiteDataStore.default()` yields two independent cookie jars and two concurrent Fastmail sessions. This is the entire mechanism behind profile switching; no in-app account handling is required.
@@ -147,6 +151,8 @@ The existing Safari web apps in `~/Applications` use these same icons, so once t
 **`NativeBridge`** — a single `WKScriptMessageHandlerWithReply` registered as `native` via `addScriptMessageHandler(_:contentWorld:name:)` against `WKContentWorld.page`, so the page-world script can see it. Message body is `["action": String, "payload": [String: Any]]`. Unknown actions and malformed payloads reply with an error string, surfacing in JS as a rejected promise.
 
 **`NavigationPolicy`** — in `decidePolicyFor`, allows `fastmail.com` and its subdomains; everything else is cancelled and opened in the default browser, via `UIApplication.open` or `NSWorkspace.open`.
+
+**`LinkRouter`** — the single entry point for every URL arriving from outside: custom scheme, `mailto:`, or share extension. Decides between loading locally, translating a `mailto:` to a compose URL, handing off to the other profile, and refusing. Pure logic with no platform or WebKit dependency, so all of its rules are unit-testable. See Link handling.
 
 ## Script source
 
@@ -233,9 +239,9 @@ Returns a `MailLink` transient entity with three properties, so a shortcut can c
 
 | Property | Example |
 |---|---|
-| `url` | `https://app.fastmail.com/mail/Test/?filter=inbox&u=REDACTED` |
+| `url` | `https://app.fastmail.com/mail/Test/?filter=inbox&u=…` |
 | `title` | `Invoice for July` |
-| `markdown` | `[Invoice for July](https://app.fastmail.com/mail/Test/?filter=inbox&u=REDACTED)` |
+| `markdown` | `[Invoice for July](https://app.fastmail.com/mail/Test/?filter=inbox&u=…)` |
 
 `title` is the subject of the open message and nothing else — no mailbox, no account, no ` | Fastmail` suffix, no unread count.
 
@@ -332,6 +338,98 @@ Label matching is English-only. The accounts are English, so this is accepted ra
 
 The harness generalises this as `native.addMenuItem({label, icon, section, onSelect})`, so a user script can add further items without reimplementing the observer. The Share item is the first consumer of that API rather than a special case.
 
+## Link handling
+
+Two things are not possible and are recorded so they are not re-attempted:
+
+- **Universal Links for `https://app.fastmail.com`.** Claiming them requires an `apple-app-site-association` file served from `fastmail.com`, which is not controllable. Registering as an `http`/`https` handler on macOS instead would make the app the default browser for everything, which is worse than not having it.
+- **`mailto:` as the iOS default.** This requires the `com.apple.developer.mail-client` entitlement, granted only after Apple reviews the app as a genuine mail client, with a runtime check for both the entitlement and actual `mailto:` handling. Not available to a personally-signed app.
+
+What is built instead:
+
+### Account identifiers
+
+The `u=` account identifiers must never enter the repository — not in this document, not in an xcconfig, not in an Info.plist under version control.
+
+They are supplied by the environment at build time:
+
+```
+Config/Shared.xcconfig        committed, #includes the local file
+Config/Local.xcconfig         gitignored, holds the real values
+Config/Local.xcconfig.example committed, placeholders only
+```
+
+`Local.xcconfig` defines `PERSONAL_ACCOUNT_ID` and `WORK_ACCOUNT_ID`, which are substituted into each target's Info.plist as `FMAccountID` and read at runtime through `Bundle.main.infoDictionary`. The Makefile passes them through from the environment when set, so CI or a clean machine can build without the file existing.
+
+`.gitignore` covers `Config/Local.xcconfig`, and the committed `.example` documents the shape without the values.
+
+When the identifier is absent the build still succeeds and cross-app handoff is disabled: links load locally regardless of account. Handoff is a convenience, so a missing identifier degrades rather than fails.
+
+The values are still present in the built binary, which is unavoidable and acceptable — the requirement is that they never reach version control.
+
+### Custom URL scheme
+
+Each profile declares its own scheme in `CFBundleURLTypes`, derived from `Profile.urlScheme`: `fastmail-personal` and `fastmail-work`. Two forms are accepted:
+
+| URL | Effect |
+|---|---|
+| `fastmail-personal://open?url=…` | Loads the percent-encoded URL |
+| `fastmail-personal://compose?mailto=…` | Translates a `mailto:` URI to a compose URL |
+
+`open` accepts `fastmail.com` hosts only. Anything else is refused with a banner rather than loaded. Without that check the scheme is an open redirect that renders an arbitrary page inside a logged-in mail session, which is the one genuine security consideration in this design.
+
+This scheme is also the plumbing every other entry point routes through, rather than a user-facing feature.
+
+### macOS mailto
+
+Both targets declare the `mailto` scheme, so either can be chosen as the default email reader in Mail settings; the system offers the choice once more than one handler exists. On receiving a `mailto:` URL the app translates it to a Fastmail compose URL and appends the profile's account parameter, so it composes from the right account rather than whichever session is active.
+
+The compose URL template is pinned during Milestone 0 by reading the protocol handler Fastmail's own web app registers, rather than inventing a parameter mapping.
+
+### iOS share extension
+
+One share extension target per profile, `com.mdbraber.fastmail.personal.share` and `.work.share`, titled "Open in Fastmail" and "Open in Fastmail Work". It accepts `public.url`, and opens the containing app through the custom scheme using `NSExtensionContext.open(_:)` — the reason the scheme exists, since an extension cannot reach `UIApplication`.
+
+Non-Fastmail URLs are rejected in the extension rather than passed on, so the failure is visible at the point of sharing.
+
+### Cross-app handoff
+
+`Profile` gains an `accountId`, the value Fastmail carries as `u=` in its URLs. Its value is never written down here or anywhere else in the repository; see Account identifiers.
+
+When an incoming URL carries a `u=` that does not match the receiving profile, the app rewrites it to the other profile's scheme and opens it, via `NSWorkspace.open` or `UIApplication.open`. A URL with no `u=` is loaded locally without handoff, since there is nothing to disagree with.
+
+**The handoff is one hop only.** The rewritten URL carries `handoff=1`, and an app that receives a URL already bearing it loads it locally regardless of account. Without that guard, two apps that each consider the link foreign would bounce it between them indefinitely.
+
+If the other app is not installed the open fails, and the link is loaded locally with a banner explaining the account mismatch.
+
+## macOS windows
+
+The Mac build is a real Mac app rather than a single fixed window: multiple windows, native tabs, and a compose command.
+
+### Tabs
+
+The scene is a `WindowGroup`, so each window owns its own `WKWebView` starting at the profile's start URL and sharing the profile's `WKWebsiteDataStore`. Native window tabbing is left enabled, so windows group into tabs according to the system preference, with the standard ⌘T, ⌃⇥, and Move Tab to New Window behaviour coming free.
+
+The user script runs independently in each tab, which is correct — each is a separate page with its own JavaScript context — and the script's own `window.mdbraberInboxMode` guard already covers double-injection within a context.
+
+**Consequence for everything that says "current".** With more than one web view alive, `currentLink()`, the share toolbar button, the badge resolver, and the `GetCurrentLink` intent must all act on the key window's web view rather than on any singleton. A `WebViewRegistry` tracks the live views and resolves the active one from the key window; on iOS it resolves to the only view there is. This is written down because a singleton web view reference would work perfectly until the first second tab.
+
+### Compose
+
+A **Compose** command sits in the menu bar bound to ⌘N, which displaces the default New Window command; new windows move to ⇧⌘N and new tabs stay on ⌘T.
+
+Compose opens its own window that does not join the tab group, since a draft is a task rather than another view of the mailbox.
+
+**Preloading.** The point of the requirement is that ⌘N feels instant, so a compose web view is created and loaded at launch and kept ready off-screen, in an ordered-out window so WebKit has a real window to render into rather than a detached view. ⌘N orders that window in; nothing loads at press time.
+
+The lifecycle is the part worth stating: a used compose view is spent. When a compose window closes, it reloads the compose URL and returns to the ready pool, so the next ⌘N is instant again. If ⌘N is pressed while the pool is empty — a second compose before the first closed — a fresh window is created and loaded normally, accepting the delay rather than blocking.
+
+The compose URL is the same template pinned in Milestone 0 for `mailto:` handling, with the profile's account parameter appended.
+
+The same injection applies to compose views as to any other, and no special-casing is needed: the Inbox mode script's `isReady()` gate requires a drawn `.v-MailboxSource` sidebar, so in a compose window it simply waits and stays inert.
+
+iOS has neither command, since it has one full-screen web view and no menu bar. Compose there is reached through Fastmail's own UI.
+
 ## Unread badge
 
 The app icon carries an unread count, read from the page Fastmail already renders. No API, no token, no background task.
@@ -367,6 +465,9 @@ A count of zero clears the badge rather than displaying `0`. The badge deliberat
 | Network failure | Retry view replacing the WebKit error page |
 | Badge authorization declined | Badge is skipped; harness stops being asked for a count |
 | Badge resolver finds no count | Badge left unchanged rather than cleared, since absence is not zero |
+| Incoming URL is not a Fastmail host | Refused with a banner; never loaded |
+| Handoff target app not installed | Loaded locally with a banner explaining the account mismatch |
+| Handoff URL already carries `handoff=1` | Loaded locally regardless of account, breaking the bounce loop |
 
 ## Testing
 
@@ -376,6 +477,7 @@ Unit tests, no WebKit required:
 - `ScriptStore`: bundle resolution, overlay resolution, and the script-plus-overlay ordering.
 - `NativeBridge`: unknown action, malformed payload, share payload parsing.
 - `BadgeController`: zero clears rather than shows `0`, a missing count leaves the badge unchanged, and a declined authorization is not re-requested.
+- `LinkRouter`: `mailto:` translation including subject and body, non-Fastmail host refusal, `u=` match and mismatch, absent `u=`, and that a URL carrying `handoff=1` is never handed off again.
 
 Integration test with a real `WKWebView` loading a bundled `fixture.html`: harness installs, `window.native` exists, `onRoute` fires after a `pushState`, the user script is evaluated after `load` rather than at document start, and a throwing user script is caught and reported. The fixture also carries the `.v-Thread-title h1` structure and a `.v-Menu` containing `Show details`, so the subject chain and menu injection are covered without hitting the network.
 
