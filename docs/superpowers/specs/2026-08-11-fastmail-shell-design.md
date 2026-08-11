@@ -497,6 +497,23 @@ This partly walks back the earlier claim that dropping live script reloading rem
 
 iOS cannot write to arbitrary locations, so a configurable path is a macOS concept. The app's Documents folder is exposed through `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace`, making downloads reachable from Files.
 
+### Progress
+
+`WKDownload` publishes a `Progress`, so `DownloadManager` exposes `[DownloadItem]` with filename, fraction complete, byte counts, and state. `Progress.localizedAdditionalDescription` already renders "3.2 MB of 12 MB" in the user's locale, so no byte formatting is written by hand.
+
+**Nothing is shown for the first 500ms.** Most attachments finish inside that window, and flashing a progress panel for a 40 KB PDF is worse than showing nothing. Past the threshold the platform surface appears:
+
+| Platform | Surface |
+|---|---|
+| macOS | A toolbar item with a progress ring, opening a popover listing active and recent downloads, each cancellable, with Show in Finder once complete |
+| iOS | A compact pill above the safe area showing filename and progress, tapping to expand into the same list, cancellable |
+
+The iOS pill reuses the banner mechanism rather than introducing a second overlay concept, which keeps the chromeless design intact — it is transient, and gone once downloads finish.
+
+A download whose total size is unknown renders indeterminate rather than pretending to a percentage. Concurrent downloads list together and the macOS ring shows their combined fraction, since `Progress` composes through `addChild`.
+
+Completed items stay in the list for the session so a file can be found again without re-downloading, and are not persisted beyond it.
+
 ### After a download
 
 A completed download is previewed with Quick Look rather than handed straight to another app: `QLPreviewPanel` on macOS, the same floating panel Finder uses, and `QLPreviewController` on iOS. From there the standard share and save affordances take over.
@@ -581,7 +598,7 @@ Unit tests, no WebKit required:
 - `WebViewRegistry`: resolves the active view from the key window, and copes with the last window closing.
 - `ComposePool`: a closed compose window returns to the pool reloaded, and an empty pool creates a fresh window rather than failing.
 - `NavigationPolicy`: `fastmailusercontent.com` is admitted rather than externalised, and the response rules route `Content-Disposition: attachment` and unshowable MIME types to download while leaving everything else to Fastmail.
-- `DownloadManager`: the auto-open allowlist admits PDF and images and refuses archives, disk images, and executables, matched by UTI rather than by extension; a spoofed extension on a disallowed type is still refused.
+- `DownloadManager`: the auto-open allowlist admits PDF and images and refuses archives, disk images, and executables, matched by UTI rather than by extension; a spoofed extension on a disallowed type is still refused. Also that a download completing inside the 500ms threshold never publishes a progress item, and that a cancelled download leaves no partial file.
 
 Integration test with a real `WKWebView` loading a bundled `fixture.html`: harness installs, `window.native` exists, `onRoute` fires after a `pushState`, the user script is evaluated after `load` rather than at document start, and a throwing user script is caught and reported. The fixture also carries the `.v-Thread-title h1` structure and a `.v-Menu` containing `Show details`, so the subject chain and menu injection are covered without hitting the network.
 
