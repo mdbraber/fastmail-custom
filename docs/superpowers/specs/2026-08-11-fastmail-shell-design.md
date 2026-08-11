@@ -144,13 +144,22 @@ The existing Safari web apps in `~/Applications` use these same icons, so once t
 
 **`BadgeController`** — applies an unread count to the app icon, via `UNUserNotificationCenter` on iOS or the dock tile on macOS, and owns the one-time authorization request. See Unread badge.
 
+**`DownloadManager`** — the `WKDownloadDelegate`, deciding destination, applying the auto-open allowlist, and handing completed files to Quick Look. See Attachments and downloads.
+
+**`SettingsStore`** — `UserDefaults`-backed, holding the download folder bookmark and the auto-open toggle.
+
 **`ScriptStore`** — reads `userscript.js` and the profile overlay from the app bundle and parses their metadata blocks. No watching, no I/O beyond launch. A missing script is a programming error rather than a runtime condition, since the build phase fails without one.
 
 **`ScriptInjector`** — builds one `WKUserScript`: the bundled `harness.js` with the user script and overlay embedded as JSON-encoded string literals. Injected at `.atDocumentStart`, `forMainFrameOnly: true`, into `WKContentWorld.page`.
 
 **`NativeBridge`** — a single `WKScriptMessageHandlerWithReply` registered as `native` via `addScriptMessageHandler(_:contentWorld:name:)` against `WKContentWorld.page`, so the page-world script can see it. Message body is `["action": String, "payload": [String: Any]]`. Unknown actions and malformed payloads reply with an error string, surfacing in JS as a rejected promise.
 
-**`NavigationPolicy`** — in `decidePolicyFor`, allows `fastmail.com` and its subdomains; everything else is cancelled and opened in the default browser, via `UIApplication.open` or `NSWorkspace.open`.
+**`NavigationPolicy`** — in `decidePolicyFor`, allows `fastmail.com` and `fastmailusercontent.com` and their subdomains; everything else is cancelled and opened in the default browser, via `UIApplication.open` or `NSWorkspace.open`. `fastmailusercontent.com` is where attachment content is served, so excluding it would send every attachment click to Safari instead of downloading it.
+
+It also handles the two cases WebKit does nothing about by default:
+
+- **`target="_blank"` and `window.open()`** produce no action at all unless `webView(_:createWebViewWith:…)` is implemented. Most links in real email are `target=_blank`, so without this a large share of clicks silently do nothing. The delegate returns `nil` and routes the request through the same policy, so such links open in the default browser rather than a stray window.
+- **Web content process termination** leaves a permanently blank view with no error. `webViewWebContentProcessDidTerminate` reloads the last URL. Rare, but the failure is total and reads as the app having broken.
 
 **`LinkRouter`** — the single entry point for every URL arriving from outside: custom scheme, `mailto:`, or share extension. Decides between loading locally, translating a `mailto:` to a compose URL, handing off to the other profile, and refusing. Pure logic with no platform or WebKit dependency, so all of its rules are unit-testable. See Link handling.
 
@@ -417,6 +426,10 @@ The scene is a `WindowGroup`, so each window owns its own `WKWebView` starting a
 
 The user script runs independently in each tab, which is correct — each is a separate page with its own JavaScript context — and the script's own `window.mdbraberInboxMode` guard already covers double-injection within a context.
 
+**Tab selection is bound to ⌥1–⌥9, not ⌘1–⌘9.** The Inbox mode script binds `Meta-1` through `Meta-9` to jump to sources, and a menu key equivalent wins over a web view key handler, so the conventional Mac binding would silently break shortcuts you use constantly. The web view keeps the ⌘ range; the menu takes the ⌥ range.
+
+The cost is that ⌥ plus a digit no longer types its typographic character while composing. That is the lesser loss, and it is the first thing to revisit if it grates.
+
 **Consequence for everything that says "current".** With more than one web view alive, `currentLink()`, the share toolbar button, the badge resolver, and the `GetCurrentLink` intent must all act on the key window's web view rather than on any singleton. A `WebViewRegistry` tracks the live views and resolves the active one from the key window; on iOS it resolves to the only view there is. This is written down because a singleton web view reference would work perfectly until the first second tab.
 
 ### Compose
@@ -454,6 +467,64 @@ Implementation is an `.sdef` in the bundle with `NSAppleScriptEnabled` and `OSAS
 The one non-obvious piece: `callAsyncJavaScript` is asynchronous while an Apple Event expects a result. The command calls `suspendExecution()` and then `resumeExecution(withResult:)` from the completion handler, rather than blocking the main thread or returning early with nothing.
 
 **Scripting reaches a logged-in mail session.** `do JavaScript` and `RunJavaScript` let anything that can send an Apple Event or run a shortcut execute code against live mail — the same exposure Safari gates behind "Allow JavaScript from Apple Events", which is off by default there. Both are enabled here without a gate, on the grounds that this is a personal app on a single-user machine and the alternative is a preferences surface the app otherwise does not need. Recorded so the decision is deliberate; it is the point to revisit first if the app is ever shared.
+
+## Attachments and downloads
+
+Attachment content is served from `fastmailusercontent.com`, which the navigation policy admits for exactly this reason. A navigation that becomes a download is taken over by `WKDownloadDelegate`; without it, clicking an attachment does nothing at all.
+
+### When the app takes over
+
+Fastmail renders PDFs and images in its own viewer, and intercepting those would fight the web app for no gain. The app therefore only takes over where WebKit would otherwise fail or download anyway. In `decidePolicyFor navigationResponse`:
+
+| Response | Decision |
+|---|---|
+| `Content-Disposition: attachment` | `.download` |
+| `!navigationResponse.canShowMIMEType` | `.download` |
+| Anything else | `.allow`, and Fastmail displays it |
+
+So opening a PDF inside Fastmail keeps using Fastmail's viewer; explicitly downloading an attachment, or opening a type WebKit cannot render, becomes a download.
+
+### Where downloads go
+
+| Platform | Default | Configurable |
+|---|---|---|
+| macOS | `~/Downloads` | Any folder, chosen in Settings |
+| iOS | the app's Documents folder, visible in Files | Per-download "Save to…" via the document picker |
+
+macOS reaches `~/Downloads` through the `com.apple.security.files.downloads.read-write` entitlement, so the common case needs no bookmark. A custom folder is chosen with `NSOpenPanel` and persisted as a security-scoped bookmark, resolved on each launch.
+
+This partly walks back the earlier claim that dropping live script reloading removed security-scoped bookmarks entirely: they are gone from the script path, but a user-chosen download folder brings them back. The default path avoids them, so the complexity is only paid by someone who wants a different folder.
+
+iOS cannot write to arbitrary locations, so a configurable path is a macOS concept. The app's Documents folder is exposed through `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace`, making downloads reachable from Files.
+
+### After a download
+
+A completed download is previewed with Quick Look rather than handed straight to another app: `QLPreviewPanel` on macOS, the same floating panel Finder uses, and `QLPreviewController` on iOS. From there the standard share and save affordances take over.
+
+**Quick Look requires a local file.** `QLPreviewItem.previewItemURL` must be a `file:` URL; neither API will fetch an `https://fastmailusercontent.com/…` URL. Previewing therefore always follows a completed download and can never operate on the remote URL directly. This is the reason the download path exists at all, rather than previewing straight from the web view.
+
+**Auto-open safe attachments** is a setting, off by default. When enabled, a completed download whose type is on a fixed allowlist opens in the default application instead of previewing:
+
+- PDF, plain text, RTF
+- Images: PNG, JPEG, GIF, HEIC, WebP
+- Calendar invitations: `.ics`
+
+The allowlist is by uniform type identifier, checked with `UTType.conforms(to:)` rather than by file extension, since an extension is attacker-controlled in a way a sniffed type is less so. Everything else previews regardless of the setting. Archives, disk images, installers, scripts, and executables are never auto-opened, and the list is deliberately fixed rather than user-editable — a settings toggle that can be widened to `.dmg` is a phishing vector in a mail client, which is precisely where hostile attachments arrive.
+
+Off by default because the safe cases are exactly the ones Quick Look already handles well, so the setting buys convenience rather than capability.
+
+## Settings
+
+A small settings surface, holding only what cannot be inferred:
+
+| Setting | Default |
+|---|---|
+| Download folder (macOS) | `~/Downloads` |
+| Auto-open safe attachments | Off |
+
+macOS uses a `Settings` scene, reachable at ⌘, as normal. iOS has no chrome to hang a settings button on, so it is reached through an item the harness injects into Fastmail's actions menu, alongside Share — the same mechanism, and the reason `addMenuItem` was generalised rather than written for Share alone.
+
+Values live in `UserDefaults`, per profile by virtue of separate app containers, so the two apps can have different download folders.
 
 ## Unread badge
 
@@ -493,6 +564,10 @@ A count of zero clears the badge rather than displaying `0`. The badge deliberat
 | Incoming URL is not a Fastmail host | Refused with a banner; never loaded |
 | Handoff target app not installed | Loaded locally with a banner explaining the account mismatch |
 | Handoff URL already carries `handoff=1` | Loaded locally regardless of account, breaking the bounce loop |
+| Web content process terminates | Blank view reloaded from the last URL |
+| `target=_blank` or `window.open` | No stray window; routed through the navigation policy |
+| Download folder bookmark fails to resolve | Falls back to `~/Downloads` and reports it once in Settings |
+| Download fails or is cancelled | Reported in the banner; no partial file left in place |
 
 ## Testing
 
@@ -505,6 +580,8 @@ Unit tests, no WebKit required:
 - `LinkRouter`: `mailto:` translation including subject and body, non-Fastmail host refusal, `u=` match and mismatch, absent `u=`, and that a URL carrying `handoff=1` is never handed off again.
 - `WebViewRegistry`: resolves the active view from the key window, and copes with the last window closing.
 - `ComposePool`: a closed compose window returns to the pool reloaded, and an empty pool creates a fresh window rather than failing.
+- `NavigationPolicy`: `fastmailusercontent.com` is admitted rather than externalised, and the response rules route `Content-Disposition: attachment` and unshowable MIME types to download while leaving everything else to Fastmail.
+- `DownloadManager`: the auto-open allowlist admits PDF and images and refuses archives, disk images, and executables, matched by UTI rather than by extension; a spoofed extension on a disallowed type is still refused.
 
 Integration test with a real `WKWebView` loading a bundled `fixture.html`: harness installs, `window.native` exists, `onRoute` fires after a `pushState`, the user script is evaluated after `load` rather than at document start, and a throwing user script is caught and reported. The fixture also carries the `.v-Thread-title h1` structure and a `.v-Menu` containing `Show details`, so the subject chain and menu injection are covered without hitting the network.
 
@@ -520,7 +597,8 @@ Manual verification uses `isInspectable` and Safari Web Inspector.
 - **M3** — `harness.js`: route hooks, subject resolution, menu injection, error reporting.
 - **M4** — `NativeBridge`, `SharePresenter`, `BadgeController`, and the web view shims.
 - **M5** — App Intents, the AppleScript dictionary, link handling, share extensions, and the macOS compose and tab behaviour.
-- **M6** — Tests, icons in both forms, error states.
+- **M6** — Attachments and downloads, Quick Look, the settings surface, `target=_blank` and crash recovery.
+- **M7** — Tests, icons in both forms, error states.
 
 Within each milestone the macOS build is brought up first where the work is platform-agnostic, because the rebuild loop is faster and neither the app-bound-domain nor service-worker constraint applies there. iOS is then verified before the milestone closes, so divergence never accumulates across more than one milestone.
 
