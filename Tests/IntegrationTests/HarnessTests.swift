@@ -68,6 +68,8 @@ final class HarnessTests: XCTestCase {
         try await webView.evaluateJavaScript(js)
     }
 
+    private struct WaitTimeoutError: Error {}
+
     private func waitUntil(
         timeout: TimeInterval = 5,
         _ condition: () async throws -> Bool
@@ -78,6 +80,7 @@ final class HarnessTests: XCTestCase {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         XCTFail("condition not met within \(timeout)s")
+        throw WaitTimeoutError()
     }
 
     func testHarnessInstallsAndExposesNative() async throws {
@@ -107,6 +110,16 @@ final class HarnessTests: XCTestCase {
         let error = received.first { $0["action"] as? String == "error" }
         let payload = error?["payload"] as? [String: Any]
         XCTAssertTrue((payload?["message"] as? String ?? "").contains("boom"))
+        XCTAssertFalse((payload?["stack"] as? String ?? "").isEmpty)
+    }
+
+    func testNativeLogDeliversMessageToNative() async throws {
+        webView = try makeWebView(userScript: "window.native.log('x', 'y');", metadata: Self.meta())
+        try await load(webView)
+        try await waitUntil { self.received.contains { $0["action"] as? String == "log" } }
+        let entry = received.first { $0["action"] as? String == "log" }
+        let payload = entry?["payload"] as? [String: Any]
+        XCTAssertEqual(payload?["message"] as? String, "x y")
     }
 
     func testRouteHookFiresOnPushState() async throws {
@@ -128,7 +141,33 @@ final class HarnessTests: XCTestCase {
             metadata: Self.meta(matches: ["https://example.com/*"])
         )
         try await load(webView)
+        let installed = try await evaluate(webView, "typeof window.__fmshell") as? String
+        XCTAssertEqual(installed, "object")
         let ran = try await evaluate(webView, "window.__ranAnyway")
         XCTAssertNil(ran)
+        try await waitUntil {
+            self.received.contains { entry in
+                guard entry["action"] as? String == "error" else { return false }
+                let payload = entry["payload"] as? [String: Any]
+                let message = payload?["message"] as? String ?? ""
+                return message.contains("@match does not cover")
+            }
+        }
+    }
+
+    func testDocumentStartScriptRunsWhileDocumentIsLoading() async throws {
+        let script = "window.__readyStateWhenRun = document.readyState;"
+        webView = try makeWebView(userScript: script, metadata: Self.meta(runAt: .documentStart))
+        try await load(webView)
+        let state = try await evaluate(webView, "window.__readyStateWhenRun") as? String
+        XCTAssertEqual(state, "loading")
+    }
+
+    func testDocumentEndScriptNeverRunsBeforeDOMContentLoaded() async throws {
+        let script = "window.__readyStateWhenRun = document.readyState;"
+        webView = try makeWebView(userScript: script, metadata: Self.meta(runAt: .documentEnd))
+        try await load(webView)
+        let state = try await evaluate(webView, "window.__readyStateWhenRun") as? String
+        XCTAssertTrue(state == "interactive" || state == "complete")
     }
 }

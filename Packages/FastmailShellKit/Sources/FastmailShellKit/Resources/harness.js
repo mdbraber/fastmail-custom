@@ -7,11 +7,15 @@
     function post(action, payload) {
         var webkit = window.webkit;
         var handler = webkit && webkit.messageHandlers && webkit.messageHandlers.native;
-        if (!handler) return Promise.resolve(null);
+        if (!handler) {
+            console.error('fmshell: bridge unavailable', action, payload);
+            return Promise.resolve(null);
+        }
         try {
             var result = handler.postMessage({ action: action, payload: payload || {} });
             return result && result.catch ? result.catch(function () { return null; }) : Promise.resolve(result);
         } catch (error) {
+            console.error('fmshell: bridge unavailable', action, payload);
             return Promise.resolve(null);
         }
     }
@@ -87,13 +91,13 @@
             (0, eval)(source);
         } catch (error) {
             var message = error && error.message ? error.message : String(error);
-            report(new Error(label + ': ' + message));
+            var stack = error && error.stack ? error.stack : '';
+            post('error', { message: label + ': ' + message, stack: stack });
         }
     }
 
     window.__fmshell = {
         boot: function (userScript, overlay, metadata) {
-            installRouteHooks();
             var patterns = (metadata && metadata.matches) || [];
             if (patterns.length && !matchesAny(patterns, location.href)) {
                 post('error', {
@@ -102,6 +106,7 @@
                 });
                 return;
             }
+            installRouteHooks();
             var runAt = (metadata && metadata.runAt) || 'document-idle';
             runWhenReady(runAt, function () {
                 if (userScript) evaluate(userScript, 'userscript');
