@@ -23,9 +23,11 @@ final class WebCoordinatorTests: XCTestCase {
         let coordinator = WebCoordinator(model: ShellModel(), startURL: URL(string: "https://app.fastmail.com")!)
         let coordinatorSelectors = [
             "webView:decidePolicyForNavigationAction:decisionHandler:",
+            "webView:decidePolicyForNavigationResponse:decisionHandler:",
             "webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:",
             "webViewWebContentProcessDidTerminate:",
-            "webView:didFailNavigation:withError:"
+            "webView:didFailNavigation:withError:",
+            "webView:didFailProvisionalNavigation:withError:"
         ]
         for selector in coordinatorSelectors {
             XCTAssertTrue(
@@ -65,5 +67,28 @@ final class WebCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(openedURLs, [blockedURL])
         XCTAssertNotEqual(webView.url?.host, "example.com")
+    }
+
+    func testProvisionalNavigationFailureFiltersOnlyOwnPolicyCancellations() {
+        let cases: [(error: NSError, shouldReport: Bool)] = [
+            (NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled), false),
+            (NSError(domain: "WebKitErrorDomain", code: 102), false),
+            (NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet), true),
+            (NSError(domain: "SomeOtherDomain", code: 102), true)
+        ]
+        for testCase in cases {
+            let model = ShellModel()
+            let coordinator = WebCoordinator(model: model, startURL: URL(string: "https://app.fastmail.com")!)
+            coordinator.webView(
+                WKWebView(frame: .zero),
+                didFailProvisionalNavigation: nil,
+                withError: testCase.error
+            )
+            XCTAssertEqual(
+                model.banner != nil,
+                testCase.shouldReport,
+                "domain=\(testCase.error.domain) code=\(testCase.error.code)"
+            )
+        }
     }
 }
