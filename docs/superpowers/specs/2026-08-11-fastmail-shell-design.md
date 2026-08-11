@@ -59,10 +59,30 @@ A Safari Web Extension of this script already exists at `~/src/fastmail-customiz
   Apps/Personal/{Info.plist, Assets.xcassets, PersonalApp.swift}
   Apps/Work/{Info.plist, Assets.xcassets, WorkApp.swift}
   tools/extract-icons.swift
+  Makefile
+  Config/Shared.xcconfig
   docs/superpowers/specs/
 ```
 
 Deployment targets iOS 17 and macOS 14.
+
+## Building and installing
+
+Two targets across two platforms means four products, and since a script change now requires a rebuild, propagating one edit by hand is four Xcode actions. Two things reduce that to one command.
+
+**Aggregate scheme.** An `All` aggregate target depends on both app targets, so a single build action produces both apps for the selected destination. This covers the common case of rebuilding both Mac apps at once. It cannot cover both platforms in one action, because a scheme builds for one destination at a time — which is what the Makefile is for.
+
+**Makefile.** The entry point for everything, driving `xcodebuild` per destination:
+
+| Target | Effect |
+|---|---|
+| `make macos` | Builds both Mac apps and copies them to `/Applications` |
+| `make ios` | Builds both iOS apps and installs them with `xcrun devicectl device install app` |
+| `make install` | Both of the above |
+
+The iOS device is identified by a `DEVICE` variable, defaulting to the first paired device from `xcrun devicectl list devices` and overridable on the command line, so the UDID is not committed. Signing uses automatic provisioning with the team identifier set in the xcconfig alongside `USERSCRIPT_PATH`.
+
+`make install` is the routine after editing the user script.
 
 ## Platform shims
 
@@ -107,6 +127,8 @@ The macOS builds use the extracted artwork as-is: it is already an inset squircl
 The iOS builds need a conversion, since an iOS `AppIcon` must be a fully opaque square with no alpha and no pre-applied corner rounding. The artwork is scaled to full bleed (roughly 1.15–1.2×, letting the corners run past the edge where the iOS mask cuts them), composited onto an opaque backdrop, and exported at 1024×1024 with alpha removed.
 
 A single asset catalog per target holds both, using platform-specific icon sets.
+
+The existing Safari web apps in `~/Applications` use these same icons, so once the Mac apps are installed there will be two green Fastmail icons and two blue ones, separable only by name. Accepted; the old web apps are not retired as part of this work.
 
 ## Components
 
@@ -364,7 +386,7 @@ Manual verification uses `isInspectable` and Safari Web Inspector.
 ## Milestones
 
 - **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app, re-verify the subject selector chain inside `WKWebView` (it was verified in Safari, and Fastmail may serve different markup to a non-Safari user agent), and capture the message actions menu: which container it renders into, that `Show details` identifies it, and whether an `i-share` icon exists in the sprite. `window.FastMail` is already confirmed present under a `WKWebView` user agent and is not re-checked. Decision gate before further work.
-- **M1** — Package plus two multiplatform targets, profiles, navigation policy, persistent sessions. Both destinations build and run.
+- **M1** — Package plus two multiplatform targets, profiles, navigation policy, persistent sessions. Both destinations build and run, and `make install` puts all four in place. The Makefile comes this early because every later milestone depends on rebuilding often.
 - **M2** — Build phase, `ScriptStore`, `ScriptInjector`, metadata parsing. Ends with the Inbox mode script running unmodified on both platforms.
 - **M3** — `harness.js`: route hooks, subject resolution, menu injection, error reporting.
 - **M4** — `NativeBridge`, `SharePresenter`, `BadgeController`, and the web view shims.
