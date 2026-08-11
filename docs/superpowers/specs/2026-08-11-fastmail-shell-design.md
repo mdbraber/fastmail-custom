@@ -110,8 +110,8 @@ If the container is unavailable (not signed into iCloud, first launch before dow
 `harness.js` ships in the bundle and runs before user scripts. It exposes `window.native`:
 
 - `share({url, text})` → Promise resolving when the share sheet is dismissed.
-- `currentLink()` → `{url, title, markdown}` for the frontmost view, using the title cleaner. Backs both the `GetCurrentLink` intent and the toolbar share button.
-- `titleCleaner` → assignable; overrides the default cleaning rules.
+- `currentLink()` → `{url, title, markdown}` for the open message, where `title` is the subject alone. Backs both the `GetCurrentLink` intent and the toolbar share button. Rejects when no message is open.
+- `subjectResolver` → assignable; overrides the default selector chain.
 - `registerAction(name, fn)` → registers a Shortcuts-invocable action; also notifies native so the name can be offered as a Shortcuts parameter option.
 - `log(...args)` → Xcode console.
 - `onRoute(cb)` → fires on route change. Implemented by patching `history.pushState` and `history.replaceState`, listening for `popstate`, and running a debounced `MutationObserver` on `document.body`. Necessary because `WKUserScript` runs once per document load and Fastmail is client-routed.
@@ -139,21 +139,24 @@ Returns a `MailLink` transient entity with three properties, so a shortcut can c
 | Property | Example |
 |---|---|
 | `url` | `https://app.fastmail.com/mail/Test/?filter=inbox&u=REDACTED` |
-| `title` | `In Inbox • Test` |
-| `markdown` | `[In Inbox • Test](https://app.fastmail.com/mail/Test/?filter=inbox&u=REDACTED)` |
+| `title` | `Invoice for July` |
+| `markdown` | `[Invoice for July](https://app.fastmail.com/mail/Test/?filter=inbox&u=REDACTED)` |
 
-The `u=` account parameter is preserved. It identifies which Fastmail account the link belongs to, so a link captured from the work app still opens as the work account rather than whichever session happens to be active.
+`title` is the subject of the open message and nothing else — no mailbox, no account, no ` | Fastmail` suffix, no unread count.
 
-Cleaning is implemented in `harness.js`, not in Swift, so title-format changes on Fastmail's side are fixed by editing the script rather than rebuilding and re-signing both apps. The default cleaner:
+This rules out `document.title` as the source. Fastmail renders it as `In Inbox • Test | Fastmail` (observed 2026-08-11), which is mailbox context rather than subject, so no amount of suffix-stripping produces the wanted value. The subject is instead read from the message view's DOM.
 
-1. Strips a leading unread count, `^\(\d+\)\s*`.
-2. Strips the trailing ` | Fastmail` suffix.
-3. Collapses whitespace.
-4. When a message is open, prefers the subject read from the DOM over the document title.
+The `u=` account parameter in the URL is preserved. It identifies which Fastmail account the link belongs to, so a link captured from the work app still opens as the work account rather than whichever session happens to be active.
 
-Observed input as of 2026-08-11: `In Inbox • Test | Fastmail`. The message-view title format is unconfirmed and is to be sampled during Milestone 0, with step 4 as the fallback if it proves unreliable.
+Subject resolution lives in `harness.js`, not in Swift, so a Fastmail markup change is fixed by editing the script rather than rebuilding and re-signing both apps:
 
-The user script can override the cleaner by assigning `native.titleCleaner = fn`; the harness uses the override when present.
+1. Try each selector in an ordered candidate list, first non-empty match wins. The list is pinned during Milestone 0 by inspecting a real message view.
+2. Trim and collapse whitespace.
+3. If no candidate matches, fail rather than substituting a mailbox name — a wrong title is worse than none, because it is silently wrong.
+
+When no message is open, `GetCurrentLink` fails with "No message open". Capturing a link to a mailbox has no subject by definition, and returning the mailbox name would violate the rule above.
+
+The user script can override resolution by assigning `native.subjectResolver = fn`; the harness uses the override when present.
 
 ## Error handling
 
