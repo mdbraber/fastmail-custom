@@ -226,10 +226,15 @@ No GM API shims. The target script declares `@grant none` and needs none.
 Three App Intents per app, working identically on iOS and macOS, titled with the profile name so the two apps are distinguishable in the Shortcuts picker:
 
 - `OpenFastmail(path: String?)` — opens the app, optionally at a path.
-- `GetCurrentLink()` — returns the frontmost URL and cleaned title.
-- `RunScriptAction(name: String)` — opens the app, waits for load and action registration, then invokes the action via `callAsyncJavaScript`, awaiting the returned promise, and returns its string result. Parameter options come from the registered action names last persisted to `UserDefaults`.
+- `GetURL()` — the active web view's current URL.
+- `GetTitle()` — the open message's subject, resolved by the same chain as `currentLink()`. Not `document.title`, for the reasons under GetCurrentLink; the raw document title is reachable through `RunJavaScript` for anyone who wants it.
+- `GetCurrentLink()` — URL, title, and markdown together as one entity.
+- `RunJavaScript(script: String)` — evaluates arbitrary JavaScript in the active web view via `callAsyncJavaScript`, awaiting a returned promise, and returns the result coerced to text.
+- `RunScriptAction(name: String)` — invokes an action the user script registered by name. Parameter options come from the registered action names last persisted to `UserDefaults`.
 
-All three set `openAppWhenRun = true`, since the value lives in the web view and only exists while the app is running.
+`GetURL`, `GetTitle`, and `GetCurrentLink` share one implementation; the first two exist because pulling a single value out of an entity is clumsy in a shortcut.
+
+All set `openAppWhenRun = true`, since the value lives in the web view and only exists while the app is running. On macOS the active web view is the key window's, so a shortcut acts on the front tab.
 
 Adding a further Shortcuts action means adding a `registerAction` call to the script, with no rebuild.
 
@@ -430,6 +435,26 @@ The same injection applies to compose views as to any other, and no special-casi
 
 iOS has neither command, since it has one full-screen web view and no menu bar. Compose there is reached through Fastmail's own UI.
 
+### AppleScript
+
+The Mac app is scriptable, with a dictionary that deliberately mirrors Safari's so existing habits and snippets carry over:
+
+```applescript
+tell application "Fastmail"
+    get URL of front window
+    get name of front window
+    do JavaScript "document.title" in front window
+end tell
+```
+
+`windows` enumerates real windows, and since macOS tabs are windows, it enumerates tabs too. Each exposes `URL` and `name`, where `name` is the resolved message subject, matching `GetTitle`.
+
+Implementation is an `.sdef` in the bundle with `NSAppleScriptEnabled` and `OSAScriptingDefinition` set in Info.plist, plus an `NSScriptCommand` subclass for `do JavaScript`.
+
+The one non-obvious piece: `callAsyncJavaScript` is asynchronous while an Apple Event expects a result. The command calls `suspendExecution()` and then `resumeExecution(withResult:)` from the completion handler, rather than blocking the main thread or returning early with nothing.
+
+**Scripting reaches a logged-in mail session.** `do JavaScript` and `RunJavaScript` let anything that can send an Apple Event or run a shortcut execute code against live mail — the same exposure Safari gates behind "Allow JavaScript from Apple Events", which is off by default there. Both are enabled here without a gate, on the grounds that this is a personal app on a single-user machine and the alternative is a preferences surface the app otherwise does not need. Recorded so the decision is deliberate; it is the point to revisit first if the app is ever shared.
+
 ## Unread badge
 
 The app icon carries an unread count, read from the page Fastmail already renders. No API, no token, no background task.
@@ -478,6 +503,8 @@ Unit tests, no WebKit required:
 - `NativeBridge`: unknown action, malformed payload, share payload parsing.
 - `BadgeController`: zero clears rather than shows `0`, a missing count leaves the badge unchanged, and a declined authorization is not re-requested.
 - `LinkRouter`: `mailto:` translation including subject and body, non-Fastmail host refusal, `u=` match and mismatch, absent `u=`, and that a URL carrying `handoff=1` is never handed off again.
+- `WebViewRegistry`: resolves the active view from the key window, and copes with the last window closing.
+- `ComposePool`: a closed compose window returns to the pool reloaded, and an empty pool creates a fresh window rather than failing.
 
 Integration test with a real `WKWebView` loading a bundled `fixture.html`: harness installs, `window.native` exists, `onRoute` fires after a `pushState`, the user script is evaluated after `load` rather than at document start, and a throwing user script is caught and reported. The fixture also carries the `.v-Thread-title h1` structure and a `.v-Menu` containing `Show details`, so the subject chain and menu injection are covered without hitting the network.
 
@@ -492,7 +519,7 @@ Manual verification uses `isInspectable` and Safari Web Inspector.
 - **M2** — Build phase, `ScriptStore`, `ScriptInjector`, metadata parsing. Ends with the Inbox mode script running unmodified on both platforms.
 - **M3** — `harness.js`: route hooks, subject resolution, menu injection, error reporting.
 - **M4** — `NativeBridge`, `SharePresenter`, `BadgeController`, and the web view shims.
-- **M5** — App Intents.
+- **M5** — App Intents, the AppleScript dictionary, link handling, share extensions, and the macOS compose and tab behaviour.
 - **M6** — Tests, icons in both forms, error states.
 
 Within each milestone the macOS build is brought up first where the work is platform-agnostic, because the rebuild loop is faster and neither the app-bound-domain nor service-worker constraint applies there. iOS is then verified before the milestone closes, so divergence never accumulates across more than one milestone.
