@@ -6,8 +6,9 @@ DEVICE ?= $(shell xcrun devicectl list devices --quiet 2>/dev/null | awk 'NR==3 
 generate:
 	xcodegen generate
 
-test:
+test: generate
 	cd Packages/FastmailShellKit && swift test
+	xcodebuild -project $(PROJECT) -scheme IntegrationTests -destination 'platform=macOS' test
 
 build-macos: generate
 	xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release build

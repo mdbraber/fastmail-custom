@@ -60,6 +60,20 @@ targets:
         PRODUCT_NAME: Fastmail Work
         INFOPLIST_FILE: Apps/Work/Info.plist
 
+  IntegrationTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/IntegrationTests
+      - path: Packages/FastmailShellKit/Sources/FastmailShellKit/Resources/harness.js
+        buildPhase: resources
+    dependencies:
+      - package: FastmailShellKit
+        product: FastmailShellKit
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
 aggregateTargets:
   All:
     targets:
@@ -83,3 +97,10 @@ schemes:
     build:
       targets:
         All: all
+  IntegrationTests:
+    build:
+      targets:
+        IntegrationTests: [test]
+    test:
+      targets:
+        - IntegrationTests
