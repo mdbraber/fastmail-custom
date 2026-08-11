@@ -1123,18 +1123,37 @@ private func bundle(userScript: String, overlay: String? = nil) -> ScriptBundle 
     )
 }
 
-private func firstJSONArgument(of source: String) throws -> String {
+private func stringArgument(_ index: Int, of source: String) throws -> String {
     let marker = "window.__fmshell.boot("
-    let start = source.range(of: marker)!.upperBound
-    let rest = String(source[start...])
-    let comma = rest.range(of: ",")!.lowerBound
-    let literal = String(rest[rest.startIndex..<comma])
-    let data = literal.data(using: .utf8)!
-    let value = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-    return value as! String
+    var rest = Substring(source[source.range(of: marker)!.upperBound...])
+    var found = 0
+    while let open = rest.firstIndex(of: "\"") {
+        var cursor = rest.index(after: open)
+        var escaped = false
+        while cursor < rest.endIndex {
+            let character = rest[cursor]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "\"" {
+                break
+            }
+            cursor = rest.index(after: cursor)
+        }
+        let literal = String(rest[open...cursor])
+        if found == index {
+            let data = literal.data(using: .utf8)!
+            let value = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+            return value as! String
+        }
+        found += 1
+        rest = rest[rest.index(after: cursor)...]
+    }
+    throw ScriptInjectorError.encodingFailed("no argument at index \(index)")
 }
 
-@Test func bootstrapContainsHarnessThenBootCall() {
+@Test func bootstrapContainsHarnessThenBootCall() throws {
     let source = try ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
     #expect(source.hasPrefix("HARNESS_SOURCE"))
     #expect(source.contains("window.__fmshell.boot("))
@@ -1143,22 +1162,31 @@ private func firstJSONArgument(of source: String) throws -> String {
 @Test func userScriptSurvivesQuotesNewlinesAndScriptTags() throws {
     let hostile = "var s = \"a'b\\\"c\";\nif (a </script> b) {}\n\u{2028}\u{2029} emoji 🙂 tail"
     let source = try ScriptInjector.bootstrap(from: bundle(userScript: hostile))
-    #expect(try firstJSONArgument(of: source) == hostile)
+    #expect(try stringArgument(0, of: source) == hostile)
 }
 
-@Test func absentOverlayIsEncodedAsNull() {
+@Test func presentOverlayRoundTrips() throws {
+    let overlay = "var x = \"content, with, commas\";"
+    let source = try ScriptInjector.bootstrap(from: bundle(userScript: "BODY", overlay: overlay))
+    #expect(try stringArgument(1, of: source) == overlay)
+}
+
+@Test func absentOverlayIsEncodedAsNullAndDoesNotThrow() throws {
     let source = try ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
     #expect(source.contains(", null, "))
 }
 
-@Test func metadataIsPassedAsRunAtAndMatches() {
+@Test func metadataIsPassedAsRunAtAndMatches() throws {
     let source = try ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
     #expect(source.contains("\"runAt\":\"document-idle\"") || source.contains("\"runAt\": \"document-idle\""))
+    #expect(source.contains("\"matches\""))
     #expect(source.contains("app.fastmail.com"))
 }
 ```
 
-The hostile-input test is the point of this task. Concatenating a 29 KB script into a JavaScript string literal by hand is exactly where a quote or a `</script>` breaks everything, and the failure would look like a broken user script rather than a broken injector.
+The hostile-input test is the point of this task. Concatenating a 49 KB script into a JavaScript string literal by hand is exactly where a quote or a `</script>` breaks everything, and the failure would look like a broken user script rather than a broken injector.
+
+Two details in the helper matter. It walks the JSON string literal honouring backslash escapes rather than splitting on the first comma, because JSON does not escape commas inside strings and a real script is full of them. And the hostile fixture uses `\u{2028}` and `\u{2029}`, Swift's real scalar syntax — `"\\u2028"` would embed the six characters backslash-u-2-0-2-8 and quietly test nothing.
 
 - [ ] **Step 2: Run test to verify it fails**
 
