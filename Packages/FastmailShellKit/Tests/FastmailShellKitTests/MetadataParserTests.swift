@@ -78,3 +78,41 @@ private let realHeader = """
     """
     #expect(try MetadataParser.parse(source).matches == ["https://app.fastmail.com/*"])
 }
+
+@Test func bothMarkersOnOneLineThrows() {
+    #expect(throws: MetadataParseError.blockMissing) {
+        try MetadataParser.parse("// ==UserScript== ==/UserScript==")
+    }
+}
+
+@Test func emptyStringThrows() {
+    #expect(throws: MetadataParseError.blockMissing) {
+        try MetadataParser.parse("")
+    }
+}
+
+@Test func onlyClosingMarkerThrows() {
+    #expect(throws: MetadataParseError.blockMissing) {
+        try MetadataParser.parse("// ==/UserScript==")
+    }
+}
+
+@Test func closingMarkerBeforeOpeningMarkerWithValidBlockAfter() throws {
+    let source = """
+    // ==/UserScript==
+    // ==UserScript==
+    // @match https://example.com/*
+    // ==/UserScript==
+    """
+    #expect(try MetadataParser.parse(source).matches == ["https://example.com/*"])
+}
+
+@Test func adjacentMarkersYieldsEmptyMatches() throws {
+    let source = """
+    // ==UserScript==
+    // ==/UserScript==
+    """
+    let meta = try MetadataParser.parse(source)
+    #expect(meta.matches == [])
+    #expect(meta.runAt == .documentIdle)
+}

@@ -9,7 +9,7 @@ public enum MetadataParser {
         guard let start = lines.firstIndex(where: { $0.contains(openMarker) }) else {
             throw MetadataParseError.blockMissing
         }
-        guard let end = lines[start...].firstIndex(where: { $0.contains(closeMarker) }) else {
+        guard let end = lines[(start + 1)...].firstIndex(where: { $0.contains(closeMarker) }) else {
             throw MetadataParseError.blockMissing
         }
 
