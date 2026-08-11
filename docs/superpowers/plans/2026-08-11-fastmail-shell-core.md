@@ -1,0 +1,2291 @@
+# Fastmail Shell Core Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Four installable apps — personal and work, iOS and macOS — that load `app.fastmail.com` in a `WKWebView` and run the existing Inbox mode user script inside it.
+
+**Architecture:** A local Swift package, `FastmailShellKit`, holds everything platform-agnostic: profile configuration, user script metadata parsing, bundle-backed script loading, bootstrap assembly, and navigation policy. Two multiplatform Xcode app targets are thin wrappers that instantiate one `Profile` each. The user script is copied into each app bundle by a build phase and evaluated by a bundled JavaScript harness at the time its metadata asks for, in the page content world.
+
+**Tech Stack:** Swift 6, SwiftUI, WebKit, Swift Testing for package tests, XCTest for the WebKit integration target, XcodeGen for project generation, Make for build and install.
+
+## Global Constraints
+
+- **No code comments.** Ship bare code. Reasoning belongs in commit messages and the spec, not in the source.
+- **No third-party runtime dependencies** in the package or the apps. XcodeGen and Make are build-time tools only.
+- Deployment targets: **iOS 17.0**, **macOS 14.0**. Swift language version **6**.
+- Bundle identifiers, exactly: `com.mdbraber.fastmail.personal` and `com.mdbraber.fastmail.work`.
+- **Never commit account identifiers.** They live in `Config/Local.xcconfig`, which is gitignored. `Config/Local.xcconfig.example` carries placeholders only. No real `u=` value may appear in any committed file, including tests and fixtures.
+- **Do not add `WKAppBoundDomains`** to any Info.plist. It disables script injection, custom stylesheets, and message handlers.
+- The user script and harness run in **`WKContentWorld.page`**. The script requires `window.FastMail`, which an isolated world cannot see. Message handlers must be registered with `addScriptMessageHandler(_:contentWorld:name:)` against `WKContentWorld.page` for the same reason.
+- Allowed navigation hosts, exactly: `fastmail.com` and `fastmailusercontent.com`, plus their subdomains. Subdomain matching must require a leading dot so `notfastmail.com` is refused.
+- Source of the user script: `~/src/fastmail-customized/fastmail-inbox-mode.user.js`, referenced through the `USERSCRIPT_PATH` build setting and never copied into this repository.
+
+---
+
+## File Structure
+
+| Path | Responsibility |
+|---|---|
+| `project.yml` | XcodeGen definition: two multiplatform app targets, integration test target, aggregate scheme |
+| `Makefile` | generate, test, build, install for both platforms |
+| `Config/Shared.xcconfig` | Committed build settings; optionally includes `Local.xcconfig` |
+| `Config/Local.xcconfig.example` | Placeholder template for the gitignored real file |
+| `tools/copy-userscript.sh` | Build phase: validate and copy the user script into the bundle |
+| `tools/extract-icons.swift` | Renders app icons from the existing macOS web apps into asset catalogs |
+| `Packages/FastmailShellKit/Sources/FastmailShellKit/Profile.swift` | Per-app configuration value type |
+| `.../UserScriptMetadata.swift` | Parsed representation of a user script metadata block |
+| `.../MetadataParser.swift` | Parses `==UserScript==` blocks |
+| `.../ScriptStore.swift` | Loads harness, user script, and overlay from a resource loader |
+| `.../ScriptInjector.swift` | Assembles the bootstrap JavaScript source |
+| `.../NavigationPolicy.swift` | Decides allow / open externally / download |
+| `.../NativeBridge.swift` | `WKScriptMessageHandlerWithReply` for `log` and `error` |
+| `.../WebCoordinator.swift` | `WKNavigationDelegate` and `WKUIDelegate` |
+| `.../WebContainer.swift` | Cross-platform representable, with `+iOS` and `+macOS` variants |
+| `.../AppShell.swift` | Root SwiftUI view: web view plus error banner |
+| `.../Resources/harness.js` | Bootstrap, run-at scheduling, route hooks, error capture |
+| `Apps/Personal/`, `Apps/Work/` | `@main` entry points, Info.plist, asset catalogs |
+| `Tests/IntegrationTests/` | WebKit-backed tests with a local fixture |
+
+---
+
+### Task 1: Spike — verify Fastmail runs in a bare `WKWebView`
+
+The whole project rests on assumptions that cost minutes to check and days to discover late. This task builds a throwaway app, answers the questions, and commits the findings. Nothing else starts until it passes.
+
+**Files:**
+- Create: `/tmp/fmspike/main.swift` (throwaway, not committed)
+- Create: `docs/superpowers/spike-findings.md`
+
+- [ ] **Step 1: Write the spike app**
+
+Create `/tmp/fmspike/main.swift`:
+
+```swift
+import AppKit
+import WebKit
+
+final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+    var window: NSWindow!
+    var webView: WKWebView!
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let config = WKWebViewConfiguration()
+        let probe = """
+        window.__spike = {
+            hasFastMail: typeof window.FastMail !== 'undefined',
+            ua: navigator.userAgent,
+            sw: 'serviceWorker' in navigator
+        };
+        """
+        config.userContentController.addUserScript(
+            WKUserScript(source: probe, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        )
+        webView = WKWebView(frame: .zero, configuration: config)
+        webView.isInspectable = true
+        webView.navigationDelegate = self
+        window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 900),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = webView
+        window.makeKeyAndOrderFront(nil)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        webView.load(URLRequest(url: URL(string: "https://app.fastmail.com")!))
+    }
+}
+
+let app = NSApplication.shared
+let delegate = Delegate()
+app.delegate = delegate
+app.run()
+```
+
+- [ ] **Step 2: Run it**
+
+```bash
+cd /tmp/fmspike && swiftc -o fmspike main.swift && ./fmspike
+```
+
+Expected: a window opens showing the Fastmail login page.
+
+- [ ] **Step 3: Log in and answer the questions**
+
+Log in with password and TOTP. Then open Safari → Develop → your Mac → the spike web view, and in the console run:
+
+```javascript
+window.__spike
+document.querySelector('.v-Thread-title h1')
+document.querySelectorAll('.v-Menu').length
+navigator.serviceWorker.controller
+```
+
+Open a message, then open its actions menu (the one containing "Show details") and run:
+
+```javascript
+Array.from(document.querySelectorAll('.v-Menu'))
+  .filter(m => m.offsetParent !== null)
+  .map(m => Array.from(m.querySelectorAll('li.v-MenuOption')).map(li => li.textContent.trim()))
+```
+
+Also check whether a share icon exists in the sprite:
+
+```javascript
+Array.from(document.querySelectorAll('svg.v-Icon'))
+  .map(s => s.getAttribute('class'))
+  .filter((v, i, a) => a.indexOf(v) === i)
+  .filter(c => /share|export|link/i.test(c))
+```
+
+- [ ] **Step 4: Record the findings**
+
+Create `docs/superpowers/spike-findings.md` with the answers, one heading each:
+
+```markdown
+# Spike findings — 2026-08-11
+
+## Login
+Password plus TOTP in a bare WKWebView: PASS / FAIL, with notes.
+
+## window.FastMail
+Present: yes / no. Keys observed: store, classes, router, getViewFromNode.
+
+## Service workers
+navigator.serviceWorker.controller: value. Any visible degradation: notes.
+
+## Subject selector
+.v-Thread-title h1 resolves to the subject: yes / no.
+Fallback .v-MailboxItem.is-focused .v-MailboxItem-subject: yes / no.
+
+## Actions menu
+Menu containing "Show details" identified by: contents / other.
+Visible .v-Menu count while open: number.
+
+## Share icon
+Existing sprite class, or "none — inline an SVG path".
+
+## User agent
+Verbatim string.
+```
+
+- [ ] **Step 5: Gate**
+
+If login fails, or `window.FastMail` is absent, **stop and report**. The remaining tasks assume both.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add docs/superpowers/spike-findings.md
+git commit -m "docs: record WKWebView spike findings"
+```
+
+---
+
+### Task 2: Repository scaffolding and project generation
+
+**Files:**
+- Create: `project.yml`, `Makefile`, `Config/Shared.xcconfig`, `Config/Local.xcconfig.example`, `tools/copy-userscript.sh`
+- Modify: `.gitignore`
+- Create: `Apps/Personal/Info.plist`, `Apps/Work/Info.plist`, `Apps/Personal/PersonalApp.swift`, `Apps/Work/WorkApp.swift`
+- Create: `Packages/FastmailShellKit/Package.swift`, `Packages/FastmailShellKit/Sources/FastmailShellKit/Placeholder.swift`
+
+**Interfaces:**
+- Consumes: nothing
+- Produces: a generated `FastmailShell.xcodeproj` with targets `Personal` and `Work`, both building for iOS and macOS; `make generate`, `make build-macos`
+
+- [ ] **Step 1: Write the package manifest**
+
+Create `Packages/FastmailShellKit/Package.swift`:
+
+```swift
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+    name: "FastmailShellKit",
+    platforms: [.iOS(.v17), .macOS(.v14)],
+    products: [
+        .library(name: "FastmailShellKit", targets: ["FastmailShellKit"])
+    ],
+    targets: [
+        .target(
+            name: "FastmailShellKit",
+            resources: [.copy("Resources/harness.js")]
+        ),
+        .testTarget(
+            name: "FastmailShellKitTests",
+            dependencies: ["FastmailShellKit"]
+        )
+    ]
+)
+```
+
+- [ ] **Step 2: Add a placeholder source and the harness resource**
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/Placeholder.swift`:
+
+```swift
+public enum FastmailShellKit {
+    public static let version = "0.1.0"
+}
+```
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/Resources/harness.js`:
+
+```javascript
+(function () {
+    window.__fmshell = { version: '0.1.0' };
+})();
+```
+
+- [ ] **Step 3: Verify the package builds**
+
+Run: `cd Packages/FastmailShellKit && swift build`
+Expected: `Build complete!`
+
+- [ ] **Step 4: Write the xcconfig files**
+
+Create `Config/Shared.xcconfig`:
+
+```
+SWIFT_VERSION = 6.0
+CODE_SIGN_STYLE = Automatic
+USERSCRIPT_PATH = $(SRCROOT)/../fastmail-customized/fastmail-inbox-mode.user.js
+PERSONAL_ACCOUNT_ID =
+WORK_ACCOUNT_ID =
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"
+```
+
+The include sits last so `Local.xcconfig` overrides the empty defaults.
+
+Create `Config/Local.xcconfig.example`:
+
+```
+DEVELOPMENT_TEAM = ABCDE12345
+PERSONAL_ACCOUNT_ID = replace-me
+WORK_ACCOUNT_ID = replace-me
+USERSCRIPT_PATH = /Users/you/src/fastmail-customized/fastmail-inbox-mode.user.js
+```
+
+- [ ] **Step 5: Extend .gitignore**
+
+Replace `.gitignore` with:
+
+```
+Config/Local.xcconfig
+FastmailShell.xcodeproj/
+build/
+DerivedData/
+.DS_Store
+*.xcuserstate
+xcuserdata/
+.build/
+```
+
+The generated project is ignored because `project.yml` is the source of truth.
+
+- [ ] **Step 6: Write the build phase script**
+
+Create `tools/copy-userscript.sh`:
+
+```bash
+#!/bin/sh
+set -eu
+
+if [ -z "${USERSCRIPT_PATH:-}" ]; then
+    echo "error: USERSCRIPT_PATH is not set; copy Config/Local.xcconfig.example to Config/Local.xcconfig"
+    exit 1
+fi
+
+if [ ! -f "$USERSCRIPT_PATH" ]; then
+    echo "error: user script not found at $USERSCRIPT_PATH"
+    exit 1
+fi
+
+if ! grep -q "==UserScript==" "$USERSCRIPT_PATH"; then
+    echo "error: no ==UserScript== metadata block in $USERSCRIPT_PATH"
+    exit 1
+fi
+
+DEST="$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+mkdir -p "$DEST"
+cp "$USERSCRIPT_PATH" "$DEST/userscript.js"
+```
+
+Run: `chmod +x tools/copy-userscript.sh`
+
+- [ ] **Step 7: Write the Info.plists**
+
+Create `Apps/Personal/Info.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>Fastmail</string>
+    <key>FMAccountID</key>
+    <string>$(PERSONAL_ACCOUNT_ID)</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+</dict>
+</plist>
+```
+
+Create `Apps/Work/Info.plist` identically, but with `CFBundleDisplayName` of `Fastmail Work` and `FMAccountID` of `$(WORK_ACCOUNT_ID)`.
+
+- [ ] **Step 8: Write the app entry points**
+
+Create `Apps/Personal/PersonalApp.swift`:
+
+```swift
+import SwiftUI
+
+@main
+struct PersonalApp: App {
+    var body: some Scene {
+        WindowGroup {
+            Text("Personal")
+        }
+    }
+}
+```
+
+Create `Apps/Work/WorkApp.swift` with `WorkApp` and `Text("Work")`.
+
+These are replaced in Task 10. They exist now so the project generates and builds.
+
+- [ ] **Step 9: Write project.yml**
+
+Create `project.yml`:
+
+```yaml
+name: FastmailShell
+options:
+  bundleIdPrefix: com.mdbraber.fastmail
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+configs:
+  Debug: debug
+  Release: release
+
+configFiles:
+  Debug: Config/Shared.xcconfig
+  Release: Config/Shared.xcconfig
+
+packages:
+  FastmailShellKit:
+    path: Packages/FastmailShellKit
+
+targetTemplates:
+  ShellApp:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    dependencies:
+      - package: FastmailShellKit
+        product: FastmailShellKit
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        GENERATE_INFOPLIST_FILE: NO
+    postBuildScripts:
+      - name: Copy User Script
+        script: '"$SRCROOT/tools/copy-userscript.sh"'
+        inputFiles:
+          - $(USERSCRIPT_PATH)
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/userscript.js
+
+targets:
+  Personal:
+    templates: [ShellApp]
+    sources:
+      - path: Apps/Personal
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.personal
+        PRODUCT_NAME: Fastmail
+        INFOPLIST_FILE: Apps/Personal/Info.plist
+
+  Work:
+    templates: [ShellApp]
+    sources:
+      - path: Apps/Work
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.work
+        PRODUCT_NAME: Fastmail Work
+        INFOPLIST_FILE: Apps/Work/Info.plist
+
+  All:
+    type: ""
+    platform: macOS
+    dependencies:
+      - target: Personal
+        embed: false
+      - target: Work
+        embed: false
+
+schemes:
+  Personal:
+    build:
+      targets:
+        Personal: all
+    run:
+      config: Debug
+  Work:
+    build:
+      targets:
+        Work: all
+    run:
+      config: Debug
+  All:
+    build:
+      targets:
+        All: all
+```
+
+- [ ] **Step 10: Write the Makefile**
+
+Create `Makefile`:
+
+```makefile
+PROJECT = FastmailShell.xcodeproj
+DEVICE ?= $(shell xcrun devicectl list devices --quiet 2>/dev/null | awk 'NR==3 {print $$3}')
+
+.PHONY: generate test build-macos install-macos build-ios install-ios install clean
+
+generate:
+	xcodegen generate
+
+test:
+	cd Packages/FastmailShellKit && swift test
+
+build-macos: generate
+	xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release build
+	xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release build
+
+install-macos: build-macos
+	rm -rf "/Applications/Fastmail.app" "/Applications/Fastmail Work.app"
+	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail.app" /Applications/
+	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail Work.app" /Applications/
+
+build-ios: generate
+	xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release build
+	xcodebuild -project $(PROJECT) -scheme Work -destination 'generic/platform=iOS' -configuration Release build
+
+install-ios: build-ios
+	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail.app"
+	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail Work.app"
+
+install: install-macos install-ios
+
+clean:
+	rm -rf build DerivedData $(PROJECT)
+```
+
+- [ ] **Step 11: Create your local config and generate**
+
+```bash
+cp Config/Local.xcconfig.example Config/Local.xcconfig
+```
+
+Edit `Config/Local.xcconfig`: set `DEVELOPMENT_TEAM` to your team id, `USERSCRIPT_PATH` to the real path, and leave the account ids as placeholders for now.
+
+Run: `make generate`
+Expected: `Created project at FastmailShell.xcodeproj`
+
+- [ ] **Step 12: Build for macOS**
+
+Run: `make build-macos`
+Expected: `** BUILD SUCCEEDED **` twice.
+
+- [ ] **Step 13: Verify the build phase actually copied the script**
+
+```bash
+find ~/Library/Developer/Xcode/DerivedData -name userscript.js -path '*Fastmail.app*' | head -1 | xargs head -3
+```
+
+Expected: the first lines of the Inbox mode user script, starting `// ==UserScript==`.
+
+- [ ] **Step 14: Verify the build phase fails loudly when the source is missing**
+
+```bash
+USERSCRIPT_PATH=/nonexistent BUILT_PRODUCTS_DIR=/tmp/x UNLOCALIZED_RESOURCES_FOLDER_PATH=y ./tools/copy-userscript.sh; echo "exit=$?"
+```
+
+Expected: `error: user script not found at /nonexistent` and `exit=1`.
+
+- [ ] **Step 15: Commit**
+
+```bash
+git add project.yml Makefile Config tools .gitignore Apps Packages
+git commit -m "build: scaffold XcodeGen project, package, and user script build phase"
+```
+
+---
+
+### Task 3: Profile
+
+**Files:**
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/Profile.swift`
+- Test: `Packages/FastmailShellKit/Tests/FastmailShellKitTests/ProfileTests.swift`
+
+**Interfaces:**
+- Consumes: nothing
+- Produces: `Profile` with `id: String`, `displayName: String`, `startURL: URL`, `overlayScriptName: String?`, `urlScheme: String`, `accountID: String?`; `Profile.personal(accountID:)`, `Profile.work(accountID:)`, `Profile.accountID(from: Bundle)`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `Packages/FastmailShellKitTests/ProfileTests.swift` at `Packages/FastmailShellKit/Tests/FastmailShellKitTests/ProfileTests.swift`:
+
+```swift
+import Testing
+import Foundation
+@testable import FastmailShellKit
+
+@Test func personalProfileHasExpectedIdentity() {
+    let profile = Profile.personal(accountID: nil)
+    #expect(profile.id == "personal")
+    #expect(profile.displayName == "Fastmail")
+    #expect(profile.urlScheme == "fastmail-personal")
+    #expect(profile.overlayScriptName == "userscript.personal.js")
+    #expect(profile.startURL.absoluteString == "https://app.fastmail.com")
+}
+
+@Test func workProfileHasExpectedIdentity() {
+    let profile = Profile.work(accountID: nil)
+    #expect(profile.id == "work")
+    #expect(profile.displayName == "Fastmail Work")
+    #expect(profile.urlScheme == "fastmail-work")
+    #expect(profile.overlayScriptName == "userscript.work.js")
+}
+
+@Test func accountIDIsCarriedThrough() {
+    #expect(Profile.personal(accountID: "abc123").accountID == "abc123")
+}
+
+@Test func unsubstitutedBuildSettingIsTreatedAsAbsent() {
+    #expect(Profile.normalizedAccountID("$(PERSONAL_ACCOUNT_ID)") == nil)
+    #expect(Profile.normalizedAccountID("") == nil)
+    #expect(Profile.normalizedAccountID("   ") == nil)
+    #expect(Profile.normalizedAccountID("abc123") == "abc123")
+}
+```
+
+The unsubstituted case matters: if `Local.xcconfig` is missing, Info.plist keeps the literal `$(PERSONAL_ACCOUNT_ID)`, and treating that as a real account id would make every link look like it belonged to another profile.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: FAIL, `cannot find 'Profile' in scope`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/Profile.swift`:
+
+```swift
+import Foundation
+
+public struct Profile: Equatable, Sendable {
+    public let id: String
+    public let displayName: String
+    public let startURL: URL
+    public let overlayScriptName: String?
+    public let urlScheme: String
+    public let accountID: String?
+
+    public init(
+        id: String,
+        displayName: String,
+        startURL: URL,
+        overlayScriptName: String?,
+        urlScheme: String,
+        accountID: String?
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.startURL = startURL
+        self.overlayScriptName = overlayScriptName
+        self.urlScheme = urlScheme
+        self.accountID = accountID
+    }
+}
+
+extension Profile {
+    public static func personal(accountID: String?) -> Profile {
+        Profile(
+            id: "personal",
+            displayName: "Fastmail",
+            startURL: URL(string: "https://app.fastmail.com")!,
+            overlayScriptName: "userscript.personal.js",
+            urlScheme: "fastmail-personal",
+            accountID: normalizedAccountID(accountID)
+        )
+    }
+
+    public static func work(accountID: String?) -> Profile {
+        Profile(
+            id: "work",
+            displayName: "Fastmail Work",
+            startURL: URL(string: "https://app.fastmail.com")!,
+            overlayScriptName: "userscript.work.js",
+            urlScheme: "fastmail-work",
+            accountID: normalizedAccountID(accountID)
+        )
+    }
+
+    public static func accountID(from bundle: Bundle) -> String? {
+        normalizedAccountID(bundle.object(forInfoDictionaryKey: "FMAccountID") as? String)
+    }
+
+    static func normalizedAccountID(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("$(") else { return nil }
+        return trimmed
+    }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: PASS, 4 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add Packages/FastmailShellKit
+git commit -m "feat: add Profile with account id normalization"
+```
+
+---
+
+### Task 4: User script metadata parsing
+
+**Files:**
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/UserScriptMetadata.swift`
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/MetadataParser.swift`
+- Test: `Packages/FastmailShellKit/Tests/FastmailShellKitTests/MetadataParserTests.swift`
+
+**Interfaces:**
+- Consumes: nothing
+- Produces: `UserScriptMetadata` with `name: String?`, `matches: [String]`, `runAt: UserScriptMetadata.RunAt`, `grants: [String]`; `UserScriptMetadata.RunAt` cases `documentStart`, `documentEnd`, `documentIdle` with raw values `document-start`, `document-end`, `document-idle`; `MetadataParser.parse(_:) throws -> UserScriptMetadata`; `MetadataParseError.blockMissing`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `Packages/FastmailShellKit/Tests/FastmailShellKitTests/MetadataParserTests.swift`:
+
+```swift
+import Testing
+@testable import FastmailShellKit
+
+private let realHeader = """
+// ==UserScript==
+// @name         Fastmail Inbox mode
+// @namespace    mdbraber
+// @version      1.0
+// @description  Sticky Inbox filter on labels
+// @author       Someone
+// @match        https://app.fastmail.com/*
+// @run-at       document-idle
+// @inject-into  context
+// @grant        none
+// ==/UserScript==
+
+(function () { 'use strict'; })();
+"""
+
+@Test func parsesTheRealHeader() throws {
+    let meta = try MetadataParser.parse(realHeader)
+    #expect(meta.name == "Fastmail Inbox mode")
+    #expect(meta.matches == ["https://app.fastmail.com/*"])
+    #expect(meta.runAt == .documentIdle)
+    #expect(meta.grants == ["none"])
+}
+
+@Test func missingBlockThrows() {
+    #expect(throws: MetadataParseError.blockMissing) {
+        try MetadataParser.parse("(function () {})();")
+    }
+}
+
+@Test func runAtDefaultsToDocumentIdle() throws {
+    let source = """
+    // ==UserScript==
+    // @name  X
+    // ==/UserScript==
+    """
+    #expect(try MetadataParser.parse(source).runAt == .documentIdle)
+}
+
+@Test func unknownRunAtFallsBackToDocumentIdle() throws {
+    let source = """
+    // ==UserScript==
+    // @run-at  whenever
+    // ==/UserScript==
+    """
+    #expect(try MetadataParser.parse(source).runAt == .documentIdle)
+}
+
+@Test func collectsMultipleMatches() throws {
+    let source = """
+    // ==UserScript==
+    // @match https://app.fastmail.com/*
+    // @match https://www.fastmail.com/*
+    // ==/UserScript==
+    """
+    #expect(try MetadataParser.parse(source).matches.count == 2)
+}
+
+@Test func unknownDirectivesAreIgnoredNotFatal() throws {
+    let source = """
+    // ==UserScript==
+    // @wibble something
+    // @match https://app.fastmail.com/*
+    // ==/UserScript==
+    """
+    #expect(try MetadataParser.parse(source).matches == ["https://app.fastmail.com/*"])
+}
+
+@Test func directivesAfterTheClosingLineAreIgnored() throws {
+    let source = """
+    // ==UserScript==
+    // @match https://app.fastmail.com/*
+    // ==/UserScript==
+    // @match https://evil.example.com/*
+    """
+    #expect(try MetadataParser.parse(source).matches == ["https://app.fastmail.com/*"])
+}
+```
+
+That last test is the one worth having: a parser that scans the whole file rather than the block would let anything below the header widen where the script runs.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: FAIL, `cannot find 'MetadataParser' in scope`.
+
+- [ ] **Step 3: Write the metadata type**
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/UserScriptMetadata.swift`:
+
+```swift
+import Foundation
+
+public struct UserScriptMetadata: Equatable, Sendable {
+    public enum RunAt: String, Equatable, Sendable {
+        case documentStart = "document-start"
+        case documentEnd = "document-end"
+        case documentIdle = "document-idle"
+    }
+
+    public let name: String?
+    public let matches: [String]
+    public let runAt: RunAt
+    public let grants: [String]
+
+    public init(name: String?, matches: [String], runAt: RunAt, grants: [String]) {
+        self.name = name
+        self.matches = matches
+        self.runAt = runAt
+        self.grants = grants
+    }
+}
+
+public enum MetadataParseError: Error, Equatable {
+    case blockMissing
+}
+```
+
+- [ ] **Step 4: Write the parser**
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/MetadataParser.swift`:
+
+```swift
+import Foundation
+
+public enum MetadataParser {
+    private static let openMarker = "==UserScript=="
+    private static let closeMarker = "==/UserScript=="
+
+    public static func parse(_ source: String) throws -> UserScriptMetadata {
+        let lines = source.components(separatedBy: .newlines)
+        guard let start = lines.firstIndex(where: { $0.contains(openMarker) }) else {
+            throw MetadataParseError.blockMissing
+        }
+        guard let end = lines[start...].firstIndex(where: { $0.contains(closeMarker) }) else {
+            throw MetadataParseError.blockMissing
+        }
+
+        var name: String?
+        var matches: [String] = []
+        var runAt: UserScriptMetadata.RunAt = .documentIdle
+        var grants: [String] = []
+
+        for line in lines[(start + 1)..<end] {
+            guard let (key, value) = directive(in: line) else { continue }
+            switch key {
+            case "name": name = value
+            case "match": matches.append(value)
+            case "run-at": runAt = UserScriptMetadata.RunAt(rawValue: value) ?? .documentIdle
+            case "grant": grants.append(value)
+            default: continue
+            }
+        }
+
+        return UserScriptMetadata(name: name, matches: matches, runAt: runAt, grants: grants)
+    }
+
+    private static func directive(in line: String) -> (String, String)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("//") else { return nil }
+        let body = trimmed.dropFirst(2).trimmingCharacters(in: .whitespaces)
+        guard body.hasPrefix("@") else { return nil }
+        let content = body.dropFirst()
+        guard let separator = content.firstIndex(where: { $0 == " " || $0 == "\t" }) else { return nil }
+        let key = String(content[content.startIndex..<separator])
+        let value = String(content[separator...]).trimmingCharacters(in: .whitespaces)
+        guard !key.isEmpty, !value.isEmpty else { return nil }
+        return (key, value)
+    }
+}
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: PASS, 11 tests total.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add Packages/FastmailShellKit
+git commit -m "feat: parse user script metadata blocks"
+```
+
+---
+
+### Task 5: Script loading from the bundle
+
+**Files:**
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/ScriptStore.swift`
+- Test: `Packages/FastmailShellKit/Tests/FastmailShellKitTests/ScriptStoreTests.swift`
+
+**Interfaces:**
+- Consumes: `UserScriptMetadata`, `MetadataParser`
+- Produces: `ScriptBundle` with `harness: String`, `userScript: String`, `overlay: String?`, `metadata: UserScriptMetadata`; protocol `ResourceLoading` with `func string(named: String) -> String?`; `BundleResourceLoader(bundle:)`; `ScriptStore(loader:overlayName:)` with `func load() throws -> ScriptBundle`; `ScriptStoreError.harnessMissing`, `.userScriptMissing`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `Packages/FastmailShellKit/Tests/FastmailShellKitTests/ScriptStoreTests.swift`:
+
+```swift
+import Testing
+@testable import FastmailShellKit
+
+private struct StubLoader: ResourceLoading {
+    var resources: [String: String]
+    func string(named name: String) -> String? { resources[name] }
+}
+
+private let header = """
+// ==UserScript==
+// @match https://app.fastmail.com/*
+// @run-at document-idle
+// ==/UserScript==
+"""
+
+@Test func loadsHarnessUserScriptAndMetadata() throws {
+    let loader = StubLoader(resources: [
+        "harness.js": "HARNESS",
+        "userscript.js": header + "\nBODY"
+    ])
+    let bundle = try ScriptStore(loader: loader, overlayName: nil).load()
+    #expect(bundle.harness == "HARNESS")
+    #expect(bundle.userScript.contains("BODY"))
+    #expect(bundle.overlay == nil)
+    #expect(bundle.metadata.runAt == .documentIdle)
+}
+
+@Test func loadsOverlayWhenPresent() throws {
+    let loader = StubLoader(resources: [
+        "harness.js": "HARNESS",
+        "userscript.js": header,
+        "userscript.personal.js": "OVERLAY"
+    ])
+    let bundle = try ScriptStore(loader: loader, overlayName: "userscript.personal.js").load()
+    #expect(bundle.overlay == "OVERLAY")
+}
+
+@Test func missingOverlayIsNotAnError() throws {
+    let loader = StubLoader(resources: [
+        "harness.js": "HARNESS",
+        "userscript.js": header
+    ])
+    let bundle = try ScriptStore(loader: loader, overlayName: "userscript.personal.js").load()
+    #expect(bundle.overlay == nil)
+}
+
+@Test func missingHarnessThrows() {
+    let loader = StubLoader(resources: ["userscript.js": header])
+    #expect(throws: ScriptStoreError.harnessMissing) {
+        try ScriptStore(loader: loader, overlayName: nil).load()
+    }
+}
+
+@Test func missingUserScriptThrows() {
+    let loader = StubLoader(resources: ["harness.js": "HARNESS"])
+    #expect(throws: ScriptStoreError.userScriptMissing) {
+        try ScriptStore(loader: loader, overlayName: nil).load()
+    }
+}
+
+@Test func unparseableUserScriptPropagatesTheParseError() {
+    let loader = StubLoader(resources: [
+        "harness.js": "HARNESS",
+        "userscript.js": "no metadata here"
+    ])
+    #expect(throws: MetadataParseError.blockMissing) {
+        try ScriptStore(loader: loader, overlayName: nil).load()
+    }
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: FAIL, `cannot find 'ResourceLoading' in scope`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/ScriptStore.swift`:
+
+```swift
+import Foundation
+
+public struct ScriptBundle: Equatable, Sendable {
+    public let harness: String
+    public let userScript: String
+    public let overlay: String?
+    public let metadata: UserScriptMetadata
+}
+
+public enum ScriptStoreError: Error, Equatable {
+    case harnessMissing
+    case userScriptMissing
+}
+
+public protocol ResourceLoading: Sendable {
+    func string(named name: String) -> String?
+}
+
+public struct BundleResourceLoader: ResourceLoading {
+    private let bundles: [Bundle]
+
+    public init(bundles: [Bundle]) {
+        self.bundles = bundles
+    }
+
+    public func string(named name: String) -> String? {
+        for bundle in bundles {
+            guard let url = bundle.url(forResource: name, withExtension: nil) else { continue }
+            if let contents = try? String(contentsOf: url, encoding: .utf8) { return contents }
+        }
+        return nil
+    }
+}
+
+public struct ScriptStore {
+    private let loader: ResourceLoading
+    private let overlayName: String?
+
+    public init(loader: ResourceLoading, overlayName: String?) {
+        self.loader = loader
+        self.overlayName = overlayName
+    }
+
+    public func load() throws -> ScriptBundle {
+        guard let harness = loader.string(named: "harness.js") else {
+            throw ScriptStoreError.harnessMissing
+        }
+        guard let userScript = loader.string(named: "userscript.js") else {
+            throw ScriptStoreError.userScriptMissing
+        }
+        let metadata = try MetadataParser.parse(userScript)
+        let overlay = overlayName.flatMap { loader.string(named: $0) }
+        return ScriptBundle(
+            harness: harness,
+            userScript: userScript,
+            overlay: overlay,
+            metadata: metadata
+        )
+    }
+}
+```
+
+`BundleResourceLoader` takes several bundles because `harness.js` ships in the package's resource bundle while `userscript.js` is placed in the app bundle by the build phase.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: PASS, 17 tests total.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add Packages/FastmailShellKit
+git commit -m "feat: load harness, user script, and overlay from bundles"
+```
+
+---
+
+### Task 6: Bootstrap assembly
+
+**Files:**
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/ScriptInjector.swift`
+- Test: `Packages/FastmailShellKit/Tests/FastmailShellKitTests/ScriptInjectorTests.swift`
+
+**Interfaces:**
+- Consumes: `ScriptBundle`
+- Produces: `ScriptInjector.bootstrap(from: ScriptBundle) -> String`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `Packages/FastmailShellKit/Tests/FastmailShellKitTests/ScriptInjectorTests.swift`:
+
+```swift
+import Testing
+import Foundation
+@testable import FastmailShellKit
+
+private func bundle(userScript: String, overlay: String? = nil) -> ScriptBundle {
+    ScriptBundle(
+        harness: "HARNESS_SOURCE",
+        userScript: userScript,
+        overlay: overlay,
+        metadata: UserScriptMetadata(
+            name: "X",
+            matches: ["https://app.fastmail.com/*"],
+            runAt: .documentIdle,
+            grants: ["none"]
+        )
+    )
+}
+
+private func firstJSONArgument(of source: String) throws -> String {
+    let marker = "window.__fmshell.boot("
+    let start = source.range(of: marker)!.upperBound
+    let rest = String(source[start...])
+    let comma = rest.range(of: ",")!.lowerBound
+    let literal = String(rest[rest.startIndex..<comma])
+    let data = literal.data(using: .utf8)!
+    let value = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+    return value as! String
+}
+
+@Test func bootstrapContainsHarnessThenBootCall() {
+    let source = ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
+    #expect(source.hasPrefix("HARNESS_SOURCE"))
+    #expect(source.contains("window.__fmshell.boot("))
+}
+
+@Test func userScriptSurvivesQuotesNewlinesAndScriptTags() throws {
+    let hostile = "var s = \"a'b\\\"c\";\nif (a </script> b) {}\n// emoji 🙂 and \\u2028"
+    let source = ScriptInjector.bootstrap(from: bundle(userScript: hostile))
+    #expect(try firstJSONArgument(of: source) == hostile)
+}
+
+@Test func absentOverlayIsEncodedAsNull() {
+    let source = ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
+    #expect(source.contains(", null, "))
+}
+
+@Test func metadataIsPassedAsRunAtAndMatches() {
+    let source = ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
+    #expect(source.contains("\"runAt\":\"document-idle\"") || source.contains("\"runAt\": \"document-idle\""))
+    #expect(source.contains("app.fastmail.com"))
+}
+```
+
+The hostile-input test is the point of this task. Concatenating a 29 KB script into a JavaScript string literal by hand is exactly where a quote or a `</script>` breaks everything, and the failure would look like a broken user script rather than a broken injector.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: FAIL, `cannot find 'ScriptInjector' in scope`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/ScriptInjector.swift`:
+
+```swift
+import Foundation
+
+public enum ScriptInjector {
+    public static func bootstrap(from bundle: ScriptBundle) -> String {
+        let userScript = jsonLiteral(bundle.userScript)
+        let overlay = bundle.overlay.map(jsonLiteral) ?? "null"
+        let metadata = jsonLiteral([
+            "runAt": bundle.metadata.runAt.rawValue,
+            "matches": bundle.metadata.matches
+        ])
+        return """
+        \(bundle.harness)
+        window.__fmshell.boot(\(userScript), \(overlay), \(metadata));
+        """
+    }
+
+    static func jsonLiteral(_ value: String) -> String {
+        jsonLiteral(value as Any)
+    }
+
+    static func jsonLiteral(_ value: Any) -> String {
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]),
+            let text = String(data: data, encoding: .utf8)
+        else {
+            return "null"
+        }
+        return text
+    }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: PASS, 21 tests total.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add Packages/FastmailShellKit
+git commit -m "feat: assemble the injection bootstrap with JSON-encoded sources"
+```
+
+---
+
+### Task 7: Navigation policy
+
+**Files:**
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/NavigationPolicy.swift`
+- Test: `Packages/FastmailShellKit/Tests/FastmailShellKitTests/NavigationPolicyTests.swift`
+
+**Interfaces:**
+- Consumes: nothing
+- Produces: `NavigationDecision` cases `allow`, `openExternally`, `download`; `NavigationPolicy.decide(url: URL) -> NavigationDecision`; `NavigationPolicy.decideResponse(canShowMIMEType: Bool, contentDisposition: String?) -> NavigationDecision`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `Packages/FastmailShellKit/Tests/FastmailShellKitTests/NavigationPolicyTests.swift`:
+
+```swift
+import Testing
+import Foundation
+@testable import FastmailShellKit
+
+private func decide(_ string: String) -> NavigationDecision {
+    NavigationPolicy.decide(url: URL(string: string)!)
+}
+
+@Test func allowsFastmailAndItsSubdomains() {
+    #expect(decide("https://app.fastmail.com/mail/Inbox") == .allow)
+    #expect(decide("https://fastmail.com/") == .allow)
+    #expect(decide("https://www.fastmail.com/help") == .allow)
+}
+
+@Test func allowsAttachmentHost() {
+    #expect(decide("https://a1.fastmailusercontent.com/file.pdf") == .allow)
+    #expect(decide("https://fastmailusercontent.com/file.pdf") == .allow)
+}
+
+@Test func refusesLookalikeHosts() {
+    #expect(decide("https://notfastmail.com/") == .openExternally)
+    #expect(decide("https://fastmail.com.evil.example/") == .openExternally)
+    #expect(decide("https://evilfastmailusercontent.com/") == .openExternally)
+}
+
+@Test func sendsOrdinaryLinksToTheBrowser() {
+    #expect(decide("https://example.com/article") == .openExternally)
+}
+
+@Test func sendsNonWebSchemesOutward() {
+    #expect(decide("mailto:someone@example.com") == .openExternally)
+    #expect(decide("tel:+3112345678") == .openExternally)
+}
+
+@Test func downloadsWhenContentDispositionSaysAttachment() {
+    #expect(NavigationPolicy.decideResponse(
+        canShowMIMEType: true,
+        contentDisposition: "attachment; filename=\"invoice.pdf\""
+    ) == .download)
+}
+
+@Test func downloadsWhenWebKitCannotRenderTheType() {
+    #expect(NavigationPolicy.decideResponse(canShowMIMEType: false, contentDisposition: nil) == .download)
+}
+
+@Test func leavesRenderableInlineContentToFastmail() {
+    #expect(NavigationPolicy.decideResponse(canShowMIMEType: true, contentDisposition: "inline") == .allow)
+    #expect(NavigationPolicy.decideResponse(canShowMIMEType: true, contentDisposition: nil) == .allow)
+}
+```
+
+`fastmail.com.evil.example` and `notfastmail.com` are the two failures a naive `hasSuffix` check produces, and both would render an attacker's page inside a logged-in mail session.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: FAIL, `cannot find 'NavigationPolicy' in scope`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/NavigationPolicy.swift`:
+
+```swift
+import Foundation
+
+public enum NavigationDecision: Equatable, Sendable {
+    case allow
+    case openExternally
+    case download
+}
+
+public enum NavigationPolicy {
+    public static let allowedHosts = ["fastmail.com", "fastmailusercontent.com"]
+
+    public static func decide(url: URL) -> NavigationDecision {
+        guard let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
+            return .openExternally
+        }
+        return isAllowed(host: url.host) ? .allow : .openExternally
+    }
+
+    public static func decideResponse(canShowMIMEType: Bool, contentDisposition: String?) -> NavigationDecision {
+        let disposition = contentDisposition?.lowercased() ?? ""
+        if disposition.hasPrefix("attachment") { return .download }
+        return canShowMIMEType ? .allow : .download
+    }
+
+    static func isAllowed(host: String?) -> Bool {
+        guard let host = host?.lowercased() else { return false }
+        return allowedHosts.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: PASS, 29 tests total.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add Packages/FastmailShellKit
+git commit -m "feat: add navigation policy with strict host matching"
+```
+
+---
+
+### Task 8: The JavaScript harness
+
+**Files:**
+- Modify: `Packages/FastmailShellKit/Sources/FastmailShellKit/Resources/harness.js`
+- Create: `Tests/IntegrationTests/HarnessTests.swift`
+- Create: `Tests/IntegrationTests/fixture.html`
+- Modify: `project.yml`
+
+**Interfaces:**
+- Consumes: the bootstrap call shape from Task 6, `window.__fmshell.boot(userScript, overlay, metadata)`
+- Produces: `window.__fmshell` with `boot`, `onRoute`, `report`; `window.native` with `log` and `onRoute`; messages posted to the `native` handler with `{action: "log"|"error", payload: {...}}`
+
+- [ ] **Step 1: Write the fixture**
+
+Create `Tests/IntegrationTests/fixture.html`:
+
+```html
+<!doctype html>
+<html>
+<head><title>Fixture</title></head>
+<body>
+<div class="v-Thread">
+  <div class="v-Thread-title"><div><h1>Welcome to Labels</h1></div></div>
+</div>
+<script>
+window.__fixtureRouted = 0;
+</script>
+</body>
+</html>
+```
+
+- [ ] **Step 2: Write the failing tests**
+
+Create `Tests/IntegrationTests/HarnessTests.swift`:
+
+```swift
+import XCTest
+import WebKit
+@testable import FastmailShellKit
+
+@MainActor
+final class HarnessTests: XCTestCase {
+    private var webView: WKWebView!
+    private var received: [[String: Any]] = []
+
+    private final class Recorder: NSObject, WKScriptMessageHandlerWithReply {
+        var onMessage: (([String: Any]) -> Void)?
+        func userContentController(
+            _ userContentController: WKUserContentController,
+            didReceive message: WKScriptMessage,
+            replyHandler: @escaping (Any?, String?) -> Void
+        ) {
+            if let body = message.body as? [String: Any] { onMessage?(body) }
+            replyHandler(nil, nil)
+        }
+    }
+
+    private func makeWebView(userScript: String, runAt: UserScriptMetadata.RunAt) throws -> WKWebView {
+        let harnessURL = Bundle(for: HarnessTests.self).url(forResource: "harness", withExtension: "js")
+            ?? Bundle.module.url(forResource: "harness", withExtension: "js")!
+        let harness = try String(contentsOf: harnessURL, encoding: .utf8)
+        let bundle = ScriptBundle(
+            harness: harness,
+            userScript: userScript,
+            overlay: nil,
+            metadata: UserScriptMetadata(
+                name: "T",
+                matches: [],
+                runAt: runAt,
+                grants: ["none"]
+            )
+        )
+        let configuration = WKWebViewConfiguration()
+        let recorder = Recorder()
+        recorder.onMessage = { [weak self] body in self?.received.append(body) }
+        configuration.userContentController.addScriptMessageHandler(
+            recorder,
+            contentWorld: .page,
+            name: "native"
+        )
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: ScriptInjector.bootstrap(from: bundle),
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+        return WKWebView(frame: .zero, configuration: configuration)
+    }
+
+    private func load(_ webView: WKWebView) async throws {
+        let url = Bundle(for: HarnessTests.self).url(forResource: "fixture", withExtension: "html")!
+        webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        try await waitUntil { try await self.evaluate(webView, "document.readyState") as? String == "complete" }
+    }
+
+    private func evaluate(_ webView: WKWebView, _ js: String) async throws -> Any? {
+        try await webView.evaluateJavaScript(js)
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 5,
+        _ condition: () async throws -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if try await condition() { return }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTFail("condition not met within \(timeout)s")
+    }
+
+    func testHarnessInstallsAndExposesNative() async throws {
+        webView = try makeWebView(userScript: "window.__ran = true;", runAt: .documentIdle)
+        try await load(webView)
+        let installed = try await evaluate(webView, "typeof window.__fmshell") as? String
+        XCTAssertEqual(installed, "object")
+        let native = try await evaluate(webView, "typeof window.native.log") as? String
+        XCTAssertEqual(native, "function")
+    }
+
+    func testDocumentIdleScriptRunsAfterLoadNotAtStart() async throws {
+        let script = "window.__readyStateWhenRun = document.readyState;"
+        webView = try makeWebView(userScript: script, runAt: .documentIdle)
+        try await load(webView)
+        try await waitUntil {
+            try await self.evaluate(self.webView, "window.__readyStateWhenRun") != nil
+        }
+        let state = try await evaluate(webView, "window.__readyStateWhenRun") as? String
+        XCTAssertEqual(state, "complete")
+    }
+
+    func testThrowingUserScriptIsReportedNotSilent() async throws {
+        webView = try makeWebView(userScript: "throw new Error('boom');", runAt: .documentIdle)
+        try await load(webView)
+        try await waitUntil { self.received.contains { $0["action"] as? String == "error" } }
+        let error = received.first { $0["action"] as? String == "error" }
+        let payload = error?["payload"] as? [String: Any]
+        XCTAssertTrue((payload?["message"] as? String ?? "").contains("boom"))
+    }
+
+    func testRouteHookFiresOnPushState() async throws {
+        let script = "window.native.onRoute(function () { window.__fixtureRouted += 1; });"
+        webView = try makeWebView(userScript: script, runAt: .documentIdle)
+        try await load(webView)
+        try await waitUntil {
+            try await self.evaluate(self.webView, "typeof window.__fixtureRouted") as? String == "number"
+        }
+        _ = try await evaluate(webView, "history.pushState({}, '', '/changed')")
+        try await waitUntil {
+            (try await self.evaluate(self.webView, "window.__fixtureRouted") as? Int ?? 0) >= 1
+        }
+    }
+
+    func testMatchMismatchPreventsEvaluation() async throws {
+        let bundleMeta = UserScriptMetadata(
+            name: "T",
+            matches: ["https://example.com/*"],
+            runAt: .documentIdle,
+            grants: []
+        )
+        let harnessURL = Bundle(for: HarnessTests.self).url(forResource: "harness", withExtension: "js")!
+        let harness = try String(contentsOf: harnessURL, encoding: .utf8)
+        let bundle = ScriptBundle(
+            harness: harness,
+            userScript: "window.__ranAnyway = true;",
+            overlay: nil,
+            metadata: bundleMeta
+        )
+        let configuration = WKWebViewConfiguration()
+        let recorder = Recorder()
+        recorder.onMessage = { [weak self] body in self?.received.append(body) }
+        configuration.userContentController.addScriptMessageHandler(
+            recorder, contentWorld: .page, name: "native"
+        )
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: ScriptInjector.bootstrap(from: bundle),
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+        webView = WKWebView(frame: .zero, configuration: configuration)
+        try await load(webView)
+        let ran = try await evaluate(webView, "window.__ranAnyway")
+        XCTAssertNil(ran)
+    }
+}
+```
+
+- [ ] **Step 3: Add the integration target to project.yml**
+
+Add under `targets:` in `project.yml`:
+
+```yaml
+  IntegrationTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/IntegrationTests
+      - path: Packages/FastmailShellKit/Sources/FastmailShellKit/Resources/harness.js
+        buildPhase: resources
+    dependencies:
+      - package: FastmailShellKit
+        product: FastmailShellKit
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+```
+
+And add to `schemes:`:
+
+```yaml
+  IntegrationTests:
+    build:
+      targets:
+        IntegrationTests: [test]
+    test:
+      targets:
+        - IntegrationTests
+```
+
+- [ ] **Step 4: Run tests to verify they fail**
+
+```bash
+make generate
+xcodebuild -project FastmailShell.xcodeproj -scheme IntegrationTests -destination 'platform=macOS' test 2>&1 | tail -20
+```
+
+Expected: FAIL — the harness has no `boot`, so nothing is installed and every assertion fails.
+
+- [ ] **Step 5: Write the harness**
+
+Replace `Packages/FastmailShellKit/Sources/FastmailShellKit/Resources/harness.js` with:
+
+```javascript
+(function () {
+    if (window.__fmshell && window.__fmshell.boot) return;
+
+    var routeCallbacks = [];
+    var lastHref = location.href;
+
+    function post(action, payload) {
+        var webkit = window.webkit;
+        var handler = webkit && webkit.messageHandlers && webkit.messageHandlers.native;
+        if (!handler) return Promise.resolve(null);
+        try {
+            var result = handler.postMessage({ action: action, payload: payload || {} });
+            return result && result.catch ? result.catch(function () { return null; }) : Promise.resolve(result);
+        } catch (error) {
+            return Promise.resolve(null);
+        }
+    }
+
+    function report(error) {
+        var message = error && error.message ? error.message : String(error);
+        var stack = error && error.stack ? error.stack : '';
+        post('error', { message: message, stack: stack });
+    }
+
+    function notifyRoute() {
+        if (location.href === lastHref) return;
+        lastHref = location.href;
+        for (var i = 0; i < routeCallbacks.length; i += 1) {
+            try {
+                routeCallbacks[i](location.href);
+            } catch (error) {
+                report(error);
+            }
+        }
+    }
+
+    function installRouteHooks() {
+        ['pushState', 'replaceState'].forEach(function (name) {
+            var original = history[name];
+            history[name] = function () {
+                var result = original.apply(this, arguments);
+                notifyRoute();
+                return result;
+            };
+        });
+        window.addEventListener('popstate', notifyRoute);
+
+        var pending = null;
+        var observer = new MutationObserver(function () {
+            if (pending) return;
+            pending = setTimeout(function () {
+                pending = null;
+                notifyRoute();
+            }, 100);
+        });
+        function observe() {
+            if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+        }
+        if (document.body) observe();
+        else document.addEventListener('DOMContentLoaded', observe);
+    }
+
+    function matchesAny(patterns, href) {
+        for (var i = 0; i < patterns.length; i += 1) {
+            var escaped = patterns[i].replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+            if (new RegExp('^' + escaped + '$').test(href)) return true;
+        }
+        return false;
+    }
+
+    function runWhenReady(runAt, fn) {
+        if (runAt === 'document-start') {
+            fn();
+            return;
+        }
+        if (runAt === 'document-end') {
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+            else fn();
+            return;
+        }
+        if (document.readyState === 'complete') fn();
+        else window.addEventListener('load', fn);
+    }
+
+    function evaluate(source, label) {
+        try {
+            (0, eval)(source);
+        } catch (error) {
+            var message = error && error.message ? error.message : String(error);
+            report(new Error(label + ': ' + message));
+        }
+    }
+
+    window.__fmshell = {
+        boot: function (userScript, overlay, metadata) {
+            installRouteHooks();
+            var patterns = (metadata && metadata.matches) || [];
+            if (patterns.length && !matchesAny(patterns, location.href)) {
+                post('error', {
+                    message: 'user script @match does not cover ' + location.href,
+                    stack: ''
+                });
+                return;
+            }
+            var runAt = (metadata && metadata.runAt) || 'document-idle';
+            runWhenReady(runAt, function () {
+                if (userScript) evaluate(userScript, 'userscript');
+                if (overlay) evaluate(overlay, 'overlay');
+            });
+        },
+        onRoute: function (callback) {
+            routeCallbacks.push(callback);
+        },
+        report: report
+    };
+
+    window.native = window.native || {};
+    window.native.log = function () {
+        var parts = Array.prototype.slice.call(arguments).map(String);
+        post('log', { message: parts.join(' ') });
+    };
+    window.native.onRoute = function (callback) {
+        window.__fmshell.onRoute(callback);
+    };
+
+    window.addEventListener('error', function (event) {
+        report(event.error || event.message);
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+        report(event.reason);
+    });
+})();
+```
+
+`(0, eval)` is indirect eval, which evaluates in global scope — the semantics a user script manager provides, and what the Inbox mode script's top-level `window.mdbraberInboxMode` guard expects.
+
+- [ ] **Step 6: Run tests to verify they pass**
+
+```bash
+xcodebuild -project FastmailShell.xcodeproj -scheme IntegrationTests -destination 'platform=macOS' test 2>&1 | tail -20
+```
+
+Expected: `** TEST SUCCEEDED **`, 5 tests.
+
+If WebKit refuses to run in the test process with an error about a missing bundle identifier, add `PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.integrationtests` to the target's settings and regenerate.
+
+- [ ] **Step 7: Add the integration suite to make test**
+
+In `Makefile`, replace the `test` target with:
+
+```makefile
+test: generate
+	cd Packages/FastmailShellKit && swift test
+	xcodebuild -project $(PROJECT) -scheme IntegrationTests -destination 'platform=macOS' test
+```
+
+- [ ] **Step 8: Run the whole suite**
+
+Run: `make test`
+Expected: both suites pass.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add Packages/FastmailShellKit Tests project.yml Makefile
+git commit -m "feat: add JavaScript harness with run-at scheduling and error capture"
+```
+
+---
+
+### Task 9: Web view, bridge, and shell UI
+
+**Files:**
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/NativeBridge.swift`
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/WebCoordinator.swift`
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/WebContainer.swift`
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/AppShell.swift`
+- Test: `Packages/FastmailShellKit/Tests/FastmailShellKitTests/NativeBridgeTests.swift`
+
+**Interfaces:**
+- Consumes: `Profile`, `ScriptStore`, `ScriptInjector`, `NavigationPolicy`, `BundleResourceLoader`
+- Produces: `ShellModel` (`@MainActor`, `ObservableObject`) with `@Published var banner: String?`; `NativeBridge(onLog:onError:)`; `WebContainer(profile:model:)`; `AppShell(profile:)`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `Packages/FastmailShellKit/Tests/FastmailShellKitTests/NativeBridgeTests.swift`:
+
+```swift
+import Testing
+import Foundation
+@testable import FastmailShellKit
+
+@Test func routesLogAndErrorActions() async {
+    let recorded = Recorder()
+    let bridge = await NativeBridge(
+        onLog: { await recorded.appendLog($0) },
+        onError: { await recorded.appendError($0) }
+    )
+    await bridge.handle(body: ["action": "log", "payload": ["message": "hello"]])
+    await bridge.handle(body: ["action": "error", "payload": ["message": "boom", "stack": "s"]])
+    #expect(await recorded.logs == ["hello"])
+    #expect(await recorded.errors == ["boom"])
+}
+
+@Test func unknownActionProducesAnError() async {
+    let bridge = await NativeBridge(onLog: { _ in }, onError: { _ in })
+    let reply = await bridge.handle(body: ["action": "teleport", "payload": [:]])
+    #expect(reply.error?.contains("teleport") == true)
+}
+
+@Test func malformedBodyProducesAnError() async {
+    let bridge = await NativeBridge(onLog: { _ in }, onError: { _ in })
+    let reply = await bridge.handle(body: ["nonsense": 1])
+    #expect(reply.error != nil)
+}
+
+actor Recorder {
+    var logs: [String] = []
+    var errors: [String] = []
+    func appendLog(_ value: String) { logs.append(value) }
+    func appendError(_ value: String) { errors.append(value) }
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: FAIL, `cannot find 'NativeBridge' in scope`.
+
+- [ ] **Step 3: Write the bridge**
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/NativeBridge.swift`:
+
+```swift
+import Foundation
+import WebKit
+
+public struct BridgeReply: Equatable, Sendable {
+    public let value: String?
+    public let error: String?
+}
+
+@MainActor
+public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
+    private let onLog: (String) async -> Void
+    private let onError: (String) async -> Void
+
+    public init(
+        onLog: @escaping (String) async -> Void,
+        onError: @escaping (String) async -> Void
+    ) {
+        self.onLog = onLog
+        self.onError = onError
+    }
+
+    @discardableResult
+    public func handle(body: [String: Any]) async -> BridgeReply {
+        guard let action = body["action"] as? String else {
+            return BridgeReply(value: nil, error: "message has no action")
+        }
+        let payload = body["payload"] as? [String: Any] ?? [:]
+        switch action {
+        case "log":
+            await onLog(payload["message"] as? String ?? "")
+            return BridgeReply(value: nil, error: nil)
+        case "error":
+            await onError(payload["message"] as? String ?? "unknown error")
+            return BridgeReply(value: nil, error: nil)
+        default:
+            return BridgeReply(value: nil, error: "unknown action: \(action)")
+        }
+    }
+
+    public nonisolated func userContentController(
+        _ userContentController: WKUserContentController,
+        didReceive message: WKScriptMessage,
+        replyHandler: @escaping (Any?, String?) -> Void
+    ) {
+        let body = message.body as? [String: Any] ?? [:]
+        Task { @MainActor in
+            let reply = await handle(body: body)
+            replyHandler(reply.value, reply.error)
+        }
+    }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: PASS, 32 tests total.
+
+- [ ] **Step 5: Write the coordinator**
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/WebCoordinator.swift`:
+
+```swift
+import Foundation
+import WebKit
+
+#if canImport(UIKit)
+import UIKit
+#else
+import AppKit
+#endif
+
+@MainActor
+public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+    private let model: ShellModel
+    private var lastURL: URL
+
+    public init(model: ShellModel, startURL: URL) {
+        self.model = model
+        self.lastURL = startURL
+    }
+
+    public func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+        switch NavigationPolicy.decide(url: url) {
+        case .allow:
+            lastURL = url
+            decisionHandler(.allow)
+        case .openExternally, .download:
+            decisionHandler(.cancel)
+            open(url)
+        }
+    }
+
+    public func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        if let url = navigationAction.request.url {
+            switch NavigationPolicy.decide(url: url) {
+            case .allow: webView.load(URLRequest(url: url))
+            case .openExternally, .download: open(url)
+            }
+        }
+        return nil
+    }
+
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        model.banner = "The page stopped responding and was reloaded."
+        webView.load(URLRequest(url: lastURL))
+    }
+
+    public func webView(
+        _ webView: WKWebView,
+        didFail navigation: WKNavigation!,
+        withError error: Error
+    ) {
+        model.banner = error.localizedDescription
+    }
+
+    private func open(_ url: URL) {
+        #if canImport(UIKit)
+        UIApplication.shared.open(url)
+        #else
+        NSWorkspace.shared.open(url)
+        #endif
+    }
+}
+```
+
+`createWebViewWith` returning `nil` after routing the request is what makes `target="_blank"` links work at all; WebKit does nothing for them otherwise.
+
+- [ ] **Step 6: Write the container and shell**
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/WebContainer.swift`:
+
+```swift
+import SwiftUI
+import WebKit
+
+@MainActor
+public final class ShellModel: ObservableObject {
+    @Published public var banner: String?
+
+    public init() {}
+
+    public func show(_ message: String) {
+        banner = message
+    }
+}
+
+@MainActor
+public struct WebContainer {
+    let profile: Profile
+    let model: ShellModel
+
+    public init(profile: Profile, model: ShellModel) {
+        self.profile = profile
+        self.model = model
+    }
+
+    func makeWebView(coordinator: WebCoordinator) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .default()
+
+        let bridge = NativeBridge(
+            onLog: { message in print("[userscript] \(message)") },
+            onError: { [model] message in model.show(message) }
+        )
+        configuration.userContentController.addScriptMessageHandler(
+            bridge,
+            contentWorld: .page,
+            name: "native"
+        )
+
+        let loader = BundleResourceLoader(bundles: [.main, .module])
+        do {
+            let scripts = try ScriptStore(
+                loader: loader,
+                overlayName: profile.overlayScriptName
+            ).load()
+            configuration.userContentController.addUserScript(
+                WKUserScript(
+                    source: ScriptInjector.bootstrap(from: scripts),
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                )
+            )
+        } catch {
+            model.show("User script not loaded: \(error)")
+        }
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isInspectable = true
+        webView.navigationDelegate = coordinator
+        webView.uiDelegate = coordinator
+        webView.load(URLRequest(url: profile.startURL))
+        return webView
+    }
+}
+```
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/WebContainer+iOS.swift`:
+
+```swift
+#if canImport(UIKit)
+import SwiftUI
+import WebKit
+
+extension WebContainer: UIViewRepresentable {
+    public func makeCoordinator() -> WebCoordinator {
+        WebCoordinator(model: model, startURL: profile.startURL)
+    }
+
+    public func makeUIView(context: Context) -> WKWebView {
+        makeWebView(coordinator: context.coordinator)
+    }
+
+    public func updateUIView(_ uiView: WKWebView, context: Context) {}
+}
+#endif
+```
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/WebContainer+macOS.swift`:
+
+```swift
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+import SwiftUI
+import WebKit
+
+extension WebContainer: NSViewRepresentable {
+    public func makeCoordinator() -> WebCoordinator {
+        WebCoordinator(model: model, startURL: profile.startURL)
+    }
+
+    public func makeNSView(context: Context) -> WKWebView {
+        makeWebView(coordinator: context.coordinator)
+    }
+
+    public func updateNSView(_ nsView: WKWebView, context: Context) {}
+}
+#endif
+```
+
+Create `Packages/FastmailShellKit/Sources/FastmailShellKit/AppShell.swift`:
+
+```swift
+import SwiftUI
+
+public struct AppShell: View {
+    private let profile: Profile
+    @StateObject private var model = ShellModel()
+
+    public init(profile: Profile) {
+        self.profile = profile
+    }
+
+    public var body: some View {
+        ZStack(alignment: .top) {
+            WebContainer(profile: profile, model: model)
+                .ignoresSafeArea()
+            if let banner = model.banner {
+                HStack(alignment: .top) {
+                    Text(banner)
+                        .font(.callout)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 8)
+                    Button("Dismiss") { model.banner = nil }
+                        .buttonStyle(.plain)
+                }
+                .padding(12)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .padding(12)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.default, value: model.banner)
+    }
+}
+```
+
+- [ ] **Step 7: Verify the package still builds and tests pass**
+
+Run: `cd Packages/FastmailShellKit && swift build && swift test`
+Expected: build succeeds, 32 tests pass.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add Packages/FastmailShellKit
+git commit -m "feat: add web container, navigation coordinator, and error banner"
+```
+
+---
+
+### Task 10: Wire the apps, extract icons, install
+
+**Files:**
+- Modify: `Apps/Personal/PersonalApp.swift`, `Apps/Work/WorkApp.swift`
+- Create: `tools/extract-icons.swift`
+- Create: `Apps/Personal/Assets.xcassets/`, `Apps/Work/Assets.xcassets/`
+- Modify: `Makefile`, `project.yml`
+
+**Interfaces:**
+- Consumes: `AppShell`, `Profile`
+- Produces: four installable products
+
+- [ ] **Step 1: Point the apps at the shell**
+
+Replace `Apps/Personal/PersonalApp.swift`:
+
+```swift
+import SwiftUI
+import FastmailShellKit
+
+@main
+struct PersonalApp: App {
+    var body: some Scene {
+        WindowGroup {
+            AppShell(profile: .personal(accountID: Profile.accountID(from: .main)))
+        }
+    }
+}
+```
+
+Replace `Apps/Work/WorkApp.swift`:
+
+```swift
+import SwiftUI
+import FastmailShellKit
+
+@main
+struct WorkApp: App {
+    var body: some Scene {
+        WindowGroup {
+            AppShell(profile: .work(accountID: Profile.accountID(from: .main)))
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Write the icon extraction tool**
+
+Create `tools/extract-icons.swift`:
+
+```swift
+import AppKit
+import Foundation
+
+struct Source {
+    let app: String
+    let target: String
+}
+
+let sources = [
+    Source(app: "/Users/mdbraber/Applications/mdbraber.com.app", target: "Apps/Personal"),
+    Source(app: "/Users/mdbraber/Applications/nexthealth.nl.app", target: "Apps/Work")
+]
+
+func render(_ image: NSImage, size: CGFloat, opaque: Bool, bleed: CGFloat) -> Data {
+    let pixels = Int(size)
+    let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: pixels,
+        pixelsHigh: pixels,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    )!
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    let full = NSRect(x: 0, y: 0, width: size, height: size)
+    if opaque {
+        NSColor.white.setFill()
+        full.fill()
+    }
+    let inset = -size * (bleed - 1) / 2
+    image.draw(in: full.insetBy(dx: inset, dy: inset))
+    NSGraphicsContext.restoreGraphicsState()
+    return rep.representation(using: .png, properties: [:])!
+}
+
+let contents = """
+{
+  "images" : [
+    {
+      "filename" : "icon-ios.png",
+      "idiom" : "universal",
+      "platform" : "ios",
+      "size" : "1024x1024"
+    },
+    {
+      "filename" : "icon-mac.png",
+      "idiom" : "mac",
+      "scale" : "1x",
+      "size" : "512x512"
+    }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+"""
+
+for source in sources {
+    let icon = NSWorkspace.shared.icon(forFile: source.app)
+    let set = "\(source.target)/Assets.xcassets/AppIcon.appiconset"
+    try! FileManager.default.createDirectory(atPath: set, withIntermediateDirectories: true)
+    try! render(icon, size: 1024, opaque: true, bleed: 1.18)
+        .write(to: URL(fileURLWithPath: "\(set)/icon-ios.png"))
+    try! render(icon, size: 512, opaque: false, bleed: 1.0)
+        .write(to: URL(fileURLWithPath: "\(set)/icon-mac.png"))
+    try! contents.write(toFile: "\(set)/Contents.json", atomically: true, encoding: .utf8)
+
+    let root = "\(source.target)/Assets.xcassets"
+    try! "{\n  \"info\" : { \"author\" : \"xcode\", \"version\" : 1 }\n}"
+        .write(toFile: "\(root)/Contents.json", atomically: true, encoding: .utf8)
+    print("wrote \(set)")
+}
+```
+
+- [ ] **Step 3: Run it and check the output**
+
+```bash
+swift tools/extract-icons.swift
+open Apps/Personal/Assets.xcassets/AppIcon.appiconset/icon-ios.png
+```
+
+Expected: two asset catalogs written. The personal iOS icon is a green Fastmail envelope filling the square with no transparent corners; the macOS one keeps its inset squircle and shadow.
+
+- [ ] **Step 4: Add the asset catalogs to the targets**
+
+In `project.yml`, under both `Personal` and `Work`, extend `sources` — they already point at `Apps/Personal` and `Apps/Work`, so the catalogs are picked up automatically. Confirm by regenerating:
+
+```bash
+make generate && xcodebuild -project FastmailShell.xcodeproj -list
+```
+
+Expected: schemes `Personal`, `Work`, `All`, `IntegrationTests`.
+
+- [ ] **Step 5: Build and run the Mac app**
+
+```bash
+make build-macos
+open "$(xcodebuild -project FastmailShell.xcodeproj -scheme Personal -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $3}')/Fastmail.app"
+```
+
+Expected: a window opens on the Fastmail login page, with the green icon in the Dock.
+
+- [ ] **Step 6: Verify the user script actually runs**
+
+Log in. Then in Safari → Develop → your Mac → Fastmail, run in the console:
+
+```javascript
+window.mdbraberInboxMode
+```
+
+Expected: an object with `isOn`, `setMode`, `toggleMode`, `computeCounts`. Press `Shift-I` in the app window and confirm Inbox mode toggles.
+
+If it is `undefined`, check the Xcode console for a `[userscript]` line or a banner in the app; the harness reports throw sites rather than swallowing them.
+
+- [ ] **Step 7: Install everything**
+
+```bash
+make install-macos
+```
+
+Expected: `Fastmail.app` and `Fastmail Work.app` in `/Applications`.
+
+For iOS, connect and unlock the device, then:
+
+```bash
+make install-ios
+```
+
+Expected: both apps on the Home Screen. If `DEVICE` resolves wrongly, pass it explicitly: `make install-ios DEVICE=<udid from xcrun devicectl list devices>`.
+
+- [ ] **Step 8: Verify on iOS**
+
+Open Fastmail on the phone, log in, and confirm the sidebar badges show Inbox-only counts — the script's visible signature.
+
+- [ ] **Step 9: Run the whole suite once more**
+
+Run: `make test`
+Expected: both suites pass.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add Apps tools project.yml Makefile
+git commit -m "feat: wire app targets to the shell and extract icons"
+```
+
+---
+
+## Self-Review
+
+**Spec coverage.** M0 → Task 1. M1 (package, two multiplatform targets, profiles, navigation policy, persistent sessions, `make install`) → Tasks 2, 3, 7, 9, 10. M2 (build phase, script store, injector, metadata) → Tasks 2, 4, 5, 6. M3-core (route hooks, error reporting, run-at evaluation) → Task 8.
+
+Deliberately **not** in this plan, and belonging to Plans 2 and 3: subject resolution and `currentLink`, menu injection and `addMenuItem`, share and `SharePresenter`, badge, App Intents, AppleScript, compose and tabs, `WebViewRegistry`, link handling and `LinkRouter`, share extensions, downloads, Quick Look, and settings. Two spec items are pulled forward into Task 9 because leaving them out would ship a visibly broken app: `target="_blank"` routing and content-process crash recovery.
+
+`NavigationPolicy.decideResponse` is written and tested in Task 7 but not yet wired to a `WKDownloadDelegate` — Task 9 routes `.download` externally as an interim, and Plan 3 replaces that with real downloads. Flagged so it is not mistaken for finished.
+
+**Placeholder scan.** No TBDs. Every code step carries the actual source. Task 1 is a spike whose deliverable is a findings document with a named gate condition rather than tests, which is intentional.
+
+**Type consistency.** `ScriptBundle(harness:userScript:overlay:metadata:)` is constructed identically in Tasks 5, 6, and 8. `UserScriptMetadata(name:matches:runAt:grants:)` matches across Tasks 4, 6, and 8. `NavigationDecision` cases `allow`/`openExternally`/`download` are used consistently in Tasks 7 and 9. `ShellModel.banner` is declared in Task 9's `WebContainer.swift` and consumed by `WebCoordinator` and `AppShell` in the same task. `Profile.accountID(from:)` defined in Task 3, used in Task 10.
