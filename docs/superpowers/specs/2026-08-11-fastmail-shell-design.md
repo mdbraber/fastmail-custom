@@ -15,7 +15,7 @@ One script, authored in its own repository, is built into all four products. The
 
 Multiple sites or URL-pattern matching. Content blocking or request interception. Response rewriting. Push or local notifications. Offline caching. In-app script editing. Remote script updates. App Store distribution.
 
-No unread-count badge. A badge can only be updated while the app runs, so a truthful one requires polling Fastmail's JMAP API from a background task, which requires storing an API token per profile. Not worth a stored credential. The app therefore holds no Fastmail credentials of its own; the only session state is the web view's cookies.
+No background refresh of the badge. The badge is read from the page while the app runs; see Unread badge. Keeping it current when the app is closed would require polling Fastmail's JMAP API from a background task and storing an API token per profile, which is not worth a stored credential. The app holds no Fastmail credentials of its own; the only session state is the web view's cookies.
 
 ## Platform constraints
 
@@ -116,6 +116,8 @@ A single asset catalog per target holds both, using platform-specific icon sets.
 
 **`SharePresenter`** — presents `UIActivityViewController` or `NSSharingServicePicker` behind one interface, so `NativeBridge` has no platform branches.
 
+**`BadgeController`** — applies an unread count to the app icon, via `UNUserNotificationCenter` on iOS or the dock tile on macOS, and owns the one-time authorization request. See Unread badge.
+
 **`ScriptStore`** — reads `userscript.js` and the profile overlay from the app bundle and parses their metadata blocks. No watching, no I/O beyond launch. A missing script is a programming error rather than a runtime condition, since the build phase fails without one.
 
 **`ScriptInjector`** — builds one `WKUserScript`: the bundled `harness.js` with the user script and overlay embedded as JSON-encoded string literals. Injected at `.atDocumentStart`, `forMainFrameOnly: true`, into `WKContentWorld.page`.
@@ -180,6 +182,8 @@ The trade-off is that Fastmail's own JavaScript can also see `window.native` and
 - `share({url, text, rect})` → Promise resolving when the share sheet is dismissed. `rect` is optional and takes the shape of `getBoundingClientRect()`; see Share presentation.
 - `currentLink()` → `{url, title, markdown}` for the open message, where `title` is the subject alone. Backs both the `GetCurrentLink` intent and the toolbar share button. Rejects when no message is open.
 - `subjectResolver` → assignable; overrides the default selector chain.
+- `setBadge(count)` → sets the app icon badge. See Unread badge.
+- `badgeResolver` → assignable; overrides how the unread count is read from the page.
 - `addMenuItem({label, icon, section, onSelect})` → injects an item into Fastmail's message actions menu, matching its markup. See Menu injection.
 - `registerAction(name, fn)` → registers a Shortcuts-invocable action; also notifies native so the name can be offered as a Shortcuts parameter option.
 - `log(...args)` → Xcode console.
@@ -306,6 +310,29 @@ Label matching is English-only. The accounts are English, so this is accepted ra
 
 The harness generalises this as `native.addMenuItem({label, icon, section, onSelect})`, so a user script can add further items without reimplementing the observer. The Share item is the first consumer of that API rather than a special case.
 
+## Unread badge
+
+The app icon carries an unread count, read from the page Fastmail already renders. No API, no token, no background task.
+
+The count is only as fresh as the last time the app ran. On iOS it therefore freezes when the app is backgrounded and stays frozen until it is next opened. This is accepted rather than worked around: the value is seeing the count on returning to the Home Screen, not being notified.
+
+**Source.** The harness resolves the count from Fastmail's own sidebar rather than inventing its own query, so the badge always agrees with what the app shows. The default resolver reads the Inbox source's badge from `.v-MailboxSource`, and is overridable with `native.badgeResolver = fn` on the same pattern as `subjectResolver`.
+
+Overriding matters here more than elsewhere: the Inbox mode script already computes its own per-label Inbox counts and patches Fastmail's badge rendering, so it is better placed than the harness to say what the number should be. The harness supplies the primitive and the script decides the policy.
+
+**When it updates.** On route change, on a debounced `MutationObserver` tick, and when the app returns to the foreground, where native asks the page for a fresh count via `callAsyncJavaScript` rather than trusting the last pushed value.
+
+**Native side.** `BadgeController` takes an `Int` and applies it per platform:
+
+| Platform | Mechanism | Authorization |
+|---|---|---|
+| iOS | `UNUserNotificationCenter.setBadgeCount(_:)` | `.badge` only, requested on the first non-zero count |
+| macOS | `NSApplication.shared.dockTile.badgeLabel` | none required |
+
+Authorization is requested when there is first something to show, not at launch, so the prompt arrives with obvious cause. If it is declined the badge silently does nothing and the harness stops being asked; the app is otherwise unaffected.
+
+A count of zero clears the badge rather than displaying `0`. The badge deliberately persists after the app quits, showing the last known count, which is the entire point on iOS.
+
 ## Error handling
 
 | Condition | Behavior |
@@ -316,6 +343,8 @@ The harness generalises this as `native.addMenuItem({label, icon, section, onSel
 | User script throws | Caught in harness, reported to native, shown in banner |
 | Unknown or malformed bridge action | Rejected promise with a descriptive message |
 | Network failure | Retry view replacing the WebKit error page |
+| Badge authorization declined | Badge is skipped; harness stops being asked for a count |
+| Badge resolver finds no count | Badge left unchanged rather than cleared, since absence is not zero |
 
 ## Testing
 
@@ -324,6 +353,7 @@ Unit tests, no WebKit required:
 - `MetadataParser`: `@match`, `@run-at`, and `@grant` extraction; missing block; unknown directives ignored rather than fatal.
 - `ScriptStore`: bundle resolution, overlay resolution, and the script-plus-overlay ordering.
 - `NativeBridge`: unknown action, malformed payload, share payload parsing.
+- `BadgeController`: zero clears rather than shows `0`, a missing count leaves the badge unchanged, and a declined authorization is not re-requested.
 
 Integration test with a real `WKWebView` loading a bundled `fixture.html`: harness installs, `window.native` exists, `onRoute` fires after a `pushState`, the user script is evaluated after `load` rather than at document start, and a throwing user script is caught and reported. The fixture also carries the `.v-Thread-title h1` structure and a `.v-Menu` containing `Show details`, so the subject chain and menu injection are covered without hitting the network.
 
@@ -337,7 +367,7 @@ Manual verification uses `isInspectable` and Safari Web Inspector.
 - **M1** — Package plus two multiplatform targets, profiles, navigation policy, persistent sessions. Both destinations build and run.
 - **M2** — Build phase, `ScriptStore`, `ScriptInjector`, metadata parsing. Ends with the Inbox mode script running unmodified on both platforms.
 - **M3** — `harness.js`: route hooks, subject resolution, menu injection, error reporting.
-- **M4** — `NativeBridge`, `SharePresenter`, and the web view shims.
+- **M4** — `NativeBridge`, `SharePresenter`, `BadgeController`, and the web view shims.
 - **M5** — App Intents.
 - **M6** — Tests, icons in both forms, error states.
 
