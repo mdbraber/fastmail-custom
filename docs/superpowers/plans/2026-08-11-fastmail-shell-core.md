@@ -2588,3 +2588,332 @@ Build and launch the Mac app, log in, and confirm in Web Inspector that `window.
 git add Packages Tests
 git commit -m "fix: inject the user script directly, since CSP forbids eval"
 ```
+
+---
+
+### Task 12: macOS chrome stylesheet
+
+Task 10 made the window full-height, so Fastmail's own page header now runs to the top edge and the traffic lights sit on top of it. This task stops them overlapping.
+
+Unlike the script case, CSS is not blocked: Fastmail sends `style-src 'self' 'unsafe-inline' …`, so an injected `<style>` element is permitted. Verified against the live headers on 2026-08-11.
+
+The stylesheet is macOS-only. iOS has no traffic lights and no title bar, and applying the inset there would leave a dead band at the top of the screen.
+
+**Files:**
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/Resources/chrome-macos.css`
+- Modify: `Packages/FastmailShellKit/Sources/FastmailShellKit/ScriptStore.swift`
+- Modify: `Packages/FastmailShellKit/Sources/FastmailShellKit/ScriptInjector.swift`
+- Modify: `Packages/FastmailShellKit/Sources/FastmailShellKit/WebContainer+macOS.swift`
+- Test: `Packages/FastmailShellKit/Tests/FastmailShellKitTests/ScriptInjectorTests.swift`
+
+**Interfaces:**
+- Consumes: `ScriptBundle`, `ScriptInjector.userScripts(from:url:)` from Task 11
+- Produces: `ScriptBundle.chromeCSS: String?`; `ScriptInjector.userScripts(from:url:chromeCSS:)`
+
+- [ ] **Step 1: Write the stylesheet**
+
+Create `chrome-macos.css`:
+
+```css
+:root {
+    --fmshell-titlebar-inset: 78px;
+}
+
+.v-PageHeader {
+    padding-left: var(--fmshell-titlebar-inset);
+}
+
+body.fmshell-fullscreen {
+    --fmshell-titlebar-inset: 0px;
+}
+```
+
+The inset is a custom property so the value can be tuned in one place. 78px is the standard distance from the window's left edge to the right of the close/minimise/zoom cluster at default sizing; confirm it visually in Step 6 and adjust if Fastmail's own padding already accounts for part of it.
+
+- [ ] **Step 2: Write the failing tests**
+
+Add to `ScriptInjectorTests.swift`:
+
+```swift
+@Test func chromeCSSIsInjectedAsAStyleElementAtDocumentStart() throws {
+    let scripts = try ScriptInjector.userScripts(
+        from: bundle(), url: fastmail, chromeCSS: ".v-PageHeader { padding-left: 78px; }"
+    )
+    let styleScript = try #require(scripts.first { $0.source.contains("createElement('style')") })
+    #expect(styleScript.injectionTime == .atDocumentStart)
+    #expect(styleScript.source.contains("padding-left: 78px"))
+}
+
+@Test func chromeCSSIsOmittedWhenAbsent() throws {
+    let scripts = try ScriptInjector.userScripts(from: bundle(), url: fastmail, chromeCSS: nil)
+    #expect(scripts.allSatisfy { !$0.source.contains("createElement('style')") })
+}
+
+@Test func chromeCSSSurvivesQuotesAndNewlines() throws {
+    let css = ".x::after { content: \"a'b\\\"c\"; }\n.y { color: red; }"
+    let scripts = try ScriptInjector.userScripts(from: bundle(), url: fastmail, chromeCSS: css)
+    let styleScript = try #require(scripts.first { $0.source.contains("createElement('style')") })
+    let encoded = try #require(styleScript.source.range(of: "\"")).lowerBound
+    _ = encoded
+    #expect(styleScript.source.contains("\\n") || styleScript.source.contains("\\\""))
+}
+
+@Test func chromeCSSIsInjectedEvenWhenTheURLDoesNotMatch() throws {
+    let scripts = try ScriptInjector.userScripts(
+        from: bundle(), url: URL(string: "https://example.com/")!, chromeCSS: "x{}"
+    )
+    #expect(scripts.contains { $0.source.contains("createElement('style')") })
+}
+```
+
+That last one is deliberate: the chrome inset is a property of the window, not of the page, so it applies wherever the window points — including the login page, which is where you will first see whether the inset is right.
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: FAIL, `userScripts(from:url:chromeCSS:)` has no such parameter.
+
+- [ ] **Step 4: Extend ScriptStore and ScriptInjector**
+
+In `ScriptStore.swift`, add `chromeCSS` to `ScriptBundle` and load it, treating absence as normal rather than an error:
+
+```swift
+public struct ScriptBundle: Equatable, Sendable {
+    public let harness: String
+    public let userScript: String
+    public let overlay: String?
+    public let chromeCSS: String?
+    public let metadata: UserScriptMetadata
+}
+```
+
+and in `load()`, `let chromeCSS = loader.string(named: "chrome-macos.css")`, passed through to the initializer. Update the existing `ScriptStore` tests' expected values for the new field.
+
+In `ScriptInjector.swift`, add the parameter and prepend the style script:
+
+```swift
+public static func userScripts(
+    from bundle: ScriptBundle,
+    url: URL,
+    chromeCSS: String? = nil
+) throws -> [WKUserScript] {
+    var scripts = [
+        WKUserScript(source: bundle.harness, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+    ]
+    if let chromeCSS, let literal = jsonLiteral(chromeCSS) {
+        let source = """
+        (function () {
+            var style = document.createElement('style');
+            style.id = 'fmshell-chrome';
+            style.textContent = \(literal);
+            (document.head || document.documentElement).appendChild(style);
+        })();
+        """
+        scripts.append(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    }
+    ...
+}
+```
+
+Reinstate the `jsonLiteral` helper deleted in Task 11, returning `String?`, for the CSS string only. A stylesheet with a quote or newline in it would otherwise break the surrounding JavaScript, which is the same class of bug the Task 6 tests were written for.
+
+- [ ] **Step 5: Pass the CSS on macOS only, and track fullscreen**
+
+In `WebContainer+macOS.swift`, pass `bundle.chromeCSS` through, and toggle the body class as the window enters and leaves fullscreen, since the traffic lights disappear in fullscreen and the inset must go with them:
+
+```swift
+func observeFullScreen(_ window: NSWindow, webView: WKWebView) {
+    let center = NotificationCenter.default
+    center.addObserver(forName: NSWindow.didEnterFullScreenNotification, object: window, queue: .main) { _ in
+        MainActor.assumeIsolated {
+            webView.evaluateJavaScript("document.body.classList.add('fmshell-fullscreen')")
+        }
+    }
+    center.addObserver(forName: NSWindow.didExitFullScreenNotification, object: window, queue: .main) { _ in
+        MainActor.assumeIsolated {
+            webView.evaluateJavaScript("document.body.classList.remove('fmshell-fullscreen')")
+        }
+    }
+}
+```
+
+`WebContainer.swift` must NOT pass `chromeCSS`; the iOS path leaves it nil.
+
+- [ ] **Step 6: Verify visually**
+
+Build and launch the Mac app. Confirm the search field and the buttons to its left are clear of the traffic lights, with no visible gap between the inset and Fastmail's own content. Enter fullscreen with ⌃⌘F and confirm the inset disappears and the header sits flush. Adjust `--fmshell-titlebar-inset` if the spacing is wrong and re-verify.
+
+Record the final value you settled on in the report.
+
+- [ ] **Step 7: Run the suites and commit**
+
+```bash
+make test
+git add Packages
+git commit -m "feat: inset Fastmail's page header clear of the traffic lights"
+```
+
+---
+
+### Task 13: Titlebar tint from the page
+
+The window edges and the area behind the content should carry Fastmail's colour rather than the system default, so the window reads as one surface the way the screenshot does.
+
+Fastmail publishes `<meta name="theme-color" content="#d6d8da">` with no `media` attribute, so it does not vary by colour scheme; it also carries a `t-light` or `t-dark` class on `<html>`. The tint therefore comes from the meta, and the light/dark decision comes from the tint's own luminance rather than from the class, so it stays correct if Fastmail renames its themes.
+
+**Files:**
+- Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/ThemeColor.swift`
+- Create: `Packages/FastmailShellKit/Tests/FastmailShellKitTests/ThemeColorTests.swift`
+- Modify: `Packages/FastmailShellKit/Sources/FastmailShellKit/Resources/harness.js`
+- Modify: `Packages/FastmailShellKit/Sources/FastmailShellKit/NativeBridge.swift`
+- Modify: `Packages/FastmailShellKit/Sources/FastmailShellKit/WebContainer.swift`
+- Modify: `Packages/FastmailShellKit/Sources/FastmailShellKit/WebContainer+macOS.swift`
+
+**Interfaces:**
+- Consumes: `NativeBridge`, `ShellModel`
+- Produces: `ThemeColor.components(fromHex:) -> (Double, Double, Double)?`, `ThemeColor.isDark(_:) -> Bool`; bridge action `theme` with payload `{color: String}`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `ThemeColorTests.swift`:
+
+```swift
+import Testing
+@testable import FastmailShellKit
+
+@Test func parsesSixDigitHex() throws {
+    let rgb = try #require(ThemeColor.components(fromHex: "#d6d8da"))
+    #expect(abs(rgb.0 - 214.0 / 255.0) < 0.001)
+    #expect(abs(rgb.1 - 216.0 / 255.0) < 0.001)
+    #expect(abs(rgb.2 - 218.0 / 255.0) < 0.001)
+}
+
+@Test func parsesWithoutLeadingHash() {
+    #expect(ThemeColor.components(fromHex: "d6d8da") != nil)
+}
+
+@Test func parsesThreeDigitShorthand() throws {
+    let rgb = try #require(ThemeColor.components(fromHex: "#fff"))
+    #expect(rgb.0 == 1.0 && rgb.1 == 1.0 && rgb.2 == 1.0)
+}
+
+@Test func rejectsMalformedValues() {
+    #expect(ThemeColor.components(fromHex: "") == nil)
+    #expect(ThemeColor.components(fromHex: "#12345") == nil)
+    #expect(ThemeColor.components(fromHex: "#gggggg") == nil)
+    #expect(ThemeColor.components(fromHex: "rgb(1,2,3)") == nil)
+}
+
+@Test func judgesLightnessByLuminance() {
+    #expect(ThemeColor.isDark((0, 0, 0)))
+    #expect(!ThemeColor.isDark((1, 1, 1)))
+    #expect(!ThemeColor.isDark((214.0 / 255, 216.0 / 255, 218.0 / 255)))
+    #expect(ThemeColor.isDark((0.1, 0.1, 0.12)))
+}
+
+@Test func weightsGreenMoreThanBlue() {
+    #expect(ThemeColor.isDark((0, 0, 1)))
+    #expect(!ThemeColor.isDark((0, 1, 0)))
+}
+```
+
+The last test is the one that catches a plain average being used instead of a luminance formula: pure blue is dark to the eye and pure green is not, but a naive mean calls them identical.
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: FAIL, `cannot find 'ThemeColor' in scope`.
+
+- [ ] **Step 3: Implement ThemeColor**
+
+Create `ThemeColor.swift`:
+
+```swift
+import Foundation
+
+public enum ThemeColor {
+    public static func components(fromHex hex: String) -> (Double, Double, Double)? {
+        var value = hex.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if value.hasPrefix("#") { value.removeFirst() }
+        if value.count == 3 {
+            value = value.map { "\($0)\($0)" }.joined()
+        }
+        guard value.count == 6, value.allSatisfy({ $0.isHexDigit }) else { return nil }
+        guard let number = UInt32(value, radix: 16) else { return nil }
+        return (
+            Double((number >> 16) & 0xff) / 255.0,
+            Double((number >> 8) & 0xff) / 255.0,
+            Double(number & 0xff) / 255.0
+        )
+    }
+
+    public static func isDark(_ rgb: (Double, Double, Double)) -> Bool {
+        0.2126 * rgb.0 + 0.7152 * rgb.1 + 0.0722 * rgb.2 < 0.5
+    }
+}
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `cd Packages/FastmailShellKit && swift test`
+Expected: PASS.
+
+- [ ] **Step 5: Report the theme colour from the harness**
+
+Add to `harness.js`, inside the IIFE, called once at install and again whenever it changes:
+
+```javascript
+function reportTheme() {
+    var meta = document.querySelector('meta[name="theme-color"]');
+    var color = meta ? meta.getAttribute('content') : null;
+    if (!color) return;
+    post('theme', { color: color });
+}
+
+function watchTheme() {
+    reportTheme();
+    var observer = new MutationObserver(reportTheme);
+    if (document.head) {
+        observer.observe(document.head, { attributes: true, childList: true, subtree: true });
+    }
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+}
+```
+
+Call `watchTheme()` from the IIFE, after `installRouteHooks()`. Observing the `<html>` class as well as the head matters because Fastmail may swap themes without replacing the meta element.
+
+- [ ] **Step 6: Route the action and publish the tint**
+
+In `NativeBridge.swift`, add a `theme` case alongside `log` and `error`, taking `payload["color"] as? String` and calling a new `onTheme` closure. An unknown or unparseable colour must produce a rejected promise, not be silently ignored.
+
+In `WebContainer.swift`, add `@Published public var tint: String?` to `ShellModel` and set it from the bridge, hopping to the main actor with `Task { @MainActor in }` exactly as the banner does.
+
+- [ ] **Step 7: Apply it on macOS**
+
+In `WebContainer+macOS.swift`, observe the model's tint and apply it to the window:
+
+```swift
+func applyTint(_ hex: String, to window: NSWindow) {
+    guard let rgb = ThemeColor.components(fromHex: hex) else { return }
+    window.backgroundColor = NSColor(
+        srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: 1
+    )
+    window.appearance = NSAppearance(named: ThemeColor.isDark(rgb) ? .darkAqua : .aqua)
+}
+```
+
+A colour that fails to parse leaves the window as it was rather than falling back to a guess.
+
+iOS takes no action in this task; the safe-area tint is deferred.
+
+- [ ] **Step 8: Verify**
+
+Launch the Mac app and confirm the window background matches Fastmail's own header colour at the rounded corners and during a resize, and that the traffic lights and any title text remain legible. Switch Fastmail between its light and dark themes in settings and confirm the window follows.
+
+- [ ] **Step 9: Run the suites and commit**
+
+```bash
+make test
+git add Packages
+git commit -m "feat: tint the window from the page's theme-color"
+```
