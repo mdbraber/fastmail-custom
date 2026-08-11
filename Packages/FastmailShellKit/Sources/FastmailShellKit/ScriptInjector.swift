@@ -52,16 +52,19 @@ public enum ScriptInjector {
 
     static func guarded(_ source: String, patterns: [String], label: String) -> String {
         let patternsLiteral = jsonLiteral(patterns) ?? "[]"
+        let labelLiteral = jsonLiteral(label) ?? "\"\""
         return #"""
-        var __fmshellPatterns = \#(patternsLiteral);
-        if (!__fmshellPatterns.length || __fmshellPatterns.some(function (pattern) {
+        if ((function () {
+        var patterns = \#(patternsLiteral);
+        return !patterns.length || patterns.some(function (pattern) {
         var escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
         return new RegExp('^' + escaped + '$').test(location.href);
-        })) {
+        });
+        })()) {
         try {\#(source)
         } catch (error) {
         var reported = {
-        message: '\#(label): ' + (error && error.message ? error.message : String(error)),
+        message: \#(labelLiteral) + ': ' + (error && error.message ? error.message : String(error)),
         stack: error && error.stack ? error.stack : ''
         };
         if (window.__fmshell && window.__fmshell.report) {
@@ -82,5 +85,7 @@ public enum ScriptInjector {
             return nil
         }
         return text
+            .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+            .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
     }
 }

@@ -67,9 +67,9 @@ private let fastmail = URL(string: "https://app.fastmail.com/mail/Inbox")!
 
 @Test @MainActor func guardedSourceCarriesLabelAndPatternsForTheRuntimeGate() throws {
     let scripts = try ScriptInjector.userScripts(from: bundle(overlay: "OVERLAY"), url: fastmail)
-    #expect(scripts[1].source.contains("userscript: "))
+    #expect(scripts[1].source.contains("\"userscript\""))
     #expect(scripts[1].source.contains("app.fastmail.com"))
-    #expect(scripts[2].source.contains("overlay: "))
+    #expect(scripts[2].source.contains("\"overlay\""))
 }
 
 @Test func matchesNormalizesEmptyPathToRoot() {
@@ -79,6 +79,11 @@ private let fastmail = URL(string: "https://app.fastmail.com/mail/Inbox")!
 
 @Test func matchesNormalizesHostCase() {
     #expect(ScriptInjector.matches(["https://app.fastmail.com/*"], url: URL(string: "https://APP.FASTMAIL.COM/")!))
+}
+
+@Test func jsonLiteralEscapesLineAndParagraphSeparators() {
+    let literal = ScriptInjector.jsonLiteral("a\u{2028}b\u{2029}c")
+    #expect(literal == "\"a\\u2028b\\u2029c\"")
 }
 
 @Test func matchesCoversBothProfileStartURLs() {

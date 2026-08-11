@@ -23,6 +23,10 @@ public struct BundleResourceLoader: ResourceLoading {
         self.bundles = bundles
     }
 
+    public init() {
+        self.init(bundles: [.main, .module])
+    }
+
     public func string(named name: String) -> String? {
         for bundle in bundles {
             guard let url = bundle.url(forResource: name, withExtension: nil) else { continue }

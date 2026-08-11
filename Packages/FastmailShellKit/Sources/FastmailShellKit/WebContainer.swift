@@ -16,10 +16,16 @@ public final class ShellModel: ObservableObject {
 public struct WebContainer {
     let profile: Profile
     let model: ShellModel
+    let loader: ResourceLoading
 
-    public init(profile: Profile, model: ShellModel) {
+    public init(
+        profile: Profile,
+        model: ShellModel,
+        loader: ResourceLoading = BundleResourceLoader()
+    ) {
         self.profile = profile
         self.model = model
+        self.loader = loader
     }
 
     func makeWebView(coordinator: WebCoordinator) -> WKWebView {
@@ -36,7 +42,6 @@ public struct WebContainer {
             name: "native"
         )
 
-        let loader = BundleResourceLoader(bundles: [.main, .module])
         do {
             let scripts = try ScriptStore(
                 loader: loader,

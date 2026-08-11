@@ -159,6 +159,16 @@ final class HarnessTests: XCTestCase {
         XCTAssertNil(ranAnyway)
     }
 
+    func testGuardedWrapperDoesNotLeakPatternsGlobal() async throws {
+        webView = try makeWebView(userScript: "window.__ran = true;", metadata: Self.meta())
+        try await load(webView)
+        try await waitUntil {
+            try await self.evaluate(self.webView, "window.__ran") != nil
+        }
+        let leaked = try await evaluate(webView, "typeof window.__fmshellPatterns") as? String
+        XCTAssertEqual(leaked, "undefined")
+    }
+
     func testDocumentStartScriptRunsWhileDocumentIsLoading() async throws {
         let script = "window.__readyStateWhenRun = document.readyState;"
         webView = try makeWebView(userScript: script, metadata: Self.meta(runAt: .documentStart))
