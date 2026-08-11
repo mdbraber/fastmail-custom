@@ -905,7 +905,7 @@ public enum MetadataParser {
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `cd Packages/FastmailShellKit && swift test`
-Expected: PASS, 11 tests total.
+Expected: PASS, 16 tests total.
 
 - [ ] **Step 6: Commit**
 
@@ -1079,7 +1079,7 @@ public struct ScriptStore {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd Packages/FastmailShellKit && swift test`
-Expected: PASS, 17 tests total.
+Expected: PASS, 22 tests total.
 
 - [ ] **Step 5: Commit**
 
@@ -1205,7 +1205,7 @@ public enum ScriptInjector {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd Packages/FastmailShellKit && swift test`
-Expected: PASS, 21 tests total.
+Expected: PASS, 26 tests total.
 
 - [ ] **Step 5: Commit**
 
@@ -1328,7 +1328,7 @@ public enum NavigationPolicy {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd Packages/FastmailShellKit && swift test`
-Expected: PASS, 29 tests total.
+Expected: PASS, 34 tests total.
 
 - [ ] **Step 5: Commit**
 
@@ -1842,7 +1842,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd Packages/FastmailShellKit && swift test`
-Expected: PASS, 32 tests total.
+Expected: PASS, 37 tests total.
 
 - [ ] **Step 5: Write the coordinator**
 
