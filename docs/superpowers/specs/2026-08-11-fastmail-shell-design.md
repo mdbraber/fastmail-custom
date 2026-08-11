@@ -110,6 +110,8 @@ If the container is unavailable (not signed into iCloud, first launch before dow
 `harness.js` ships in the bundle and runs before user scripts. It exposes `window.native`:
 
 - `share({url, text})` → Promise resolving when the share sheet is dismissed.
+- `currentLink()` → `{url, title, markdown}` for the frontmost view, using the title cleaner. Backs both the `GetCurrentLink` intent and the toolbar share button.
+- `titleCleaner` → assignable; overrides the default cleaning rules.
 - `registerAction(name, fn)` → registers a Shortcuts-invocable action; also notifies native so the name can be offered as a Shortcuts parameter option.
 - `log(...args)` → Xcode console.
 - `onRoute(cb)` → fires on route change. Implemented by patching `history.pushState` and `history.replaceState`, listening for `popstate`, and running a debounced `MutationObserver` on `document.body`. Necessary because `WKUserScript` runs once per document load and Fastmail is client-routed.
@@ -120,12 +122,38 @@ User scripts are wrapped in a try/catch inside an IIFE; a throw is reported to n
 
 ## Shortcuts
 
-Two App Intents per app, titled with the profile name so the two apps are distinguishable in the Shortcuts picker:
+Three App Intents per app, titled with the profile name so the two apps are distinguishable in the Shortcuts picker:
 
 - `OpenFastmail(path: String?)` — opens the app, optionally at a path.
+- `GetCurrentLink()` — returns the frontmost URL and cleaned title.
 - `RunScriptAction(name: String)` — opens the app, waits for load and action registration, then invokes the action via `callAsyncJavaScript`, awaiting the returned promise, and returns its string result. Parameter options come from the registered action names last persisted to `UserDefaults`.
 
-Adding a Shortcuts action therefore means adding a `registerAction` call to the script, with no rebuild.
+All three set `openAppWhenRun = true`, since the value lives in the web view and only exists while the app is running.
+
+Adding a further Shortcuts action means adding a `registerAction` call to the script, with no rebuild.
+
+### GetCurrentLink
+
+Returns a `MailLink` transient entity with three properties, so a shortcut can consume whichever it needs:
+
+| Property | Example |
+|---|---|
+| `url` | `https://app.fastmail.com/mail/Test/?filter=inbox&u=REDACTED` |
+| `title` | `In Inbox • Test` |
+| `markdown` | `[In Inbox • Test](https://app.fastmail.com/mail/Test/?filter=inbox&u=REDACTED)` |
+
+The `u=` account parameter is preserved. It identifies which Fastmail account the link belongs to, so a link captured from the work app still opens as the work account rather than whichever session happens to be active.
+
+Cleaning is implemented in `harness.js`, not in Swift, so title-format changes on Fastmail's side are fixed by editing the script rather than rebuilding and re-signing both apps. The default cleaner:
+
+1. Strips a leading unread count, `^\(\d+\)\s*`.
+2. Strips the trailing ` | Fastmail` suffix.
+3. Collapses whitespace.
+4. When a message is open, prefers the subject read from the DOM over the document title.
+
+Observed input as of 2026-08-11: `In Inbox • Test | Fastmail`. The message-view title format is unconfirmed and is to be sampled during Milestone 0, with step 4 as the fallback if it proves unreliable.
+
+The user script can override the cleaner by assigning `native.titleCleaner = fn`; the harness uses the override when present.
 
 ## Error handling
 
@@ -151,7 +179,7 @@ Manual verification uses `isInspectable` and Safari Web Inspector.
 
 ## Milestones
 
-- **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app. Decision gate before further work.
+- **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app, and sample `document.title` and `location.href` for a mailbox view, an open message, and a search result to pin down the cleaning rules. Decision gate before further work.
 - **M1** — Package plus two targets, profiles, navigation policy, persistent sessions.
 - **M2** — `ScriptStore` and `ScriptInjector`, iCloud container, reload pipeline.
 - **M3** — `harness.js`: route hooks, GM shims, error reporting.
