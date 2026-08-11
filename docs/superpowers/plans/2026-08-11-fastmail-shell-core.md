@@ -1307,6 +1307,34 @@ private func decide(_ string: String) -> NavigationDecision {
     #expect(decide("tel:+3112345678") == .openExternally)
 }
 
+@Test func requiresHTTPSEvenForAllowedHosts() {
+    #expect(decide("http://app.fastmail.com/") == .openExternally)
+}
+
+@Test func hostComparisonIsCaseInsensitive() {
+    #expect(decide("https://FASTMAIL.COM/") == .allow)
+    #expect(decide("https://App.Fastmail.Com/") == .allow)
+}
+
+@Test func acceptsRootLabelForm() {
+    #expect(decide("https://fastmail.com./") == .allow)
+}
+
+@Test func refusesSmuggledHostsInCredentialsAndFragment() {
+    #expect(decide("https://user:pass@evil.example/?x=fastmail.com") == .openExternally)
+    #expect(decide("https://evil.example/#https://app.fastmail.com/") == .openExternally)
+    #expect(decide("https://app.fastmail.com.evil.example/") == .openExternally)
+}
+
+@Test func attachmentIsDetectedDespiteWhitespaceAndCase() {
+    #expect(NavigationPolicy.decideResponse(
+        canShowMIMEType: true,
+        contentDisposition: " attachment; filename=\"invoice.pdf\""
+    ) == .download)
+    #expect(NavigationPolicy.decideResponse(canShowMIMEType: true, contentDisposition: "ATTACHMENT") == .download)
+    #expect(NavigationPolicy.decideResponse(canShowMIMEType: true, contentDisposition: "attachment") == .download)
+}
+
 @Test func downloadsWhenContentDispositionSaysAttachment() {
     #expect(NavigationPolicy.decideResponse(
         canShowMIMEType: true,
@@ -1325,6 +1353,8 @@ private func decide(_ string: String) -> NavigationDecision {
 ```
 
 `fastmail.com.evil.example` and `notfastmail.com` are the two failures a naive `hasSuffix` check produces, and both would render an attacker's page inside a logged-in mail session.
+
+Three further rules exist for the same reason. Only `https` may be allowed — accepting `http` for an allowed host would leave the boundary depending on App Transport Security being configured correctly in a different file. `Content-Disposition` is trimmed before matching, because leading whitespace is legal in HTTP header values and an untrimmed check lets an attachment render inline in the authenticated origin instead of downloading. And a single trailing dot on the host is stripped, so the root-label form of a legitimate URL is not treated as external.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1348,20 +1378,21 @@ public enum NavigationPolicy {
     public static let allowedHosts = ["fastmail.com", "fastmailusercontent.com"]
 
     public static func decide(url: URL) -> NavigationDecision {
-        guard let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
-            return .openExternally
-        }
+        guard url.scheme?.lowercased() == "https" else { return .openExternally }
         return isAllowed(host: url.host) ? .allow : .openExternally
     }
 
     public static func decideResponse(canShowMIMEType: Bool, contentDisposition: String?) -> NavigationDecision {
-        let disposition = contentDisposition?.lowercased() ?? ""
+        let disposition = (contentDisposition ?? "")
+            .lowercased()
+            .trimmingCharacters(in: .whitespaces)
         if disposition.hasPrefix("attachment") { return .download }
         return canShowMIMEType ? .allow : .download
     }
 
     static func isAllowed(host: String?) -> Bool {
-        guard let host = host?.lowercased() else { return false }
+        guard var host = host?.lowercased() else { return false }
+        if host.hasSuffix(".") { host.removeLast() }
         return allowedHosts.contains { host == $0 || host.hasSuffix("." + $0) }
     }
 }
