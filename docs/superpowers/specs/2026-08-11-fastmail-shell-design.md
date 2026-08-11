@@ -148,13 +148,25 @@ This rules out `document.title` as the source. Fastmail renders it as `In Inbox 
 
 The `u=` account parameter in the URL is preserved. It identifies which Fastmail account the link belongs to, so a link captured from the work app still opens as the work account rather than whichever session happens to be active.
 
-Subject resolution lives in `harness.js`, not in Swift, so a Fastmail markup change is fixed by editing the script rather than rebuilding and re-signing both apps:
+Subject resolution lives in `harness.js`, not in Swift, so a Fastmail markup change is fixed by editing the script rather than rebuilding and re-signing both apps. The candidate chain, first non-empty match wins, verified against a live message on 2026-08-11:
 
-1. Try each selector in an ordered candidate list, first non-empty match wins. The list is pinned during Milestone 0 by inspecting a real message view.
-2. Trim and collapse whitespace.
-3. If no candidate matches, fail rather than substituting a mailbox name — a wrong title is worse than none, because it is silently wrong.
+1. `.v-Thread-title h1` — the reading-pane thread title. Contains the subject and nothing else. Canonical.
+2. `.v-MailboxItem.is-focused .v-MailboxItem-subject` — the focused row in the message list, for when the reading pane is not rendered.
+3. `document.title` — strip the trailing ` | Fastmail`, then take everything after the first ` – ` (U+2013, surrounded by ordinary spaces).
 
-When no message is open, `GetCurrentLink` fails with "No message open". Capturing a link to a mailbox has no subject by definition, and returning the mailbox name would violate the rule above.
+Each result is trimmed and has whitespace collapsed.
+
+Element ids must not be used. Fastmail's view layer generates them per render (`h1#v391`, `div#v21`), so they differ between loads.
+
+The observed title on a message view is:
+
+```
+In␉Inbox␉•␉Test – Welcome to Labels - 3 things to know | Fastmail
+```
+
+where ␉ marks U+2009 thin spaces around the bullet. The separator before the subject is an ordinary-spaced U+2013 en dash, while the subject itself contains an ASCII hyphen — which is why candidate 3 splits on the first en dash and not on any dash.
+
+A message is considered open when candidate 1 matches. When nothing matches, `GetCurrentLink` fails with "No message open" rather than substituting a mailbox name. Capturing a link to a mailbox has no subject by definition, and a silently wrong title is worse than a visible error.
 
 The user script can override resolution by assigning `native.subjectResolver = fn`; the harness uses the override when present.
 
@@ -182,7 +194,7 @@ Manual verification uses `isInspectable` and Safari Web Inspector.
 
 ## Milestones
 
-- **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app, and sample `document.title` and `location.href` for a mailbox view, an open message, and a search result to pin down the cleaning rules. Decision gate before further work.
+- **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app, and re-verify the subject selector chain inside `WKWebView` (it was verified in Safari, and Fastmail may serve different markup to a non-Safari user agent). Decision gate before further work.
 - **M1** — Package plus two targets, profiles, navigation policy, persistent sessions.
 - **M2** — `ScriptStore` and `ScriptInjector`, iCloud container, reload pipeline.
 - **M3** — `harness.js`: route hooks, GM shims, error reporting.
