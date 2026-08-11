@@ -9,7 +9,7 @@ Installable apps that each wrap `app.fastmail.com` in a `WKWebView` and inject a
 
 Two profiles across two platforms, so four products from two multiplatform targets: iOS and macOS, personal and work.
 
-The script must be editable from a Mac without rebuilding the app, and must be shared across all four products. The script must also be able to reach two native capabilities: the system share sheet, and Shortcuts.
+One script, authored in its own repository, is built into all four products. The script must also be able to reach two native capabilities: the system share sheet, and Shortcuts.
 
 ## Non-goals
 
@@ -32,7 +32,7 @@ Constraints 1 and 3 are the reason the macOS build is the better place to develo
 
 A native SwiftUI app with no third-party dependencies. Shared logic lives in a local Swift package; the two app targets are thin, holding only configuration, icons, and a profile constant.
 
-Each app target is multiplatform, declaring both iOS and macOS as supported destinations, rather than four separate targets. A profile therefore keeps one bundle identifier across platforms, which in turn means one iCloud container and one identity per profile — the mechanism by which a single `userscript.js` reaches all four products.
+Each app target is multiplatform, declaring both iOS and macOS as supported destinations, rather than four separate targets. A profile therefore keeps one bundle identifier, one asset catalog, and one build phase across platforms, so a script change is one rebuild per profile rather than four.
 
 Rejected alternatives: the Userscripts Safari extension (no native bridge, no app identity); a Capacitor/Tauri wrapper (a JS toolchain wrapped around a few hundred lines of Swift); and Mac Catalyst, which would remove the three platform shims below at the cost of an iPad-flavoured window on the Mac.
 
@@ -91,7 +91,7 @@ Separate bundle IDs give separate app containers, so `WKWebsiteDataStore.default
 
 Cookies do not sync between platforms, so each profile is logged in once on iOS and once on macOS. This is a consequence of the cookie jar being local to the app container, not a design choice, and it is the only per-platform setup step.
 
-Both targets declare the same iCloud container, `iCloud.com.mdbraber.fastmail`, so the shared script is authored once and reaches all four products.
+Both targets run the same build phase against the same repository file, so the script is authored once and reaches all four products at build time.
 
 ## Icons
 
@@ -110,19 +110,15 @@ A single asset catalog per target holds both, using platform-specific icon sets.
 
 ## Components
 
-**`AppShell`** — root SwiftUI view. Hosts the web container, a toolbar (reload page, share current URL, reload script), and a dismissible error banner bound to a published error state.
+**`AppShell`** — root SwiftUI view. Hosts the web container, a dismissible error banner bound to a published error state, and on macOS a window toolbar (reload, share).
 
 **`WebContainer`** — the representable wrapping `WKWebView`, with the platform variants in `WebContainer+iOS.swift` and `WebContainer+macOS.swift`. Sets `isInspectable = true` so Safari Web Inspector attaches to the injected script. Owns the navigation delegate.
 
 **`SharePresenter`** — presents `UIActivityViewController` or `NSSharingServicePicker` behind one interface, so `NativeBridge` has no platform branches.
 
-**`ScriptStore`** — a protocol with two implementations behind one publisher of `ScriptBundle(shared: String?, overlay: String?)`. `RepositoryScriptStore` (macOS) watches the repository file with a `DispatchSource` on its directory, which survives the write-and-rename that editors perform on save. `UbiquitousScriptStore` (iOS) resolves the container via `FileManager.url(forUbiquityContainerIdentifier:)`, calls `startDownloadingUbiquitousItem` for items not yet local, and observes `Documents/` with an `NSMetadataQuery`.
+**`ScriptStore`** — reads `userscript.js` and the profile overlay from the app bundle and parses their metadata blocks. No watching, no I/O beyond launch. A missing script is a programming error rather than a runtime condition, since the build phase fails without one.
 
-**`ScriptPublisher`** — macOS only. Writes the repository content into the iCloud container so iOS receives edits between builds. The single direction of flow, repository to container, is what keeps the two stores from fighting.
-
-**`BundledScriptStore`** — reads the copy placed in the app bundle by the build phase. The fallback under both platform stores, and the reason no state exists in which the app has no script.
-
-**`ScriptInjector`** — parses the metadata block, then builds one `WKUserScript`: the bundled `harness.js` with the user script and overlay embedded as JSON-encoded string literals. Injected at `.atDocumentStart`, `forMainFrameOnly: true`, into `WKContentWorld.page`. On any change it calls `removeAllUserScripts()`, re-adds, and reloads the web view.
+**`ScriptInjector`** — builds one `WKUserScript`: the bundled `harness.js` with the user script and overlay embedded as JSON-encoded string literals. Injected at `.atDocumentStart`, `forMainFrameOnly: true`, into `WKContentWorld.page`.
 
 **`NativeBridge`** — a single `WKScriptMessageHandlerWithReply` registered as `native` via `addScriptMessageHandler(_:contentWorld:name:)` against `WKContentWorld.page`, so the page-world script can see it. Message body is `["action": String, "payload": [String: Any]]`. Unknown actions and malformed payloads reply with an error string, surfacing in JS as a rejected promise.
 
@@ -132,42 +128,27 @@ A single asset catalog per target holds both, using platform-specific icon sets.
 
 The script to run is an existing one: `~/src/fastmail-customized/fastmail-inbox-mode.user.js`, which adds a sticky Inbox filter on labels and Inbox-only sidebar badge counts. The repository stays canonical and versioned; the app never becomes the place the script lives.
 
-A symlink from the iCloud container to the repository does not work. iCloud Drive does not sync a symlink as content, and an iOS device has no `~/src/fastmail-customized` to resolve it against. Hard links fail for a different reason: editors that save atomically write a new file and rename over the old one, severing the link on first save.
+The script is copied into the app bundle at build time and read from there at runtime. Nothing is watched, synced, or fetched. **Changing the script means rebuilding the app.**
 
-Every build therefore embeds the current script, and the live sources layer on top of it.
-
-**Build-phase copy.** A `Copy User Script` run-script phase copies the repository file into the app bundle's resources on every build of every target. The source path comes from a `USERSCRIPT_PATH` build setting in an xcconfig rather than being hardcoded in the phase. The phase declares its input and output files so incremental builds behave, and it fails the build when the source is missing — an app silently shipping a stale script is the failure worth preventing.
-
-This makes the bundled copy a guaranteed-current baseline. There is no state in which the app has no script, so iCloud availability, sync lag, and whether the Mac app has run recently all stop being correctness concerns and become convenience ones.
-
-**Runtime override.** On top of the baseline, each platform watches a live source so edits land without a rebuild:
-
-| Platform | Live source | Watched with |
-|---|---|---|
-| macOS | the repository file directly | `DispatchSource` on the containing directory |
-| iOS | the iCloud container | `NSMetadataQuery` |
-
-Resolution order is live source, then bundled copy. The live source wins when it is non-empty and its metadata block parses; otherwise the bundle is used. On macOS the two are the same file, so they only diverge if a build is older than the working tree.
-
-The macOS app additionally publishes the repository content into the iCloud container when it changes, so iOS picks up edits between builds. This is now a convenience path rather than the only path.
+**Build-phase copy.** A `Copy User Script` run-script phase copies the repository file into the app bundle's resources on every build of every target. The source path comes from a `USERSCRIPT_PATH` build setting in an xcconfig rather than being hardcoded in the phase. The phase declares its input and output files so incremental builds behave, and it fails the build when the source is missing — an app silently shipping no script is the failure worth preventing.
 
 ```
 repo/fastmail-inbox-mode.user.js
   → build phase copies into each app bundle
-  → at runtime: macOS DispatchSource / iOS NSMetadataQuery, else bundled copy
-  → debounce 300ms
-  → reject empty or unparseable content, retain last good copy
+  → read from Bundle at launch
   → parse metadata block
-  → removeAllUserScripts() + re-add bootstrap
-  → reload
-  → (macOS only) publish content to the iCloud container
+  → build bootstrap, inject at document start
 ```
 
-**macOS sandboxing.** Reading the repository directly is outside an app container, so it requires either the App Sandbox switched off or a security-scoped bookmark from a user-selected file. Distribution is local and signed with a Developer ID, never the App Store, so the sandbox is switched off and the complexity of bookmarks avoided. Recorded here because it is the kind of decision that looks arbitrary later.
+This was deliberately chosen over live reloading from iCloud or a watched repository file. Those were specified earlier in this design and removed. What they bought was editing the script without a rebuild; what they cost was an iCloud container and entitlement, `NSMetadataQuery` and `DispatchSource` watchers, debounce and last-good-copy handling for partially written files, a publish path from macOS to iOS, and a class of failure where the running script is not the one in the repository. On macOS a rebuild is seconds, and the script is mature rather than under active development.
 
-The debounce and last-good retention exist because the file is written from an editor while the app is running; a partially written file must never replace a working script. This matters most on macOS, where the editor and the app share a disk and the window visibly reloads as you save. The refresh affordance forces a re-read for when iCloud sync lags.
+Three simplifications follow, and they are the reason this is the better trade:
 
-When the iCloud container is unavailable on iOS, the bundled copy is used and nothing is reported. That is a normal state, not an error.
+1. **No iCloud.** No container, no entitlement, no sync states, no availability errors.
+2. **The macOS App Sandbox stays on**, because the app never reads a path outside its own bundle. The security-scoped bookmark question disappears.
+3. **The script is immutable at runtime**, so there is no reload path, no debounce, no partially written file to defend against, and no divergence between platforms.
+
+The cost, stated plainly: iterating on the script means a rebuild on macOS and a rebuild plus reinstall on iOS.
 
 ## User script metadata
 
@@ -270,7 +251,7 @@ The share sheet is reachable three ways, all resolving to the same `SharePresent
 
 The macOS build additionally has a window toolbar, since a Mac window has one regardless, and the same Share item appears there.
 
-On iOS the only other app-level affordance is pull-to-refresh, which reloads both page and script. Errors surface as a transient banner over the web view. No persistent chrome is added.
+On iOS the only other app-level affordance is pull-to-refresh, which reloads the page. Errors surface as a transient banner over the web view. No persistent chrome is added.
 
 Anchoring is a correctness requirement rather than a refinement. On iPad, `UIActivityViewController` presents as a popover and traps if `popoverPresentationController.sourceView` and `sourceRect` are unset; `NSSharingServicePicker.show(relativeTo:of:preferredEdge:)` likewise needs a rect. The toolbar button supplies its own anchor. A script-invoked share supplies one by passing `rect` from `element.getBoundingClientRect()`, which `NativeBridge` converts from page coordinates to web view coordinates, accounting for scroll offset and content insets.
 
@@ -329,9 +310,9 @@ The harness generalises this as `native.addMenuItem({label, icon, section, onSel
 
 | Condition | Behavior |
 |---|---|
-| iCloud container unavailable | Site loads with harness only; banner explains |
-| Script file missing | Site loads; banner notes the missing file |
-| Script empty or mid-write | Rejected; last good copy retained |
+| Script missing from bundle | Cannot occur; the build phase fails first |
+| Metadata block unparseable | Build-time check in the copy phase, so it fails before shipping |
+| `@match` does not match the loaded URL | Script not evaluated; reported to the banner |
 | User script throws | Caught in harness, reported to native, shown in banner |
 | Unknown or malformed bridge action | Rejected promise with a descriptive message |
 | Network failure | Retry view replacing the WebKit error page |
@@ -340,10 +321,11 @@ The harness generalises this as `native.addMenuItem({label, icon, section, onSel
 
 Unit tests, no WebKit required:
 
-- `ScriptStore`: debounce coalescing, empty-file rejection, last-good fallback, missing-file path, overlay resolution.
+- `MetadataParser`: `@match`, `@run-at`, and `@grant` extraction; missing block; unknown directives ignored rather than fatal.
+- `ScriptStore`: bundle resolution, overlay resolution, and the script-plus-overlay ordering.
 - `NativeBridge`: unknown action, malformed payload, share payload parsing.
 
-Integration test with a real `WKWebView` loading a bundled `fixture.html`: harness installs, `window.native` exists, `onRoute` fires after a `pushState`, `GM_addStyle` inserts a style element, a throwing user script is caught and reported. The fixture also carries the `.v-Thread-title h1` structure so the subject selector chain is covered without hitting the network.
+Integration test with a real `WKWebView` loading a bundled `fixture.html`: harness installs, `window.native` exists, `onRoute` fires after a `pushState`, the user script is evaluated after `load` rather than at document start, and a throwing user script is caught and reported. The fixture also carries the `.v-Thread-title h1` structure and a `.v-Menu` containing `Show details`, so the subject chain and menu injection are covered without hitting the network.
 
 The package's tests run on macOS directly, which is the fast loop; the same suite runs on the iOS simulator to catch platform divergence in the shims.
 
@@ -353,8 +335,8 @@ Manual verification uses `isInspectable` and Safari Web Inspector.
 
 - **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app, re-verify the subject selector chain inside `WKWebView` (it was verified in Safari, and Fastmail may serve different markup to a non-Safari user agent), and capture the message actions menu: which container it renders into, that `Show details` identifies it, and whether an `i-share` icon exists in the sprite. `window.FastMail` is already confirmed present under a `WKWebView` user agent and is not re-checked. Decision gate before further work.
 - **M1** — Package plus two multiplatform targets, profiles, navigation policy, persistent sessions. Both destinations build and run.
-- **M2** — `ScriptStore` in both forms, `ScriptPublisher`, `ScriptInjector`, metadata parsing, reload pipeline. Ends with the Inbox mode script running unmodified on both platforms.
-- **M3** — `harness.js`: route hooks, GM shims, subject resolution, error reporting.
+- **M2** — Build phase, `ScriptStore`, `ScriptInjector`, metadata parsing. Ends with the Inbox mode script running unmodified on both platforms.
+- **M3** — `harness.js`: route hooks, subject resolution, menu injection, error reporting.
 - **M4** — `NativeBridge`, `SharePresenter`, and the web view shims.
 - **M5** — App Intents.
 - **M6** — Tests, icons in both forms, error states.
