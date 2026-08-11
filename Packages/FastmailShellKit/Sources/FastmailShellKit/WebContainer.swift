@@ -50,7 +50,8 @@ public struct WebContainer {
                 )
             )
         } catch {
-            model.show("User script not loaded: \(error)")
+            let message = "User script not loaded: \(error)"
+            Task { @MainActor in model.show(message) }
         }
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
