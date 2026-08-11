@@ -1098,7 +1098,7 @@ git commit -m "feat: load harness, user script, and overlay from bundles"
 
 **Interfaces:**
 - Consumes: `ScriptBundle`
-- Produces: `ScriptInjector.bootstrap(from: ScriptBundle) -> String`
+- Produces: `ScriptInjector.bootstrap(from: ScriptBundle) throws -> String`; `ScriptInjectorError.encodingFailed(String)`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1135,24 +1135,24 @@ private func firstJSONArgument(of source: String) throws -> String {
 }
 
 @Test func bootstrapContainsHarnessThenBootCall() {
-    let source = ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
+    let source = try ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
     #expect(source.hasPrefix("HARNESS_SOURCE"))
     #expect(source.contains("window.__fmshell.boot("))
 }
 
 @Test func userScriptSurvivesQuotesNewlinesAndScriptTags() throws {
-    let hostile = "var s = \"a'b\\\"c\";\nif (a </script> b) {}\n// emoji 🙂 and \\u2028"
-    let source = ScriptInjector.bootstrap(from: bundle(userScript: hostile))
+    let hostile = "var s = \"a'b\\\"c\";\nif (a </script> b) {}\n\u{2028}\u{2029} emoji 🙂 tail"
+    let source = try ScriptInjector.bootstrap(from: bundle(userScript: hostile))
     #expect(try firstJSONArgument(of: source) == hostile)
 }
 
 @Test func absentOverlayIsEncodedAsNull() {
-    let source = ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
+    let source = try ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
     #expect(source.contains(", null, "))
 }
 
 @Test func metadataIsPassedAsRunAtAndMatches() {
-    let source = ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
+    let source = try ScriptInjector.bootstrap(from: bundle(userScript: "BODY"))
     #expect(source.contains("\"runAt\":\"document-idle\"") || source.contains("\"runAt\": \"document-idle\""))
     #expect(source.contains("app.fastmail.com"))
 }
@@ -1172,30 +1172,44 @@ Create `Packages/FastmailShellKit/Sources/FastmailShellKit/ScriptInjector.swift`
 ```swift
 import Foundation
 
+public enum ScriptInjectorError: Error, Equatable {
+    case encodingFailed(String)
+}
+
 public enum ScriptInjector {
-    public static func bootstrap(from bundle: ScriptBundle) -> String {
-        let userScript = jsonLiteral(bundle.userScript)
-        let overlay = bundle.overlay.map(jsonLiteral) ?? "null"
-        let metadata = jsonLiteral([
+    public static func bootstrap(from bundle: ScriptBundle) throws -> String {
+        guard let userScript = jsonLiteral(bundle.userScript) else {
+            throw ScriptInjectorError.encodingFailed("userScript")
+        }
+        var overlay = "null"
+        if let source = bundle.overlay {
+            guard let encoded = jsonLiteral(source) else {
+                throw ScriptInjectorError.encodingFailed("overlay")
+            }
+            overlay = encoded
+        }
+        guard let metadata = jsonLiteral([
             "runAt": bundle.metadata.runAt.rawValue,
             "matches": bundle.metadata.matches
-        ])
+        ] as Any) else {
+            throw ScriptInjectorError.encodingFailed("metadata")
+        }
         return """
         \(bundle.harness)
         window.__fmshell.boot(\(userScript), \(overlay), \(metadata));
         """
     }
 
-    static func jsonLiteral(_ value: String) -> String {
+    static func jsonLiteral(_ value: String) -> String? {
         jsonLiteral(value as Any)
     }
 
-    static func jsonLiteral(_ value: Any) -> String {
+    static func jsonLiteral(_ value: Any) -> String? {
         guard
             let data = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]),
             let text = String(data: data, encoding: .utf8)
         else {
-            return "null"
+            return nil
         }
         return text
     }
@@ -1422,7 +1436,7 @@ final class HarnessTests: XCTestCase {
         )
         configuration.userContentController.addUserScript(
             WKUserScript(
-                source: ScriptInjector.bootstrap(from: bundle),
+                source: try ScriptInjector.bootstrap(from: bundle),
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: true
             )
@@ -1978,7 +1992,7 @@ public struct WebContainer {
             ).load()
             configuration.userContentController.addUserScript(
                 WKUserScript(
-                    source: ScriptInjector.bootstrap(from: scripts),
+                    source: try ScriptInjector.bootstrap(from: scripts),
                     injectionTime: .atDocumentStart,
                     forMainFrameOnly: true
                 )
