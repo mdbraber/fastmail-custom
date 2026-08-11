@@ -23,7 +23,7 @@ These were verified before design and each one shapes a decision:
 
 1. **App-Bound Domains must not be used.** Adding `WKAppBoundDomains` to Info.plist puts every `WKWebView` in the app into a mode that denies script injection, custom stylesheets, and message handlers. The `limitsNavigationsToAppBoundDomains` flag is meant to restore them but is reported to still conflict with `addUserScript`. The app therefore does not declare the key. iOS only; the restriction does not exist on macOS.
 2. **Passkey login is unavailable.** WebAuthn in a `WKWebView` requires Associated Domains between the app and the relying party, which requires an `apple-app-site-association` file on `fastmail.com`. Not controllable. Login is password plus TOTP, once per app per platform, persisted in cookies. Applies to both platforms.
-3. **Service workers may not run**, as WKWebView ties them to app-bound domains. Accepted risk; verified in Milestone 0. iOS only.
+3. ~~Service workers may not run.~~ **Disproved on 2026-08-11.** A bare `WKWebView` with no `WKAppBoundDomains` declared reports `navigator.serviceWorker.controller` as live on `app.fastmail.com`, so service workers run normally and the concern is withdrawn. Script injection works in the same configuration, so the two are not in tension as feared.
 4. **Web push does not exist in `WKWebView`.** No new-mail notifications. Accepted.
 
 Constraints 1 and 3 are the reason the macOS build is the better place to develop the userscript: neither applies there.
@@ -426,11 +426,37 @@ The scene is a `WindowGroup`, so each window owns its own `WKWebView` starting a
 
 The user script runs independently in each tab, which is correct — each is a separate page with its own JavaScript context — and the script's own `window.mdbraberInboxMode` guard already covers double-injection within a context.
 
+**The standard Edit menu must be kept.** SwiftUI's `WindowGroup` supplies Cut, Copy, and Paste with their key equivalents, and a `WKWebView` depends on them: an app with no menu bar cannot route ⌘V into the page at all, as the Milestone 0 spike demonstrated by accident. The chromeless treatment applies to iOS only; on macOS the menu bar stays.
+
 **Tab selection is bound to ⌥1–⌥9, not ⌘1–⌘9.** The Inbox mode script binds `Meta-1` through `Meta-9` to jump to sources, and a menu key equivalent wins over a web view key handler, so the conventional Mac binding would silently break shortcuts you use constantly. The web view keeps the ⌘ range; the menu takes the ⌥ range.
 
 The cost is that ⌥ plus a digit no longer types its typographic character while composing. That is the lesser loss, and it is the first thing to revisit if it grates.
 
 **Consequence for everything that says "current".** With more than one web view alive, `currentLink()`, the share toolbar button, the badge resolver, and the `GetCurrentLink` intent must all act on the key window's web view rather than on any singleton. A `WebViewRegistry` tracks the live views and resolves the active one from the key window; on iOS it resolves to the only view there is. This is written down because a singleton web view reference would work perfectly until the first second tab.
+
+### Titlebar tint
+
+The window titlebar takes the site's colour, the way Safari tints its toolbar, so the app reads as Fastmail rather than as a generic window. The macOS system menu bar cannot be tinted by an application and is not involved.
+
+Observed on 2026-08-11, Fastmail publishes:
+
+```html
+<meta name="theme-color" content="#d6d8da">
+<html class="t-light">
+```
+
+Two things follow. The meta carries **no `media` attribute**, so it is a single value that does not vary by colour scheme; taking it at face value would tint the titlebar light grey while Fastmail is in dark mode. And Fastmail signals its own theme with a `t-light` / `t-dark` class on `<html>`, which is the more reliable input.
+
+The harness therefore reports both, and re-reports on change via a `MutationObserver` watching `<head>` for the meta's `content` and `<html>` for its class list. Fastmail's chrome elements all compute to `rgba(0, 0, 0, 0)`, so sampling a background colour is not an option — the paint comes from further down the tree.
+
+Native applies it as:
+
+- `titlebarAppearsTransparent = true` and `backgroundColor` set to the reported tint, which is what makes the titlebar take the colour.
+- `appearance` set to `.darkAqua` or `.aqua` by the tint's relative luminance, so the traffic lights and title text stay legible whichever theme is active. Deriving appearance from luminance rather than from the `t-*` class means it stays correct even if Fastmail changes how it names its themes.
+
+Each window tints independently, which is correct under tabs since each tab is its own window with its own page.
+
+On iOS there is no titlebar. The equivalent surface is the safe-area background behind the status bar, tinted from the same reported value.
 
 ### Compose
 
@@ -621,7 +647,7 @@ Within each milestone the macOS build is brought up first where the work is plat
 
 ## Risks
 
-1. Fastmail depends on its service worker more than expected. Mitigated by the M0 gate. iOS only.
+1. Retired. Service workers were confirmed running in `WKWebView` on 2026-08-11, so Fastmail's dependence on them is not a risk.
 2. Fastmail login inside `WKWebView` hits a flow that assumes Safari. Mitigated by the M0 gate.
 3. Fastmail ships UI changes that break selectors. Inherent to the approach; mitigated by keeping scripts defensive and reloadable without a rebuild.
 4. Fastmail serves different markup or a different layout to the macOS user agent, so one selector chain does not cover both platforms. Checked in M0 on both; if it holds, the chain moves into the per-profile overlay rather than the shared script.
