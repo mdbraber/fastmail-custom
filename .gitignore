@@ -1,6 +1,8 @@
 Config/Local.xcconfig
+FastmailShell.xcodeproj/
 build/
 DerivedData/
 .DS_Store
 *.xcuserstate
 xcuserdata/
+.build/

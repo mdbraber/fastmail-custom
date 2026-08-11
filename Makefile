@@ -1,0 +1,32 @@
+PROJECT = FastmailShell.xcodeproj
+DEVICE ?= $(shell xcrun devicectl list devices --quiet 2>/dev/null | awk 'NR==3 {print $$3}')
+
+.PHONY: generate test build-macos install-macos build-ios install-ios install clean
+
+generate:
+	xcodegen generate
+
+test:
+	cd Packages/FastmailShellKit && swift test
+
+build-macos: generate
+	xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release build
+	xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release build
+
+install-macos: build-macos
+	rm -rf "/Applications/Fastmail.app" "/Applications/Fastmail Work.app"
+	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail.app" /Applications/
+	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail Work.app" /Applications/
+
+build-ios: generate
+	xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release build
+	xcodebuild -project $(PROJECT) -scheme Work -destination 'generic/platform=iOS' -configuration Release build
+
+install-ios: build-ios
+	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail.app"
+	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Fastmail Work.app"
+
+install: install-macos install-ios
+
+clean:
+	rm -rf build DerivedData $(PROJECT)
