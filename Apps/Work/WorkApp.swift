@@ -1,10 +1,11 @@
 import SwiftUI
+import FastmailShellKit
 
 @main
 struct WorkApp: App {
     var body: some Scene {
         WindowGroup {
-            Text("Work")
+            AppShell(profile: .work(accountID: Profile.accountID(from: .main)))
         }
     }
 }

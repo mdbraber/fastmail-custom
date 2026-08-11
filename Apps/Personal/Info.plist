@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDisplayName</key>
-    <string>Fastmail</string>
+    <string>mdbraber.com</string>
     <key>FMAccountID</key>
     <string>$(PERSONAL_ACCOUNT_ID)</string>
     <key>CFBundleShortVersionString</key>

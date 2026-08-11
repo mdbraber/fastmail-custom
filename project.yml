@@ -47,7 +47,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.personal
-        PRODUCT_NAME: Fastmail
+        PRODUCT_NAME: mdbraber.com
         INFOPLIST_FILE: Apps/Personal/Info.plist
 
   Work:
@@ -57,7 +57,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.work
-        PRODUCT_NAME: Fastmail Work
+        PRODUCT_NAME: nexthealth.nl
         INFOPLIST_FILE: Apps/Work/Info.plist
 
   IntegrationTests:

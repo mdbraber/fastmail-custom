@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDisplayName</key>
-    <string>Fastmail Work</string>
+    <string>nexthealth.nl</string>
     <key>FMAccountID</key>
     <string>$(WORK_ACCOUNT_ID)</string>
     <key>CFBundleShortVersionString</key>

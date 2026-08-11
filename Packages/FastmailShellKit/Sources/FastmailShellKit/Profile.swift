@@ -29,7 +29,7 @@ extension Profile {
     public static func personal(accountID: String?) -> Profile {
         Profile(
             id: "personal",
-            displayName: "Fastmail",
+            displayName: "mdbraber.com",
             startURL: URL(string: "https://app.fastmail.com")!,
             overlayScriptName: "userscript.personal.js",
             urlScheme: "fastmail-personal",
@@ -40,7 +40,7 @@ extension Profile {
     public static func work(accountID: String?) -> Profile {
         Profile(
             id: "work",
-            displayName: "Fastmail Work",
+            displayName: "nexthealth.nl",
             startURL: URL(string: "https://app.fastmail.com")!,
             overlayScriptName: "userscript.work.js",
             urlScheme: "fastmail-work",
