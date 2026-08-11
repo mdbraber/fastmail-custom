@@ -2189,6 +2189,24 @@ Run `cd Packages/FastmailShellKit && swift test` and confirm the profile tests p
 
 This collides by name with the existing Safari web apps in `~/Applications`, which are also called `mdbraber.com.app` and `nexthealth.nl.app` and carry the same icons. The new apps install to `/Applications`, so both sets coexist and are told apart only by location. Accepted deliberately; retiring the old web apps is out of scope for this plan.
 
+- [ ] **Step 0b: Full-height window chrome on macOS**
+
+The Mac window must let Fastmail's own page header reach the top edge, with the traffic lights floating over it, rather than sitting below a stock title bar.
+
+Add to `Packages/FastmailShellKit/Sources/FastmailShellKit/WebContainer+macOS.swift`, applied once the view has a window:
+
+```swift
+func configureWindow(_ window: NSWindow) {
+    window.styleMask.insert(.fullSizeContentView)
+    window.titlebarAppearsTransparent = true
+    window.titleVisibility = .hidden
+}
+```
+
+Call it from `makeNSView` via `DispatchQueue.main.async` on the view's `window`, since the view has no window at creation time. Guard against the window being nil rather than force-unwrapping.
+
+This is native window configuration only. The CSS that pads Fastmail's header clear of the traffic lights belongs to the user script and is deliberately out of scope here — it must not be added to Swift.
+
 - [ ] **Step 1: Point the apps at the shell**
 
 Replace `Apps/Personal/PersonalApp.swift`:
