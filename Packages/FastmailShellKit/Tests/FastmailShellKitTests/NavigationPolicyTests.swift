@@ -10,6 +10,9 @@ private func decide(_ string: String) -> NavigationDecision {
     #expect(decide("https://app.fastmail.com/mail/Inbox") == .allow)
     #expect(decide("https://fastmail.com/") == .allow)
     #expect(decide("https://www.fastmail.com/help") == .allow)
+    #expect(decide("https://FASTMAIL.COM/") == .allow)
+    #expect(decide("https://App.Fastmail.Com/") == .allow)
+    #expect(decide("https://fastmail.com./") == .allow)
 }
 
 @Test func allowsAttachmentHost() {
@@ -21,6 +24,9 @@ private func decide(_ string: String) -> NavigationDecision {
     #expect(decide("https://notfastmail.com/") == .openExternally)
     #expect(decide("https://fastmail.com.evil.example/") == .openExternally)
     #expect(decide("https://evilfastmailusercontent.com/") == .openExternally)
+    #expect(decide("https://app.fastmail.com.evil.example/") == .openExternally)
+    #expect(decide("https://user:pass@evil.example/?x=fastmail.com") == .openExternally)
+    #expect(decide("https://evil.example/#https://app.fastmail.com/") == .openExternally)
 }
 
 @Test func sendsOrdinaryLinksToTheBrowser() {
@@ -30,12 +36,25 @@ private func decide(_ string: String) -> NavigationDecision {
 @Test func sendsNonWebSchemesOutward() {
     #expect(decide("mailto:someone@example.com") == .openExternally)
     #expect(decide("tel:+3112345678") == .openExternally)
+    #expect(decide("http://app.fastmail.com/") == .openExternally)
 }
 
 @Test func downloadsWhenContentDispositionSaysAttachment() {
     #expect(NavigationPolicy.decideResponse(
         canShowMIMEType: true,
         contentDisposition: "attachment; filename=\"invoice.pdf\""
+    ) == .download)
+    #expect(NavigationPolicy.decideResponse(
+        canShowMIMEType: true,
+        contentDisposition: " attachment; filename=\"x.pdf\""
+    ) == .download)
+    #expect(NavigationPolicy.decideResponse(
+        canShowMIMEType: true,
+        contentDisposition: "ATTACHMENT"
+    ) == .download)
+    #expect(NavigationPolicy.decideResponse(
+        canShowMIMEType: true,
+        contentDisposition: "attachment"
     ) == .download)
 }
 

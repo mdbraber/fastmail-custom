@@ -10,20 +10,23 @@ public enum NavigationPolicy {
     public static let allowedHosts = ["fastmail.com", "fastmailusercontent.com"]
 
     public static func decide(url: URL) -> NavigationDecision {
-        guard let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
+        guard let scheme = url.scheme?.lowercased(), scheme == "https" else {
             return .openExternally
         }
         return isAllowed(host: url.host) ? .allow : .openExternally
     }
 
     public static func decideResponse(canShowMIMEType: Bool, contentDisposition: String?) -> NavigationDecision {
-        let disposition = contentDisposition?.lowercased() ?? ""
+        let disposition = (contentDisposition?.lowercased() ?? "").trimmingCharacters(in: .whitespaces)
         if disposition.hasPrefix("attachment") { return .download }
         return canShowMIMEType ? .allow : .download
     }
 
     static func isAllowed(host: String?) -> Bool {
-        guard let host = host?.lowercased() else { return false }
+        guard var host = host?.lowercased() else { return false }
+        if host.hasSuffix(".") {
+            host.removeLast()
+        }
         return allowedHosts.contains { host == $0 || host.hasSuffix("." + $0) }
     }
 }
