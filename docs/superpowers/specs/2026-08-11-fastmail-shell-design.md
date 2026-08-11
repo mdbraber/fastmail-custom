@@ -141,7 +141,7 @@ If the container is unavailable (not signed into iCloud, first launch before dow
 
 `harness.js` ships in the bundle and runs before user scripts. It exposes `window.native`:
 
-- `share({url, text})` → Promise resolving when the share sheet is dismissed.
+- `share({url, text, rect})` → Promise resolving when the share sheet is dismissed. `rect` is optional and takes the shape of `getBoundingClientRect()`; see Share presentation.
 - `currentLink()` → `{url, title, markdown}` for the open message, where `title` is the subject alone. Backs both the `GetCurrentLink` intent and the toolbar share button. Rejects when no message is open.
 - `subjectResolver` → assignable; overrides the default selector chain.
 - `registerAction(name, fn)` → registers a Shortcuts-invocable action; also notifies native so the name can be offered as a Shortcuts parameter option.
@@ -201,6 +201,20 @@ where ␉ marks U+2009 thin spaces around the bullet. The separator before the s
 A message is considered open when candidate 1 matches. When nothing matches, `GetCurrentLink` fails with "No message open" rather than substituting a mailbox name. Capturing a link to a mailbox has no subject by definition, and a silently wrong title is worse than a visible error.
 
 The user script can override resolution by assigning `native.subjectResolver = fn`; the harness uses the override when present.
+
+## Share presentation
+
+The share sheet is reachable three ways, all resolving to the same `SharePresenter` call:
+
+1. A toolbar button in the app chrome, sharing `currentLink()`.
+2. `native.share(...)` from the user script, so the script can draw its own affordance inside Fastmail's UI.
+3. The `GetCurrentLink` intent feeding a share action in Shortcuts.
+
+Anchoring is a correctness requirement rather than a refinement. On iPad, `UIActivityViewController` presents as a popover and traps if `popoverPresentationController.sourceView` and `sourceRect` are unset; `NSSharingServicePicker.show(relativeTo:of:preferredEdge:)` likewise needs a rect. The toolbar button supplies its own anchor. A script-invoked share supplies one by passing `rect` from `element.getBoundingClientRect()`, which `NativeBridge` converts from page coordinates to web view coordinates, accounting for scroll offset and content insets.
+
+When `rect` is absent, the presenter anchors to the centre of the web view. This is deliberately a fallback rather than an error, since a missing anchor should degrade to an oddly placed sheet rather than a crash.
+
+Presentation is driven by state, not by reaching into the view hierarchy: `NativeBridge` publishes a share request, `AppShell` presents it, and the promise resolves on dismissal.
 
 ## Error handling
 
