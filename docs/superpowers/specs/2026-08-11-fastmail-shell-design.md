@@ -440,6 +440,33 @@ The cost is that ⌥ plus a digit no longer types its typographic character whil
 
 **Consequence for everything that says "current".** With more than one web view alive, `currentLink()`, the share toolbar button, the badge resolver, and the `GetCurrentLink` intent must all act on the key window's web view rather than on any singleton. A `WebViewRegistry` tracks the live views and resolves the active one from the key window; on iOS it resolves to the only view there is. This is written down because a singleton web view reference would work perfectly until the first second tab.
 
+### Window chrome
+
+The Mac window reproduces the chrome of the existing Safari web app: Fastmail's own page header running full width, with the traffic lights floating over it and no separate title bar.
+
+None of that is a native toolbar. The search field, the sidebar and view toggles, and the settings, help and avatar buttons are all Fastmail's `.v-PageHeader`, the same element the web app renders in any browser. What makes it read as app chrome is the window letting the page reach the top edge:
+
+- `styleMask` includes `.fullSizeContentView`
+- `titlebarAppearsTransparent = true`
+- `titleVisibility = .hidden`
+- the tint from the section below
+
+One thing must come from the user script rather than from Swift: the page header needs left padding so its leftmost controls clear the traffic lights, roughly 78pt at the standard window-button inset. Doing it in CSS keeps it adjustable without a rebuild, and keeps Swift ignorant of Fastmail's markup.
+
+The toolbar described elsewhere in this document is therefore macOS-only *and* minimal — reload and share — and coexists with Fastmail's own header rather than duplicating it.
+
+### Offline
+
+Fastmail's web app has its own offline support built on a service worker. The app does not implement caching; it only needs to avoid preventing what Fastmail already does.
+
+**macOS: confirmed working.** The Milestone 0 spike observed `navigator.serviceWorker.controller` live in a bare `WKWebView` with no app-bound domains declared, on the same configuration that injects scripts.
+
+**iOS: unverified, and possibly mutually exclusive with script injection.** iOS is where WebKit has historically tied service worker availability to `WKAppBoundDomains` — the same key that disables `WKUserScript` injection, custom stylesheets, and message handlers. If that coupling still holds, iOS offers offline or the user script, not both, and the app cannot have the feature it exists to provide.
+
+This must be measured before either behaviour is promised on iOS. The spike is small: install the app on a device, load the mailbox, enable Airplane Mode, and relaunch, then check `navigator.serviceWorker.controller` and whether the mailbox renders. Run it twice, once with no `WKAppBoundDomains` key and once with it declared, and record whether injection survives in the second case.
+
+If the coupling holds, the resolution is to keep injection and accept no offline on iOS, since a shell that cannot run the user script has no reason to exist. That would be a change to the Non-goals, not a defect.
+
 ### Titlebar tint
 
 The window titlebar takes the site's colour, the way Safari tints its toolbar, so the app reads as Fastmail rather than as a generic window. The macOS system menu bar cannot be tinted by an application and is not involved.
