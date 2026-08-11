@@ -144,6 +144,7 @@ If the container is unavailable (not signed into iCloud, first launch before dow
 - `share({url, text, rect})` → Promise resolving when the share sheet is dismissed. `rect` is optional and takes the shape of `getBoundingClientRect()`; see Share presentation.
 - `currentLink()` → `{url, title, markdown}` for the open message, where `title` is the subject alone. Backs both the `GetCurrentLink` intent and the toolbar share button. Rejects when no message is open.
 - `subjectResolver` → assignable; overrides the default selector chain.
+- `addMenuItem({label, icon, section, onSelect})` → injects an item into Fastmail's message actions menu, matching its markup. See Menu injection.
 - `registerAction(name, fn)` → registers a Shortcuts-invocable action; also notifies native so the name can be offered as a Shortcuts parameter option.
 - `log(...args)` → Xcode console.
 - `onRoute(cb)` → fires on route change. Implemented by patching `history.pushState` and `history.replaceState`, listening for `popstate`, and running a debounced `MutationObserver` on `document.body`. Necessary because `WKUserScript` runs once per document load and Fastmail is client-routed.
@@ -204,17 +205,70 @@ The user script can override resolution by assigning `native.subjectResolver = f
 
 ## Share presentation
 
+The iOS build is chromeless — the web view fills the screen, with no toolbar to hang a share button on. The share affordance therefore lives inside Fastmail's own UI, injected by the harness. See Menu injection.
+
 The share sheet is reachable three ways, all resolving to the same `SharePresenter` call:
 
-1. A toolbar button in the app chrome, sharing `currentLink()`.
-2. `native.share(...)` from the user script, so the script can draw its own affordance inside Fastmail's UI.
+1. A **Share** item injected at the top of Fastmail's message actions menu. The primary route, and the only in-app one on iOS.
+2. `native.share(...)` from the user script directly, for any other affordance the script wants to draw.
 3. The `GetCurrentLink` intent feeding a share action in Shortcuts.
+
+The macOS build additionally has a window toolbar, since a Mac window has one regardless, and the same Share item appears there.
+
+On iOS the only other app-level affordance is pull-to-refresh, which reloads both page and script. Errors surface as a transient banner over the web view. No persistent chrome is added.
 
 Anchoring is a correctness requirement rather than a refinement. On iPad, `UIActivityViewController` presents as a popover and traps if `popoverPresentationController.sourceView` and `sourceRect` are unset; `NSSharingServicePicker.show(relativeTo:of:preferredEdge:)` likewise needs a rect. The toolbar button supplies its own anchor. A script-invoked share supplies one by passing `rect` from `element.getBoundingClientRect()`, which `NativeBridge` converts from page coordinates to web view coordinates, accounting for scroll offset and content insets.
 
 When `rect` is absent, the presenter anchors to the centre of the web view. This is deliberately a fallback rather than an error, since a missing anchor should degrade to an oddly placed sheet rather than a crash.
 
 Presentation is driven by state, not by reaching into the view hierarchy: `NativeBridge` publishes a share request, `AppShell` presents it, and the promise resolves on dismissal.
+
+## Menu injection
+
+Fastmail's menu markup, read from a live session on 2026-08-11:
+
+```html
+<div class="v-Menu">
+  <li id="v308" class="v-MenuOption">
+    <button class="v-Button has-icon" type="button">
+      <svg viewBox="0 0 24 24" class="u-standardicon v-Icon i-restore" role="presentation">…</svg>
+      <span class="label">Undo</span>
+    </button>
+  </li>
+  <li class="v-MenuOption v-MenuOption--lastOfSection">…</li>
+</div>
+```
+
+Three properties of this markup drive the design:
+
+1. **A separator is a modifier class, not an element.** `v-MenuOption--lastOfSection` on the last item of a section draws the rule. A Share item at the top with a separator underneath is therefore a single `li` carrying `v-MenuOption v-MenuOption--lastOfSection`, inserted as the first child.
+2. **Several `.v-Menu` nodes coexist** in the DOM, at most one visible. A query at page load finds nothing useful and a query at click time may find a stale node. Injection must react to menus becoming visible.
+3. **Element ids are generated per render** (`v308`, `v302`), so nothing may key off them.
+
+The harness runs a `MutationObserver` on `document.body` watching for `.v-Menu` nodes being added or becoming visible. A menu is identified as the message actions menu by its **contents** — it contains an option whose label is `Show details` — rather than by a container selector, since `v-Menu` is shared by every menu in the app and ids are unusable.
+
+On a match the harness prepends:
+
+```html
+<li class="v-MenuOption v-MenuOption--lastOfSection" data-fmshell="share">
+  <button class="v-Button has-icon" type="button">
+    <svg viewBox="0 0 24 24" class="u-standardicon v-Icon i-share" role="presentation">…</svg>
+    <span class="label">Share</span>
+  </button>
+</li>
+```
+
+Mirroring Fastmail's own class names means the item inherits menu styling with no CSS of its own, and keeps matching if Fastmail restyles.
+
+Selecting it calls `currentLink()`, then `share(...)` with the rect of the `li` so the popover anchors to the menu item, then dismisses the menu.
+
+The `data-fmshell` attribute makes injection idempotent, since menu nodes are reused across openings.
+
+Two details to settle in Milestone 0: whether an `i-share` icon exists in Fastmail's sprite, falling back to an inlined 24×24 path matching the existing convention; and whether the message actions menu can be identified by `Show details` in the reading pane as well as the message card.
+
+Label matching is English-only. The accounts are English, so this is accepted rather than solved.
+
+The harness generalises this as `native.addMenuItem({label, icon, section, onSelect})`, so a user script can add further items without reimplementing the observer. The Share item is the first consumer of that API rather than a special case.
 
 ## Error handling
 
@@ -242,7 +296,7 @@ Manual verification uses `isInspectable` and Safari Web Inspector.
 
 ## Milestones
 
-- **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app, and re-verify the subject selector chain inside `WKWebView` (it was verified in Safari, and Fastmail may serve different markup to a non-Safari user agent). Decision gate before further work.
+- **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app, re-verify the subject selector chain inside `WKWebView` (it was verified in Safari, and Fastmail may serve different markup to a non-Safari user agent), and capture the message actions menu: which container it renders into, that `Show details` identifies it, and whether an `i-share` icon exists in the sprite. Decision gate before further work.
 - **M1** — Package plus two multiplatform targets, profiles, navigation policy, persistent sessions. Both destinations build and run.
 - **M2** — `ScriptStore` and `ScriptInjector`, iCloud container, reload pipeline.
 - **M3** — `harness.js`: route hooks, GM shims, subject resolution, error reporting.
