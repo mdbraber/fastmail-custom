@@ -140,6 +140,8 @@ The existing Safari web apps in `~/Applications` use these same icons, so once t
 
 **`WebContainer`** — the representable wrapping `WKWebView`, with the platform variants in `WebContainer+iOS.swift` and `WebContainer+macOS.swift`. Sets `isInspectable = true` so Safari Web Inspector attaches to the injected script. Owns the navigation delegate.
 
+`isInspectable` is set unconditionally, in Release as well as Debug. This is deliberate: the installed Release build is where the user script is developed, so a `#if DEBUG` guard would remove the capability from the only build that matters. The consequence is accepted — anyone with access to the unlocked machine can attach Web Inspector to a logged-in mail session and read or script it. Revisit only if these apps ever leave a single-user machine.
+
 **`SharePresenter`** — presents `UIActivityViewController` or `NSSharingServicePicker` behind one interface, so `NativeBridge` has no platform branches.
 
 **`BadgeController`** — applies an unread count to the app icon, via `UNUserNotificationCenter` on iOS or the dock tile on macOS, and owns the one-time authorization request. See Unread badge.
