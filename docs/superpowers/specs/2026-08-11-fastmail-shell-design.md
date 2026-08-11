@@ -13,6 +13,8 @@ The script must be editable from a Mac without rebuilding the app. The script mu
 
 Multiple sites or URL-pattern matching. Content blocking or request interception. Response rewriting. Push or local notifications. Offline caching. In-app script editing. Remote script updates. App Store distribution.
 
+No unread-count badge. A badge can only be updated while the app runs, so a truthful one requires polling Fastmail's JMAP API from a background task, which requires storing an API token per profile. Not worth a stored credential. The app therefore holds no Fastmail credentials of its own; the only session state is the web view's cookies.
+
 ## Platform constraints
 
 These were verified before design and each one shapes a decision:
