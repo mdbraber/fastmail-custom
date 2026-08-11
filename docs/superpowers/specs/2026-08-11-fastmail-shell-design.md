@@ -327,7 +327,11 @@ Three properties of this markup drive the design:
 2. **Several `.v-Menu` nodes coexist** in the DOM, at most one visible. A query at page load finds nothing useful and a query at click time may find a stale node. Injection must react to menus becoming visible.
 3. **Element ids are generated per render** (`v308`, `v302`), so nothing may key off them.
 
-The harness runs a `MutationObserver` on `document.body` watching for `.v-Menu` nodes being added or becoming visible. A menu is identified as the message actions menu by its **contents** — it contains an option whose label is `Show details` — rather than by a container selector, since `v-Menu` is shared by every menu in the app and ids are unusable.
+The harness runs a `MutationObserver` on `document.body` watching for `.v-Menu` nodes being added or becoming visible. A menu is identified as the message actions menu by its **contents** rather than by a container selector, since `v-Menu` is shared by every menu in the app and ids are unusable.
+
+The identifying contents are options labelled **both `Reply` and `Forward`**. Requiring two labels avoids matching a menu that happens to carry one common verb.
+
+An earlier draft of this design identified the menu by an option labelled `Show details`. Milestone 0 disproved that: the message actions menu contains `Reply, Reply to all, Forward, Forward as attachment, Edit as new, Print, Download, Add rule from message…, Block <sender>…, Show raw message, View as text, Send a copy…, Delete` and no `Show details` at all. That label belongs to the message card's details toggle, which controls `div.v-Message-details.is-notshown`. The old rule would never have matched and the Share item would never have appeared. See `docs/superpowers/spike-findings.md`.
 
 On a match the harness prepends:
 
@@ -346,7 +350,7 @@ Selecting it calls `currentLink()`, then `share(...)` with the rect of the `li` 
 
 The `data-fmshell` attribute makes injection idempotent, since menu nodes are reused across openings.
 
-Two details to settle in Milestone 0: whether an `i-share` icon exists in Fastmail's sprite, falling back to an inlined 24×24 path matching the existing convention; and whether the message actions menu can be identified by `Show details` in the reading pane as well as the message card.
+Milestone 0 settled the icon question: **no share icon exists** in Fastmail's sprite. Scanning every distinct `svg.v-Icon` class for share-like names returned only `i-forward`. The injected item therefore carries an inlined 24×24 SVG path following the existing convention rather than reusing a sprite class.
 
 Label matching is English-only. The accounts are English, so this is accepted rather than solved.
 
