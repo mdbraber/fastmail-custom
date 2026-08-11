@@ -781,6 +781,36 @@ private let realHeader = """
 
 That last test is the one worth having: a parser that scans the whole file rather than the block would let anything below the header widen where the script runs.
 
+Add boundary cases too, since `parse` is declared `throws` so malformed input fails safely — a trap here would crash the host process instead:
+
+```swift
+@Test func bothMarkersOnOneLineThrows() {
+    #expect(throws: MetadataParseError.blockMissing) {
+        try MetadataParser.parse("// ==UserScript== ==/UserScript==")
+    }
+}
+
+@Test func emptySourceThrows() {
+    #expect(throws: MetadataParseError.blockMissing) {
+        try MetadataParser.parse("")
+    }
+}
+
+@Test func onlyClosingMarkerThrows() {
+    #expect(throws: MetadataParseError.blockMissing) {
+        try MetadataParser.parse("// ==/UserScript==")
+    }
+}
+
+@Test func adjacentMarkersYieldAnEmptyBlock() throws {
+    let meta = try MetadataParser.parse("// ==UserScript==\n// ==/UserScript==")
+    #expect(meta.matches.isEmpty)
+    #expect(meta.runAt == .documentIdle)
+}
+```
+
+The closing marker must be searched for strictly after the opening line. Searching from `lines[start...]` includes the opening line itself, so a line carrying both markers makes `end == start`, the range `(start + 1)..<end` inverts to `1..<0`, and Swift traps.
+
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd Packages/FastmailShellKit && swift test`
@@ -834,7 +864,7 @@ public enum MetadataParser {
         guard let start = lines.firstIndex(where: { $0.contains(openMarker) }) else {
             throw MetadataParseError.blockMissing
         }
-        guard let end = lines[start...].firstIndex(where: { $0.contains(closeMarker) }) else {
+        guard let end = lines[(start + 1)...].firstIndex(where: { $0.contains(closeMarker) }) else {
             throw MetadataParseError.blockMissing
         }
 
