@@ -40,10 +40,44 @@ extension WebContainer: NSViewRepresentable {
 @MainActor
 final class WindowAwareWebView: WKWebView {
     var onDidMoveToWindow: (() -> Void)?
+    private let dragRegion = TitlebarDragView()
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if dragRegion.superview !== self {
+            dragRegion.frame = bounds
+            dragRegion.autoresizingMask = [.width, .height]
+            addSubview(dragRegion)
+        }
         onDidMoveToWindow?()
+    }
+}
+
+@MainActor
+final class TitlebarDragView: NSView {
+    static let inset: CGFloat = 78
+    static let titlebarHeight: CGFloat = 52
+    static let topStrip: CGFloat = 10
+
+    override var mouseDownCanMoveWindow: Bool { true }
+
+    static func isDraggable(_ point: NSPoint, in size: NSSize, fullScreen: Bool) -> Bool {
+        guard !fullScreen else { return false }
+        let fromTop = size.height - point.y
+        guard fromTop >= 0, fromTop <= titlebarHeight else { return false }
+        if fromTop <= topStrip { return true }
+        return point.x <= inset
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        let fullScreen = window?.styleMask.contains(.fullScreen) ?? false
+        guard Self.isDraggable(local, in: bounds.size, fullScreen: fullScreen) else { return nil }
+        return self
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.performDrag(with: event)
     }
 }
 

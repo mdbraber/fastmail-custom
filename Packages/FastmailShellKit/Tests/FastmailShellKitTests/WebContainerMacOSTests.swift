@@ -89,4 +89,29 @@ private func makeWindow() -> NSWindow {
     model.tint = "#000000"
     #expect(window.backgroundColor != NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
 }
+
+@Test @MainActor func topStripIsDraggableAcrossTheFullWidth() {
+    let size = NSSize(width: 1200, height: 800)
+    #expect(TitlebarDragView.isDraggable(NSPoint(x: 600, y: 795), in: size, fullScreen: false))
+    #expect(TitlebarDragView.isDraggable(NSPoint(x: 1190, y: 792), in: size, fullScreen: false))
+}
+
+@Test @MainActor func theTrafficLightInsetIsDraggableForTheFullTitlebarHeight() {
+    let size = NSSize(width: 1200, height: 800)
+    #expect(TitlebarDragView.isDraggable(NSPoint(x: 40, y: 760), in: size, fullScreen: false))
+    #expect(TitlebarDragView.isDraggable(NSPoint(x: 78, y: 750), in: size, fullScreen: false))
+}
+
+@Test @MainActor func fastmailsOwnControlsStayClickable() {
+    let size = NSSize(width: 1200, height: 800)
+    #expect(!TitlebarDragView.isDraggable(NSPoint(x: 600, y: 770), in: size, fullScreen: false))
+    #expect(!TitlebarDragView.isDraggable(NSPoint(x: 1100, y: 765), in: size, fullScreen: false))
+    #expect(!TitlebarDragView.isDraggable(NSPoint(x: 600, y: 400), in: size, fullScreen: false))
+}
+
+@Test @MainActor func nothingIsDraggableInFullscreenWhereThereIsNoTitlebar() {
+    let size = NSSize(width: 1200, height: 800)
+    #expect(!TitlebarDragView.isDraggable(NSPoint(x: 600, y: 795), in: size, fullScreen: true))
+    #expect(!TitlebarDragView.isDraggable(NSPoint(x: 40, y: 760), in: size, fullScreen: true))
+}
 #endif
