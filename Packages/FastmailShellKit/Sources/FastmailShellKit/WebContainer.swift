@@ -5,6 +5,8 @@ import WebKit
 public final class ShellModel: ObservableObject {
     @Published public var banner: String?
     @Published public var tint: String?
+    @Published public var dragRect: CGRect = .zero
+    @Published public var noDragRects: [CGRect] = []
 
     public init() {}
 
@@ -44,7 +46,13 @@ public struct WebContainer {
             expectedHost: profile.startURL.host ?? "",
             onLog: { message in print("[userscript] \(message)") },
             onError: { [model] message in model.show(message) },
-            onTheme: { [model] color in Task { @MainActor in model.tint = color } }
+            onTheme: { [model] color in Task { @MainActor in model.tint = color } },
+            onDragRegions: { [model] drag, noDrag in
+                Task { @MainActor in
+                    model.dragRect = drag
+                    model.noDragRects = noDrag
+                }
+            }
         )
         configuration.userContentController.addScriptMessageHandler(
             bridge,

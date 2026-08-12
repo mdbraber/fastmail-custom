@@ -90,28 +90,57 @@ private func makeWindow() -> NSWindow {
     #expect(window.backgroundColor != NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
 }
 
-@Test @MainActor func topStripIsDraggableAcrossTheFullWidth() {
+private let header = CGRect(x: 0, y: 0, width: 1200, height: 52)
+private let searchField = CGRect(x: 420, y: 10, width: 360, height: 32)
+private let gear = CGRect(x: 1120, y: 14, width: 24, height: 24)
+
+@Test @MainActor func theWholeHeaderDragsWhereFastmailSaysItDoes() {
     let size = NSSize(width: 1200, height: 800)
-    #expect(TitlebarDragView.isDraggable(NSPoint(x: 600, y: 795), in: size, fullScreen: false))
-    #expect(TitlebarDragView.isDraggable(NSPoint(x: 1190, y: 792), in: size, fullScreen: false))
+    let point = NSPoint(x: 300, y: size.height - 26)
+    #expect(TitlebarDragView.isDraggable(
+        point, in: size, drag: header, noDrag: [searchField, gear], fullScreen: false
+    ))
 }
 
-@Test @MainActor func theTrafficLightInsetIsDraggableForTheFullTitlebarHeight() {
+@Test @MainActor func fastmailsNoDragElementsStayClickable() {
     let size = NSSize(width: 1200, height: 800)
-    #expect(TitlebarDragView.isDraggable(NSPoint(x: 40, y: 760), in: size, fullScreen: false))
-    #expect(TitlebarDragView.isDraggable(NSPoint(x: 78, y: 750), in: size, fullScreen: false))
+    let onSearch = NSPoint(x: 600, y: size.height - 26)
+    let onGear = NSPoint(x: 1130, y: size.height - 26)
+    #expect(!TitlebarDragView.isDraggable(
+        onSearch, in: size, drag: header, noDrag: [searchField, gear], fullScreen: false
+    ))
+    #expect(!TitlebarDragView.isDraggable(
+        onGear, in: size, drag: header, noDrag: [searchField, gear], fullScreen: false
+    ))
 }
 
-@Test @MainActor func fastmailsOwnControlsStayClickable() {
+@Test @MainActor func belowTheHeaderIsNeverDraggable() {
     let size = NSSize(width: 1200, height: 800)
-    #expect(!TitlebarDragView.isDraggable(NSPoint(x: 600, y: 770), in: size, fullScreen: false))
-    #expect(!TitlebarDragView.isDraggable(NSPoint(x: 1100, y: 765), in: size, fullScreen: false))
-    #expect(!TitlebarDragView.isDraggable(NSPoint(x: 600, y: 400), in: size, fullScreen: false))
+    let point = NSPoint(x: 300, y: size.height - 400)
+    #expect(!TitlebarDragView.isDraggable(
+        point, in: size, drag: header, noDrag: [], fullScreen: false
+    ))
 }
 
-@Test @MainActor func nothingIsDraggableInFullscreenWhereThereIsNoTitlebar() {
+@Test @MainActor func fullscreenDragsNothing() {
     let size = NSSize(width: 1200, height: 800)
-    #expect(!TitlebarDragView.isDraggable(NSPoint(x: 600, y: 795), in: size, fullScreen: true))
-    #expect(!TitlebarDragView.isDraggable(NSPoint(x: 40, y: 760), in: size, fullScreen: true))
+    let point = NSPoint(x: 300, y: size.height - 26)
+    #expect(!TitlebarDragView.isDraggable(
+        point, in: size, drag: header, noDrag: [], fullScreen: true
+    ))
 }
+
+@Test @MainActor func beforeThePageReportsAnythingTheHeuristicStripStillDrags() {
+    let size = NSSize(width: 1200, height: 800)
+    #expect(TitlebarDragView.isDraggable(
+        NSPoint(x: 600, y: size.height - 4), in: size, drag: .zero, noDrag: [], fullScreen: false
+    ))
+    #expect(TitlebarDragView.isDraggable(
+        NSPoint(x: 40, y: size.height - 40), in: size, drag: .zero, noDrag: [], fullScreen: false
+    ))
+    #expect(!TitlebarDragView.isDraggable(
+        NSPoint(x: 600, y: size.height - 40), in: size, drag: .zero, noDrag: [], fullScreen: false
+    ))
+}
+
 #endif

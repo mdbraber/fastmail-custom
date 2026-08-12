@@ -14,6 +14,7 @@ extension WebContainer: NSViewRepresentable {
             beforeLoad: { controller in installChromeCSS(in: controller) },
             makeView: { configuration in
                 let view = WindowAwareWebView(frame: .zero, configuration: configuration)
+                view.dragRegion.model = model
                 view.onDidMoveToWindow = { [weak view, model] in
                     guard let view, let window = view.window else { return }
                     configureWindow(window)
@@ -40,7 +41,7 @@ extension WebContainer: NSViewRepresentable {
 @MainActor
 final class WindowAwareWebView: WKWebView {
     var onDidMoveToWindow: (() -> Void)?
-    private let dragRegion = TitlebarDragView()
+    let dragRegion = TitlebarDragView()
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -59,21 +60,41 @@ final class TitlebarDragView: NSView {
     static let titlebarHeight: CGFloat = 52
     static let topStrip: CGFloat = 10
 
+    weak var model: ShellModel?
+
     override var mouseDownCanMoveWindow: Bool { true }
 
-    static func isDraggable(_ point: NSPoint, in size: NSSize, fullScreen: Bool) -> Bool {
+    static func isDraggable(
+        _ point: NSPoint,
+        in size: NSSize,
+        drag: CGRect,
+        noDrag: [CGRect],
+        fullScreen: Bool
+    ) -> Bool {
         guard !fullScreen else { return false }
-        let fromTop = size.height - point.y
-        guard fromTop >= 0, fromTop <= titlebarHeight else { return false }
-        if fromTop <= topStrip { return true }
-        return point.x <= inset
+        let inPage = CGPoint(x: point.x, y: size.height - point.y)
+        guard !drag.isEmpty else { return fallbackIsDraggable(inPage) }
+        guard drag.contains(inPage) else { return false }
+        return !noDrag.contains { $0.contains(inPage) }
+    }
+
+    static func fallbackIsDraggable(_ inPage: CGPoint) -> Bool {
+        guard inPage.y >= 0, inPage.y <= titlebarHeight else { return false }
+        if inPage.y <= topStrip { return true }
+        return inPage.x <= inset
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
         let fullScreen = window?.styleMask.contains(.fullScreen) ?? false
-        guard Self.isDraggable(local, in: bounds.size, fullScreen: fullScreen) else { return nil }
-        return self
+        let draggable = Self.isDraggable(
+            local,
+            in: bounds.size,
+            drag: model?.dragRect ?? .zero,
+            noDrag: model?.noDragRects ?? [],
+            fullScreen: fullScreen
+        )
+        return draggable ? self : nil
     }
 
     override func mouseDown(with event: NSEvent) {

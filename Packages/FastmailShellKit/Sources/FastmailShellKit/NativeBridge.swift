@@ -12,17 +12,25 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onLog: (String) async -> Void
     private let onError: (String) async -> Void
     private let onTheme: (String) async -> Void
+    private let onDragRegions: (CGRect, [CGRect]) async -> Void
 
     public init(
         expectedHost: String,
         onLog: @escaping (String) async -> Void,
         onError: @escaping (String) async -> Void,
-        onTheme: @escaping (String) async -> Void = { _ in }
+        onTheme: @escaping (String) async -> Void = { _ in },
+        onDragRegions: @escaping (CGRect, [CGRect]) async -> Void = { _, _ in }
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
         self.onError = onError
         self.onTheme = onTheme
+        self.onDragRegions = onDragRegions
+    }
+
+    static func rect(from values: [Double]) -> CGRect? {
+        guard values.count == 4, values[2] > 0, values[3] > 0 else { return nil }
+        return CGRect(x: values[0], y: values[1], width: values[2], height: values[3])
     }
 
     @discardableResult
@@ -43,6 +51,13 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
                 return BridgeReply(value: nil, error: "theme payload missing color")
             }
             await onTheme(color)
+            return BridgeReply(value: nil, error: nil)
+        case "dragRegions":
+            guard let values = payload["drag"] as? [Double], let drag = Self.rect(from: values) else {
+                return BridgeReply(value: nil, error: "dragRegions payload has no usable drag rect")
+            }
+            let noDrag = (payload["noDrag"] as? [[Double]] ?? []).compactMap(Self.rect(from:))
+            await onDragRegions(drag, noDrag)
             return BridgeReply(value: nil, error: nil)
         default:
             return BridgeReply(value: nil, error: "unknown action: \(action)")

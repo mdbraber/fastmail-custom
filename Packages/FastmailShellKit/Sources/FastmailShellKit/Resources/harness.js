@@ -48,6 +48,49 @@
     })();
 
     var lastTheme = null;
+    var lastRegions = null;
+    var regionsScheduled = false;
+
+    function dragRegions() {
+        var header = document.querySelector('.v-PageHeader');
+        if (!header) return null;
+        var box = header.getBoundingClientRect();
+        if (!box.width || !box.height) return null;
+        var noDrag = [];
+        var nodes = header.querySelectorAll('.v-Button, .v-MainNavToolbar, .v-TextInput');
+        for (var i = 0; i < nodes.length; i += 1) {
+            var rect = nodes[i].getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                noDrag.push([rect.left, rect.top, rect.width, rect.height]);
+            }
+        }
+        return { drag: [box.left, box.top, box.width, box.height], noDrag: noDrag };
+    }
+
+    function reportDragRegions() {
+        var regions = dragRegions();
+        if (!regions) return;
+        var encoded = JSON.stringify(regions);
+        if (encoded === lastRegions) return;
+        lastRegions = encoded;
+        post('dragRegions', regions);
+    }
+
+    function scheduleDragRegions() {
+        if (regionsScheduled) return;
+        regionsScheduled = true;
+        window.requestAnimationFrame(function () {
+            regionsScheduled = false;
+            reportDragRegions();
+        });
+    }
+
+    function watchDragRegions() {
+        scheduleDragRegions();
+        var observer = new MutationObserver(scheduleDragRegions);
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        window.addEventListener('resize', scheduleDragRegions);
+    }
 
     function paintedColor(element) {
         var node = element;
@@ -158,4 +201,5 @@
 
     installRouteHooks();
     watchTheme();
+    watchDragRegions();
 })();
