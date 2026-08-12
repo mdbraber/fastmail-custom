@@ -14,6 +14,24 @@ import Foundation
     #expect(await recorded.errors == ["boom"])
 }
 
+@Test func routesThemeAction() async {
+    let recorded = Recorder()
+    let bridge = await NativeBridge(
+        onLog: { _ in },
+        onError: { _ in },
+        onTheme: { await recorded.appendTheme($0) }
+    )
+    let reply = await bridge.handle(body: ["action": "theme", "payload": ["color": "#d6d8da"]])
+    #expect(reply.error == nil)
+    #expect(await recorded.themes == ["#d6d8da"])
+}
+
+@Test func themeActionWithoutColorProducesAnError() async {
+    let bridge = await NativeBridge(onLog: { _ in }, onError: { _ in })
+    let reply = await bridge.handle(body: ["action": "theme", "payload": [:]])
+    #expect(reply.error != nil)
+}
+
 @Test func unknownActionProducesAnError() async {
     let bridge = await NativeBridge(onLog: { _ in }, onError: { _ in })
     let reply = await bridge.handle(body: ["action": "teleport", "payload": [:]])
@@ -29,6 +47,8 @@ import Foundation
 actor Recorder {
     var logs: [String] = []
     var errors: [String] = []
+    var themes: [String] = []
     func appendLog(_ value: String) { logs.append(value) }
     func appendError(_ value: String) { errors.append(value) }
+    func appendTheme(_ value: String) { themes.append(value) }
 }

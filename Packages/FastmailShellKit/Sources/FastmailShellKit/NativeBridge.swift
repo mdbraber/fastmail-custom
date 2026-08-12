@@ -10,13 +10,16 @@ public struct BridgeReply: Equatable, Sendable {
 public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onLog: (String) async -> Void
     private let onError: (String) async -> Void
+    private let onTheme: (String) async -> Void
 
     public init(
         onLog: @escaping (String) async -> Void,
-        onError: @escaping (String) async -> Void
+        onError: @escaping (String) async -> Void,
+        onTheme: @escaping (String) async -> Void = { _ in }
     ) {
         self.onLog = onLog
         self.onError = onError
+        self.onTheme = onTheme
     }
 
     @discardableResult
@@ -31,6 +34,12 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             return BridgeReply(value: nil, error: nil)
         case "error":
             await onError(payload["message"] as? String ?? "unknown error")
+            return BridgeReply(value: nil, error: nil)
+        case "theme":
+            guard let color = payload["color"] as? String else {
+                return BridgeReply(value: nil, error: "theme payload missing color")
+            }
+            await onTheme(color)
             return BridgeReply(value: nil, error: nil)
         default:
             return BridgeReply(value: nil, error: "unknown action: \(action)")

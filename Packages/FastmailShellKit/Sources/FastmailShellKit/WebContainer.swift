@@ -4,6 +4,7 @@ import WebKit
 @MainActor
 public final class ShellModel: ObservableObject {
     @Published public var banner: String?
+    @Published public var tint: String?
 
     public init() {}
 
@@ -37,7 +38,8 @@ public struct WebContainer {
 
         let bridge = NativeBridge(
             onLog: { message in print("[userscript] \(message)") },
-            onError: { [model] message in model.show(message) }
+            onError: { [model] message in model.show(message) },
+            onTheme: { [model] color in Task { @MainActor in model.tint = color } }
         )
         configuration.userContentController.addScriptMessageHandler(
             bridge,

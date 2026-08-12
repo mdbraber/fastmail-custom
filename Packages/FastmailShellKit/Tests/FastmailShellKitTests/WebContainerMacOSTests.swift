@@ -19,14 +19,14 @@ private func makeWindow() -> NSWindow {
     let webView = WKWebView()
     defer { NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window) }
     #expect(fullScreenObservers[ObjectIdentifier(window)] == nil)
-    observeFullScreen(window, webView: webView)
+    observeFullScreen(window, webView: webView, model: ShellModel())
     #expect(fullScreenObservers[ObjectIdentifier(window)] != nil)
 }
 
 @Test @MainActor func observeFullScreenTearsDownObserversWhenWindowCloses() throws {
     let window = makeWindow()
     let webView = WKWebView()
-    observeFullScreen(window, webView: webView)
+    observeFullScreen(window, webView: webView, model: ShellModel())
     #expect(fullScreenObservers[ObjectIdentifier(window)] != nil)
     NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window)
     #expect(fullScreenObservers[ObjectIdentifier(window)] == nil)
@@ -36,12 +36,45 @@ private func makeWindow() -> NSWindow {
     let window = makeWindow()
     let webView = WKWebView()
     defer { NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window) }
-    observeFullScreen(window, webView: webView)
+    observeFullScreen(window, webView: webView, model: ShellModel())
     let first = try #require(fullScreenObservers[ObjectIdentifier(window)])
-    observeFullScreen(window, webView: webView)
+    observeFullScreen(window, webView: webView, model: ShellModel())
     let second = try #require(fullScreenObservers[ObjectIdentifier(window)])
     #expect(first !== second)
     #expect(!first.isActive)
     #expect(second.isActive)
+}
+
+@Test @MainActor func observeFullScreenAppliesTintWhenModelPublishesIt() throws {
+    let window = makeWindow()
+    let webView = WKWebView()
+    let model = ShellModel()
+    defer { NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window) }
+    observeFullScreen(window, webView: webView, model: model)
+    #expect(window.backgroundColor != NSColor(srgbRed: 214.0 / 255, green: 216.0 / 255, blue: 218.0 / 255, alpha: 1))
+    model.tint = "#d6d8da"
+    #expect(window.backgroundColor == NSColor(srgbRed: 214.0 / 255, green: 216.0 / 255, blue: 218.0 / 255, alpha: 1))
+    #expect(window.appearance?.name == .aqua)
+}
+
+@Test @MainActor func observeFullScreenIgnoresMalformedTint() throws {
+    let window = makeWindow()
+    let webView = WKWebView()
+    let model = ShellModel()
+    defer { NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window) }
+    observeFullScreen(window, webView: webView, model: model)
+    let before = window.backgroundColor
+    model.tint = "not-a-color"
+    #expect(window.backgroundColor == before)
+}
+
+@Test @MainActor func observeFullScreenStopsApplyingTintAfterWindowCloses() throws {
+    let window = makeWindow()
+    let webView = WKWebView()
+    let model = ShellModel()
+    observeFullScreen(window, webView: webView, model: model)
+    NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window)
+    model.tint = "#000000"
+    #expect(window.backgroundColor != NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
 }
 #endif

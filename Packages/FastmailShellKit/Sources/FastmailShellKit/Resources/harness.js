@@ -26,6 +26,22 @@
         post('error', { message: message, stack: stack });
     }
 
+    function reportTheme() {
+        var meta = document.querySelector('meta[name="theme-color"]');
+        var color = meta ? meta.getAttribute('content') : null;
+        if (!color) return;
+        post('theme', { color: color });
+    }
+
+    function watchTheme() {
+        reportTheme();
+        var observer = new MutationObserver(reportTheme);
+        if (document.head) {
+            observer.observe(document.head, { attributes: true, childList: true, subtree: true });
+        }
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    }
+
     function notifyRoute() {
         if (location.href === lastHref) return;
         lastHref = location.href;
@@ -92,4 +108,5 @@
     });
 
     installRouteHooks();
+    watchTheme();
 })();

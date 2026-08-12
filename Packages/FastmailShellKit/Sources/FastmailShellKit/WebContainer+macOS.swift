@@ -1,6 +1,7 @@
 #if canImport(AppKit) && !targetEnvironment(macCatalyst)
 import SwiftUI
 import WebKit
+import Combine
 
 extension WebContainer: NSViewRepresentable {
     public func makeCoordinator() -> WebCoordinator {
@@ -11,10 +12,10 @@ extension WebContainer: NSViewRepresentable {
         let webView = makeWebView(coordinator: context.coordinator) { controller in
             installChromeCSS(in: controller)
         }
-        DispatchQueue.main.async { [weak webView] in
+        DispatchQueue.main.async { [weak webView, model] in
             guard let webView, let window = webView.window else { return }
             configureWindow(window)
-            observeFullScreen(window, webView: webView)
+            observeFullScreen(window, webView: webView, model: model)
         }
         return webView
     }
@@ -40,13 +41,22 @@ func configureWindow(_ window: NSWindow) {
 }
 
 @MainActor
+func applyTint(_ hex: String, to window: NSWindow) {
+    guard let rgb = ThemeColor.components(fromHex: hex) else { return }
+    window.backgroundColor = NSColor(
+        srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: 1
+    )
+    window.appearance = NSAppearance(named: ThemeColor.isDark(rgb) ? .darkAqua : .aqua)
+}
+
+@MainActor
 var fullScreenObservers: [ObjectIdentifier: FullScreenObserver] = [:]
 
 @MainActor
-func observeFullScreen(_ window: NSWindow, webView: WKWebView) {
+func observeFullScreen(_ window: NSWindow, webView: WKWebView, model: ShellModel) {
     let key = ObjectIdentifier(window)
     fullScreenObservers[key]?.tearDown()
-    fullScreenObservers[key] = FullScreenObserver(window: window, webView: webView) {
+    fullScreenObservers[key] = FullScreenObserver(window: window, webView: webView, model: model) {
         fullScreenObservers[key] = nil
     }
 }
@@ -56,8 +66,14 @@ final class FullScreenObserver {
     private var enterToken: NSObjectProtocol?
     private var exitToken: NSObjectProtocol?
     private var closeToken: NSObjectProtocol?
+    private var tintCancellable: AnyCancellable?
 
-    init(window: NSWindow, webView: WKWebView, onClose: @escaping @MainActor @Sendable () -> Void) {
+    init(
+        window: NSWindow,
+        webView: WKWebView,
+        model: ShellModel,
+        onClose: @escaping @MainActor @Sendable () -> Void
+    ) {
         let center = NotificationCenter.default
         enterToken = center.addObserver(
             forName: NSWindow.didEnterFullScreenNotification, object: window, queue: .main
@@ -81,10 +97,14 @@ final class FullScreenObserver {
                 onClose()
             }
         }
+        tintCancellable = model.$tint.sink { [weak window] color in
+            guard let color, let window else { return }
+            applyTint(color, to: window)
+        }
     }
 
     var isActive: Bool {
-        enterToken != nil || exitToken != nil || closeToken != nil
+        enterToken != nil || exitToken != nil || closeToken != nil || tintCancellable != nil
     }
 
     func tearDown() {
@@ -93,6 +113,8 @@ final class FullScreenObserver {
         enterToken = nil
         exitToken = nil
         closeToken = nil
+        tintCancellable?.cancel()
+        tintCancellable = nil
     }
 }
 #endif
