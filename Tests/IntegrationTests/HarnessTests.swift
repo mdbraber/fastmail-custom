@@ -298,7 +298,7 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(reported, "rgb(124, 179, 66)")
     }
 
-    func testChromeInsetDropsToZeroInFullscreen() async throws {
+    func testChromeInsetYieldsToFastmailsOwnCascadeInFullscreen() async throws {
         let chromeCSS = try XCTUnwrap(BundleResourceLoader().string(named: "chrome-macos.css"))
         webView = try makeWebView(userScript: "", metadata: Self.meta(), chromeCSS: chromeCSS)
         try await load(webView)
@@ -306,22 +306,17 @@ final class HarnessTests: XCTestCase {
         let paddingLeft = try await evaluate(
             webView, "getComputedStyle(document.querySelector('.v-PageHeader')).paddingLeft"
         ) as? String
-        XCTAssertEqual(paddingLeft, "0px")
+        XCTAssertEqual(paddingLeft, "12px")
     }
 
-    func testChromeInsetIsExposedAsTheWindowControlsOverlayProperty() async throws {
+    func testChromeInsetDoesNotTriggerFastmailsWindowControlsOverlayLayout() async throws {
         let chromeCSS = try XCTUnwrap(BundleResourceLoader().string(named: "chrome-macos.css"))
         webView = try makeWebView(userScript: "", metadata: Self.meta(), chromeCSS: chromeCSS)
         try await load(webView)
-        let inset = try await evaluate(
-            webView,
-            "getComputedStyle(document.body).getPropertyValue('--titlebar-area-inset-left').trim()"
-        ) as? String
-        XCTAssertEqual(inset, "78px")
         let detected = try await evaluate(
             webView,
             "!!parseInt(getComputedStyle(document.body).getPropertyValue('--titlebar-area-inset-left'), 10)"
         ) as? Bool
-        XCTAssertEqual(detected, true)
+        XCTAssertEqual(detected, false)
     }
 }

@@ -1,8 +1,7 @@
-body {
-    --titlebar-area-inset-left: 78px !important;
-    --titlebar-area-inset-right: 0px !important;
+:root {
+    --fmshell-titlebar-inset: 78px;
 }
 
-body.fmshell-fullscreen {
-    --titlebar-area-inset-left: 0px !important;
+body:not(.fmshell-fullscreen) .v-PageHeader {
+    padding-left: var(--fmshell-titlebar-inset) !important;
 }
