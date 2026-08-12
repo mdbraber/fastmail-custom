@@ -60,7 +60,11 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
                 replyHandler(nil, "rejected: message did not originate from the main frame")
                 return
             }
-            guard frameInfo.securityOrigin.host.lowercased() == expectedHost.lowercased() else {
+            guard !expectedHost.isEmpty else {
+                replyHandler(nil, "rejected: no expected host is configured")
+                return
+            }
+            guard Self.normalizedHost(frameInfo.securityOrigin.host) == Self.normalizedHost(expectedHost) else {
                 replyHandler(nil, "rejected: message originated from an unexpected origin")
                 return
             }
@@ -68,5 +72,13 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             let reply = await handle(body: body)
             replyHandler(reply.value, reply.error)
         }
+    }
+
+    nonisolated static func normalizedHost(_ host: String) -> String {
+        var host = host.lowercased()
+        if host.hasSuffix(".") {
+            host.removeLast()
+        }
+        return host
     }
 }

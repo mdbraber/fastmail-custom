@@ -93,7 +93,31 @@ final class WebCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(openedURLs.isEmpty)
         XCTAssertNotEqual(webView.url, refusedURL)
-        XCTAssertEqual(model.banner, "Refused to open \(refusedURL.absoluteString)")
+        XCTAssertEqual(model.banner, "Refused to open a file: link")
+    }
+
+    func testProgrammaticWindowOpenWithoutUserGestureDoesNotReachTheSystemBrowser() async throws {
+        let model = ShellModel()
+        let allowedBaseURL = URL(string: "https://app.fastmail.com")!
+        var openedURLs: [URL] = []
+        let coordinator = WebCoordinator(
+            model: model,
+            startURL: allowedBaseURL,
+            openExternally: { url in openedURLs.append(url) }
+        )
+        let configuration = WKWebViewConfiguration()
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = coordinator
+        webView.uiDelegate = coordinator
+
+        webView.loadHTMLString("<html><body></body></html>", baseURL: allowedBaseURL)
+        try await waitUntil { webView.url?.host == "app.fastmail.com" }
+
+        _ = try await webView.evaluateJavaScript("window.open('https://evil.example/beacon')")
+
+        XCTAssertTrue(openedURLs.isEmpty)
+        XCTAssertNil(model.banner)
     }
 
     func testFullScreenClassIsReassertedWhenNavigationFinishesWhileWindowIsFullScreen() async throws {

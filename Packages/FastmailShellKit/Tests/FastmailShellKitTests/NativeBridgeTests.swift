@@ -46,6 +46,12 @@ import Foundation
     #expect(reply.error != nil)
 }
 
+@Test func normalizedHostStripsCaseAndATrailingDot() {
+    #expect(NativeBridge.normalizedHost("App.Fastmail.Com.") == "app.fastmail.com")
+    #expect(NativeBridge.normalizedHost("app.fastmail.com") == "app.fastmail.com")
+    #expect(NativeBridge.normalizedHost("") == "")
+}
+
 actor Recorder {
     var logs: [String] = []
     var errors: [String] = []

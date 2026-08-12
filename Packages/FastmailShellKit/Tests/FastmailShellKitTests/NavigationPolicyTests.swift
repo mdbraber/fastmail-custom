@@ -46,6 +46,15 @@ private func decide(_ string: String) -> NavigationDecision {
     #expect(decide("ftp://server/file") == .refuse)
 }
 
+@Test func refusesTheJavascriptScheme() {
+    #expect(decide("javascript:alert(document.cookie)") == .refuse)
+}
+
+@Test func schemeComparisonIsCaseInsensitive() {
+    #expect(decide("HTTPS://app.fastmail.com/") == .allow)
+    #expect(decide("MAILTO:someone@example.com") == .openExternally)
+}
+
 @Test func stillAllowsFacetimeAndWebcalOutward() {
     #expect(decide("facetime:someone@example.com") == .openExternally)
     #expect(decide("webcal://example.com/calendar.ics") == .openExternally)

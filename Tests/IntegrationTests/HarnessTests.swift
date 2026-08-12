@@ -19,6 +19,20 @@ final class HarnessTests: XCTestCase {
         }
     }
 
+    private final class HTMLSchemeHandler: NSObject, WKURLSchemeHandler {
+        func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+            guard let url = urlSchemeTask.request.url else { return }
+            let data = Data("<html><body></body></html>".utf8)
+            let response = URLResponse(
+                url: url, mimeType: "text/html", expectedContentLength: data.count, textEncodingName: "utf-8"
+            )
+            urlSchemeTask.didReceive(response)
+            urlSchemeTask.didReceive(data)
+            urlSchemeTask.didFinish()
+        }
+        func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
+    }
+
     private static var fixtureURL: URL {
         Bundle(for: HarnessTests.self).url(forResource: "fixture", withExtension: "html")!
     }
@@ -34,7 +48,8 @@ final class HarnessTests: XCTestCase {
         userScript: String,
         metadata: UserScriptMetadata,
         configURL: URL? = nil,
-        chromeCSS: String? = nil
+        chromeCSS: String? = nil,
+        scheme: String? = nil
     ) throws -> WKWebView {
         let harnessURL = Bundle(for: HarnessTests.self).url(forResource: "harness", withExtension: "js")!
         let harness = try String(contentsOf: harnessURL, encoding: .utf8)
@@ -46,6 +61,9 @@ final class HarnessTests: XCTestCase {
             metadata: metadata
         )
         let configuration = WKWebViewConfiguration()
+        if let scheme {
+            configuration.setURLSchemeHandler(HTMLSchemeHandler(), forURLScheme: scheme)
+        }
         let recorder = Recorder()
         recorder.onMessage = { [weak self] body in self?.received.append(body) }
         configuration.userContentController.addScriptMessageHandler(
@@ -75,6 +93,16 @@ final class HarnessTests: XCTestCase {
 
     private func evaluate(_ webView: WKWebView, _ js: String) async throws -> Any? {
         try await webView.evaluateJavaScript(js)
+    }
+
+    private func loadCustomScheme(_ webView: WKWebView, url: URL) async throws {
+        webView.load(URLRequest(url: url))
+        try await waitUntil {
+            try await self.evaluate(
+                webView,
+                "document.readyState === 'complete' && document.URL === '\(url.absoluteString)'"
+            ) as? Bool == true
+        }
     }
 
     private struct WaitTimeoutError: Error {}
@@ -162,6 +190,33 @@ final class HarnessTests: XCTestCase {
         try await load(webView)
         let ranAnyway = try await evaluate(webView, "window.__ranAnyway")
         XCTAssertNil(ranAnyway)
+    }
+
+    func testHarnessInstallsWhenDocumentHostMatchesTheConfiguredProductionHost() async throws {
+        let url = URL(string: "fmshelltest://app.fastmail.com/mail/Inbox")!
+        webView = try makeWebView(
+            userScript: "window.__ran = true;",
+            metadata: Self.meta(),
+            configURL: url,
+            scheme: "fmshelltest"
+        )
+        try await loadCustomScheme(webView, url: url)
+        let installed = try await evaluate(webView, "typeof window.__fmshell") as? String
+        XCTAssertEqual(installed, "object")
+    }
+
+    func testHarnessInstallsWhenDocumentHostHasATrailingDotAndConfiguredHostDoesNot() async throws {
+        let configURL = URL(string: "fmshelltest://app.fastmail.com/mail/Inbox")!
+        let loadedURL = URL(string: "fmshelltest://app.fastmail.com./mail/Inbox")!
+        webView = try makeWebView(
+            userScript: "window.__ran = true;",
+            metadata: Self.meta(),
+            configURL: configURL,
+            scheme: "fmshelltest"
+        )
+        try await loadCustomScheme(webView, url: loadedURL)
+        let installed = try await evaluate(webView, "typeof window.__fmshell") as? String
+        XCTAssertEqual(installed, "object")
     }
 
     func testHarnessDoesNotInstallWhenConfiguredHostDoesNotMatchTheLoadedDocument() async throws {

@@ -70,6 +70,29 @@ final class NativeBridgeFrameTests: XCTestCase {
         XCTAssertFalse(ok)
     }
 
+    func testMessageFromTrailingDotOriginIsAcceptedWhenExpectedHostHasNoDot() async throws {
+        makeWebView(expectedHost: "app.fastmail.com")
+        webView.loadHTMLString("<html><body></body></html>", baseURL: URL(string: "https://app.fastmail.com./")!)
+        try await waitForDocumentReady(onHost: "app.fastmail.com.")
+        _ = try await webView.evaluateJavaScript(Self.postMessageAndRecordJS)
+        let ok = try await bridgeResult()
+        XCTAssertTrue(ok)
+    }
+
+    func testMessageFromFileOriginIsRejectedWhenExpectedHostIsEmpty() async throws {
+        makeWebView(expectedHost: "")
+        let fixtureURL = Bundle(for: NativeBridgeFrameTests.self).url(forResource: "fixture", withExtension: "html")!
+        webView.loadFileURL(fixtureURL, allowingReadAccessTo: fixtureURL.deletingLastPathComponent())
+        try await waitUntil {
+            try await self.webView.evaluateJavaScript(
+                "document.readyState === 'complete' && /fixture\\.html/.test(document.URL)"
+            ) as? Bool == true
+        }
+        _ = try await webView.evaluateJavaScript(Self.postMessageAndRecordJS)
+        let ok = try await bridgeResult()
+        XCTAssertFalse(ok)
+    }
+
     func testMessageFromNonMainFrameIsRejectedEvenWhenOriginMatches() async throws {
         makeWebView()
         webView.loadHTMLString("<html><body></body></html>", baseURL: URL(string: "https://app.fastmail.com")!)

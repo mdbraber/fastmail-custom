@@ -27,12 +27,17 @@ private let fastmail = URL(string: "https://app.fastmail.com/mail/Inbox")!
 
 @Test @MainActor func harnessIsGatedToTheConfiguredHost() throws {
     let injected = try ScriptInjector.userScripts(from: bundle(), url: fastmail)
-    #expect(injected.scripts.first?.source.contains("location.hostname === \"app.fastmail.com\"") == true)
+    #expect(
+        injected.scripts.first?.source
+            .contains("location.hostname.replace(/\\.$/, '') === \"app.fastmail.com\"") == true
+    )
 }
 
 @Test @MainActor func harnessGateFallsBackToEmptyHostWhenURLHasNone() throws {
     let injected = try ScriptInjector.userScripts(from: bundle(), url: URL(string: "about:blank")!)
-    #expect(injected.scripts.first?.source.contains("location.hostname === \"\"") == true)
+    #expect(
+        injected.scripts.first?.source.contains("location.hostname.replace(/\\.$/, '') === \"\"") == true
+    )
 }
 
 @Test @MainActor func userScriptIsInjectedVerbatimNotEmbedded() throws {
@@ -115,8 +120,13 @@ private let fastmail = URL(string: "https://app.fastmail.com/mail/Inbox")!
 
 @Test func gatedToHostWrapsSourceInAHostnameCheck() {
     let source = ScriptInjector.gatedToHost("BODY", host: "app.fastmail.com")
-    #expect(source.contains("if (location.hostname === \"app.fastmail.com\") {"))
+    #expect(source.contains("if (location.hostname.replace(/\\.$/, '') === \"app.fastmail.com\") {"))
     #expect(source.contains("BODY"))
+}
+
+@Test func gatedToHostNormalizesATrailingDotOnTheDocumentHostname() {
+    let source = ScriptInjector.gatedToHost("BODY", host: "app.fastmail.com")
+    #expect(source.contains(".replace(/\\.$/, '')"))
 }
 
 @Test @MainActor func chromeCSSIsInjectedAsAStyleElementAtDocumentStart() throws {

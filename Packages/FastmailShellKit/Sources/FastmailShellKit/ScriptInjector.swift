@@ -116,7 +116,7 @@ public enum ScriptInjector {
     static func gatedToHost(_ source: String, host: String) -> String {
         let hostLiteral = jsonLiteral(host) ?? "\"\""
         return #"""
-        if (location.hostname === \#(hostLiteral)) {
+        if (location.hostname.replace(/\.$/, '') === \#(hostLiteral)) {
         \#(source)
         }
         """#

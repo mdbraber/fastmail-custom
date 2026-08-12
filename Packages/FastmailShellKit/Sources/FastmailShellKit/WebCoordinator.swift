@@ -49,6 +49,18 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         }
     }
 
+    nonisolated static func windowOpenOutcome(
+        navigationType: WKNavigationType,
+        decision: NavigationDecision
+    ) -> FrameOutcome {
+        guard navigationType == .linkActivated else { return .cancel }
+        switch decision {
+        case .allow: return .allow
+        case .openExternally, .download: return .cancelAndOpenExternally
+        case .refuse: return .cancelWithBanner
+        }
+    }
+
     public func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
@@ -76,7 +88,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             openExternally(url)
         case .cancelWithBanner:
             decisionHandler(.cancel)
-            model.banner = "Refused to open \(url.absoluteString)"
+            model.banner = Self.refusalBanner(for: url)
         }
     }
 
@@ -96,6 +108,9 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             decisionHandler(.allow)
         case .cancel:
             decisionHandler(.cancel)
+            if let url = navigationResponse.response.url {
+                print(Self.subframeCancelLogMessage(for: url))
+            }
         case .cancelAndOpenExternally:
             decisionHandler(.cancel)
             if let url = navigationResponse.response.url {
@@ -104,7 +119,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         case .cancelWithBanner:
             decisionHandler(.cancel)
             if let url = navigationResponse.response.url {
-                model.banner = "Refused to open \(url.absoluteString)"
+                model.banner = Self.refusalBanner(for: url)
             }
         }
     }
@@ -115,12 +130,17 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        if let url = navigationAction.request.url {
-            switch NavigationPolicy.decide(url: url) {
-            case .allow: webView.load(URLRequest(url: url))
-            case .openExternally, .download: openExternally(url)
-            case .refuse: model.banner = "Refused to open \(url.absoluteString)"
-            }
+        guard let url = navigationAction.request.url else { return nil }
+        let decision = NavigationPolicy.decide(url: url)
+        switch Self.windowOpenOutcome(navigationType: navigationAction.navigationType, decision: decision) {
+        case .allow:
+            webView.load(URLRequest(url: url))
+        case .cancel:
+            break
+        case .cancelAndOpenExternally:
+            openExternally(url)
+        case .cancelWithBanner:
+            model.banner = Self.refusalBanner(for: url)
         }
         return nil
     }
@@ -164,5 +184,14 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             return true
         }
         return false
+    }
+
+    nonisolated static func refusalBanner(for url: URL) -> String {
+        guard let scheme = url.scheme else { return "Refused to open a link" }
+        return "Refused to open a \(scheme): link"
+    }
+
+    nonisolated static func subframeCancelLogMessage(for url: URL) -> String {
+        "Cancelled subframe response: \(url.absoluteString)"
     }
 }
