@@ -83,6 +83,10 @@ final class FullScreenObserver {
         }
     }
 
+    var isActive: Bool {
+        enterToken != nil || exitToken != nil || closeToken != nil
+    }
+
     func tearDown() {
         let center = NotificationCenter.default
         [enterToken, exitToken, closeToken].compactMap { $0 }.forEach(center.removeObserver)
