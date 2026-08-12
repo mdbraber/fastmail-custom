@@ -4,6 +4,7 @@ public struct ScriptBundle: Equatable, Sendable {
     public let harness: String
     public let userScript: String
     public let overlay: String?
+    public let chromeCSS: String?
     public let metadata: UserScriptMetadata
 }
 
@@ -54,10 +55,12 @@ public struct ScriptStore {
         }
         let metadata = try MetadataParser.parse(userScript)
         let overlay = overlayName.flatMap { loader.string(named: $0) }
+        let chromeCSS = loader.string(named: "chrome-macos.css")
         return ScriptBundle(
             harness: harness,
             userScript: userScript,
             overlay: overlay,
+            chromeCSS: chromeCSS,
             metadata: metadata
         )
     }

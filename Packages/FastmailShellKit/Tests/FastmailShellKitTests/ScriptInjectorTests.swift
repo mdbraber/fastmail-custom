@@ -12,6 +12,7 @@ private func bundle(
         harness: "HARNESS",
         userScript: userScript,
         overlay: overlay,
+        chromeCSS: nil,
         metadata: UserScriptMetadata(name: "T", matches: matches, runAt: runAt, grants: ["none"])
     )
 }
@@ -89,4 +90,34 @@ private let fastmail = URL(string: "https://app.fastmail.com/mail/Inbox")!
 @Test func matchesCoversBothProfileStartURLs() {
     #expect(ScriptInjector.matches(["https://app.fastmail.com/*"], url: Profile.personal(accountID: nil).startURL))
     #expect(ScriptInjector.matches(["https://app.fastmail.com/*"], url: Profile.work(accountID: nil).startURL))
+}
+
+@Test @MainActor func chromeCSSIsInjectedAsAStyleElementAtDocumentStart() throws {
+    let scripts = try ScriptInjector.userScripts(
+        from: bundle(), url: fastmail, chromeCSS: ".v-PageHeader { padding-left: 78px; }"
+    )
+    let styleScript = try #require(scripts.first { $0.source.contains("createElement('style')") })
+    #expect(styleScript.injectionTime == .atDocumentStart)
+    #expect(styleScript.source.contains("padding-left: 78px"))
+}
+
+@Test @MainActor func chromeCSSIsOmittedWhenAbsent() throws {
+    let scripts = try ScriptInjector.userScripts(from: bundle(), url: fastmail, chromeCSS: nil)
+    #expect(scripts.allSatisfy { !$0.source.contains("createElement('style')") })
+}
+
+@Test @MainActor func chromeCSSSurvivesQuotesAndNewlines() throws {
+    let css = ".x::after { content: \"a'b\\\"c\"; }\n.y { color: red; }"
+    let scripts = try ScriptInjector.userScripts(from: bundle(), url: fastmail, chromeCSS: css)
+    let styleScript = try #require(scripts.first { $0.source.contains("createElement('style')") })
+    let encoded = try #require(styleScript.source.range(of: "\"")).lowerBound
+    _ = encoded
+    #expect(styleScript.source.contains("\\n") || styleScript.source.contains("\\\""))
+}
+
+@Test @MainActor func chromeCSSIsInjectedEvenWhenTheURLDoesNotMatch() throws {
+    let scripts = try ScriptInjector.userScripts(
+        from: bundle(), url: URL(string: "https://example.com/")!, chromeCSS: "x{}"
+    )
+    #expect(scripts.contains { $0.source.contains("createElement('style')") })
 }

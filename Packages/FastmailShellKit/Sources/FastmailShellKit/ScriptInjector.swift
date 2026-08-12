@@ -3,10 +3,25 @@ import WebKit
 
 public enum ScriptInjector {
     @MainActor
-    public static func userScripts(from bundle: ScriptBundle, url: URL) throws -> [WKUserScript] {
+    public static func userScripts(
+        from bundle: ScriptBundle,
+        url: URL,
+        chromeCSS: String? = nil
+    ) throws -> [WKUserScript] {
         var scripts = [
             WKUserScript(source: bundle.harness, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         ]
+        if let chromeCSS, let literal = jsonLiteral(chromeCSS) {
+            let source = """
+            (function () {
+                var style = document.createElement('style');
+                style.id = 'fmshell-chrome';
+                style.textContent = \(literal);
+                (document.head || document.documentElement).appendChild(style);
+            })();
+            """
+            scripts.append(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         guard matches(bundle.metadata.matches, url: url) else { return scripts }
         let time = injectionTime(for: bundle.metadata.runAt)
         let patterns = bundle.metadata.matches

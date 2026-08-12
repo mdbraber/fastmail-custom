@@ -10,7 +10,10 @@ let package = Package(
     targets: [
         .target(
             name: "FastmailShellKit",
-            resources: [.copy("Resources/harness.js")]
+            resources: [
+                .copy("Resources/harness.js"),
+                .copy("Resources/chrome-macos.css")
+            ]
         ),
         .testTarget(
             name: "FastmailShellKitTests",

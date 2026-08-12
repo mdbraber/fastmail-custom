@@ -41,6 +41,7 @@ final class HarnessTests: XCTestCase {
             harness: harness,
             userScript: userScript,
             overlay: nil,
+            chromeCSS: nil,
             metadata: metadata
         )
         let configuration = WKWebViewConfiguration()

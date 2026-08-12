@@ -22,6 +22,7 @@ private let header = """
     #expect(bundle.harness == "HARNESS")
     #expect(bundle.userScript.contains("BODY"))
     #expect(bundle.overlay == nil)
+    #expect(bundle.chromeCSS == nil)
     #expect(bundle.metadata.runAt == .documentIdle)
 }
 
@@ -33,6 +34,25 @@ private let header = """
     ])
     let bundle = try ScriptStore(loader: loader, overlayName: "userscript.personal.js").load()
     #expect(bundle.overlay == "OVERLAY")
+}
+
+@Test func loadsChromeCSSWhenPresent() throws {
+    let loader = StubLoader(resources: [
+        "harness.js": "HARNESS",
+        "userscript.js": header,
+        "chrome-macos.css": "CHROME"
+    ])
+    let bundle = try ScriptStore(loader: loader, overlayName: nil).load()
+    #expect(bundle.chromeCSS == "CHROME")
+}
+
+@Test func missingChromeCSSIsNotAnError() throws {
+    let loader = StubLoader(resources: [
+        "harness.js": "HARNESS",
+        "userscript.js": header
+    ])
+    let bundle = try ScriptStore(loader: loader, overlayName: nil).load()
+    #expect(bundle.chromeCSS == nil)
 }
 
 @Test func missingOverlayIsNotAnError() throws {
