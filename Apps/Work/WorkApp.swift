@@ -10,6 +10,9 @@ struct WorkApp: App {
             AppShell(profile: profile)
         }
         #if os(macOS)
+        .windowStyle(.hiddenTitleBar)
+        #endif
+        #if os(macOS)
         Settings {
             SettingsView(profile: profile)
         }
