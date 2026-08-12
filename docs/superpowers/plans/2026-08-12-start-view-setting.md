@@ -25,10 +25,10 @@
 
 The whole of the logic, with no platform code, so it can be tested directly.
 
-Accepts two shapes, because the user asked for a path fragment on one platform and a URL on the other:
-
-- A bare view name — `Inbox`, `Archive`, `Inbox/SomeTag` — appended to `https://app.fastmail.com/mail/`.
-- A full URL — `https://app.fastmail.com/mail/search:foo` — used as-is.
+The setting is the URL to load. Whatever the user pastes is what the app opens,
+provided it is an `https` URL on `app.fastmail.com`. Anything else falls back to
+the profile's default. There is no path-fragment shorthand: one field, one
+meaning, and what you type is what you get.
 
 **Files:**
 - Create: `Packages/FastmailShellKit/Sources/FastmailShellKit/StartView.swift`
@@ -54,36 +54,25 @@ private let fallback = URL(string: "https://app.fastmail.com/")!
     #expect(StartView.resolve("   ", default: fallback) == fallback)
 }
 
-@Test func bareNameBecomesAMailPath() {
-    #expect(StartView.resolve("Inbox", default: fallback)
-        == URL(string: "https://app.fastmail.com/mail/Inbox")!)
-}
-
-@Test func nestedNameKeepsItsSeparators() {
-    #expect(StartView.resolve("Inbox/SomeTag", default: fallback)
-        == URL(string: "https://app.fastmail.com/mail/Inbox/SomeTag")!)
-}
-
-@Test func leadingAndTrailingSlashesAreTolerated() {
-    #expect(StartView.resolve("/Inbox", default: fallback)
-        == URL(string: "https://app.fastmail.com/mail/Inbox")!)
-    #expect(StartView.resolve("  Inbox  ", default: fallback)
-        == URL(string: "https://app.fastmail.com/mail/Inbox")!)
-}
-
-@Test func spacesAndQueryCharactersArePercentEncoded() {
-    let url = StartView.resolve("My Tag", default: fallback)
-    #expect(url.absoluteString == "https://app.fastmail.com/mail/My%20Tag")
-}
-
-@Test func aFullFastmailURLIsUsedAsIs() {
+@Test func aFastmailURLIsUsedAsIs() {
     let raw = "https://app.fastmail.com/mail/search:from%3Aboss"
     #expect(StartView.resolve(raw, default: fallback) == URL(string: raw)!)
 }
 
-@Test func aFullURLKeepsItsQueryAndFragment() {
+@Test func aURLKeepsItsQueryAndFragment() {
     let raw = "https://app.fastmail.com/mail/Inbox?u=abc#thread"
     #expect(StartView.resolve(raw, default: fallback) == URL(string: raw)!)
+}
+
+@Test func surroundingWhitespaceIsTolerated() {
+    let raw = "https://app.fastmail.com/mail/Archive"
+    #expect(StartView.resolve("  \(raw)  ", default: fallback) == URL(string: raw)!)
+}
+
+@Test func aBareViewNameIsNotAURLAndFallsBack() {
+    #expect(StartView.resolve("Inbox", default: fallback) == fallback)
+    #expect(StartView.resolve("/mail/Inbox", default: fallback) == fallback)
+    #expect(StartView.resolve("app.fastmail.com/mail/Inbox", default: fallback) == fallback)
 }
 
 @Test func aURLOnAnotherHostFallsBack() {
@@ -98,7 +87,7 @@ private let fallback = URL(string: "https://app.fastmail.com/")!
     #expect(StartView.resolve("file:///etc/passwd", default: fallback) == fallback)
 }
 
-@Test func hostComparisonIsCaseInsensitiveAndIgnoresATrailingDot() {
+@Test func hostComparisonIsCaseInsensitiveButRejectsATrailingDot() {
     #expect(StartView.resolve("https://APP.FASTMAIL.COM/mail/Inbox", default: fallback)
         == URL(string: "https://APP.FASTMAIL.COM/mail/Inbox")!)
     #expect(StartView.resolve("https://app.fastmail.com./mail/Inbox", default: fallback) == fallback)
@@ -113,7 +102,7 @@ private let fallback = URL(string: "https://app.fastmail.com/")!
     defaults.removePersistentDomain(forName: "start-view-test")
     let profile = Profile.personal(accountID: nil)
     #expect(profile.startURL(readingFrom: defaults) == profile.startURL)
-    defaults.set("Archive", forKey: StartView.defaultsKey)
+    defaults.set("https://app.fastmail.com/mail/Archive", forKey: StartView.defaultsKey)
     #expect(profile.startURL(readingFrom: defaults)
         == URL(string: "https://app.fastmail.com/mail/Archive")!)
     defaults.removePersistentDomain(forName: "start-view-test")
@@ -141,22 +130,10 @@ public enum StartView {
 
     public static func resolve(_ raw: String?, default fallback: URL) -> URL {
         let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return fallback }
-
-        if trimmed.lowercased().hasPrefix("http://") || trimmed.lowercased().hasPrefix("https://") {
-            guard let url = URL(string: trimmed),
-                  url.scheme?.lowercased() == "https",
-                  url.host?.lowercased() == host
-            else { return fallback }
-            return url
-        }
-
-        let path = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !path.isEmpty,
-              let encoded = path.addingPercentEncoding(
-                  withAllowedCharacters: .urlPathAllowed
-              ),
-              let url = URL(string: "https://\(host)/mail/\(encoded)")
+        guard !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == host
         else { return fallback }
         return url
     }
@@ -215,13 +192,13 @@ git commit -m "feat: resolve a configurable start view to a URL"
             <key>Type</key>
             <string>PSGroupSpecifier</string>
             <key>FooterText</key>
-            <string>A folder or tag such as Inbox or Inbox/Work, or a full app.fastmail.com address. Leave empty for the default view. Takes effect next time the app starts.</string>
+            <string>The full address to open, for example https://app.fastmail.com/mail/Archive. Must be on app.fastmail.com. Leave empty for the default view. Takes effect next time the app starts.</string>
         </dict>
         <dict>
             <key>Type</key>
             <string>PSTextFieldSpecifier</string>
             <key>Title</key>
-            <string>Start view</string>
+            <string>Start URL</string>
             <key>Key</key>
             <string>startView</string>
             <key>DefaultValue</key>
@@ -256,18 +233,18 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            TextField("Start view", text: $startView, prompt: Text("Inbox"))
+            TextField("Start URL", text: $startView, prompt: Text("https://app.fastmail.com/mail/Inbox"))
                 .textFieldStyle(.roundedBorder)
             Text(resolved)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
-            Text("A folder or tag such as Inbox or Inbox/Work, or a full app.fastmail.com address. Leave empty for the default view. Takes effect in new windows.")
+            Text("The full address to open. Must be on app.fastmail.com. Leave empty for the default view. Takes effect in new windows.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(20)
-        .frame(width: 420)
+        .frame(width: 460)
     }
 
     private var resolved: String {
@@ -317,7 +294,7 @@ Run this from the repo root so the relative paths resolve, or resolve them from 
 
 - [ ] **Step 6: Verify**
 
-Build and install both platforms. On iOS, open Settings, find the app, set `Archive`, relaunch, confirm it opens there. Set a deliberately bad value such as `https://evil.example/` and confirm the app falls back to the default rather than loading it. On macOS, press ⌘, and confirm the resolved URL updates as you type and that a new window opens to it.
+Build and install both platforms. On iOS, open Settings, find the app, set `https://app.fastmail.com/mail/Archive`, relaunch, confirm it opens there. Set a deliberately bad value such as `https://evil.example/` and confirm the app falls back to the default rather than loading it. On macOS, press ⌘, and confirm the resolved URL updates as you type and that a new window opens to it.
 
 - [ ] **Step 7: Commit**
 
