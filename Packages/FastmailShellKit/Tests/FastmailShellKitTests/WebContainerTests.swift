@@ -66,3 +66,39 @@ private let nonMatchingHeader = """
     #expect(webView.configuration.userContentController.userScripts.count == 2)
     #expect(model.banner == nil)
 }
+
+@Test @MainActor func loadURLDefaultsToTheProfileStartURL() {
+    let profile = Profile.personal(accountID: nil)
+    let container = WebContainer(
+        profile: profile, model: ShellModel(), loader: StubLoader(resources: [:])
+    )
+    #expect(container.loadURL == profile.startURL)
+}
+
+@Test @MainActor func makeWebViewLoadsTheSuppliedURLNotTheProfileDefault() async throws {
+    let loader = StubLoader(resources: [
+        "harness.js": "HARNESS",
+        "userscript.js": nonMatchingHeader + "\nBODY"
+    ])
+    let model = ShellModel()
+    let profile = Profile(
+        id: "test",
+        displayName: "Test",
+        startURL: URL(string: "https://127.0.0.1:1/default")!,
+        overlayScriptName: nil,
+        urlScheme: "test",
+        accountID: nil
+    )
+    let chosen = URL(string: "https://127.0.0.1:1/chosen")!
+    #expect(chosen != profile.startURL)
+    let container = WebContainer(profile: profile, model: model, loader: loader, loadURL: chosen)
+    let coordinator = WebCoordinator(model: model, startURL: chosen)
+    let webView = container.makeWebView(coordinator: coordinator)
+    #expect(container.loadURL == chosen)
+    var attempts = 0
+    while webView.url == nil && attempts < 50 {
+        try await Task.sleep(for: .milliseconds(20))
+        attempts += 1
+    }
+    #expect(webView.url == chosen)
+}

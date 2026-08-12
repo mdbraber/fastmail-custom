@@ -31,6 +31,7 @@ targetTemplates:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         GENERATE_INFOPLIST_FILE: NO
+        "EXCLUDED_SOURCE_FILE_NAMES[sdk=macosx*]": Settings.bundle
     postBuildScripts:
       - name: Copy User Script
         script: '"$SRCROOT/tools/copy-userscript.sh"'
