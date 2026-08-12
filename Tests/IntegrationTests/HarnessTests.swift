@@ -33,7 +33,8 @@ final class HarnessTests: XCTestCase {
     private func makeWebView(
         userScript: String,
         metadata: UserScriptMetadata,
-        configURL: URL? = nil
+        configURL: URL? = nil,
+        chromeCSS: String? = nil
     ) throws -> WKWebView {
         let harnessURL = Bundle(for: HarnessTests.self).url(forResource: "harness", withExtension: "js")!
         let harness = try String(contentsOf: harnessURL, encoding: .utf8)
@@ -52,7 +53,9 @@ final class HarnessTests: XCTestCase {
             contentWorld: .page,
             name: "native"
         )
-        for script in try ScriptInjector.userScripts(from: bundle, url: configURL ?? Self.fixtureURL) {
+        for script in try ScriptInjector.userScripts(
+            from: bundle, url: configURL ?? Self.fixtureURL, chromeCSS: chromeCSS
+        ) {
             configuration.userContentController.addUserScript(script)
         }
         return WKWebView(frame: .zero, configuration: configuration)
@@ -184,5 +187,26 @@ final class HarnessTests: XCTestCase {
         try await load(webView)
         let state = try await evaluate(webView, "window.__readyStateWhenRun") as? String
         XCTAssertTrue(state == "interactive" || state == "complete")
+    }
+
+    func testChromeInsetAppliesInWindowedState() async throws {
+        let chromeCSS = try XCTUnwrap(BundleResourceLoader().string(named: "chrome-macos.css"))
+        webView = try makeWebView(userScript: "", metadata: Self.meta(), chromeCSS: chromeCSS)
+        try await load(webView)
+        let paddingLeft = try await evaluate(
+            webView, "getComputedStyle(document.querySelector('.v-PageHeader')).paddingLeft"
+        ) as? String
+        XCTAssertEqual(paddingLeft, "78px")
+    }
+
+    func testChromeInsetYieldsToFastmailsOwnCascadeInFullscreen() async throws {
+        let chromeCSS = try XCTUnwrap(BundleResourceLoader().string(named: "chrome-macos.css"))
+        webView = try makeWebView(userScript: "", metadata: Self.meta(), chromeCSS: chromeCSS)
+        try await load(webView)
+        _ = try await evaluate(webView, "document.body.classList.add('fmshell-fullscreen')")
+        let paddingLeft = try await evaluate(
+            webView, "getComputedStyle(document.querySelector('.v-PageHeader')).paddingLeft"
+        ) as? String
+        XCTAssertEqual(paddingLeft, "12px")
     }
 }

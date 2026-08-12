@@ -110,9 +110,11 @@ private let fastmail = URL(string: "https://app.fastmail.com/mail/Inbox")!
     let css = ".x::after { content: \"a'b\\\"c\"; }\n.y { color: red; }"
     let scripts = try ScriptInjector.userScripts(from: bundle(), url: fastmail, chromeCSS: css)
     let styleScript = try #require(scripts.first { $0.source.contains("createElement('style')") })
-    let encoded = try #require(styleScript.source.range(of: "\"")).lowerBound
-    _ = encoded
-    #expect(styleScript.source.contains("\\n") || styleScript.source.contains("\\\""))
+    let literal = try #require(ScriptInjector.jsonLiteral(css))
+    #expect(literal.contains("\\n"))
+    #expect(literal.contains("\\\""))
+    #expect(styleScript.source.contains("style.textContent = \(literal);"))
+    #expect(!styleScript.source.contains(css))
 }
 
 @Test @MainActor func chromeCSSIsInjectedEvenWhenTheURLDoesNotMatch() throws {

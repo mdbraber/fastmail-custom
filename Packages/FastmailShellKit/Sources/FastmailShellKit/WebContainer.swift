@@ -28,7 +28,10 @@ public struct WebContainer {
         self.loader = loader
     }
 
-    func makeWebView(coordinator: WebCoordinator) -> WKWebView {
+    func makeWebView(
+        coordinator: WebCoordinator,
+        beforeLoad: ((WKUserContentController) -> Void)? = nil
+    ) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
 
@@ -58,6 +61,8 @@ public struct WebContainer {
             let message = "User script not loaded: \(error)"
             Task { @MainActor in model.show(message) }
         }
+
+        beforeLoad?(configuration.userContentController)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isInspectable = true
