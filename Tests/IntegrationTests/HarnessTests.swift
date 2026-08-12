@@ -283,6 +283,21 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(paddingLeft, "78px")
     }
 
+    func testThemeColorComesFromThePaintedAncestorNotTheTransparentHeader() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        let header = try await evaluate(
+            webView,
+            "getComputedStyle(document.querySelector('.v-PageHeader')).backgroundColor"
+        ) as? String
+        XCTAssertEqual(header, "rgba(0, 0, 0, 0)")
+        let reported = try await evaluate(
+            webView,
+            "(function(){var n=document.querySelector('.v-PageHeader');while(n){var c=getComputedStyle(n).backgroundColor;if(c&&c!=='transparent'&&c.replace(/\\s/g,'').indexOf('rgba(0,0,0,0)')!==0)return c;n=n.parentElement;}return null;})()"
+        ) as? String
+        XCTAssertEqual(reported, "rgb(124, 179, 66)")
+    }
+
     func testChromeInsetDropsToZeroInFullscreen() async throws {
         let chromeCSS = try XCTUnwrap(BundleResourceLoader().string(named: "chrome-macos.css"))
         webView = try makeWebView(userScript: "", metadata: Self.meta(), chromeCSS: chromeCSS)

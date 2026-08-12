@@ -28,13 +28,22 @@
 
     var lastTheme = null;
 
+    function paintedColor(element) {
+        var node = element;
+        while (node) {
+            var color = window.getComputedStyle(node).backgroundColor;
+            if (color && color !== 'transparent' &&
+                color.replace(/\s/g, '').indexOf('rgba(0,0,0,0)') !== 0) {
+                return color;
+            }
+            node = node.parentElement;
+        }
+        return null;
+    }
+
     function headerColor() {
-        var header = document.querySelector('.v-PageHeader');
-        if (!header) return null;
-        var color = window.getComputedStyle(header).backgroundColor;
-        if (!color || color === 'transparent') return null;
-        if (color.replace(/\s/g, '').indexOf('rgba(0,0,0,0)') === 0) return null;
-        return color;
+        return paintedColor(document.querySelector('.v-PageHeader')) ||
+            paintedColor(document.body);
     }
 
     function reportTheme() {
