@@ -5,7 +5,7 @@ import Combine
 
 extension WebContainer: NSViewRepresentable {
     public func makeCoordinator() -> WebCoordinator {
-        WebCoordinator(model: model, startURL: profile.startURL)
+        WebCoordinator(model: model, startURL: loadURL)
     }
 
     public func makeNSView(context: Context) -> WKWebView {

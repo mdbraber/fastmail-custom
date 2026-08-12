@@ -44,6 +44,7 @@ targets:
     templates: [ShellApp]
     sources:
       - path: Apps/Personal
+      - path: Apps/Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.personal
@@ -54,6 +55,7 @@ targets:
     templates: [ShellApp]
     sources:
       - path: Apps/Work
+      - path: Apps/Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.work

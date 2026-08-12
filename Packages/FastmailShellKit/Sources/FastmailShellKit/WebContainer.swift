@@ -18,15 +18,18 @@ public struct WebContainer {
     let profile: Profile
     let model: ShellModel
     let loader: ResourceLoading
+    let loadURL: URL
 
     public init(
         profile: Profile,
         model: ShellModel,
-        loader: ResourceLoading = BundleResourceLoader()
+        loader: ResourceLoading = BundleResourceLoader(),
+        loadURL: URL? = nil
     ) {
         self.profile = profile
         self.model = model
         self.loader = loader
+        self.loadURL = loadURL ?? profile.startURL
     }
 
     func makeWebView(
@@ -73,7 +76,7 @@ public struct WebContainer {
         webView.isInspectable = true
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
-        webView.load(URLRequest(url: profile.startURL))
+        webView.load(URLRequest(url: loadURL))
         return webView
     }
 }

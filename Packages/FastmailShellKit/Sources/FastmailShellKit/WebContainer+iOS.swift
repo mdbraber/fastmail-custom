@@ -4,7 +4,7 @@ import WebKit
 
 extension WebContainer: UIViewRepresentable {
     public func makeCoordinator() -> WebCoordinator {
-        WebCoordinator(model: model, startURL: profile.startURL)
+        WebCoordinator(model: model, startURL: loadURL)
     }
 
     public func makeUIView(context: Context) -> WKWebView {

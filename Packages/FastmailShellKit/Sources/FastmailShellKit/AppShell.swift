@@ -10,7 +10,7 @@ public struct AppShell: View {
 
     public var body: some View {
         ZStack(alignment: .top) {
-            WebContainer(profile: profile, model: model)
+            WebContainer(profile: profile, model: model, loadURL: profile.startURL(readingFrom: .standard))
                 .ignoresSafeArea()
             if let banner = model.banner {
                 HStack(alignment: .top) {

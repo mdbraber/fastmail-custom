@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PreferenceSpecifiers</key>
+    <array>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>The full address to open, for example https://app.fastmail.com/mail/Archive. Must be on app.fastmail.com. Leave empty for the default view. Takes effect next time the app starts.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSTextFieldSpecifier</string>
+            <key>Title</key>
+            <string>Start URL</string>
+            <key>Key</key>
+            <string>startView</string>
+            <key>DefaultValue</key>
+            <string></string>
+            <key>IsSecure</key>
+            <false/>
+            <key>KeyboardType</key>
+            <string>URL</string>
+            <key>AutocapitalizationType</key>
+            <string>None</string>
+            <key>AutocorrectionType</key>
+            <string>No</string>
+        </dict>
+    </array>
+</dict>
+</plist>
