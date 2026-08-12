@@ -298,7 +298,7 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(reported, "rgb(124, 179, 66)")
     }
 
-    func testChromeInsetYieldsToFastmailsOwnCascadeInFullscreen() async throws {
+    func testChromeInsetDropsToZeroInFullscreen() async throws {
         let chromeCSS = try XCTUnwrap(BundleResourceLoader().string(named: "chrome-macos.css"))
         webView = try makeWebView(userScript: "", metadata: Self.meta(), chromeCSS: chromeCSS)
         try await load(webView)
@@ -306,10 +306,10 @@ final class HarnessTests: XCTestCase {
         let paddingLeft = try await evaluate(
             webView, "getComputedStyle(document.querySelector('.v-PageHeader')).paddingLeft"
         ) as? String
-        XCTAssertEqual(paddingLeft, "12px")
+        XCTAssertEqual(paddingLeft, "0px")
     }
 
-    func testChromeInsetDoesNotTriggerFastmailsWindowControlsOverlayLayout() async throws {
+    func testChromeInsetSatisfiesFastmailsWindowControlsOverlayDetection() async throws {
         let chromeCSS = try XCTUnwrap(BundleResourceLoader().string(named: "chrome-macos.css"))
         webView = try makeWebView(userScript: "", metadata: Self.meta(), chromeCSS: chromeCSS)
         try await load(webView)
@@ -317,6 +317,23 @@ final class HarnessTests: XCTestCase {
             webView,
             "!!parseInt(getComputedStyle(document.body).getPropertyValue('--titlebar-area-inset-left'), 10)"
         ) as? Bool
-        XCTAssertEqual(detected, false)
+        XCTAssertEqual(detected, true)
+    }
+
+    func testHarnessReportsStandaloneDisplayModeWithoutBreakingOtherQueries() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        let standalone = try await evaluate(
+            webView, "window.matchMedia('(display-mode: standalone)').matches"
+        ) as? Bool
+        XCTAssertEqual(standalone, true)
+        let width = try await evaluate(
+            webView, "window.matchMedia('(min-width: 0px)').matches"
+        ) as? Bool
+        XCTAssertEqual(width, true)
+        let impossible = try await evaluate(
+            webView, "window.matchMedia('(min-width: 999999px)').matches"
+        ) as? Bool
+        XCTAssertEqual(impossible, false)
     }
 }

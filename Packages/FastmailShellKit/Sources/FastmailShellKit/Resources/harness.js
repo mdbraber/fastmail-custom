@@ -26,6 +26,27 @@
         post('error', { message: message, stack: stack });
     }
 
+    (function () {
+        var native = window.matchMedia.bind(window);
+        window.matchMedia = function (query) {
+            if (typeof query === 'string' &&
+                query.indexOf('display-mode') !== -1 &&
+                query.indexOf('standalone') !== -1) {
+                return {
+                    matches: true,
+                    media: query,
+                    onchange: null,
+                    addListener: function () {},
+                    removeListener: function () {},
+                    addEventListener: function () {},
+                    removeEventListener: function () {},
+                    dispatchEvent: function () { return false; }
+                };
+            }
+            return native(query);
+        };
+    })();
+
     var lastTheme = null;
 
     function paintedColor(element) {
