@@ -23,6 +23,10 @@ public struct Profile: Equatable, Sendable {
         self.urlScheme = urlScheme
         self.accountID = accountID
     }
+
+    public func startURL(readingFrom defaults: UserDefaults) -> URL {
+        StartView.resolve(defaults.string(forKey: StartView.defaultsKey), default: startURL)
+    }
 }
 
 extension Profile {
