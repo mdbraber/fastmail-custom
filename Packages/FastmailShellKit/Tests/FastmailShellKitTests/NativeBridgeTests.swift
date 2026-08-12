@@ -5,6 +5,7 @@ import Foundation
 @Test func routesLogAndErrorActions() async {
     let recorded = Recorder()
     let bridge = await NativeBridge(
+        expectedHost: "app.fastmail.com",
         onLog: { await recorded.appendLog($0) },
         onError: { await recorded.appendError($0) }
     )
@@ -17,6 +18,7 @@ import Foundation
 @Test func routesThemeAction() async {
     let recorded = Recorder()
     let bridge = await NativeBridge(
+        expectedHost: "app.fastmail.com",
         onLog: { _ in },
         onError: { _ in },
         onTheme: { await recorded.appendTheme($0) }
@@ -27,19 +29,19 @@ import Foundation
 }
 
 @Test func themeActionWithoutColorProducesAnError() async {
-    let bridge = await NativeBridge(onLog: { _ in }, onError: { _ in })
+    let bridge = await NativeBridge(expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in })
     let reply = await bridge.handle(body: ["action": "theme", "payload": [:]])
     #expect(reply.error != nil)
 }
 
 @Test func unknownActionProducesAnError() async {
-    let bridge = await NativeBridge(onLog: { _ in }, onError: { _ in })
+    let bridge = await NativeBridge(expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in })
     let reply = await bridge.handle(body: ["action": "teleport", "payload": [:]])
     #expect(reply.error?.contains("teleport") == true)
 }
 
 @Test func malformedBodyProducesAnError() async {
-    let bridge = await NativeBridge(onLog: { _ in }, onError: { _ in })
+    let bridge = await NativeBridge(expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in })
     let reply = await bridge.handle(body: ["nonsense": 1])
     #expect(reply.error != nil)
 }

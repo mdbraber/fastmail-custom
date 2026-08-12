@@ -14,6 +14,18 @@ private func makeWindow() -> NSWindow {
     )
 }
 
+@Test @MainActor func windowAwareWebViewFiresCallbackWhenMovedIntoAWindowAfterConstruction() throws {
+    let webView = WindowAwareWebView(frame: .zero, configuration: WKWebViewConfiguration())
+    var callbackCount = 0
+    webView.onDidMoveToWindow = { callbackCount += 1 }
+    #expect(callbackCount == 0)
+    let window = makeWindow()
+    defer { NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window) }
+    window.contentView = webView
+    #expect(callbackCount >= 1)
+    #expect(webView.window === window)
+}
+
 @Test @MainActor func observeFullScreenRegistersOneObserverPerWindow() throws {
     let window = makeWindow()
     let webView = WKWebView()

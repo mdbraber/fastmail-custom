@@ -39,6 +39,18 @@ private func decide(_ string: String) -> NavigationDecision {
     #expect(decide("http://app.fastmail.com/") == .openExternally)
 }
 
+@Test func refusesSchemesOutsideTheAllowlist() {
+    #expect(decide("file:///etc/passwd") == .refuse)
+    #expect(decide("smb://server/share") == .refuse)
+    #expect(decide("some-custom-scheme://payload") == .refuse)
+    #expect(decide("ftp://server/file") == .refuse)
+}
+
+@Test func stillAllowsFacetimeAndWebcalOutward() {
+    #expect(decide("facetime:someone@example.com") == .openExternally)
+    #expect(decide("webcal://example.com/calendar.ics") == .openExternally)
+}
+
 @Test func downloadsWhenContentDispositionSaysAttachment() {
     #expect(NavigationPolicy.decideResponse(
         canShowMIMEType: true,

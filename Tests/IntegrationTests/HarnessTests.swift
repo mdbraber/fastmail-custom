@@ -53,9 +53,10 @@ final class HarnessTests: XCTestCase {
             contentWorld: .page,
             name: "native"
         )
-        for script in try ScriptInjector.userScripts(
+        let injected = try ScriptInjector.userScripts(
             from: bundle, url: configURL ?? Self.fixtureURL, chromeCSS: chromeCSS
-        ) {
+        )
+        for script in injected.scripts {
             configuration.userContentController.addUserScript(script)
         }
         return WKWebView(frame: .zero, configuration: configuration)
@@ -159,6 +160,34 @@ final class HarnessTests: XCTestCase {
         )
         XCTAssertEqual(webView.configuration.userContentController.userScripts.count, 2)
         try await load(webView)
+        let ranAnyway = try await evaluate(webView, "window.__ranAnyway")
+        XCTAssertNil(ranAnyway)
+    }
+
+    func testHarnessDoesNotInstallWhenConfiguredHostDoesNotMatchTheLoadedDocument() async throws {
+        webView = try makeWebView(
+            userScript: "window.__ran = true;",
+            metadata: Self.meta(),
+            configURL: URL(string: "https://app.fastmail.com/")!
+        )
+        try await load(webView)
+        let installed = try await evaluate(webView, "typeof window.__fmshell") as? String
+        XCTAssertEqual(installed, "undefined")
+    }
+
+    func testPerDocumentMismatchIsLoggedThroughTheNativeBridge() async throws {
+        webView = try makeWebView(
+            userScript: "window.__ranAnyway = true;",
+            metadata: Self.meta(matches: ["file:///fmshell-test-does-not-exist/*"]),
+            configURL: URL(string: "file:///fmshell-test-does-not-exist/fixture.html")!
+        )
+        XCTAssertEqual(webView.configuration.userContentController.userScripts.count, 2)
+        try await load(webView)
+        try await waitUntil { self.received.contains { $0["action"] as? String == "log" } }
+        let entry = received.first { $0["action"] as? String == "log" }
+        let payload = entry?["payload"] as? [String: Any]
+        XCTAssertTrue((payload?["message"] as? String ?? "").contains("userscript"))
+        XCTAssertTrue((payload?["message"] as? String ?? "").contains("@match does not cover"))
         let ranAnyway = try await evaluate(webView, "window.__ranAnyway")
         XCTAssertNil(ranAnyway)
     }

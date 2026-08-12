@@ -1,16 +1,27 @@
 import Foundation
 import WebKit
 
+public struct InjectionResult {
+    public let scripts: [WKUserScript]
+    public let styleScript: WKUserScript?
+    public let userScriptIncluded: Bool
+}
+
 public enum ScriptInjector {
     @MainActor
     public static func userScripts(
         from bundle: ScriptBundle,
         url: URL,
         chromeCSS: String? = nil
-    ) throws -> [WKUserScript] {
+    ) throws -> InjectionResult {
         var scripts = [
-            WKUserScript(source: bundle.harness, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            WKUserScript(
+                source: gatedToHost(bundle.harness, host: url.host ?? ""),
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
         ]
+        var styleScript: WKUserScript?
         if let chromeCSS, let literal = jsonLiteral(chromeCSS) {
             let source = """
             (function () {
@@ -20,9 +31,13 @@ public enum ScriptInjector {
                 (document.head || document.documentElement).appendChild(style);
             })();
             """
-            scripts.append(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            let script = WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            styleScript = script
+            scripts.append(script)
         }
-        guard matches(bundle.metadata.matches, url: url) else { return scripts }
+        guard matches(bundle.metadata.matches, url: url) else {
+            return InjectionResult(scripts: scripts, styleScript: styleScript, userScriptIncluded: false)
+        }
         let time = injectionTime(for: bundle.metadata.runAt)
         let patterns = bundle.metadata.matches
         scripts.append(WKUserScript(
@@ -37,7 +52,7 @@ public enum ScriptInjector {
                 forMainFrameOnly: true
             ))
         }
-        return scripts
+        return InjectionResult(scripts: scripts, styleScript: styleScript, userScriptIncluded: true)
     }
 
     static func injectionTime(for runAt: UserScriptMetadata.RunAt) -> WKUserScriptInjectionTime {
@@ -88,6 +103,21 @@ public enum ScriptInjector {
         console.error(reported.message, error);
         }
         }
+        } else {
+        var notice = \#(labelLiteral) + ': @match does not cover ' + location.href;
+        console.warn(notice);
+        if (window.native && window.native.log) {
+        window.native.log(notice);
+        }
+        }
+        """#
+    }
+
+    static func gatedToHost(_ source: String, host: String) -> String {
+        let hostLiteral = jsonLiteral(host) ?? "\"\""
+        return #"""
+        if (location.hostname === \#(hostLiteral)) {
+        \#(source)
         }
         """#
     }

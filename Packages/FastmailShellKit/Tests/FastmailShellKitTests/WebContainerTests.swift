@@ -14,7 +14,7 @@ private let nonMatchingHeader = """
 // ==/UserScript==
 """
 
-@Test @MainActor func makeWebViewShowsBannerWhenConfigTimeMatchFails() throws {
+@Test @MainActor func makeWebViewShowsBannerWhenConfigTimeMatchFails() async throws {
     let loader = StubLoader(resources: [
         "harness.js": "HARNESS",
         "userscript.js": nonMatchingHeader + "\nBODY"
@@ -32,6 +32,11 @@ private let nonMatchingHeader = """
     let coordinator = WebCoordinator(model: model, startURL: profile.startURL)
     let webView = container.makeWebView(coordinator: coordinator)
     #expect(webView.configuration.userContentController.userScripts.count == 1)
+    var attempts = 0
+    while model.banner == nil && attempts < 50 {
+        await Task.yield()
+        attempts += 1
+    }
     #expect(model.banner == "User script @match does not cover \(profile.startURL.absoluteString)")
 }
 

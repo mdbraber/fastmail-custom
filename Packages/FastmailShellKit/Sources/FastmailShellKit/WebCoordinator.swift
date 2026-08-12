@@ -29,6 +29,26 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         self.openExternally = openExternally
     }
 
+    enum FrameOutcome: Equatable {
+        case allow
+        case cancel
+        case cancelAndOpenExternally
+        case cancelWithBanner
+    }
+
+    nonisolated static func outcome(for decision: NavigationDecision, isMainFrame: Bool) -> FrameOutcome {
+        switch (isMainFrame, decision) {
+        case (_, .allow):
+            return .allow
+        case (false, .openExternally), (false, .download), (false, .refuse):
+            return .cancel
+        case (true, .openExternally), (true, .download):
+            return .cancelAndOpenExternally
+        case (true, .refuse):
+            return .cancelWithBanner
+        }
+    }
+
     public func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
@@ -43,22 +63,20 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             return
         }
         let decision = NavigationPolicy.decide(url: url)
-        guard targetFrame.isMainFrame else {
-            switch decision {
-            case .allow:
-                decisionHandler(.allow)
-            case .openExternally, .download:
-                decisionHandler(.cancel)
-            }
-            return
-        }
-        switch decision {
+        switch Self.outcome(for: decision, isMainFrame: targetFrame.isMainFrame) {
         case .allow:
-            lastURL = url
+            if targetFrame.isMainFrame {
+                lastURL = url
+            }
             decisionHandler(.allow)
-        case .openExternally, .download:
+        case .cancel:
+            decisionHandler(.cancel)
+        case .cancelAndOpenExternally:
             decisionHandler(.cancel)
             openExternally(url)
+        case .cancelWithBanner:
+            decisionHandler(.cancel)
+            model.banner = "Refused to open \(url.absoluteString)"
         }
     }
 
@@ -73,13 +91,20 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             canShowMIMEType: navigationResponse.canShowMIMEType,
             contentDisposition: contentDisposition
         )
-        switch decision {
+        switch Self.outcome(for: decision, isMainFrame: navigationResponse.isForMainFrame) {
         case .allow:
             decisionHandler(.allow)
-        case .openExternally, .download:
+        case .cancel:
+            decisionHandler(.cancel)
+        case .cancelAndOpenExternally:
             decisionHandler(.cancel)
             if let url = navigationResponse.response.url {
                 openExternally(url)
+            }
+        case .cancelWithBanner:
+            decisionHandler(.cancel)
+            if let url = navigationResponse.response.url {
+                model.banner = "Refused to open \(url.absoluteString)"
             }
         }
     }
@@ -94,9 +119,18 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             switch NavigationPolicy.decide(url: url) {
             case .allow: webView.load(URLRequest(url: url))
             case .openExternally, .download: openExternally(url)
+            case .refuse: model.banner = "Refused to open \(url.absoluteString)"
             }
         }
         return nil
+    }
+
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        #if !canImport(UIKit)
+        if let window = webView.window, window.styleMask.contains(.fullScreen) {
+            webView.evaluateJavaScript("document.body.classList.add('fmshell-fullscreen')")
+        }
+        #endif
     }
 
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {

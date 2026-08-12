@@ -20,57 +20,78 @@ private func bundle(
 private let fastmail = URL(string: "https://app.fastmail.com/mail/Inbox")!
 
 @Test @MainActor func harnessIsAlwaysFirstAndAtDocumentStart() throws {
-    let scripts = try ScriptInjector.userScripts(from: bundle(), url: fastmail)
-    #expect(scripts.first?.source == "HARNESS")
-    #expect(scripts.first?.injectionTime == .atDocumentStart)
+    let injected = try ScriptInjector.userScripts(from: bundle(), url: fastmail)
+    #expect(injected.scripts.first?.source.contains("HARNESS") == true)
+    #expect(injected.scripts.first?.injectionTime == .atDocumentStart)
+}
+
+@Test @MainActor func harnessIsGatedToTheConfiguredHost() throws {
+    let injected = try ScriptInjector.userScripts(from: bundle(), url: fastmail)
+    #expect(injected.scripts.first?.source.contains("location.hostname === \"app.fastmail.com\"") == true)
+}
+
+@Test @MainActor func harnessGateFallsBackToEmptyHostWhenURLHasNone() throws {
+    let injected = try ScriptInjector.userScripts(from: bundle(), url: URL(string: "about:blank")!)
+    #expect(injected.scripts.first?.source.contains("location.hostname === \"\"") == true)
 }
 
 @Test @MainActor func userScriptIsInjectedVerbatimNotEmbedded() throws {
     let source = "var s = \"a'b\\\"c\";\nif (a </script> b) {}\n\u{2028} 🙂"
-    let scripts = try ScriptInjector.userScripts(from: bundle(userScript: source), url: fastmail)
-    #expect(scripts.contains { $0.source.contains(source) })
+    let injected = try ScriptInjector.userScripts(from: bundle(userScript: source), url: fastmail)
+    #expect(injected.scripts.contains { $0.source.contains(source) })
 }
 
 @Test @MainActor func documentIdleAndDocumentEndBothMapToDocumentEnd() throws {
     for runAt in [UserScriptMetadata.RunAt.documentIdle, .documentEnd] {
-        let scripts = try ScriptInjector.userScripts(from: bundle(runAt: runAt), url: fastmail)
-        #expect(scripts.last?.injectionTime == .atDocumentEnd)
+        let injected = try ScriptInjector.userScripts(from: bundle(runAt: runAt), url: fastmail)
+        #expect(injected.scripts.last?.injectionTime == .atDocumentEnd)
     }
 }
 
 @Test @MainActor func documentStartMapsToDocumentStart() throws {
-    let scripts = try ScriptInjector.userScripts(from: bundle(runAt: .documentStart), url: fastmail)
-    #expect(scripts.last?.injectionTime == .atDocumentStart)
+    let injected = try ScriptInjector.userScripts(from: bundle(runAt: .documentStart), url: fastmail)
+    #expect(injected.scripts.last?.injectionTime == .atDocumentStart)
 }
 
 @Test @MainActor func overlayFollowsTheUserScript() throws {
-    let scripts = try ScriptInjector.userScripts(from: bundle(overlay: "OVERLAY"), url: fastmail)
-    #expect(scripts.count == 3)
-    #expect(scripts[0].source == "HARNESS")
-    #expect(scripts[1].source.contains("BODY"))
-    #expect(scripts[2].source.contains("OVERLAY"))
+    let injected = try ScriptInjector.userScripts(from: bundle(overlay: "OVERLAY"), url: fastmail)
+    #expect(injected.scripts.count == 3)
+    #expect(injected.scripts[0].source.contains("HARNESS"))
+    #expect(injected.scripts[1].source.contains("BODY"))
+    #expect(injected.scripts[2].source.contains("OVERLAY"))
 }
 
 @Test @MainActor func nonMatchingURLYieldsHarnessOnly() throws {
-    let scripts = try ScriptInjector.userScripts(from: bundle(), url: URL(string: "https://example.com/")!)
-    #expect(scripts.map(\.source) == ["HARNESS"])
+    let injected = try ScriptInjector.userScripts(from: bundle(), url: URL(string: "https://example.com/")!)
+    #expect(injected.scripts.count == 1)
+    #expect(injected.scripts[0].source.contains("HARNESS"))
+    #expect(injected.userScriptIncluded == false)
 }
 
 @Test @MainActor func emptyMatchListMatchesEverything() throws {
-    let scripts = try ScriptInjector.userScripts(from: bundle(matches: []), url: URL(string: "https://example.com/")!)
-    #expect(scripts.count == 2)
+    let injected = try ScriptInjector.userScripts(from: bundle(matches: []), url: URL(string: "https://example.com/")!)
+    #expect(injected.scripts.count == 2)
+    #expect(injected.userScriptIncluded == true)
 }
 
 @Test @MainActor func allScriptsAreMainFrameOnly() throws {
-    let scripts = try ScriptInjector.userScripts(from: bundle(overlay: "OVERLAY"), url: fastmail)
-    #expect(scripts.allSatisfy { $0.isForMainFrameOnly })
+    let injected = try ScriptInjector.userScripts(from: bundle(overlay: "OVERLAY"), url: fastmail)
+    #expect(injected.scripts.allSatisfy { $0.isForMainFrameOnly })
 }
 
 @Test @MainActor func guardedSourceCarriesLabelAndPatternsForTheRuntimeGate() throws {
-    let scripts = try ScriptInjector.userScripts(from: bundle(overlay: "OVERLAY"), url: fastmail)
-    #expect(scripts[1].source.contains("\"userscript\""))
-    #expect(scripts[1].source.contains("app.fastmail.com"))
-    #expect(scripts[2].source.contains("\"overlay\""))
+    let injected = try ScriptInjector.userScripts(from: bundle(overlay: "OVERLAY"), url: fastmail)
+    #expect(injected.scripts[1].source.contains("\"userscript\""))
+    #expect(injected.scripts[1].source.contains("app.fastmail.com"))
+    #expect(injected.scripts[2].source.contains("\"overlay\""))
+}
+
+@Test func guardedSourceLogsThroughNativeWhenThePerDocumentGateDeclines() {
+    let source = ScriptInjector.guarded("BODY", patterns: ["https://app.fastmail.com/*"], label: "userscript")
+    #expect(source.contains("} else {"))
+    #expect(source.contains("console.warn(notice)"))
+    #expect(source.contains("window.native.log(notice)"))
+    #expect(source.contains("@match does not cover"))
 }
 
 @Test func matchesNormalizesEmptyPathToRoot() {
@@ -92,24 +113,32 @@ private let fastmail = URL(string: "https://app.fastmail.com/mail/Inbox")!
     #expect(ScriptInjector.matches(["https://app.fastmail.com/*"], url: Profile.work(accountID: nil).startURL))
 }
 
+@Test func gatedToHostWrapsSourceInAHostnameCheck() {
+    let source = ScriptInjector.gatedToHost("BODY", host: "app.fastmail.com")
+    #expect(source.contains("if (location.hostname === \"app.fastmail.com\") {"))
+    #expect(source.contains("BODY"))
+}
+
 @Test @MainActor func chromeCSSIsInjectedAsAStyleElementAtDocumentStart() throws {
-    let scripts = try ScriptInjector.userScripts(
+    let injected = try ScriptInjector.userScripts(
         from: bundle(), url: fastmail, chromeCSS: ".v-PageHeader { padding-left: 78px; }"
     )
-    let styleScript = try #require(scripts.first { $0.source.contains("createElement('style')") })
+    let styleScript = try #require(injected.styleScript)
     #expect(styleScript.injectionTime == .atDocumentStart)
     #expect(styleScript.source.contains("padding-left: 78px"))
+    #expect(injected.scripts.contains { $0 === styleScript })
 }
 
 @Test @MainActor func chromeCSSIsOmittedWhenAbsent() throws {
-    let scripts = try ScriptInjector.userScripts(from: bundle(), url: fastmail, chromeCSS: nil)
-    #expect(scripts.allSatisfy { !$0.source.contains("createElement('style')") })
+    let injected = try ScriptInjector.userScripts(from: bundle(), url: fastmail, chromeCSS: nil)
+    #expect(injected.styleScript == nil)
+    #expect(injected.scripts.allSatisfy { !$0.source.contains("createElement('style')") })
 }
 
 @Test @MainActor func chromeCSSSurvivesQuotesAndNewlines() throws {
     let css = ".x::after { content: \"a'b\\\"c\"; }\n.y { color: red; }"
-    let scripts = try ScriptInjector.userScripts(from: bundle(), url: fastmail, chromeCSS: css)
-    let styleScript = try #require(scripts.first { $0.source.contains("createElement('style')") })
+    let injected = try ScriptInjector.userScripts(from: bundle(), url: fastmail, chromeCSS: css)
+    let styleScript = try #require(injected.styleScript)
     let literal = try #require(ScriptInjector.jsonLiteral(css))
     #expect(literal.contains("\\n"))
     #expect(literal.contains("\\\""))
@@ -118,8 +147,8 @@ private let fastmail = URL(string: "https://app.fastmail.com/mail/Inbox")!
 }
 
 @Test @MainActor func chromeCSSIsInjectedEvenWhenTheURLDoesNotMatch() throws {
-    let scripts = try ScriptInjector.userScripts(
+    let injected = try ScriptInjector.userScripts(
         from: bundle(), url: URL(string: "https://example.com/")!, chromeCSS: "x{}"
     )
-    #expect(scripts.contains { $0.source.contains("createElement('style')") })
+    #expect(injected.styleScript != nil)
 }

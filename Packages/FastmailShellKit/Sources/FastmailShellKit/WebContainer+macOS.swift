@@ -9,15 +9,19 @@ extension WebContainer: NSViewRepresentable {
     }
 
     public func makeNSView(context: Context) -> WKWebView {
-        let webView = makeWebView(coordinator: context.coordinator) { controller in
-            installChromeCSS(in: controller)
-        }
-        DispatchQueue.main.async { [weak webView, model] in
-            guard let webView, let window = webView.window else { return }
-            configureWindow(window)
-            observeFullScreen(window, webView: webView, model: model)
-        }
-        return webView
+        makeWebView(
+            coordinator: context.coordinator,
+            beforeLoad: { controller in installChromeCSS(in: controller) },
+            makeView: { configuration in
+                let view = WindowAwareWebView(frame: .zero, configuration: configuration)
+                view.onDidMoveToWindow = { [weak view, model] in
+                    guard let view, let window = view.window else { return }
+                    configureWindow(window)
+                    observeFullScreen(window, webView: view, model: model)
+                }
+                return view
+            }
+        )
     }
 
     public func updateNSView(_ nsView: WKWebView, context: Context) {}
@@ -26,10 +30,20 @@ extension WebContainer: NSViewRepresentable {
         guard
             let bundle = try? ScriptStore(loader: loader, overlayName: profile.overlayScriptName).load(),
             let chromeCSS = bundle.chromeCSS,
-            let scripts = try? ScriptInjector.userScripts(from: bundle, url: profile.startURL, chromeCSS: chromeCSS),
-            let styleScript = scripts.first(where: { $0.source.contains("createElement('style')") })
+            let injected = try? ScriptInjector.userScripts(from: bundle, url: profile.startURL, chromeCSS: chromeCSS),
+            let styleScript = injected.styleScript
         else { return }
         controller.addUserScript(styleScript)
+    }
+}
+
+@MainActor
+final class WindowAwareWebView: WKWebView {
+    var onDidMoveToWindow: (() -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onDidMoveToWindow?()
     }
 }
 

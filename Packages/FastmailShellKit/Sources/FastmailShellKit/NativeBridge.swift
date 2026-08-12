@@ -8,15 +8,18 @@ public struct BridgeReply: Equatable, Sendable {
 
 @MainActor
 public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
+    private let expectedHost: String
     private let onLog: (String) async -> Void
     private let onError: (String) async -> Void
     private let onTheme: (String) async -> Void
 
     public init(
+        expectedHost: String,
         onLog: @escaping (String) async -> Void,
         onError: @escaping (String) async -> Void,
         onTheme: @escaping (String) async -> Void = { _ in }
     ) {
+        self.expectedHost = expectedHost
         self.onLog = onLog
         self.onError = onError
         self.onTheme = onTheme
@@ -52,6 +55,15 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void
     ) {
         Task { @MainActor in
+            let frameInfo = message.frameInfo
+            guard frameInfo.isMainFrame else {
+                replyHandler(nil, "rejected: message did not originate from the main frame")
+                return
+            }
+            guard frameInfo.securityOrigin.host.lowercased() == expectedHost.lowercased() else {
+                replyHandler(nil, "rejected: message originated from an unexpected origin")
+                return
+            }
             let body = message.body as? [String: Any] ?? [:]
             let reply = await handle(body: body)
             replyHandler(reply.value, reply.error)

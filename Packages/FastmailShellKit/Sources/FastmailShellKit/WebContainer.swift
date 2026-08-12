@@ -31,12 +31,14 @@ public struct WebContainer {
 
     func makeWebView(
         coordinator: WebCoordinator,
-        beforeLoad: ((WKUserContentController) -> Void)? = nil
+        beforeLoad: ((WKUserContentController) -> Void)? = nil,
+        makeView: (WKWebViewConfiguration) -> WKWebView = { WKWebView(frame: .zero, configuration: $0) }
     ) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
 
         let bridge = NativeBridge(
+            expectedHost: profile.startURL.host ?? "",
             onLog: { message in print("[userscript] \(message)") },
             onError: { [model] message in model.show(message) },
             onTheme: { [model] color in Task { @MainActor in model.tint = color } }
@@ -52,11 +54,12 @@ public struct WebContainer {
                 loader: loader,
                 overlayName: profile.overlayScriptName
             ).load()
-            let userScripts = try ScriptInjector.userScripts(from: scripts, url: profile.startURL)
-            if userScripts.count == 1 {
-                model.show("User script @match does not cover \(profile.startURL.absoluteString)")
+            let injected = try ScriptInjector.userScripts(from: scripts, url: profile.startURL)
+            if !injected.userScriptIncluded {
+                let message = "User script @match does not cover \(profile.startURL.absoluteString)"
+                Task { @MainActor in model.show(message) }
             }
-            for script in userScripts {
+            for script in injected.scripts {
                 configuration.userContentController.addUserScript(script)
             }
         } catch {
@@ -66,7 +69,7 @@ public struct WebContainer {
 
         beforeLoad?(configuration.userContentController)
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = makeView(configuration)
         webView.isInspectable = true
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
