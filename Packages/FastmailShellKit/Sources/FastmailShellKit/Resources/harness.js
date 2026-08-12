@@ -26,15 +26,34 @@
         post('error', { message: message, stack: stack });
     }
 
+    var lastTheme = null;
+
+    function headerColor() {
+        var header = document.querySelector('.v-PageHeader');
+        if (!header) return null;
+        var color = window.getComputedStyle(header).backgroundColor;
+        if (!color || color === 'transparent') return null;
+        if (color.replace(/\s/g, '').indexOf('rgba(0,0,0,0)') === 0) return null;
+        return color;
+    }
+
     function reportTheme() {
         var meta = document.querySelector('meta[name="theme-color"]');
-        var color = meta ? meta.getAttribute('content') : null;
-        if (!color) return;
+        var color = headerColor() || (meta ? meta.getAttribute('content') : null);
+        if (!color || color === lastTheme) return;
+        lastTheme = color;
         post('theme', { color: color });
     }
 
     function watchTheme() {
-        reportTheme();
+        var attempts = 0;
+        (function poll() {
+            reportTheme();
+            attempts += 1;
+            if (!headerColor() && attempts < 40) {
+                window.setTimeout(poll, 250);
+            }
+        })();
         var observer = new MutationObserver(reportTheme);
         if (document.head) {
             observer.observe(document.head, { attributes: true, childList: true, subtree: true });

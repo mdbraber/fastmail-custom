@@ -35,3 +35,32 @@ import Testing
     #expect(ThemeColor.isDark((0, 0, 1)))
     #expect(!ThemeColor.isDark((0, 1, 0)))
 }
+
+@Test func parsesFunctionalRGBAsGetComputedStyleReturnsIt() throws {
+    let rgb = try #require(ThemeColor.components(from: "rgb(124, 179, 66)"))
+    #expect(abs(rgb.0 - 124.0 / 255.0) < 0.001)
+    #expect(abs(rgb.1 - 179.0 / 255.0) < 0.001)
+    #expect(abs(rgb.2 - 66.0 / 255.0) < 0.001)
+}
+
+@Test func parsesOpaqueRGBAAndModernSlashSyntax() throws {
+    #expect(ThemeColor.components(from: "rgba(10, 20, 30, 1)") != nil)
+    #expect(ThemeColor.components(from: "rgb(10 20 30 / 1)") != nil)
+}
+
+@Test func rejectsTransparentSoTheTintFallsBack() {
+    #expect(ThemeColor.components(from: "rgba(0, 0, 0, 0)") == nil)
+    #expect(ThemeColor.components(from: "rgba(124, 179, 66, 0.5)") == nil)
+}
+
+@Test func stillAcceptsHexThroughTheCommonEntryPoint() throws {
+    let rgb = try #require(ThemeColor.components(from: "#f4f5f5"))
+    #expect(!ThemeColor.isDark(rgb))
+}
+
+@Test func rejectsMalformedFunctionalValues() {
+    #expect(ThemeColor.components(from: "rgb(1, 2)") == nil)
+    #expect(ThemeColor.components(from: "rgb(300, 0, 0)") == nil)
+    #expect(ThemeColor.components(from: "rgb()") == nil)
+    #expect(ThemeColor.components(from: "rgb(a, b, c)") == nil)
+}

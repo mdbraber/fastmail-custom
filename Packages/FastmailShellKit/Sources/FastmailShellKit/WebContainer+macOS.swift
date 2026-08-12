@@ -55,12 +55,14 @@ func configureWindow(_ window: NSWindow) {
 }
 
 @MainActor
-func applyTint(_ hex: String, to window: NSWindow) {
-    guard let rgb = ThemeColor.components(fromHex: hex) else { return }
+func applyTint(_ value: String, to window: NSWindow) {
+    guard let rgb = ThemeColor.components(from: value) else { return }
+    window.appearance = NSAppearance(named: ThemeColor.isDark(rgb) ? .darkAqua : .aqua)
     window.backgroundColor = NSColor(
         srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: 1
     )
-    window.appearance = NSAppearance(named: ThemeColor.isDark(rgb) ? .darkAqua : .aqua)
+    window.contentView?.superview?.needsDisplay = true
+    window.invalidateShadow()
 }
 
 @MainActor
