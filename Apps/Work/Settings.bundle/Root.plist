@@ -28,6 +28,282 @@
             <key>AutocorrectionType</key>
             <string>No</string>
         </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>Title</key>
+            <string>Inbox mode</string>
+            <key>FooterText</key>
+            <string>While Inbox mode is on, marks each message with the colour of a label it carries. Only labels you have given a colour show up.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Colour rows by label</string>
+            <key>Key</key>
+            <string>inboxMode.labelColours</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>Only labels that a saved search names as an inbox get a colour. Everything else you file into stays uncoloured, so the list shows which inbox a message belongs to rather than every tag it carries.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Only labels that are inboxes</string>
+            <key>Key</key>
+            <string>inboxMode.labelColoursSidebarOnly</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>Everything you keep carries it, so colouring by it would tint the whole list one shade. Turn this off to see its colour like any other.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Ignore the Process marker</string>
+            <key>Key</key>
+            <string>inboxMode.labelColoursSkipProcess</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>Draws a line in the sidebar wherever the system folders give way to your labels, or back again. A label kept inside the Inbox stays with it, without a line of its own.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Separate folders from labels</string>
+            <key>Key</key>
+            <string>inboxMode.sidebarSeparators</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>Fastmail puts an arrow on the Labels heading as soon as you have a second mail account, even when that account shows nothing in the sidebar — leaving it to collapse the only section there is. This hides it until another account’s sources actually appear.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Hide the Labels collapse arrow</string>
+            <key>Key</key>
+            <string>inboxMode.hideLoneExpando</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>Dropping a message on a label files it there and leaves it in the Inbox. Hold Option to move instead.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Dragging adds a label</string>
+            <key>Key</key>
+            <string>inboxMode.dragAdditive</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>In a view where every row is in the Inbox — a label filtered to the Inbox, or on the Actionable or Triage filter — the chip says nothing, so it is left out.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Hide the Inbox chip</string>
+            <key>Key</key>
+            <string>inboxMode.hideInboxLabel</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>A nested label reads “Work” rather than “Projects/Work”, both in the list and on an open message. Hovering still shows the full path.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Show only the label’s own name</string>
+            <key>Key</key>
+            <string>inboxMode.stripLabelPrefix</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>Adds the Process marker and takes off any deferred label, leaving the message in the Inbox. A message with no topic label yet first opens a picker narrowed to your sidebar, so it can be filed by typing. Shift-V opens the same narrowed menu just to change labels, and Option-V opens Move to as Fastmail ships it.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>V keeps a message</string>
+            <key>Key</key>
+            <string>inboxMode.labelsShortcut</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>Leaves out Trash, Archive, Spam and any label no saved search names as an inbox, so a stray letter cannot land on one. Typing a name still finds any label of your own; Trash and the rest stay out either way.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Only labels that are inboxes</string>
+            <key>Key</key>
+            <string>inboxMode.labelsSidebarOnly</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>Once typing has left one label, it is applied and the menu closes, with no Enter to press. Never applies to creating a new label.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Auto-save the last label standing</string>
+            <key>Key</key>
+            <string>inboxMode.labelsAutoSave</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>The verbs put this label on whatever you keep and strip it again on archive and snooze, so its badge counts what is still to work through. A marker, not a place — kept messages stay in the Inbox.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSTextFieldSpecifier</string>
+            <key>Title</key>
+            <string>Label that marks kept mail</string>
+            <key>Key</key>
+            <string>inboxMode.processLabel</string>
+            <key>DefaultValue</key>
+            <string>Process</string>
+            <key>IsSecure</key>
+            <false/>
+            <key>AutocapitalizationType</key>
+            <string>None</string>
+            <key>AutocorrectionType</key>
+            <string>No</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>Labels that cut across your inboxes — a message is urgent and somewhere. Their colour outranks the inbox’s on a message row, and when more than one applies the first named wins. Comma-separated, matched on the full path.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSTextFieldSpecifier</string>
+            <key>Title</key>
+            <string>Labels that qualify rather than place</string>
+            <key>Key</key>
+            <string>inboxMode.qualifierLabels</string>
+            <key>DefaultValue</key>
+            <string>Admin, Waiting</string>
+            <key>IsSecure</key>
+            <false/>
+            <key>AutocapitalizationType</key>
+            <string>None</string>
+            <key>AutocorrectionType</key>
+            <string>No</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>What the actionable filter hides: a message on any of these drops out of the Inbox and every topic until it comes back. Filing into one also takes the Process marker off — deferring is a move, not a tag. Comma-separated, matched on the full path.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSTextFieldSpecifier</string>
+            <key>Title</key>
+            <string>Labels that defer</string>
+            <key>Key</key>
+            <string>inboxMode.deferredLabels</string>
+            <key>DefaultValue</key>
+            <string>Waiting, Snoozed</string>
+            <key>IsSecure</key>
+            <false/>
+            <key>AutocapitalizationType</key>
+            <string>None</string>
+            <key>AutocorrectionType</key>
+            <string>No</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>The heading of a filtered list and the badge on each topic label show their exact actionable count, asked of the server once and kept fresh from then on. Off, filtered headings show no number and topics carry no badge.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Show exact filtered counts</string>
+            <key>Key</key>
+            <string>inboxMode.showFilteredCounts</string>
+            <key>DefaultValue</key>
+            <false/>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSGroupSpecifier</string>
+            <key>FooterText</key>
+            <string>E archives and Y expands a thread, the other way round from Fastmail. H still archives.</string>
+        </dict>
+        <dict>
+            <key>Type</key>
+            <string>PSToggleSwitchSpecifier</string>
+            <key>Title</key>
+            <string>Swap E and Y</string>
+            <key>Key</key>
+            <string>inboxMode.swapArchiveExpand</string>
+            <key>DefaultValue</key>
+            <true/>
+        </dict>
     </array>
 </dict>
 </plist>
