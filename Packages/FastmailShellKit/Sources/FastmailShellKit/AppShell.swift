@@ -3,6 +3,7 @@ import SwiftUI
 public struct AppShell: View {
     private let profile: Profile
     @StateObject private var model = ShellModel()
+    @ObservedObject private var downloads = DownloadManager.shared
 
     public init(profile: Profile) {
         self.profile = profile
@@ -26,7 +27,109 @@ public struct AppShell: View {
                 .padding(12)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
+            if !downloads.items.isEmpty {
+                DownloadsPanel(
+                    items: downloads.items,
+                    onCancel: { downloads.cancel($0) },
+                    onDismiss: { downloads.clearInactive() }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .animation(.default, value: model.banner)
+        .animation(.default, value: downloads.items)
+    }
+}
+
+private struct DownloadsPanel: View {
+    let items: [DownloadManager.Item]
+    let onCancel: (UUID) -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Downloads")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if items.allSatisfy({ $0.state != .active }) {
+                    Button {
+                        onDismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            ForEach(items) { item in
+                row(item)
+            }
+        }
+        .padding(12)
+        .frame(width: 300)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .padding(14)
+    }
+
+    @ViewBuilder
+    private func row(_ item: DownloadManager.Item) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Text(item.filename)
+                    .font(.callout)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+                switch item.state {
+                case .active:
+                    Button {
+                        onCancel(item.id)
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                    }
+                    .buttonStyle(.plain)
+                case .finished:
+                    #if os(macOS)
+                    Button("Show in Finder") {
+                        if let url = item.fileURL {
+                            NSWorkspace.shared.activateFileViewerSelecting([url])
+                        }
+                    }
+                    .font(.caption)
+                    #else
+                    Button("Open") {
+                        if let url = item.fileURL {
+                            PreviewPresenter.shared.preview(url)
+                        }
+                    }
+                    .font(.caption)
+                    #endif
+                case .failed:
+                    Text("Failed")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                case .cancelled:
+                    Text("Cancelled")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if item.state == .active {
+                if item.totalIsKnown {
+                    ProgressView(value: item.fractionComplete)
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                if !item.byteText.isEmpty {
+                    Text(item.byteText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 }

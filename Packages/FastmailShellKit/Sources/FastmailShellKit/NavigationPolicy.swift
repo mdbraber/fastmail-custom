@@ -19,10 +19,33 @@ public enum NavigationPolicy {
         return isAllowed(host: url.host) ? .allow : .openExternally
     }
 
-    public static func decideResponse(canShowMIMEType: Bool, contentDisposition: String?) -> NavigationDecision {
+    public static let trapsInlineAttachmentsByDefault: Bool = {
+        #if canImport(UIKit)
+        true
+        #else
+        false
+        #endif
+    }()
+
+    public static func decideResponse(
+        canShowMIMEType: Bool,
+        contentDisposition: String?,
+        host: String? = nil,
+        isMainFrame: Bool = false,
+        trapsInlineAttachments: Bool = trapsInlineAttachmentsByDefault
+    ) -> NavigationDecision {
         let disposition = (contentDisposition?.lowercased() ?? "").trimmingCharacters(in: .whitespaces)
         if disposition.hasPrefix("attachment") { return .download }
+        if trapsInlineAttachments, isMainFrame, isAttachmentHost(host) { return .download }
         return canShowMIMEType ? .allow : .download
+    }
+
+    static func isAttachmentHost(_ host: String?) -> Bool {
+        guard var host = host?.lowercased() else { return false }
+        if host.hasSuffix(".") {
+            host.removeLast()
+        }
+        return host == "fastmailusercontent.com" || host.hasSuffix(".fastmailusercontent.com")
     }
 
     static func isAllowed(host: String?) -> Bool {

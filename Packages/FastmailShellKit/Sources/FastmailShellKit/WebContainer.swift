@@ -103,6 +103,13 @@ public struct WebContainer {
         coordinator.commandRelay = CommandRelay(model: model, webView: webView)
         #endif
         coordinator.badgePuller = BadgePuller(webView: webView)
+        DownloadManager.shared.onFinished = { item in
+            guard let fileURL = item.fileURL else { return }
+            AttachmentOpener.handle(fileURL: fileURL)
+        }
+        DownloadManager.shared.onIssue = { [model] message in
+            model.banner = message
+        }
         webView.load(URLRequest(url: loadURL))
         return webView
     }

@@ -108,8 +108,14 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             .value(forHTTPHeaderField: "Content-Disposition")
         let decision = NavigationPolicy.decideResponse(
             canShowMIMEType: navigationResponse.canShowMIMEType,
-            contentDisposition: contentDisposition
+            contentDisposition: contentDisposition,
+            host: navigationResponse.response.url?.host,
+            isMainFrame: navigationResponse.isForMainFrame
         )
+        if decision == .download {
+            decisionHandler(.download)
+            return
+        }
         switch Self.outcome(for: decision, isMainFrame: navigationResponse.isForMainFrame) {
         case .allow:
             decisionHandler(.allow)
@@ -129,6 +135,22 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
                 model.banner = Self.refusalBanner(for: url)
             }
         }
+    }
+
+    public func webView(
+        _ webView: WKWebView,
+        navigationResponse: WKNavigationResponse,
+        didBecome download: WKDownload
+    ) {
+        DownloadManager.shared.adopt(download)
+    }
+
+    public func webView(
+        _ webView: WKWebView,
+        navigationAction: WKNavigationAction,
+        didBecome download: WKDownload
+    ) {
+        DownloadManager.shared.adopt(download)
     }
 
     public func webView(

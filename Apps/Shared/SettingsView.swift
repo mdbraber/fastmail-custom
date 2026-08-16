@@ -18,6 +18,8 @@ struct SettingsView: View {
 private struct GeneralSettingsView: View {
     let profile: Profile
     @AppStorage(StartView.defaultsKey) private var startView = ""
+    @AppStorage(AttachmentOpener.autoOpenDefaultsKey) private var autoOpen = false
+    @AppStorage(DownloadManager.folderDefaultsKey) private var downloadFolder = ""
 
     var body: some View {
         Form {
@@ -32,6 +34,27 @@ private struct GeneralSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            #if os(macOS)
+            Section {
+                LabeledContent("Download folder") {
+                    Text(downloadFolder.isEmpty ? "~/Downloads" : downloadFolder)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                HStack {
+                    Button("Choose…") { chooseFolder() }
+                    if !downloadFolder.isEmpty {
+                        Button("Use ~/Downloads") { downloadFolder = "" }
+                    }
+                }
+                Toggle("Auto-open safe attachments", isOn: $autoOpen)
+                Text("When on, a finished download whose content is a document or image opens in its default app instead of previewing. Archives, installers and executables always preview, whatever their name says.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Downloads")
+            }
+            #endif
         }
         .formStyle(.grouped)
     }
@@ -39,6 +62,18 @@ private struct GeneralSettingsView: View {
     private var resolved: String {
         StartView.resolve(startView, default: profile.startURL).absoluteString
     }
+
+    #if os(macOS)
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url {
+            downloadFolder = url.path
+        }
+    }
+    #endif
 }
 
 // The Inbox mode form is generated from InboxModeSettings.options, the same

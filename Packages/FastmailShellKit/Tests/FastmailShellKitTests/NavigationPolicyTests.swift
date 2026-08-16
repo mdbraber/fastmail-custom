@@ -87,3 +87,47 @@ private func decide(_ string: String) -> NavigationDecision {
     #expect(NavigationPolicy.decideResponse(canShowMIMEType: true, contentDisposition: "inline") == .allow)
     #expect(NavigationPolicy.decideResponse(canShowMIMEType: true, contentDisposition: nil) == .allow)
 }
+
+@Test func theIOSTrapRuleDownloadsMainFrameAttachmentContentEvenWhenRenderable() {
+    #expect(NavigationPolicy.decideResponse(
+        canShowMIMEType: true,
+        contentDisposition: "inline",
+        host: "www.fastmailusercontent.com",
+        isMainFrame: true,
+        trapsInlineAttachments: true
+    ) == .download)
+    #expect(NavigationPolicy.decideResponse(
+        canShowMIMEType: true,
+        contentDisposition: "inline",
+        host: "fastmailusercontent.com",
+        isMainFrame: true,
+        trapsInlineAttachments: true
+    ) == .download)
+}
+
+@Test func theTrapRuleLeavesSubframesAndOtherHostsAlone() {
+    #expect(NavigationPolicy.decideResponse(
+        canShowMIMEType: true,
+        contentDisposition: nil,
+        host: "www.fastmailusercontent.com",
+        isMainFrame: false,
+        trapsInlineAttachments: true
+    ) == .allow)
+    #expect(NavigationPolicy.decideResponse(
+        canShowMIMEType: true,
+        contentDisposition: nil,
+        host: "app.fastmail.com",
+        isMainFrame: true,
+        trapsInlineAttachments: true
+    ) == .allow)
+}
+
+@Test func macOSKeepsRenderingAttachmentContentInline() {
+    #expect(NavigationPolicy.decideResponse(
+        canShowMIMEType: true,
+        contentDisposition: nil,
+        host: "www.fastmailusercontent.com",
+        isMainFrame: true,
+        trapsInlineAttachments: false
+    ) == .allow)
+}
