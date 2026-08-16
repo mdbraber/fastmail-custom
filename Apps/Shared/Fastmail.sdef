@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<dictionary title="Fastmail Terminology">
+    <suite name="Standard Suite" code="core" description="Common terms for the application.">
+        <class name="application" code="capp" description="The application.">
+            <cocoa class="NSApplication"/>
+            <element type="window" access="r">
+                <cocoa key="orderedWindows"/>
+            </element>
+            <property name="name" code="pnam" type="text" access="r"/>
+            <property name="frontmost" code="pisf" type="boolean" access="r">
+                <cocoa key="isActive"/>
+            </property>
+        </class>
+        <class name="window" code="cwin" description="A mail window.">
+            <cocoa class="NSWindow"/>
+            <property name="name" code="pnam" type="text" access="r">
+                <cocoa key="fmName"/>
+            </property>
+            <property name="URL" code="furl" type="text" access="r">
+                <cocoa key="fmURL"/>
+            </property>
+            <property name="id" code="ID  " type="integer" access="r">
+                <cocoa key="windowNumber"/>
+            </property>
+            <property name="index" code="pidx" type="integer" access="r">
+                <cocoa key="orderedIndex"/>
+            </property>
+        </class>
+    </suite>
+    <suite name="Fastmail Suite" code="FMsh" description="Fastmail control.">
+        <command name="do JavaScript" code="FMshDoJS" description="Run JavaScript in a window's mail view and return the result as text.">
+            <cocoa class="FMShellDoJavaScriptCommand"/>
+            <direct-parameter type="text" description="The JavaScript function body to run."/>
+            <parameter name="in" code="Wndw" type="window" optional="yes" description="The window to run it in; the front window when omitted.">
+                <cocoa key="Window"/>
+            </parameter>
+            <result type="text"/>
+        </command>
+    </suite>
+</dictionary>

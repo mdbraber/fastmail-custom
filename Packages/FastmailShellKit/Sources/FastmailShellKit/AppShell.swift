@@ -48,6 +48,11 @@ public struct AppShell: View {
         .onOpenURL { url in
             handle(url)
         }
+        #if !canImport(UIKit)
+        .onAppear {
+            ComposeWindows.shared.configure(profile: profile)
+        }
+        #endif
     }
 
     private func handle(_ url: URL) {

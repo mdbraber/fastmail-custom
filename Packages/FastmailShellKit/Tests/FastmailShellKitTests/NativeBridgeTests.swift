@@ -86,6 +86,31 @@ import Foundation
     #expect(received?.items.count == 2)
 }
 
+@Test @MainActor func actionsPayloadReportsOnlyStringNames() async {
+    var received: [String]?
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onActions: { names in received = names }
+    )
+    let reply = await bridge.handle(body: [
+        "action": "actions",
+        "payload": ["names": ["archive-all", 7, "snooze-until-monday"]]
+    ])
+    #expect(reply.error == nil)
+    #expect(received == ["archive-all", "snooze-until-monday"])
+}
+
+@Test func javaScriptResultsCoerceToText() {
+    #expect(IntentSupport.text(from: nil) == "")
+    #expect(IntentSupport.text(from: NSNull()) == "")
+    #expect(IntentSupport.text(from: "hello") == "hello")
+    #expect(IntentSupport.text(from: NSNumber(value: 42)) == "42")
+    #expect(IntentSupport.text(from: NSNumber(value: true)) == "1")
+    #expect(IntentSupport.text(from: ["b": 2, "a": 1]) == #"{"a":1,"b":2}"#)
+}
+
 @Test func domRectParsingAcceptsBothNamingsAndRefusesEmpty() {
     #expect(
         NativeBridge.rect(fromDOMRect: ["x": 1.0, "y": 2.0, "width": 3.0, "height": 4.0]) ==

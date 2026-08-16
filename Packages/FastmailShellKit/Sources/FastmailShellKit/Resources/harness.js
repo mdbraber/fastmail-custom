@@ -376,6 +376,19 @@
 
     var lastBadge = null;
     var badgePushTimer = null;
+    var lastPushedSubject = null;
+
+    function pushSubject() {
+        var subject = null;
+        try {
+            subject = stateSubject() || domSubject() || null;
+        } catch (error) {
+            subject = null;
+        }
+        if (subject === lastPushedSubject) return;
+        lastPushedSubject = subject;
+        post('subject', { title: subject });
+    }
 
     function badgeFromScript() {
         var api = window.customInboxMode;
@@ -429,6 +442,7 @@
         if (badgePushTimer) return;
         badgePushTimer = setTimeout(function () {
             badgePushTimer = null;
+            pushSubject();
             var count = badgeCount();
             if (count === null || count === lastBadge) return;
             lastBadge = count;
@@ -450,6 +464,25 @@
             onSelect: item.onSelect
         });
         installMenuInjection();
+    };
+
+    var registeredActions = {};
+
+    window.native.registerAction = function (name, fn) {
+        if (typeof name !== 'string' || !name || typeof fn !== 'function') {
+            throw new TypeError('registerAction needs (name, fn)');
+        }
+        registeredActions[name] = fn;
+        post('actions', { names: Object.keys(registeredActions) });
+    };
+    window.native.runAction = function (name) {
+        var fn = registeredActions[name];
+        if (!fn) return Promise.reject(new Error('No action named ' + name));
+        try {
+            return Promise.resolve(fn());
+        } catch (error) {
+            return Promise.reject(error);
+        }
     };
 
     window.native.badgeResolver = null;

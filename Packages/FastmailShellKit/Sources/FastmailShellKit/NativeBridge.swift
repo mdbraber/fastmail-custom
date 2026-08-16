@@ -15,6 +15,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onDragRegions: (CGRect, [CGRect]) async -> Void
     private let onShare: @MainActor (ShareRequest) -> Void
     private let onBadge: @MainActor (Int) -> Void
+    private let onActions: @MainActor ([String]) -> Void
 
     public init(
         expectedHost: String,
@@ -23,7 +24,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onTheme: @escaping (String) async -> Void = { _ in },
         onDragRegions: @escaping (CGRect, [CGRect]) async -> Void = { _, _ in },
         onShare: @escaping @MainActor (ShareRequest) -> Void = { $0.completion() },
-        onBadge: @escaping @MainActor (Int) -> Void = { _ in }
+        onBadge: @escaping @MainActor (Int) -> Void = { _ in },
+        onActions: @escaping @MainActor ([String]) -> Void = { _ in }
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
@@ -32,6 +34,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onDragRegions = onDragRegions
         self.onShare = onShare
         self.onBadge = onBadge
+        self.onActions = onActions
     }
 
     static func rect(from values: [Double]) -> CGRect? {
@@ -59,7 +62,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     }
 
     @discardableResult
-    public func handle(body: [String: Any]) async -> BridgeReply {
+    public func handle(body: [String: Any], from webView: WKWebView? = nil) async -> BridgeReply {
         guard let action = body["action"] as? String else {
             return BridgeReply(value: nil, error: "message has no action")
         }
@@ -91,6 +94,15 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
                 return BridgeReply(value: nil, error: "badge payload missing count")
             }
             onBadge(count)
+            return BridgeReply(value: nil, error: nil)
+        case "actions":
+            let names = (payload["names"] as? [Any] ?? []).compactMap { $0 as? String }
+            onActions(names)
+            return BridgeReply(value: nil, error: nil)
+        case "subject":
+            if let webView {
+                WebViewRegistry.shared.setSubject(payload["title"] as? String, for: webView)
+            }
             return BridgeReply(value: nil, error: nil)
         case "share":
             let url = (payload["url"] as? String).flatMap(URL.init(string:))
@@ -130,7 +142,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
                 return
             }
             let body = message.body as? [String: Any] ?? [:]
-            let reply = await handle(body: body)
+            let reply = await handle(body: body, from: message.webView)
             replyHandler(reply.value, reply.error)
         }
     }

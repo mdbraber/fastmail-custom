@@ -6,7 +6,7 @@ struct PersonalApp: App {
     private let profile = Profile.personal(accountID: Profile.accountID(from: .main))
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             AppShell(profile: profile)
         }
         #if os(macOS)

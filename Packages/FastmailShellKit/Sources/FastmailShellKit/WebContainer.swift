@@ -61,7 +61,10 @@ public struct WebContainer {
                 }
             },
             onShare: { [model] request in model.shareRequest = request },
-            onBadge: { count in BadgeController.shared.apply(count) }
+            onBadge: { count in BadgeController.shared.apply(count) },
+            onActions: { names in
+                UserDefaults.standard.set(names, forKey: IntentSupport.actionNamesKey)
+            }
         )
         configuration.userContentController.addScriptMessageHandler(
             bridge,
@@ -96,6 +99,7 @@ public struct WebContainer {
         beforeLoad?(configuration.userContentController)
 
         let webView = makeView(configuration)
+        WebViewRegistry.shared.register(webView)
         webView.isInspectable = true
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
@@ -121,6 +125,7 @@ public struct WebContainer {
 public extension Notification.Name {
     static let fmshellReload = Notification.Name("fmshellReload")
     static let fmshellShare = Notification.Name("fmshellShare")
+    static let fmshellCompose = Notification.Name("fmshellCompose")
 }
 
 // External URLs land in the model from onOpenURL; the web view they should
