@@ -46,6 +46,10 @@ targets:
     sources:
       - path: Apps/Personal
       - path: Apps/Shared
+    dependencies:
+      - target: PersonalShare
+        embed: true
+        destinationFilters: [iOS]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.personal
@@ -57,11 +61,43 @@ targets:
     sources:
       - path: Apps/Work
       - path: Apps/Shared
+    dependencies:
+      - target: WorkShare
+        embed: true
+        destinationFilters: [iOS]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.work
         PRODUCT_NAME: nexthealth.nl
         INFOPLIST_FILE: Apps/Work/Info.plist
+
+  PersonalShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/PersonalShare
+      - path: Extensions/Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.personal.share
+        PRODUCT_NAME: PersonalShare
+        INFOPLIST_FILE: Extensions/PersonalShare/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+
+  WorkShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/WorkShare
+      - path: Extensions/Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.work.share
+        PRODUCT_NAME: WorkShare
+        INFOPLIST_FILE: Extensions/WorkShare/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
 
   IntegrationTests:
     type: bundle.unit-test

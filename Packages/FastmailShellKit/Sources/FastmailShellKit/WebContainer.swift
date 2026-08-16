@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import WebKit
 
@@ -12,6 +13,7 @@ public final class ShellModel: ObservableObject {
     @Published public var dragRect: CGRect = .zero
     @Published public var noDragRects: [CGRect] = []
     @Published public var shareRequest: ShareRequest?
+    @Published public var pendingLoad: URL?
 
     public init() {}
 
@@ -99,6 +101,7 @@ public struct WebContainer {
         webView.uiDelegate = coordinator
         coordinator.settingsPusher = InboxModeSettingsPusher(webView: webView)
         coordinator.sharePresenter = SharePresenter(model: model, webView: webView)
+        coordinator.linkLoader = LinkLoader(model: model, webView: webView)
         #if !canImport(UIKit)
         coordinator.commandRelay = CommandRelay(model: model, webView: webView)
         #endif
@@ -118,6 +121,31 @@ public struct WebContainer {
 public extension Notification.Name {
     static let fmshellReload = Notification.Name("fmshellReload")
     static let fmshellShare = Notification.Name("fmshellShare")
+}
+
+// External URLs land in the model from onOpenURL; the web view they should
+// drive only exists in here, so this relay carries them across, the same
+// shape as SharePresenter.
+@MainActor
+final class LinkLoader {
+    private weak var webView: WKWebView?
+    private let model: ShellModel
+    private var subscription: AnyCancellable?
+
+    init(model: ShellModel, webView: WKWebView) {
+        self.model = model
+        self.webView = webView
+        subscription = model.$pendingLoad
+            .compactMap { $0 }
+            .sink { [weak self] url in
+                self?.load(url)
+            }
+    }
+
+    private func load(_ url: URL) {
+        model.pendingLoad = nil
+        webView?.load(URLRequest(url: url))
+    }
 }
 
 #if !canImport(UIKit)

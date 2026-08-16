@@ -21,7 +21,7 @@
 
 ### Task 0: Pin the compose URL template
 
-- [ ] **Step 1:** Read the template Fastmail registers for `mailto:` itself — `navigator.registerProtocolHandler` in the live app, or the compose URL an open compose window shows — rather than inventing a parameter mapping. Record the template and its `subject`/`body`/`to` encoding in `docs/superpowers/spike-findings.md`.
+- [x] **Step 1:** Read the template Fastmail registers for `mailto:` itself — `navigator.registerProtocolHandler` in the live app, or the compose URL an open compose window shows — rather than inventing a parameter mapping. Record the template and its `subject`/`body`/`to` encoding in `docs/superpowers/spike-findings.md`.
 
 ### Task 1: `LinkRouter`
 
@@ -32,25 +32,25 @@
 **Interfaces:**
 - Produces: `LinkRouter.route(_ url: URL, profile: Profile) -> Route` where `Route` is `load(URL)`, `handoff(URL)`, or `refuse(String)`.
 
-- [ ] **Step 1:** Rules, each a test: scheme `open?url=` with a `app.fastmail.com` URL loads; any other host refuses with a banner message; `compose?mailto=` translates through the Task 0 template and appends the profile's `u=`; a raw `mailto:` (macOS) translates the same way; an `https://app.fastmail.com` URL whose `u=` matches the profile (or is absent) loads; a mismatched `u=` becomes `handoff(other-scheme URL + handoff=1)`; anything carrying `handoff=1` loads locally no matter what; a nil `accountID` never hands off.
-- [ ] **Step 2:** `mailto:` translation covers `to`, `subject`, `body`, `cc` with percent-encoding round-trips tested.
+- [x] **Step 1:** Rules, each a test: scheme `open?url=` with a `app.fastmail.com` URL loads; any other host refuses with a banner message; `compose?mailto=` translates through the Task 0 template and appends the profile's `u=`; a raw `mailto:` (macOS) translates the same way; an `https://app.fastmail.com` URL whose `u=` matches the profile (or is absent) loads; a mismatched `u=` becomes `handoff(other-scheme URL + handoff=1)`; anything carrying `handoff=1` loads locally no matter what; a nil `accountID` never hands off.
+- [x] **Step 2:** `mailto:` translation covers `to`, `subject`, `body`, `cc` with percent-encoding round-trips tested.
 
 ### Task 2: Declare and receive the schemes
 
 **Files:**
 - Modify: `project.yml` (per-target `CFBundleURLTypes`: `fastmail-personal` / `fastmail-work`; both targets also declare `mailto` on macOS), `Apps/Personal/PersonalApp.swift`, `Apps/Work/WorkApp.swift`, `AppShell.swift`.
 
-- [ ] **Step 1:** `onOpenURL` feeds `LinkRouter`; `load` drives the web view, `refuse` raises the banner, `handoff` calls `NSWorkspace.open` / `UIApplication.open` and, when the open fails (other app missing), loads locally with a banner naming the account mismatch.
-- [ ] **Step 2:** After `xcodegen generate`, verify the built Info.plists carry the schemes and nothing secret.
+- [x] **Step 1:** `onOpenURL` feeds `LinkRouter`; `load` drives the web view, `refuse` raises the banner, `handoff` calls `NSWorkspace.open` / `UIApplication.open` and, when the open fails (other app missing), loads locally with a banner naming the account mismatch.
+- [x] **Step 2:** After `xcodegen generate`, verify the built Info.plists carry the schemes and nothing secret.
 
 ### Task 3: iOS share extensions
 
 **Files:**
 - Create: `Extensions/PersonalShare/`, `Extensions/WorkShare/` (minimal principal class + Info.plist via `project.yml` extension targets).
 
-- [ ] **Step 1:** Each accepts `public.url` only, titled "Open in Fastmail" / "Open in Fastmail Work". Non-Fastmail URLs are rejected in the extension UI so the failure is visible at the point of sharing.
-- [ ] **Step 2:** A accepted URL becomes `fastmail-<profile>://open?url=…` opened through `NSExtensionContext.open(_:)` — the reason the scheme exists, since an extension cannot reach `UIApplication`.
-- [ ] **Step 3:** Signing rides the same automatic provisioning; bundle IDs `com.mdbraber.fastmail.personal.share` / `.work.share`.
+- [x] **Step 1:** Each accepts `public.url` only, titled "Open in Fastmail" / "Open in Fastmail Work". Non-Fastmail URLs are rejected in the extension UI so the failure is visible at the point of sharing.
+- [x] **Step 2:** A accepted URL becomes `fastmail-<profile>://open?url=…` opened through `NSExtensionContext.open(_:)` — the reason the scheme exists, since an extension cannot reach `UIApplication`.
+- [x] **Step 3:** Signing rides the same automatic provisioning; bundle IDs `com.mdbraber.fastmail.personal.share` / `.work.share`.
 
 ### Task 4: macOS default mail reader
 

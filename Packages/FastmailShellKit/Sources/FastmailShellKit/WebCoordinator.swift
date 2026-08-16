@@ -16,6 +16,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
     var settingsPusher: InboxModeSettingsPusher?
     var sharePresenter: SharePresenter?
     var badgePuller: BadgePuller?
+    var linkLoader: LinkLoader?
     #if !canImport(UIKit)
     var commandRelay: CommandRelay?
     #endif

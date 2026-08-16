@@ -1,5 +1,11 @@
 import SwiftUI
 
+#if canImport(UIKit)
+import UIKit
+#else
+import AppKit
+#endif
+
 public struct AppShell: View {
     private let profile: Profile
     @StateObject private var model = ShellModel()
@@ -39,6 +45,42 @@ public struct AppShell: View {
         }
         .animation(.default, value: model.banner)
         .animation(.default, value: downloads.items)
+        .onOpenURL { url in
+            handle(url)
+        }
+    }
+
+    private func handle(_ url: URL) {
+        switch LinkRouter.route(url, profile: profile) {
+        case .load(let target):
+            model.pendingLoad = target
+        case .refuse(let message):
+            model.banner = message
+        case .handoff(let target):
+            openInOtherApp(target)
+        }
+    }
+
+    private func openInOtherApp(_ target: URL) {
+        let model = model
+        let name = profile.displayName
+        let loadLocally: @MainActor () -> Void = {
+            model.banner = "This link belongs to your other account; \(name) opened it instead."
+            if let inner = LinkRouter.handoffTarget(target) {
+                model.pendingLoad = inner
+            }
+        }
+        #if canImport(UIKit)
+        UIApplication.shared.open(target, options: [:]) { opened in
+            if !opened {
+                loadLocally()
+            }
+        }
+        #else
+        if !NSWorkspace.shared.open(target) {
+            loadLocally()
+        }
+        #endif
     }
 }
 

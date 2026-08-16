@@ -7,6 +7,7 @@ public struct Profile: Equatable, Sendable {
     public let overlayScriptName: String?
     public let urlScheme: String
     public let accountID: String?
+    public let handoffScheme: String?
 
     public init(
         id: String,
@@ -14,7 +15,8 @@ public struct Profile: Equatable, Sendable {
         startURL: URL,
         overlayScriptName: String?,
         urlScheme: String,
-        accountID: String?
+        accountID: String?,
+        handoffScheme: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -22,6 +24,7 @@ public struct Profile: Equatable, Sendable {
         self.overlayScriptName = overlayScriptName
         self.urlScheme = urlScheme
         self.accountID = accountID
+        self.handoffScheme = handoffScheme
     }
 
     public func startURL(readingFrom defaults: UserDefaults) -> URL {
@@ -37,7 +40,8 @@ extension Profile {
             startURL: URL(string: "https://app.fastmail.com/")!,
             overlayScriptName: "userscript.personal.js",
             urlScheme: "fastmail-personal",
-            accountID: normalizedAccountID(accountID)
+            accountID: normalizedAccountID(accountID),
+            handoffScheme: "fastmail-work"
         )
     }
 
@@ -48,7 +52,8 @@ extension Profile {
             startURL: URL(string: "https://app.fastmail.com/")!,
             overlayScriptName: "userscript.work.js",
             urlScheme: "fastmail-work",
-            accountID: normalizedAccountID(accountID)
+            accountID: normalizedAccountID(accountID),
+            handoffScheme: "fastmail-personal"
         )
     }
 

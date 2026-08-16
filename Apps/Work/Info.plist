@@ -26,6 +26,20 @@
     <true/>
     <key>LSSupportsOpeningDocumentsInPlace</key>
     <true/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.mdbraber.fastmail.work.links</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>fastmail-work</string>
+                <string>mailto</string>
+            </array>
+        </dict>
+    </array>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
 </dict>

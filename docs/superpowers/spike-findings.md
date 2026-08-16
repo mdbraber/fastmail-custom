@@ -166,3 +166,47 @@ the live session. `FastMail.classes` exposes `MenuView`,
 
 **DEFERRED.** The iPhone is unreachable to `devicectl` today; the airplane-mode
 relaunch check runs when the device is next available.
+
+## Compose URL template
+
+Task 0 of `plans/2026-08-16-link-handling.md`. Read from Fastmail's own code,
+not invented: the in-app click handler for `mailto:` links (main bundle) routes
+to
+
+```
+mail/compose?mailto=<encodeURIComponent(full mailto URI)>
+```
+
+so the external form the shell should generate is
+
+```
+https://app.fastmail.com/mail/compose?mailto=<encodeURIComponent(mailto:...)>&u=<accountID>
+```
+
+The consumer is `goNewComposeFromUntrusted` on the mail controller (dumped from
+the live session). Its exact algorithm:
+
+1. Take the `mailto` query parameter (already URL-decoded once by the router's
+   query parsing, which is `URLSearchParams`-shaped).
+2. Strip the first 7 characters (`mailto:`), replace the **first** `?` with `&`.
+3. If the result does not start with `&`, prefix `to=` — i.e.
+   `mailto:a@b?subject=x` becomes `to=a@b&subject=x`.
+4. Split on `&`, split each pair on the first `=`, percent-decode key and
+   value, lowercase the key.
+5. Filter keys through the allowlist `{to, cc, bcc, subject, body,
+   in-reply-to}` (source: `oq = new Set([...])` next to the function in the
+   mail bundle). Everything else is dropped.
+6. `body` is treated as plain text on this path (`bodyIsHTML` is only set by a
+   different caller).
+
+Bare query parameters also work — `mail/compose?to=…&subject=…&body=…&cc=…`
+passes through the same allowlist when no `mailto` parameter is present.
+
+Encoding rules that follow:
+
+- Inside the mailto URI, `+` is **not** a space. Fastmail's decode helper is
+  percent-only (the router's search branch explicitly rewrites `+` to `%20`
+  before calling it). Spaces must be `%20`, per RFC 6068.
+- The full mailto URI is percent-encoded **again** when placed in the `mailto=`
+  query parameter, so `&`/`=` inside addresses or subjects survive both decode
+  layers.
