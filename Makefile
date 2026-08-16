@@ -1,5 +1,5 @@
 PROJECT = FastmailShell.xcodeproj
-DEVICE ?= $(shell xcrun devicectl list devices --quiet 2>/dev/null | awk 'NR==3 {print $$3}')
+DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/ available/ {print $$3; exit}')
 
 .PHONY: generate test build-macos install-macos build-ios install-ios install clean
 
@@ -24,6 +24,7 @@ build-ios: generate
 	xcodebuild -project $(PROJECT) -scheme Work -destination 'generic/platform=iOS' -configuration Release -allowProvisioningUpdates build
 
 install-ios: build-ios
+	@test -n "$(DEVICE)" || { echo "No available iOS device found. Pass DEVICE=<identifier>, see: xcrun devicectl list devices"; exit 1; }
 	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/mdbraber.com.app"
 	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/nexthealth.nl.app"
 
