@@ -113,3 +113,56 @@ Gate **passed**. Login, `window.FastMail`, script injection, and both subject
 selectors all work. Two spec corrections follow: service workers are available,
 and the actions-menu identification rule must change from `Show details` to
 `Reply` plus `Forward`.
+
+# Spike findings — 2026-08-16
+
+Task 0 of `plans/2026-08-16-harness-capabilities.md`. Read-only probes against a
+live logged-in session in Safari, desktop layout, message open and closed. No
+identifiers or subjects reproduced.
+
+## Open-message surface
+
+**PASS.** The mail controller (`FastMail.router.getAppController('mail')`)
+exposes everything `currentLink()` needs, with no DOM involved:
+
+- `get('message')` — the open `Message` record, `null` on a bare list. Its
+  presence is the "a message is open" test.
+- `get('subject')` — the subject string, `''` on a bare list.
+- `get('thread')` — the open `Thread` record, `null` on a bare list.
+- `getUrlForMessage(message)` — the canonical URL, `u=` and `?filter=`
+  preserved; navigating to its output reproduces the same state exactly.
+
+## Message-actions menu
+
+The menu is owned per message card: options are `ButtonView`s targeting
+`MessageCardView` with `method: 'click'` and an `action` name. The behavioural
+fingerprint is **an options array containing both `action === 'reply'` and
+`action === 'forward'`** — no label or icon matching needed. Section breaks in
+this menu are literal `null` entries in the options array (unlike the mobile
+page menu, which uses `isLastOfSection`).
+
+`menuView` is defined per instance, not on the `MenuButtonView` prototype
+(instances carry an own `menuView`; the prototype's slot is empty), so
+class-level wrapping of `MenuButtonView` cannot see these menus. Wrapping
+`MenuView.prototype.init` cannot either — measured: Overture constructors are
+`function () { t.apply(this, arguments) }`, calling a closure-captured init,
+so a replaced prototype `init` never runs at construction. The observer-free
+injection point that works is `FastMail.classes.MenuView.prototype.draw`:
+the render pipeline dispatches `this.draw(layer)` dynamically at show time,
+options are final by then, and mutating the live `options` array before
+delegating to the original draw renders the injected items — verified against
+the live session. `FastMail.classes` exposes `MenuView`,
+`MenuButtonView`, `MenuOptionView`, and `ButtonView`.
+
+## Badge sources
+
+- Userscript path: `window.customInboxMode` confirmed exposing `countFor`,
+  `badgeQueries`, `isOn` (v2.3).
+- DOM fallback: the Inbox sidebar row is structurally marked
+  `.v-MailboxSource--inbox`; its count is the text of the child
+  `.v-MailboxSource-badge`. No name matching required.
+
+## iOS offline spike
+
+**DEFERRED.** The iPhone is unreachable to `devicectl` today; the airplane-mode
+relaunch check runs when the device is next available.
