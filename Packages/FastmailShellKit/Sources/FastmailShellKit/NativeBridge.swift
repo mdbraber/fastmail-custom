@@ -13,24 +13,49 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onError: (String) async -> Void
     private let onTheme: (String) async -> Void
     private let onDragRegions: (CGRect, [CGRect]) async -> Void
+    private let onShare: @MainActor (ShareRequest) -> Void
+    private let onBadge: @MainActor (Int) -> Void
 
     public init(
         expectedHost: String,
         onLog: @escaping (String) async -> Void,
         onError: @escaping (String) async -> Void,
         onTheme: @escaping (String) async -> Void = { _ in },
-        onDragRegions: @escaping (CGRect, [CGRect]) async -> Void = { _, _ in }
+        onDragRegions: @escaping (CGRect, [CGRect]) async -> Void = { _, _ in },
+        onShare: @escaping @MainActor (ShareRequest) -> Void = { $0.completion() },
+        onBadge: @escaping @MainActor (Int) -> Void = { _ in }
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
         self.onError = onError
         self.onTheme = onTheme
         self.onDragRegions = onDragRegions
+        self.onShare = onShare
+        self.onBadge = onBadge
     }
 
     static func rect(from values: [Double]) -> CGRect? {
         guard values.count == 4, values[2] > 0, values[3] > 0 else { return nil }
         return CGRect(x: values[0], y: values[1], width: values[2], height: values[3])
+    }
+
+    nonisolated static func rect(fromDOMRect payload: [String: Any]?) -> CGRect? {
+        guard let payload else { return nil }
+        func number(_ keys: String...) -> Double? {
+            for key in keys {
+                if let value = payload[key] as? Double { return value }
+                if let value = payload[key] as? Int { return Double(value) }
+            }
+            return nil
+        }
+        guard
+            let x = number("x", "left"),
+            let y = number("y", "top"),
+            let width = number("width"),
+            let height = number("height"),
+            width > 0, height > 0
+        else { return nil }
+        return CGRect(x: x, y: y, width: width, height: height)
     }
 
     @discardableResult
@@ -58,6 +83,27 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             }
             let noDrag = (payload["noDrag"] as? [[Double]] ?? []).compactMap(Self.rect(from:))
             await onDragRegions(drag, noDrag)
+            return BridgeReply(value: nil, error: nil)
+        case "badge":
+            let count = (payload["count"] as? Int) ??
+                (payload["count"] as? Double).map(Int.init)
+            guard let count else {
+                return BridgeReply(value: nil, error: "badge payload missing count")
+            }
+            onBadge(count)
+            return BridgeReply(value: nil, error: nil)
+        case "share":
+            let url = (payload["url"] as? String).flatMap(URL.init(string:))
+            let text = payload["text"] as? String
+            guard url != nil || text?.isEmpty == false else {
+                return BridgeReply(value: nil, error: "share payload has neither url nor text")
+            }
+            let rect = Self.rect(fromDOMRect: payload["rect"] as? [String: Any])
+            await withCheckedContinuation { continuation in
+                onShare(ShareRequest(url: url, text: text, sourceRect: rect) {
+                    continuation.resume()
+                })
+            }
             return BridgeReply(value: nil, error: nil)
         default:
             return BridgeReply(value: nil, error: "unknown action: \(action)")

@@ -1,12 +1,17 @@
 import SwiftUI
 import WebKit
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 @MainActor
 public final class ShellModel: ObservableObject {
     @Published public var banner: String?
     @Published public var tint: String?
     @Published public var dragRect: CGRect = .zero
     @Published public var noDragRects: [CGRect] = []
+    @Published public var shareRequest: ShareRequest?
 
     public init() {}
 
@@ -52,12 +57,20 @@ public struct WebContainer {
                     model.dragRect = drag
                     model.noDragRects = noDrag
                 }
-            }
+            },
+            onShare: { [model] request in model.shareRequest = request },
+            onBadge: { count in BadgeController.shared.apply(count) }
         )
         configuration.userContentController.addScriptMessageHandler(
             bridge,
             contentWorld: .page,
             name: "native"
+        )
+
+        // Settings go in ahead of every other script: the userscript reads
+        // window.__customInboxModeSettings the moment it starts.
+        configuration.userContentController.addUserScript(
+            InboxModeSettings.bootstrapScript()
         )
 
         do {
@@ -84,7 +97,181 @@ public struct WebContainer {
         webView.isInspectable = true
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
+        coordinator.settingsPusher = InboxModeSettingsPusher(webView: webView)
+        coordinator.sharePresenter = SharePresenter(model: model, webView: webView)
+        #if !canImport(UIKit)
+        coordinator.commandRelay = CommandRelay(model: model, webView: webView)
+        #endif
+        coordinator.badgePuller = BadgePuller(webView: webView)
         webView.load(URLRequest(url: loadURL))
         return webView
+    }
+}
+
+public extension Notification.Name {
+    static let fmshellReload = Notification.Name("fmshellReload")
+    static let fmshellShare = Notification.Name("fmshellShare")
+}
+
+#if !canImport(UIKit)
+// Menu-bar commands act on whichever window's web view is key. The window
+// draws no native toolbar — Fastmail's own header is the chrome — so Share
+// and Reload live in the menu bar and reach the page from here.
+@MainActor
+final class CommandRelay {
+    private weak var webView: WKWebView?
+    private let model: ShellModel
+    private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
+
+    init(model: ShellModel, webView: WKWebView) {
+        self.model = model
+        self.webView = webView
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(
+            forName: .fmshellReload, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.ifKey { $0.reload() } }
+        })
+        observers.append(center.addObserver(
+            forName: .fmshellShare, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.shareCurrentMessage() }
+        })
+    }
+
+    deinit {
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func ifKey(_ act: (WKWebView) -> Void) {
+        guard let webView, webView.window?.isKeyWindow == true else { return }
+        act(webView)
+    }
+
+    private func shareCurrentMessage() {
+        ifKey { webView in
+            webView.callAsyncJavaScript(
+                "return await window.native.currentLink();",
+                arguments: [:],
+                in: nil,
+                in: .page
+            ) { [model] result in
+                switch result {
+                case .success(let value):
+                    let link = value as? [String: Any]
+                    let url = (link?["url"] as? String).flatMap(URL.init(string:))
+                    let title = link?["title"] as? String
+                    guard url != nil || title != nil else {
+                        model.banner = "No message open"
+                        return
+                    }
+                    model.shareRequest = ShareRequest(
+                        url: url, text: title, sourceRect: nil, completion: {}
+                    )
+                case .failure:
+                    model.banner = "No message open"
+                }
+            }
+        }
+    }
+}
+#endif
+
+// The page pushes badge counts as they change, but a backgrounded app misses
+// those pushes, so returning to the foreground asks the page for a fresh
+// count rather than trusting the last one that arrived.
+@MainActor
+final class BadgePuller {
+    private weak var webView: WKWebView?
+    private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
+
+    init(webView: WKWebView) {
+        self.webView = webView
+        #if canImport(UIKit)
+        let name = UIApplication.didBecomeActiveNotification
+        #else
+        let name = NSApplication.didBecomeActiveNotification
+        #endif
+        observers.append(NotificationCenter.default.addObserver(
+            forName: name, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pull() }
+        })
+    }
+
+    deinit {
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func pull() {
+        webView?.callAsyncJavaScript(
+            "return window.native && window.native.badgeCount ? await window.native.badgeCount() : null;",
+            arguments: [:],
+            in: nil,
+            in: .page
+        ) { result in
+            if case .success(let value) = result {
+                BadgeController.shared.apply(value as? Int)
+            }
+        }
+    }
+}
+
+/// Pushes changed Inbox mode settings into a running page, the way the Safari
+/// extension's storage listener does for its tabs. Any writer counts — the
+/// macOS Settings window, the iOS Settings app — because both land in
+/// UserDefaults. Coming back from the iOS Settings app is covered separately:
+/// the defaults change while the app is suspended, so foregrounding pushes too.
+@MainActor
+final class InboxModeSettingsPusher {
+    private weak var webView: WKWebView?
+    // Written once in init, read again only from deinit — never concurrently
+    private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
+    private var pushTask: Task<Void, Never>?
+
+    init(webView: WKWebView) {
+        self.webView = webView
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.schedulePush() }
+        })
+        #if canImport(UIKit)
+        observers.append(center.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.schedulePush() }
+        })
+        #endif
+    }
+
+    deinit {
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    // Applying settings makes the page drop caches and re-ask the server for
+    // counts, so a keystroke-by-keystroke stream of changes is coalesced into
+    // one push once the writing pauses.
+    private func schedulePush() {
+        pushTask?.cancel()
+        pushTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            self?.webView?.evaluateJavaScript(
+                InboxModeSettings.applyScriptSource(),
+                completionHandler: nil
+            )
+        }
     }
 }

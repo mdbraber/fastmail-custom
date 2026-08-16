@@ -336,4 +336,86 @@ final class HarnessTests: XCTestCase {
         ) as? Bool
         XCTAssertEqual(impossible, false)
     }
+
+    private func currentLink(_ webView: WKWebView, prepare: String = "") async throws {
+        _ = try await evaluate(webView, """
+        window.__link = null; window.__linkError = null;
+        \(prepare)
+        window.native.currentLink().then(
+            function (r) { window.__link = r; },
+            function (e) { window.__linkError = e.message; }
+        );
+        true;
+        """)
+        try await waitUntil {
+            try await self.evaluate(
+                self.webView, "!!(window.__link || window.__linkError)"
+            ) as? Bool == true
+        }
+    }
+
+    func testCurrentLinkResolvesFromTheFixtureTitle() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await currentLink(webView)
+        let title = try await evaluate(webView, "window.__link && window.__link.title") as? String
+        XCTAssertEqual(title, "Welcome to Labels")
+        let markdown = try await evaluate(webView, "window.__link && window.__link.markdown") as? String
+        let url = try await evaluate(webView, "window.__link && window.__link.url") as? String
+        XCTAssertEqual(markdown, "[Welcome to Labels](\(url ?? ""))")
+    }
+
+    func testCurrentLinkCollapsesWhitespaceInTheSubject() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await currentLink(webView, prepare:
+            "document.querySelector('.v-Thread-title h1').textContent = '  A \\n  spaced   out\\tsubject ';"
+        )
+        let title = try await evaluate(webView, "window.__link && window.__link.title") as? String
+        XCTAssertEqual(title, "A spaced out subject")
+    }
+
+    func testCurrentLinkPrefersTheAssignedResolver() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await currentLink(webView, prepare:
+            "window.native.subjectResolver = function () { return 'Overridden'; };"
+        )
+        let title = try await evaluate(webView, "window.__link && window.__link.title") as? String
+        XCTAssertEqual(title, "Overridden")
+    }
+
+    func testCurrentLinkEscapesBracketsInMarkdown() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await currentLink(webView, prepare:
+            "window.native.subjectResolver = function () { return '[urgent] fix'; };"
+        )
+        let markdown = try await evaluate(webView, "window.__link && window.__link.markdown") as? String
+        XCTAssertEqual(markdown?.hasPrefix("[\\[urgent\\] fix]("), true)
+    }
+
+    func testCurrentLinkRejectsWhenNoMessageIsOpen() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await currentLink(webView, prepare:
+            "document.querySelector('.v-Thread').remove();"
+        )
+        let error = try await evaluate(webView, "window.__linkError") as? String
+        XCTAssertEqual(error, "No message open")
+    }
+
+    func testCurrentLinkFallsBackToTheFocusedRow() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await currentLink(webView, prepare: """
+        document.querySelector('.v-Thread').remove();
+        var row = document.createElement('div');
+        row.className = 'v-MailboxItem is-focused';
+        row.innerHTML = '<div class="v-MailboxItem-subject">Row subject</div>';
+        document.body.appendChild(row);
+        """)
+        let title = try await evaluate(webView, "window.__link && window.__link.title") as? String
+        XCTAssertEqual(title, "Row subject")
+    }
 }

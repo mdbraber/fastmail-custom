@@ -12,6 +12,13 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
     private let model: ShellModel
     private var lastURL: URL
     private let openExternally: @MainActor (URL) -> Void
+    // Keeps the settings observer alive exactly as long as the view exists
+    var settingsPusher: InboxModeSettingsPusher?
+    var sharePresenter: SharePresenter?
+    var badgePuller: BadgePuller?
+    #if !canImport(UIKit)
+    var commandRelay: CommandRelay?
+    #endif
 
     public init(
         model: ShellModel,
@@ -185,6 +192,120 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         }
         return false
     }
+
+    // MARK: JavaScript dialogs
+    //
+    // Fastmail asks through alert/confirm/prompt in a handful of flows —
+    // deleting a rule confirms first, for one. WKWebView renders none of
+    // them unless the UI delegate presents them itself; without these, a
+    // confirm() silently answers "no" and the action looks like it simply
+    // did not work.
+
+    public func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor () -> Void
+    ) {
+        #if canImport(UIKit)
+        guard let presenter = Self.topViewController(for: webView) else {
+            completionHandler()
+            return
+        }
+        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler() })
+        presenter.present(alert, animated: true)
+        #else
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.addButton(withTitle: "OK")
+        if let window = webView.window {
+            alert.beginSheetModal(for: window) { _ in completionHandler() }
+        } else {
+            _ = alert.runModal()
+            completionHandler()
+        }
+        #endif
+    }
+
+    public func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor (Bool) -> Void
+    ) {
+        #if canImport(UIKit)
+        guard let presenter = Self.topViewController(for: webView) else {
+            completionHandler(false)
+            return
+        }
+        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(false) })
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler(true) })
+        presenter.present(alert, animated: true)
+        #else
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        if let window = webView.window {
+            alert.beginSheetModal(for: window) { response in
+                completionHandler(response == .alertFirstButtonReturn)
+            }
+        } else {
+            completionHandler(alert.runModal() == .alertFirstButtonReturn)
+        }
+        #endif
+    }
+
+    public func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor (String?) -> Void
+    ) {
+        #if canImport(UIKit)
+        guard let presenter = Self.topViewController(for: webView) else {
+            completionHandler(nil)
+            return
+        }
+        let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
+        alert.addTextField { $0.text = defaultText }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(nil) })
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak alert] _ in
+            completionHandler(alert?.textFields?.first?.text ?? "")
+        })
+        presenter.present(alert, animated: true)
+        #else
+        let alert = NSAlert()
+        alert.messageText = prompt
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        field.stringValue = defaultText ?? ""
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        let finish: @MainActor (NSApplication.ModalResponse) -> Void = { response in
+            completionHandler(response == .alertFirstButtonReturn ? field.stringValue : nil)
+        }
+        if let window = webView.window {
+            alert.beginSheetModal(for: window, completionHandler: finish)
+        } else {
+            finish(alert.runModal())
+        }
+        #endif
+    }
+
+    #if canImport(UIKit)
+    private static func topViewController(for webView: WKWebView) -> UIViewController? {
+        var top = webView.window?.rootViewController
+        while let presented = top?.presentedViewController {
+            top = presented
+        }
+        return top
+    }
+    #endif
 
     nonisolated static func refusalBanner(for url: URL) -> String {
         guard let scheme = url.scheme else { return "Refused to open a link" }

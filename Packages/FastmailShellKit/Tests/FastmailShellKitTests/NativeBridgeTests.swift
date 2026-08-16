@@ -52,6 +52,54 @@ import Foundation
     #expect(NativeBridge.normalizedHost("") == "")
 }
 
+@Test func shareWithNeitherURLNorTextProducesAnError() async {
+    let bridge = await NativeBridge(expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in })
+    let empty = await bridge.handle(body: ["action": "share", "payload": [:]])
+    #expect(empty.error != nil)
+    let blank = await bridge.handle(body: ["action": "share", "payload": ["text": ""]])
+    #expect(blank.error != nil)
+}
+
+@Test @MainActor func shareRepliesOnceThePresenterCompletes() async {
+    var received: ShareRequest?
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onShare: { request in
+            received = request
+            request.completion()
+        }
+    )
+    let reply = await bridge.handle(body: [
+        "action": "share",
+        "payload": [
+            "url": "https://app.fastmail.com/mail/Inbox/",
+            "text": "Subject line",
+            "rect": ["x": 10.0, "y": 20.0, "width": 30.0, "height": 40.0]
+        ]
+    ])
+    #expect(reply.error == nil)
+    #expect(received?.url?.absoluteString == "https://app.fastmail.com/mail/Inbox/")
+    #expect(received?.text == "Subject line")
+    #expect(received?.sourceRect == CGRect(x: 10, y: 20, width: 30, height: 40))
+    #expect(received?.items.count == 2)
+}
+
+@Test func domRectParsingAcceptsBothNamingsAndRefusesEmpty() {
+    #expect(
+        NativeBridge.rect(fromDOMRect: ["x": 1.0, "y": 2.0, "width": 3.0, "height": 4.0]) ==
+        CGRect(x: 1, y: 2, width: 3, height: 4)
+    )
+    #expect(
+        NativeBridge.rect(fromDOMRect: ["left": 5, "top": 6, "width": 7, "height": 8]) ==
+        CGRect(x: 5, y: 6, width: 7, height: 8)
+    )
+    #expect(NativeBridge.rect(fromDOMRect: ["x": 1.0, "y": 2.0, "width": 0.0, "height": 4.0]) == nil)
+    #expect(NativeBridge.rect(fromDOMRect: ["x": 1.0, "y": 2.0]) == nil)
+    #expect(NativeBridge.rect(fromDOMRect: nil) == nil)
+}
+
 actor Recorder {
     var logs: [String] = []
     var errors: [String] = []

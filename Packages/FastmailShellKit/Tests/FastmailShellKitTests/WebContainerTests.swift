@@ -31,7 +31,8 @@ private let nonMatchingHeader = """
     let container = WebContainer(profile: profile, model: model, loader: loader)
     let coordinator = WebCoordinator(model: model, startURL: profile.startURL)
     let webView = container.makeWebView(coordinator: coordinator)
-    #expect(webView.configuration.userContentController.userScripts.count == 1)
+    // Settings bootstrap + harness; the non-matching userscript stays out
+    #expect(webView.configuration.userContentController.userScripts.count == 2)
     var attempts = 0
     while model.banner == nil && attempts < 50 {
         await Task.yield()
@@ -63,8 +64,11 @@ private let nonMatchingHeader = """
     let container = WebContainer(profile: profile, model: model, loader: loader)
     let coordinator = WebCoordinator(model: model, startURL: profile.startURL)
     let webView = container.makeWebView(coordinator: coordinator)
-    #expect(webView.configuration.userContentController.userScripts.count == 2)
+    // Settings bootstrap + harness + the matching userscript
+    #expect(webView.configuration.userContentController.userScripts.count == 3)
     #expect(model.banner == nil)
+    let first = webView.configuration.userContentController.userScripts[0]
+    #expect(first.source.hasPrefix("window.__customInboxModeSettings = {"))
 }
 
 @Test @MainActor func loadURLDefaultsToTheProfileStartURL() {

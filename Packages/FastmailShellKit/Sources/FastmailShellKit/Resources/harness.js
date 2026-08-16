@@ -163,6 +163,7 @@
             pending = setTimeout(function () {
                 pending = null;
                 notifyRoute();
+                scheduleBadgePush();
             }, 100);
         });
         function observe() {
@@ -179,6 +180,151 @@
         report: report
     };
 
+    function collapse(text) {
+        return String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+    }
+
+    function mailController() {
+        var fm = window.FastMail;
+        if (!fm || !fm.router || typeof fm.router.getAppController !== 'function') return null;
+        try {
+            return fm.router.getAppController('mail');
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function stateSubject() {
+        var controller = mailController();
+        if (!controller || typeof controller.get !== 'function') return null;
+        var message = null;
+        try {
+            message = controller.get('message');
+        } catch (error) {
+            return null;
+        }
+        if (!message) return null;
+        var subject = controller.get('subject');
+        if (!subject && typeof message.get === 'function') subject = message.get('subject');
+        return collapse(subject) || null;
+    }
+
+    function stateURL() {
+        var controller = mailController();
+        if (!controller || typeof controller.getUrlForMessage !== 'function') return null;
+        try {
+            var message = controller.get('message');
+            if (!message) return null;
+            var url = controller.getUrlForMessage(message);
+            return url ? String(new URL(url, location.href)) : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function domSubject() {
+        var node = document.querySelector('.v-Thread-title h1') ||
+            document.querySelector('.v-MailboxItem.is-focused .v-MailboxItem-subject');
+        return node ? (collapse(node.textContent) || null) : null;
+    }
+
+    var menuItems = [];
+    var menuPatchInstalled = false;
+
+    function iconNode(svg) {
+        try {
+            var parsed = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
+            parsed.setAttribute('role', 'presentation');
+            return parsed;
+        } catch (error) {
+            return undefined;
+        }
+    }
+
+    function isMessageActionsMenu(options) {
+        var reply = false;
+        var forward = false;
+        for (var i = 0; i < options.length; i += 1) {
+            var option = options[i];
+            if (!option || typeof option.get !== 'function') continue;
+            var action = option.get('action');
+            if (action === 'reply') reply = true;
+            if (action === 'forward') forward = true;
+        }
+        return reply && forward;
+    }
+
+    function injectMenuItems(menu) {
+        if (!menuItems.length) return;
+        var options = menu && typeof menu.get === 'function' && menu.get('options');
+        if (!options || typeof options.unshift !== 'function') return;
+        if (!isMessageActionsMenu(options)) return;
+        if (options.some(function (option) { return option && option.__fmshellItem; })) return;
+
+        var ButtonView = window.FastMail.classes.ButtonView;
+        var added = [];
+        menuItems.forEach(function (item) {
+            var button = new ButtonView({
+                label: item.label,
+                icon: item.icon ? iconNode(item.icon) : undefined,
+                method: 'chooseItem',
+                chooseItem: function () {
+                    var layer = null;
+                    try {
+                        layer = this.get('layer');
+                    } catch (error) {}
+                    var rect = layer && layer.getBoundingClientRect
+                        ? layer.getBoundingClientRect() : null;
+                    try {
+                        item.onSelect({ rect: rect });
+                    } catch (error) {
+                        report(error);
+                    }
+                }
+            });
+            button.__fmshellItem = item.id;
+            added.push(button);
+        });
+        added.push(null);
+        options.unshift.apply(options, added);
+    }
+
+    function installMenuInjection() {
+        if (menuPatchInstalled) return true;
+        var fm = window.FastMail;
+        var MenuView = fm && fm.classes && fm.classes.MenuView;
+        var ButtonView = fm && fm.classes && fm.classes.ButtonView;
+        if (!MenuView || !ButtonView || !MenuView.prototype ||
+            typeof MenuView.prototype.draw !== 'function') return false;
+
+        var original = MenuView.prototype.draw;
+        MenuView.prototype.draw = function () {
+            try {
+                injectMenuItems(this);
+            } catch (error) {
+                report(error);
+            }
+            return original.apply(this, arguments);
+        };
+        menuPatchInstalled = true;
+        return true;
+    }
+
+    function watchMenus() {
+        var attempts = 0;
+        (function poll() {
+            if (installMenuInjection() || attempts >= 120) return;
+            attempts += 1;
+            window.setTimeout(poll, 250);
+        })();
+    }
+
+    var SHARE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"' +
+        ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"' +
+        ' stroke-linejoin="round" class="u-standardicon v-Icon">' +
+        '<path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/>' +
+        '<polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
+
     window.native = window.native || {};
     window.native.log = function () {
         var parts = Array.prototype.slice.call(arguments).map(String);
@@ -187,6 +333,149 @@
     window.native.onRoute = function (callback) {
         window.__fmshell.onRoute(callback);
     };
+    window.native.share = function (options) {
+        options = options || {};
+        var payload = { url: options.url || null, text: options.text || null };
+        var rect = options.rect;
+        if (rect) {
+            payload.rect = {
+                x: rect.x !== undefined ? rect.x : rect.left,
+                y: rect.y !== undefined ? rect.y : rect.top,
+                width: rect.width,
+                height: rect.height
+            };
+        }
+        return post('share', payload);
+    };
+    window.native.subjectResolver = null;
+    window.native.currentLink = function () {
+        return new Promise(function (resolve, reject) {
+            var title = null;
+            var resolver = window.native.subjectResolver;
+            if (typeof resolver === 'function') {
+                try {
+                    title = collapse(resolver()) || null;
+                } catch (error) {
+                    report(error);
+                }
+            }
+            if (!title) title = stateSubject();
+            if (!title) title = domSubject();
+            if (!title) {
+                reject(new Error('No message open'));
+                return;
+            }
+            var url = stateURL() || location.href;
+            resolve({
+                url: url,
+                title: title,
+                markdown: '[' + title.replace(/([\[\]\\])/g, '\\$1') + '](' + url + ')'
+            });
+        });
+    };
+
+    var lastBadge = null;
+    var badgePushTimer = null;
+
+    function badgeFromScript() {
+        var api = window.customInboxMode;
+        var fm = window.FastMail;
+        if (!api || typeof api.isOn !== 'function' || !api.isOn() ||
+            typeof api.countFor !== 'function') return null;
+        if (!fm || !fm.store || !fm.classes || !fm.classes.Mailbox) return null;
+        try {
+            var inboxes = fm.store.getAll(fm.classes.Mailbox).filter(function (mailbox) {
+                return mailbox.get('role') === 'inbox';
+            });
+            if (!inboxes.length) return null;
+            var total = 0;
+            inboxes.forEach(function (inbox) {
+                total += api.countFor(inbox) || 0;
+            });
+            return total;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function badgeFromSidebar() {
+        var rows = document.querySelectorAll('.v-MailboxSource--inbox');
+        if (!rows.length) return null;
+        var total = 0;
+        for (var i = 0; i < rows.length; i += 1) {
+            var badge = rows[i].querySelector('.v-MailboxSource-badge');
+            var count = badge ? parseInt(badge.textContent, 10) : 0;
+            if (!isNaN(count)) total += count;
+        }
+        return total;
+    }
+
+    function badgeCount() {
+        var resolver = window.native.badgeResolver;
+        if (typeof resolver === 'function') {
+            try {
+                var resolved = resolver();
+                return typeof resolved === 'number' && isFinite(resolved) ? resolved : null;
+            } catch (error) {
+                report(error);
+                return null;
+            }
+        }
+        var fromScript = badgeFromScript();
+        return fromScript !== null ? fromScript : badgeFromSidebar();
+    }
+
+    function scheduleBadgePush() {
+        if (badgePushTimer) return;
+        badgePushTimer = setTimeout(function () {
+            badgePushTimer = null;
+            var count = badgeCount();
+            if (count === null || count === lastBadge) return;
+            lastBadge = count;
+            post('badge', { count: count });
+        }, 500);
+    }
+
+    window.native.addMenuItem = function (item) {
+        if (!item || typeof item.id !== 'string' || !item.id ||
+            typeof item.label !== 'string' || !item.label ||
+            typeof item.onSelect !== 'function') {
+            throw new TypeError('addMenuItem needs { id, label, onSelect }');
+        }
+        if (menuItems.some(function (existing) { return existing.id === item.id; })) return;
+        menuItems.push({
+            id: item.id,
+            label: item.label,
+            icon: typeof item.icon === 'string' ? item.icon : null,
+            onSelect: item.onSelect
+        });
+        installMenuInjection();
+    };
+
+    window.native.badgeResolver = null;
+    window.native.setBadge = function (count) {
+        if (typeof count !== 'number' || !isFinite(count)) return Promise.resolve(null);
+        lastBadge = count;
+        return post('badge', { count: count });
+    };
+    window.native.badgeCount = function () {
+        return Promise.resolve(badgeCount());
+    };
+
+    window.native.addMenuItem({
+        id: 'share',
+        label: 'Share',
+        icon: SHARE_ICON,
+        onSelect: function (context) {
+            window.native.currentLink().then(function (link) {
+                return window.native.share({
+                    url: link.url,
+                    text: link.title,
+                    rect: context && context.rect
+                });
+            }).catch(function () {});
+        }
+    });
 
     window.addEventListener('error', function (event) {
         if (!event.error && event.message === 'Script error.') {
@@ -202,4 +491,5 @@
     installRouteHooks();
     watchTheme();
     watchDragRegions();
+    watchMenus();
 })();

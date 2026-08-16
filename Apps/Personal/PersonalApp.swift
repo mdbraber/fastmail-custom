@@ -11,6 +11,7 @@ struct PersonalApp: App {
         }
         #if os(macOS)
         .windowStyle(.hiddenTitleBar)
+        .commands { ShellCommands() }
         #endif
         #if os(macOS)
         Settings {
