@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.28
+// @version      2.29
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, actionable is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -101,8 +101,7 @@ other user label is a topic.
 
     // Keystroke that toggles Inbox mode
     const SHORTCUT = 'Shift-I';
-    // 1 … 9 and 0 go to the sources listed above the Labels heading, and the key
-    // left of 1 cycles the labels.
+    // 1 … 9 and 0 go to the sources listed above the Labels heading.
     //
     // Cmd is the one to reach for, but Safari keeps Cmd-1 … Cmd-9 for its tabs
     // and never lets the page see the number at all — pressing Cmd-1 delivers
@@ -114,10 +113,9 @@ other user label is a topic.
 
     // Option shortcuts are matched on the physical key rather than the
     // character, because Option is what a Mac keyboard uses to reach a second
-    // layer: Option-1 is not "1" but ¡ or similar, and on this layout Option
-    // and the key left of 1 is a dead key, waiting to accent whatever follows.
-    // Neither is something a shortcut can be named after, and the answer would
-    // change with the layout. The code does not.
+    // layer: Option-1 is not "1" but ¡ or similar — nothing a shortcut can be
+    // named after, and the answer would change with the layout. The code
+    // does not.
     //
     // Digit0 comes last, so the row reads 1 … 9, 0 as it does on the keyboard.
     const OPTION_SOURCE_CODES = [
@@ -125,12 +123,6 @@ other user label is a topic.
         'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'
     ];
 
-    // The key left of 1: IntlBackslash on this keyboard, Backquote on others
-    const OPTION_CYCLE_CODES = ['IntlBackslash', 'Backquote'];
-    // Cycle through the inboxes. On an ISO keyboard Shift-§ can arrive as ±,
-    // depending on layout, so both spellings are bound to the same step.
-    const NEXT_INBOX_SHORTCUT = 'Meta-§';
-    const PREV_INBOX_SHORTCUTS = ['Meta-Shift-§', 'Meta-Shift-±'];
     // Where the on/off state is remembered across reloads
     const STORAGE_KEY = 'custom-inbox-mode';
     // Where each label's own filter choice is remembered, by mailbox id
@@ -152,11 +144,6 @@ other user label is a topic.
     const SOURCE_SEPARATOR_CLASS = 'custom-sourceSeparator';
     // Goes on the sidebar when the only section drawn is this account's own
     const LONE_SECTION_CLASS = 'custom-loneSection';
-    // Carries an inbox search's count. An attribute rather than an element:
-    // SearchSourceView.redrawIsSelected ends with removeChild(link.lastChild),
-    // so a badge appended there is eaten the moment the row is deselected —
-    // which is what forced the old script to disable that method outright.
-    const SEARCH_COUNT_ATTR = 'data-custom-count';
     // Opens the Move to menu: v narrowed to the sidebar and adding rather than
     // moving, Option-V as it comes. Option-V is matched on the physical key,
     // because on a Mac the character Option produces is not "v".
@@ -325,7 +312,16 @@ other user label is a topic.
     // Which labels those are is a rule of yours, like the triage label, so it is
     // named rather than worked out. Order matters: the first named wins when a
     // message carries more than one.
+    //
+    // Asked for every option a picker filters and every row a rule colours,
+    // so the parse is kept until the settings that feed it change.
+    let qualifierCache = null;
+
     const qualifierPaths = () => {
+        const key = [settings.qualifierLabels, settings.waitingLabel,
+            settings.somedayLabel].join('\u0000');
+        if (qualifierCache && qualifierCache.key === key) return qualifierCache.paths;
+
         const named = String(settings.qualifierLabels || '')
             .split(',')
             .map(part => part.trim())
@@ -341,6 +337,7 @@ other user label is a topic.
             }
         });
 
+        qualifierCache = { key: key, paths: named };
         return named;
     };
 
@@ -351,11 +348,21 @@ other user label is a topic.
 
     // Labels struck from the topic set by name — Later holds mail, it does
     // not file it — a rule of yours like the qualifiers, so it is named
-    // rather than worked out.
-    const excludedPaths = () => String(settings.excludedLabels || '')
-        .split(',')
-        .map(part => part.trim())
-        .filter(Boolean);
+    // rather than worked out. Memoized like the qualifiers, for the same
+    // callers.
+    let excludedCache = null;
+
+    const excludedPaths = () => {
+        const key = String(settings.excludedLabels || '');
+        if (excludedCache && excludedCache.key === key) return excludedCache.paths;
+
+        const paths = key.split(',')
+            .map(part => part.trim())
+            .filter(Boolean);
+
+        excludedCache = { key: key, paths: paths };
+        return paths;
+    };
 
     const isExcludedLabel = (mailbox) => {
         const path = mailboxPath(mailbox).toLowerCase();
@@ -718,7 +725,6 @@ other user label is a topic.
         badgeTimer = setTimeout(() => {
             badgeTimer = null;
             repaintBadges();
-            dressInboxSearches();
             pushAppBadge();
 
             // The heading shares the badge queries, but none of its own
@@ -939,131 +945,6 @@ other user label is a topic.
     };
 
     const goToSourceAt = (index) => selectSource(sourcesAboveLabels()[index]);
-
-    // An inbox is a saved search over one label: `in:Admin`, or `in:Inbox
-    // in:Admin` — which half carries the Inbox depends on how the search was
-    // written and on whether the route is scoping it, and both say the same
-    // thing. So an `in:inbox` term is read and discarded, and what is left has
-    // to be exactly one label for the search to stand for an inbox.
-    //
-    // Returns the label's path, or null for a search that is a search like any
-    // other: `has:memo` names no label, `in:a in:b` names two.
-    const searchLabelPath = (search) => {
-        const terms = String(search || '').trim().split(/\s+/).filter(Boolean);
-        const paths = [];
-
-        for (let i = 0; i < terms.length; i += 1) {
-            // A term taken away narrows the search without saying what it is
-            // about: `in:Inbox in:Triage -in:Snoozed` is still the triage
-            // inbox, minus what is asleep. So exclusions are read and skipped.
-            if (terms[i].charAt(0) === '-') continue;
-
-            const named = /^in:(.+)$/i.exec(terms[i]);
-            if (!named) return null;
-
-            // Fastmail quotes a path with a space in it
-            const path = named[1].replace(/^["']|["']$/g, '');
-            if (path.toLowerCase() !== 'inbox') paths.push(path);
-        }
-
-        return paths.length === 1 ? paths[0] : null;
-    };
-
-    // Matched on the full path, so a nested label works, and case-insensitively,
-    // because what you typed into the search is not necessarily how the label is
-    // capitalised.
-    const labelByPath = (path) => {
-        const wanted = String(path || '').toLowerCase();
-        if (!wanted) return null;
-
-        return FastMail.store.getAll(FastMail.classes.Mailbox)
-            .filter(m => isUserLabel(m) && mailboxPath(m).toLowerCase() === wanted)[0] || null;
-    };
-
-    // Which label a search belongs to. Its query names one — `in:Admin` — or,
-    // when the query is not about a label at all, its own name does: the pinned
-    // inbox is a saved search called Urgent asking for `is:pinned`, and the
-    // Urgent label is what says what colour it is drawn in.
-    //
-    // Name second, not first, so a search called one thing and asking for
-    // another is drawn as what it asks for.
-    const labelForSearch = (search, name) =>
-        labelByPath(searchLabelPath(search)) || labelByPath(name);
-
-    // The pinned inbox asks by keyword rather than by label, so its tally is
-    // its own. `in:pinned` is the same question written the other way.
-    const PINNED_SEARCH = /^\s*(is|in):pinned\s*$/i;
-
-    const isPinnedSearch = (search) => PINNED_SEARCH.test(
-        String(search || '').replace(/\bin:inbox\b/i, '').trim());
-
-    // Everything that counts as an inbox: the Inbox itself, and each saved
-    // search that stands for one. They are rows of two different kinds in one
-    // list, so both are read from the drawn rows in document order — which puts
-    // the Inbox wherever you have put it, rather than at an end this decides on.
-    //
-    // A label with no search of its own is not here. The searches are the
-    // inboxes now, and a label may not be in the sidebar at all.
-    const inboxSources = () => {
-        const found = [];
-
-        document.querySelectorAll('.v-MailboxSource, .v-SearchSource').forEach((el) => {
-            const view = FastMail.getViewFromNode(el);
-            const content = view && typeof view.get === 'function' ? view.get('content') : null;
-            if (!content || typeof content.get !== 'function') return;
-
-            if (el.matches('.v-SearchSource')) {
-                const query = content.get('search');
-                const label = labelForSearch(query, content.get('name'));
-
-                if (label) found.push({ source: content, label, query });
-                return;
-            }
-
-            if (content.get('role') === 'inbox') {
-                found.push({ source: content, label: null, query: '' });
-            }
-        });
-
-        return found;
-    };
-
-    // Where you are is read from the label the current search names rather than
-    // from the search text: the controller reports `in:Inbox in:Admin` for a
-    // search saved as `in:Admin`, so the two never match as strings. And it
-    // reports the Inbox as the mailbox for every one of these searches, so the
-    // Inbox proper is only where you are when there is no search at all.
-    const currentInboxIndex = (inboxes) => {
-        const search = controller().get('search');
-
-        if (search) {
-            // The pinned inbox names no label, so it is found by the question
-            // it asks rather than by what it is drawn as
-            if (isPinnedSearch(search)) {
-                return inboxes.findIndex(entry => isPinnedSearch(entry.query));
-            }
-
-            const here = labelByPath(searchLabelPath(search));
-            return here ? inboxes.findIndex(entry => entry.label === here) : -1;
-        }
-
-        const mailbox = controller().get('mailbox');
-        return inboxes.findIndex(entry => !entry.label && entry.source === mailbox);
-    };
-
-    const cycleInboxes = (step) => {
-        const inboxes = inboxSources();
-        if (!inboxes.length) return;
-
-        const index = currentInboxIndex(inboxes);
-
-        // Coming from somewhere that is not an inbox, enter at the near end
-        const next = index === -1
-            ? (step > 0 ? inboxes[0] : inboxes[inboxes.length - 1])
-            : inboxes[(index + step + inboxes.length) % inboxes.length];
-
-        selectSource(next.source);
-    };
 
     /*
      * ----------------------------------------------------------------
@@ -1304,19 +1185,6 @@ other user label is a topic.
         `.${LONE_SECTION_CLASS} .v-Sources-expando { display: none; }`
     ];
 
-    // A saved search that stands for an inbox counts what is in it, the way a
-    // mailbox row does. Drawn from the attribute, so there is no element for
-    // Fastmail to lose track of; sized and weighted to match the badge on the
-    // rows above it, and absent rather than zero, as Fastmail's own are.
-    // The attribute goes on the link rather than the row, because attr() reads
-    // the element the pseudo belongs to and nothing above it.
-    const SEARCH_BADGE_RULES = [
-        `.v-SearchSource a[${SEARCH_COUNT_ATTR}]::after {` +
-        ` content: attr(${SEARCH_COUNT_ATTR}); margin-left: 4px;` +
-        ' font-weight: 700; font-variant-numeric: tabular-nums;' +
-        ' color: inherit; pointer-events: none; }'
-    ];
-
     // The bar's Pin while the open conversation is pinned: the same pair of
     // theme variables Fastmail's own list rule paints a pinned row's pin
     // with, so the two read as one state in either theme. The colour sits on
@@ -1473,7 +1341,6 @@ other user label is a topic.
             .concat(labelColourRules())
             .concat(sourceSeparatorRules())
             .concat(LONE_SECTION_RULES)
-            .concat(SEARCH_BADGE_RULES)
             .concat(PIN_STATE_RULES)
             .concat(BADGE_UNREAD_RULES)
             .concat(TOAST_RULES)
@@ -2070,16 +1937,24 @@ other user label is a topic.
             // The order is the setting's, stated once rather than arrived at
             // by nudging one past another. Each is taken out and put back
             // against More in turn, which lands them in exactly this order
-            // from whatever order they were in — and lands them there again
-            // on a second pass, which a sequence of relative moves would
-            // not. Anything not found is skipped.
-            slotNames.forEach((name) => {
-                const view = onBar(SLOT_KINDS[name].test);
-                if (!view) return;
+            // from whatever order they were in. Skipped when the bar already
+            // reads that way: this runs on every rebuilt bar and every
+            // resize, and pulling views through the DOM to land them where
+            // they already stand is churn a redraw can notice.
+            const wanted = slotNames
+                .map(name => onBar(SLOT_KINDS[name].test))
+                .filter(Boolean);
+            const bar = toolbar.get('childViews') || [];
+            const moreAt = bar.indexOf(overflow);
+            const inOrder = moreAt >= wanted.length && wanted.every(
+                (view, index) => bar[moreAt - wanted.length + index] === view);
 
-                toolbar.removeView(view);
-                toolbar.insertView(view, overflow, 'before');
-            });
+            if (!inOrder) {
+                wanted.forEach((view) => {
+                    toolbar.removeView(view);
+                    toolbar.insertView(view, overflow, 'before');
+                });
+            }
 
             // The stock button carries `flag`, which only ever sets: in More
             // it could be rebuilt to say Unpin, but lifted onto the bar it
@@ -2120,7 +1995,9 @@ other user label is a topic.
                 });
 
             // More reads in the list's order too: the known verbs are
-            // pulled out and re-appended in sequence, after Fastmail's own
+            // pulled out and re-appended in sequence, after Fastmail's own.
+            // Written back only when that moves something — a fresh array on
+            // every pass would redraw a menu that already reads correctly.
             const moreNow = menu.get('options') || [];
             const ordered = [];
             named.forEach((name) => {
@@ -2128,9 +2005,12 @@ other user label is a topic.
                 if (view) ordered.push(view);
             });
             if (ordered.length) {
-                menu.set('options', moreNow
+                const reordered = moreNow
                     .filter(option => ordered.indexOf(option) === -1)
-                    .concat(ordered));
+                    .concat(ordered);
+                if (reordered.some((option, index) => option !== moreNow[index])) {
+                    menu.set('options', reordered);
+                }
             }
 
             const current = menu.get('options') || [];
@@ -4658,7 +4538,6 @@ other user label is a topic.
             // A row appearing or leaving moves where one kind gives way to
             // the next
             if (sidebarDrawn) {
-                dressInboxSearches();
                 markSourceGroups();
                 dressSourceSections();
             }
@@ -4667,7 +4546,6 @@ other user label is a topic.
         observer.observe(app, { childList: true, subtree: true });
         labelObserver = { root: app, observer: observer };
         stripLabelsIn(app);
-        dressInboxSearches();
         markSourceGroups();
         dressSourceSections();
         if (FastMail.isMobile) {
@@ -4690,7 +4568,7 @@ other user label is a topic.
     const FILTER_ICON_POINTS = '19.75 5.03 4.25 5.03 10.45 12.36 10.45 17.43' +
         ' 13.55 18.98 13.55 12.36 19.75 5.03';
 
-    const filterGlyph = (existing, keepColour) => {
+    const filterGlyph = (existing) => {
         const svg = document.createElementNS(SVG_NS, 'svg');
 
         svg.setAttribute('viewBox', '0 0 24 24');
@@ -4709,117 +4587,11 @@ other user label is a topic.
 
         svg.setAttribute('class', classes.concat(FILTER_ICON_CLASS).join(' '));
 
-        // Fastmail writes two things into the icon's inline style: `color`, the
-        // label's own colour, and `fill`, a pale wash of it. Only the first is
-        // wanted. Taking the whole style filled the funnel with the wash —
-        // inline style beats the fill attribute above — and turned a stroked
-        // glyph into a solid one.
-        //
-        // In the sidebar the label's colour is the point, so it is kept. On the
-        // toolbar button there is no label to borrow from, and pinning a colour
-        // there stops is-active showing the accent when the mode is on, so it
-        // is left to follow currentColor.
-        const colour = keepColour && existing.style && existing.style.color;
-        if (colour) svg.style.color = colour;
-
         const shape = document.createElementNS(SVG_NS, 'polygon');
         shape.setAttribute('points', FILTER_ICON_POINTS);
         svg.appendChild(shape);
 
         return svg;
-    };
-
-    // A saved search that stands for an inbox is an inbox, so it wears the
-    // Inbox's own icon rather than the magnifying glass every other search gets.
-    // Fastmail's own path, taken from a drawn Inbox row, and the same two
-    // properties its redrawIcon copies — foregroundColor onto `color`, which
-    // strokes the glyph, and backgroundColor onto `fill`, the pale wash inside
-    // it. So each inbox is drawn in the colour of the label it stands for.
-    //
-    // Nothing here has to be kept in step afterwards: SearchSourceView has no
-    // `_icon` of its own and no redrawIcon, so there is no pointer to leave
-    // dangling, and its redrawIsSelected only ever touches the link's last
-    // child while the icon is its first.
-    const INBOX_ICON_CLASS = 'custom-inboxIcon';
-    const INBOX_ICON_PATH = 'M3.75 13.2727H7.01567C7.73679 13.2727 8.39602 13.6813' +
-        ' 8.71852 14.328L8.93533 14.7629C9.25782 15.4096 9.91706 15.8182 10.6382' +
-        ' 15.8182H13.3618C14.0829 15.8182 14.7422 15.4096 15.0647 14.7629L15.2815' +
-        ' 14.328C15.604 13.6813 16.2632 13.2727 16.9843 13.2727H20.25M3.75' +
-        ' 13.5598V17.0909C3.75 18.1453 4.60238 19 5.65385 19H18.3462C19.3976 19' +
-        ' 20.25 18.1453 20.25 17.0909V13.5598C20.25 13.3695 20.2216 13.1802' +
-        ' 20.1658 12.9984L18.1251 6.34765C17.8793 5.54662 17.1412 5 16.3054' +
-        ' 5H7.69459C6.8588 5 6.12073 5.54662 5.87494 6.34765L3.83419' +
-        ' 12.9984C3.77838 13.1802 3.75 13.3695 3.75 13.5598Z';
-
-    const inboxGlyph = (existing) => {
-        const svg = document.createElementNS(SVG_NS, 'svg');
-
-        svg.setAttribute('viewBox', '0 0 24 24');
-        svg.setAttribute('role', 'presentation');
-
-        // i-search is what Fastmail hangs the magnifying glass off, and this is
-        // no longer that icon; i-inbox is what it hangs this one off, so the
-        // stroke and weight come out identical to a real Inbox row.
-        const classes = (existing.getAttribute('class') || '')
-            .split(/\s+/)
-            .filter(name => name && name.indexOf('i-') !== 0);
-
-        svg.setAttribute('class', classes.concat(['i-inbox', INBOX_ICON_CLASS]).join(' '));
-
-        const shape = document.createElementNS(SVG_NS, 'path');
-        shape.setAttribute('d', INBOX_ICON_PATH);
-        svg.appendChild(shape);
-
-        return svg;
-    };
-
-    // The colour is written on every pass rather than only when the glyph is
-    // first put on: recolouring a label changes nothing about the row, so there
-    // would otherwise be nothing to notice it.
-    const tintInboxGlyph = (svg, label) => {
-        const foreground = label.get('foregroundColor') || label.get('color') || '';
-        const background = label.get('backgroundColor') || '';
-
-        svg.style.color = foreground;
-        svg.style.fill = background;
-    };
-
-    const dressInboxSearches = () => {
-        document.querySelectorAll('.v-SearchSource').forEach((el) => {
-            const view = FastMail.getViewFromNode(el);
-            const search = view && typeof view.get === 'function' ? view.get('content') : null;
-            if (!search || typeof search.get !== 'function') return;
-
-            const query = search.get('search');
-            const label = labelForSearch(query, search.get('name'));
-            if (!label) return;
-
-            const icon = el.querySelector('a svg');
-            if (!icon) return;
-
-            const glyph = icon.classList.contains(INBOX_ICON_CLASS)
-                ? icon
-                : inboxGlyph(icon);
-
-            if (glyph !== icon) icon.replaceWith(glyph);
-            tintInboxGlyph(glyph, label);
-
-            // The count, when asked for, is the label's exact actionable
-            // count — the same primed query its sidebar badge reads, so the
-            // two can never disagree. The pinned search asks by keyword and
-            // gets no number.
-            const count = modeIsOn && settings.showFilteredCounts &&
-                    !isPinnedSearch(query)
-                ? exactLength(badgeQueryFor(label, DEFAULT_FILTER, false))
-                : null;
-            const link = el.querySelector('a');
-
-            if (link && count) {
-                link.setAttribute(SEARCH_COUNT_ATTR, String(count));
-            } else if (link) {
-                link.removeAttribute(SEARCH_COUNT_ATTR);
-            }
-        });
     };
 
     // The sidebar runs the system folders, the labels and the saved searches
@@ -5029,7 +4801,6 @@ other user label is a topic.
         repaintBadges();
         pushAppBadge();
         dropStaleChips();
-        dressInboxSearches();
         markSourceGroups();
         dressSourceSections();
         watchLabels();
@@ -5151,16 +4922,10 @@ other user label is a topic.
             }
 
             const source = OPTION_SOURCE_CODES.indexOf(event.code);
-            if (source !== -1) {
-                event.preventDefault();
-                goToSourceAt(source);
-                return;
-            }
-
-            if (OPTION_CYCLE_CODES.indexOf(event.code) === -1) return;
+            if (source === -1) return;
 
             event.preventDefault();
-            cycleInboxes(event.shiftKey ? -1 : 1);
+            goToSourceAt(source);
         }, true);
     };
 
@@ -5416,8 +5181,6 @@ other user label is a topic.
         }
 
         bindOptionShortcuts();
-        shortcut(NEXT_INBOX_SHORTCUT, () => cycleInboxes(1));
-        PREV_INBOX_SHORTCUTS.forEach(key => shortcut(key, () => cycleInboxes(-1)));
         addObservers();
 
         // On a fresh load, apply the filter only if the mode is on: with it off
@@ -5436,7 +5199,6 @@ other user label is a topic.
             listQueries: () => listQueries,
             sourcesAboveLabels,
             goToSourceAt,
-            cycleInboxes,
             filters: () => rememberedFilters,
             forgetFilters: () => { rememberedFilters = {}; saveFilters(); },
             settings: () => settings,
