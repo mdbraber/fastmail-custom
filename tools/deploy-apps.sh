@@ -91,9 +91,18 @@ for try in $(seq 1 $TRIES); do
       # asleep is named rather than passed over in silence: "installed" and
       # "installed everywhere" are not the same claim, and reading one as
       # the other is how a device goes a long time without a build.
-      xcrun devicectl list devices 2>/dev/null | grep -v 'available (paired)' \
-        | grep -oE '^\S+.*[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\s+\S+' \
-        | awk '{print "skipped (not reachable): " $1}'
+      #
+      # Skipped means "never installed to", read against what actually was —
+      # not against the listing's state column, which reads `connected`
+      # rather than `available (paired)` for a device just installed to, and
+      # so reported every success as a skip.
+      listing=$(xcrun devicectl list devices 2>/dev/null)
+      for line in ${(f)listing}; do
+        other=$(print -r -- "$line" | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}')
+        [ -n "$other" ] || continue
+        [ -n "${seen[$other]}" ] && continue
+        echo "skipped (not reachable): ${line%% *}"
+      done
       echo "installed on ${#seen} device(s): ${(k)seen}"
       echo "BOTH INSTALLED"
       exit 0
