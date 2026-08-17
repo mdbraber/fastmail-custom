@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.27
+// @version      2.28
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, actionable is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -320,36 +320,6 @@ other user label is a topic.
     // how the label opens. One source of truth, already persisted.
     const modeForLabel = (mailbox) =>
         modeIsOn && isUserLabel(mailbox) && filterFor(mailbox) === DEFAULT_FILTER;
-
-    // The labels that stand for an inbox: the ones a saved search names. This
-    // is what "one of mine" means now — sidebar membership used to say it, but
-    // the labels need not be in the sidebar at all any more, and the searches
-    // are the inboxes.
-    //
-    // Cached against the searches it was built from, the way the Inbox query is:
-    // this is asked on every keystroke in the Move to menu and once per label
-    // when the stylesheet is rebuilt.
-    let inboxLabels = null;
-    let inboxLabelsFor = null;
-
-    const inboxLabelSet = () => {
-        const searches = toArray(FastMail.store.getAll(FastMail.classes.SavedSearch));
-        const signature = searches.map(s => String(s.get('search') || '')).join('|');
-
-        if (inboxLabels && inboxLabelsFor === signature) return inboxLabels;
-
-        inboxLabelsFor = signature;
-        inboxLabels = new Set();
-
-        searches.forEach((search) => {
-            const label = labelForSearch(search.get('search'), search.get('name'));
-            if (label) inboxLabels.add(label);
-        });
-
-        return inboxLabels;
-    };
-
-    const isInboxLabel = (mailbox) => !!mailbox && inboxLabelSet().has(mailbox);
 
     // Qualifiers cut across the inboxes — a message is urgent *and* somewhere.
     // Which labels those are is a rule of yours, like the triage label, so it is
@@ -1223,9 +1193,13 @@ other user label is a topic.
             // The colours are there to show what a message is about; being
             // kept is not what it is about. An option, since a colour you
             // have given the label is a choice, and you may want to see it.
+            // "Sidebar only" once meant the saved-search inboxes of the old
+            // workflow; that set is empty in the v2 model, which painted
+            // nothing. Sidebar visibility is the living notion of the same
+            // idea — the labels you actually file into.
             .filter(m => isUserLabel(m) && m.get('color') &&
                 !(settings.labelColoursSkipProcess && isProcess(m)) &&
-                (!settings.labelColoursSidebarOnly || isInboxLabel(m) ||
+                (!settings.labelColoursSidebarOnly || isSidebarLabel(m) ||
                     isProcess(m) || isDeferred(m)))
             // A row carrying two coloured labels matches both rules and the
             // later one wins, so precedence is a matter of emission order.
@@ -2506,8 +2480,10 @@ other user label is a topic.
                 // The marker never belongs in a picker: v and s manage it
                 if (isProcess(option)) return false;
 
+                // The same rebasing as the colours: topics are the living
+                // form of "labels that are inboxes"
                 return !settings.labelsSidebarOnly ||
-                    isInboxLabel(option) ||
+                    isTopic(option) ||
                     qualifierRank(option) !== -1 ||
                     isDeferred(option);
             });
