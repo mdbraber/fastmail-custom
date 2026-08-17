@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.23
+// @version      2.24
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, actionable is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -4264,11 +4264,11 @@ other user label is a topic.
             const word = FILTER_WORDS[filter];
             if (word) title = title + ' • ' + word;
 
-            // The number leads: leftmost is the count whenever there is
-            // one, exactly as the unfiltered web header already has it. In
-            // the shell apps the stock heading carries no number at all,
-            // so with the option on the unfiltered heading matches the
-            // sidebar badge instead of following stock silence.
+            // The pair trails the name and the filter — "Inbox • Actionable
+            // 37 (1)" — reading as one sentence: the place, its slice, what
+            // it holds. In the shell apps the stock heading carries no
+            // number at all, so with the option on the unfiltered heading
+            // matches the sidebar badge instead of following stock silence.
             if (settings.showHeaderCounts) {
                 const mailbox = this.get('mailbox');
 
@@ -4279,7 +4279,7 @@ other user label is a topic.
                         let count = String(list.get('length'));
                         const unread = mailbox && headerUnreadFor(mailbox, filter);
                         if (unread) count += ' (' + unread + ')';
-                        title = count + ' • ' + title;
+                        title = title + ' ' + count;
                     } else if (list && !list.customPrimed && list.get('where')) {
                         primeListForCount(list);
                     }
@@ -4287,8 +4287,8 @@ other user label is a topic.
                     const total = mailbox.get('totalThreads') || 0;
                     const unread = mailbox.get('unreadThreads') || 0;
                     if (total) {
-                        title = total + (unread ? ' (' + unread + ')' : '') +
-                            ' • ' + title;
+                        title = title + ' ' + total +
+                            (unread ? ' (' + unread + ')' : '');
                     }
                 }
             }
