@@ -86,7 +86,18 @@ for try in $(seq 1 $TRIES); do
     for udid in ${(k)seen}; do
       { [ ${done_p[$udid]} -eq 1 ] && [ ${done_w[$udid]} -eq 1 ] } || outstanding=1
     done
-    [ $outstanding -eq 0 ] && { echo "BOTH INSTALLED"; exit 0; }
+    if [ $outstanding -eq 0 ]; then
+      # Only ever the devices that turned up. A paired device that stayed
+      # asleep is named rather than passed over in silence: "installed" and
+      # "installed everywhere" are not the same claim, and reading one as
+      # the other is how a device goes a long time without a build.
+      xcrun devicectl list devices 2>/dev/null | grep -v 'available (paired)' \
+        | grep -oE '^\S+.*[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\s+\S+' \
+        | awk '{print "skipped (not reachable): " $1}'
+      echo "installed on ${#seen} device(s): ${(k)seen}"
+      echo "BOTH INSTALLED"
+      exit 0
+    fi
   fi
 
   sleep 20
