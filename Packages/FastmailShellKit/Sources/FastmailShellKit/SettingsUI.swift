@@ -21,8 +21,8 @@ public struct InboxModeSettingsForm: View {
 
     // The bar order is dragged, not typed: one row per verb, reordered
     // with onMove and written back as the same comma string the userscript
-    // reads. On iOS the grips appear in edit mode — the sheet carries an
-    // Edit button for it.
+    // reads. The embedded list stays in edit mode permanently on iOS, so
+    // the grips are simply always there — no mode to toggle.
     @ViewBuilder
     private func barOrderRows(for option: InboxModeSettings.Option) -> some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -32,22 +32,20 @@ public struct InboxModeSettingsForm: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        #if canImport(UIKit)
-        ForEach(model.barOrder, id: \.self) { name in
-            Label(name, systemImage: "line.3.horizontal")
-                .foregroundStyle(.primary)
-        }
-        .onMove { from, to in model.moveBarSlot(from: from, to: to) }
-        #else
         List {
             ForEach(model.barOrder, id: \.self) { name in
                 Text(name)
             }
             .onMove { from, to in model.moveBarSlot(from: from, to: to) }
         }
+        #if canImport(UIKit)
+        .listStyle(.plain)
+        .environment(\.editMode, .constant(.active))
+        .frame(height: 400)
+        #else
         .frame(height: 248)
-        .scrollDisabled(true)
         #endif
+        .scrollDisabled(true)
     }
 
     @ViewBuilder
@@ -126,11 +124,6 @@ public struct MobileSettingsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                #if canImport(UIKit)
-                ToolbarItem(placement: .cancellationAction) {
-                    EditButton()
-                }
-                #endif
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
