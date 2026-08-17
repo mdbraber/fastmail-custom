@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.37
+// @version      2.39
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -3011,38 +3011,129 @@ other user label is a topic.
         toolbarLabelsView() ||
         visibleViewForIcon('svg.v-Icon.i-folder');
 
-    // The bar's ⋯. Its own view rather than an icon, because that is what
-    // holds the options the Labels button may be waiting in.
-    const overflowView = () => {
-        const toolbar = messageToolbar();
-        if (!toolbar) return null;
+    /*
+     * The picker, asked for rather than hunted down.
+     *
+     * Pressing a button is only ever a way of asking Fastmail to construct
+     * its label menu and show it. Every failure so far has been in the
+     * finding — no shortcut to name the button by, no glyph to match, not on
+     * the bar, not even in the More menu — and none of them in the menu. So
+     * the last resort drops the button and asks for the menu directly. It is
+     * still Fastmail's menu: its class, its search field, its Create label,
+     * its icons and colours, and — because our hooks sit on the prototype —
+     * the same didEnterDocument, the same narrowing and the same commit that
+     * a menu opened by a button gets.
+     *
+     * Read out of the app bundle rather than guessed. MailboxMenuView takes
+     * willAdd, willRemove and accountId, builds its controller lazily, and
+     * that controller's select() ends in didSelect on the view — so the
+     * caller supplies the handler and no button need exist. Showing it is
+     * PopOverView.show({view, alignWithView, …}), which is what the app's own
+     * swipe actions do for exactly this menu.
+     */
 
+    const anchorRect = (view) => {
         try {
-            return (toolbar.get('childViews') || []).filter(view =>
-                view.constructor &&
-                view.constructor.name === 'OverflowMenuView')[0] || null;
+            const layer = view && typeof view.get === 'function' && view.get('layer');
+            if (!layer || !layer.isConnected) return null;
+            const rect = layer.getBoundingClientRect();
+            return rect.width || rect.height ? rect : null;
         } catch (error) {
             return null;
         }
     };
 
-    // Open More, then press the Labels button that draws inside it. Returns
-    // whether the first half got anywhere; the second half runs a tick later
-    // and is watched by the deadline like every other route, so a More menu
-    // that turns out not to hold Labels still ends in the question rather
-    // than in silence.
-    const openPickerViaMore = (verb) => {
-        const overflow = overflowView();
-        if (!overflow || !pressButtonView(overflow)) return false;
+    const viewForNode = (node) => (node ? FastMail.getViewFromNode(node) : null);
 
-        setTimeout(() => {
-            if (pendingVerb !== verb || verb.opened) return;
+    // Something drawn to hang the menu off. show() measures the anchor's
+    // layer and inserts the popover into the root view the anchor belongs
+    // to, so this has to be a view that is on screen: not the root itself,
+    // which is nobody's child and would leave the popover unparented, and
+    // not a button parked in a closed menu, which has no rectangle. The
+    // toolbars come first because that is where the verb was pressed.
+    const pickerAnchor = () => {
+        const candidates = [
+            messageToolbar(),
+            mailToolbar(),
+            viewForNode(document.querySelector('.v-PageHeader')),
+            viewForNode(document.querySelector('.v-MailboxSource'))
+        ];
 
-            const labels = mobileLabelsButtonView();
-            if (labels) pressButtonView(labels);
-        }, 150);
+        for (const view of candidates) {
+            if (anchorRect(view)) return view;
+        }
+        return null;
+    };
 
-        return true;
+    // One popover, reused. show() hides whatever it was holding first and
+    // detaches itself on hide, which is how the app's own singleton behaves;
+    // a fresh one per opening would leak a view every time.
+    let pickerPopOver = null;
+
+    const popOverForPicker = () => {
+        if (pickerPopOver) return pickerPopOver;
+
+        const PopOverView = FastMail.classes && FastMail.classes.PopOverView;
+        if (!PopOverView) return null;
+
+        pickerPopOver = new PopOverView();
+        return pickerPopOver;
+    };
+
+    const buildPicker = (keys) => {
+        const MailboxMenuView = FastMail.classes && FastMail.classes.MailboxMenuView;
+        if (!MailboxMenuView) return false;
+
+        const popOver = popOverForPicker();
+        const anchor = pickerAnchor();
+        const rect = anchor && anchorRect(anchor);
+        if (!popOver || !rect) return false;
+
+        const first = messagesFrom(keys)[0];
+
+        try {
+            const menu = new MailboxMenuView({
+                // Adding one, which is the shape Move to opens; the tristate
+                // needs willRemove too, and a verb only ever wants a topic
+                willAdd: true,
+                accountId: first ? first.get('accountId') : null,
+                closeOnActivate: true,
+                // Replaced by addInsteadOfMoving as the menu enters the
+                // document; declared so the controller has one to call
+                didSelect() {}
+            });
+
+            // What tells didEnterDocument this menu is ours to narrow and to
+            // route through the waiting verb, exactly as pressing Move to does
+            wantOurMove = true;
+
+            // Away from the edge it is anchored to: hung off the bottom bar
+            // it opens upwards, off a header it opens down.
+            const below = rect.top + rect.height / 2 > window.innerHeight / 2;
+
+            popOver.show({
+                view: menu,
+                alignWithView: anchor,
+                positionToThe: below ? 'top' : 'bottom',
+                alignEdge: 'centre',
+                showCallout: true,
+                keepInHorizontalBounds: true,
+                keepInVerticalBounds: true,
+                onHide(options) {
+                    try {
+                        options.view.destroy();
+                    } catch (error) {
+                        // Already gone is already gone
+                    }
+                }
+            });
+
+            return true;
+        } catch (error) {
+            wantOurMove = false;
+            console.warn('Inbox mode: could not open the topic picker', error);
+            return false;
+        }
     };
 
     const openTopicPicker = (keys, onCommit) => {
@@ -3079,17 +3170,13 @@ other user label is a topic.
             if (armPicker(verb, pressButtonView(drawn), onCommit)) return;
         }
 
-        // Still nothing on screen, so put something there: open the bar's
-        // More menu and press Labels once it has drawn inside it. Pressing
-        // what is visible is the one route that has always worked on touch —
-        // this only arranges for the button to be visible first, which is
-        // what a thumb would do. The tick between the two is the same one
-        // the More menu's own verbs wait for; two menus opening in one
-        // moment is how taps get eaten.
-        if (openPickerViaMore(verb)) {
-            pendingVerb = verb;
-            armPicker(verb, true, onCommit);
-            return;
+        // Still no button anywhere. Stop looking for one: ask Fastmail for
+        // the menu the button would have opened. Set the verb pending first,
+        // because the menu adopts it as it enters the document and show()
+        // gets that far before it returns.
+        pendingVerb = verb;
+        if (buildPicker(keys)) {
+            if (armPicker(verb, true, onCommit)) return;
         }
 
         // Out of menus. The one question a dialog can carry stands in,
