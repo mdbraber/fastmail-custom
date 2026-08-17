@@ -407,8 +407,33 @@
         var item = document.createElement(logout.tagName.toLowerCase());
         item.className = logout.className;
         item.classList.add('fmshell-app-settings');
-        item.textContent = 'App settings';
         if (item.tagName === 'A') item.setAttribute('href', '#');
+
+        // Dressed like its neighbour: the cog takes the logout icon's own
+        // classes when there is one to copy, and the label its span's
+        var logoutIcon = logout.querySelector('svg');
+        var icon = iconNode(SETTINGS_ICON);
+        if (icon) {
+            if (logoutIcon && logoutIcon.getAttribute('class')) {
+                icon.setAttribute('class', logoutIcon.getAttribute('class'));
+            } else if (!logoutIcon) {
+                icon.style.width = '20px';
+                icon.style.height = '20px';
+                icon.style.verticalAlign = 'middle';
+                icon.style.marginRight = '8px';
+            }
+            item.appendChild(icon);
+        }
+
+        var logoutText = logout.querySelector('span');
+        if (logoutText) {
+            var label = document.createElement('span');
+            label.className = logoutText.className;
+            label.textContent = 'App settings';
+            item.appendChild(label);
+        } else {
+            item.appendChild(document.createTextNode('App settings'));
+        }
         item.addEventListener('click', function (event) {
             event.preventDefault();
             event.stopPropagation();
@@ -635,11 +660,18 @@
     var SETTINGS_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"' +
         ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"' +
         ' stroke-linejoin="round" class="u-standardicon v-Icon">' +
-        '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>' +
-        '<line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>' +
-        '<line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>' +
-        '<line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/>' +
-        '<line x1="17" y1="16" x2="23" y2="16"/></svg>';
+        '<circle cx="12" cy="12" r="3"/>' +
+        '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83' +
+        ' 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1' +
+        ' 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65' +
+        ' 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06' +
+        'a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2' +
+        ' 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06' +
+        'a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9' +
+        'a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65' +
+        ' 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0' +
+        ' 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51' +
+        ' 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 
     window.native.addMenuItem({
         id: 'app-settings',
