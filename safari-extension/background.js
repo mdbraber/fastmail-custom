@@ -46,6 +46,7 @@ const DEFAULT_SETTINGS = {
     bottomBarSlots: 'Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move',
     excludedLabels: 'Later',
     showFilteredCounts: true,
+    showHeaderCounts: true,
     appBadgeLabel: 'Inbox',
     appBadgeFilter: 'actionable',
     swapArchiveExpand: true,

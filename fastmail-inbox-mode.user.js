@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.22
+// @version      2.23
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, actionable is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -217,6 +217,10 @@ other user label is a topic.
         excludedLabels: 'Later',
         // Show exact counts on filtered views and topic badges
         showFilteredCounts: true,
+        // The list heading carries the same pair as the sidebar badge —
+        // total, unread in parens — including in the shell apps, whose
+        // stock heading carries no number at all
+        showHeaderCounts: true,
         // The app icon's badge, for the shell apps: the total of this label
         // under this filter (actionable, triage, deferred, or empty for the
         // plain total). An empty label hands the shell its own fallback.
@@ -722,6 +726,15 @@ other user label is a topic.
         return exactLength(badgeQueryFor(mailbox, kind, true)) || 0;
     };
 
+    // The heading's unread half: only the mode's own slices have an unread
+    // query to ask; stock filters go without rather than guessing
+    const headerUnreadFor = (mailbox, kind) => {
+        if (kind !== DEFAULT_FILTER && kind !== TRIAGE_FILTER &&
+                kind !== DEFERRED_FILTER) return null;
+
+        return exactLength(badgeQueryFor(mailbox, kind, true));
+    };
+
     // Badge repaints arrive in bursts as query totals land
     let badgeTimer = null;
 
@@ -733,6 +746,14 @@ other user label is a topic.
             repaintBadges();
             dressInboxSearches();
             pushAppBadge();
+
+            // The heading shares the badge queries, but none of its own
+            // declared dependencies move when an unread total lands
+            try {
+                controller().computedPropertyDidChange('mailboxTitleAndCount');
+            } catch (error) {
+                // No mail screen, no heading
+            }
         }, 100);
     };
 
@@ -4243,15 +4264,32 @@ other user label is a topic.
             const word = FILTER_WORDS[filter];
             if (word) title = title + ' • ' + word;
 
-            if (settings.showFilteredCounts && filter && !standaloneApp()) {
-                const list = this.get('mailboxMessageList');
+            // The number leads: leftmost is the count whenever there is
+            // one, exactly as the unfiltered web header already has it. In
+            // the shell apps the stock heading carries no number at all,
+            // so with the option on the unfiltered heading matches the
+            // sidebar badge instead of following stock silence.
+            if (settings.showHeaderCounts) {
+                const mailbox = this.get('mailbox');
 
-                if (list && list.get('hasTotal')) {
-                    // The number leads: leftmost is the count whenever there
-                    // is one, exactly as the unfiltered header already has it
-                    title = list.get('length') + ' • ' + title;
-                } else if (list && !list.customPrimed && list.get('where')) {
-                    primeListForCount(list);
+                if (filter) {
+                    const list = this.get('mailboxMessageList');
+
+                    if (list && list.get('hasTotal')) {
+                        let count = String(list.get('length'));
+                        const unread = mailbox && headerUnreadFor(mailbox, filter);
+                        if (unread) count += ' (' + unread + ')';
+                        title = count + ' • ' + title;
+                    } else if (list && !list.customPrimed && list.get('where')) {
+                        primeListForCount(list);
+                    }
+                } else if (standaloneApp() && mailbox) {
+                    const total = mailbox.get('totalThreads') || 0;
+                    const unread = mailbox.get('unreadThreads') || 0;
+                    if (total) {
+                        title = total + (unread ? ' (' + unread + ')' : '') +
+                            ' • ' + title;
+                    }
                 }
             }
 
