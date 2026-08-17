@@ -1,0 +1,629 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		6BD49773302BA54000196E0B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD49772302BA54000196E0B /* AppDelegate.swift */; };
+		6BD49777302BA54000196E0B /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 6BD49775302BA54000196E0B /* Main.html */; };
+		6BD49779302BA54000196E0B /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 6BD49778302BA54000196E0B /* Icon.png */; };
+		6BD4977B302BA54000196E0B /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 6BD4977A302BA54000196E0B /* Style.css */; };
+		6BD4977D302BA54000196E0B /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 6BD4977C302BA54000196E0B /* Script.js */; };
+		6BD4977F302BA54000196E0B /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD4977E302BA54000196E0B /* ViewController.swift */; };
+		6BD49782302BA54000196E0B /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6BD49780302BA54000196E0B /* Main.storyboard */; };
+		6BD49784302BA54200196E0B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BD49783302BA54200196E0B /* Assets.xcassets */; };
+		6BD4978B302BA54200196E0B /* Fastmail Inbox mode Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6BD4978A302BA54200196E0B /* Fastmail Inbox mode Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6BD49790302BA54200196E0B /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD4978F302BA54200196E0B /* SafariWebExtensionHandler.swift */; };
+		6BD497A4302BA54200196E0B /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 6BD4979C302BA54200196E0B /* background.js */; };
+		6BD497A5302BA54200196E0B /* images in Resources */ = {isa = PBXBuildFile; fileRef = 6BD4979D302BA54200196E0B /* images */; };
+		6BD497A6302BA54200196E0B /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 6BD4979E302BA54200196E0B /* README.md */; };
+		6BD497A7302BA54200196E0B /* fastmail-inbox-mode.js in Resources */ = {isa = PBXBuildFile; fileRef = 6BD4979F302BA54200196E0B /* fastmail-inbox-mode.js */; };
+		6BD497A8302BA54200196E0B /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 6BD497A0302BA54200196E0B /* manifest.json */; };
+		6BD497A9302BA54200196E0B /* early.js in Resources */ = {isa = PBXBuildFile; fileRef = 6BD497A1302BA54200196E0B /* early.js */; };
+		6BD497AA302BA54200196E0B /* settings.html in Resources */ = {isa = PBXBuildFile; fileRef = 6BD497A2302BA54200196E0B /* settings.html */; };
+		6BD497AB302BA54200196E0B /* settings.js in Resources */ = {isa = PBXBuildFile; fileRef = 6BD497A3302BA54200196E0B /* settings.js */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		6BD4978C302BA54200196E0B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6BD49767302BA54000196E0B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6BD49789302BA54200196E0B;
+			remoteInfo = "Fastmail Inbox mode Extension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		6BD49797302BA54200196E0B /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				6BD4978B302BA54200196E0B /* Fastmail Inbox mode Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		6BD4976F302BA54000196E0B /* Fastmail Inbox mode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Fastmail Inbox mode.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6BD49772302BA54000196E0B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		6BD49776302BA54000196E0B /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
+		6BD49778302BA54000196E0B /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
+		6BD4977A302BA54000196E0B /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
+		6BD4977C302BA54000196E0B /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
+		6BD4977E302BA54000196E0B /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		6BD49781302BA54000196E0B /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		6BD49783302BA54200196E0B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		6BD49785302BA54200196E0B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		6BD4978A302BA54200196E0B /* Fastmail Inbox mode Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Fastmail Inbox mode Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6BD4978F302BA54200196E0B /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		6BD49791302BA54200196E0B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		6BD4979C302BA54200196E0B /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = Resources/background.js; sourceTree = "<group>"; };
+		6BD4979D302BA54200196E0B /* images */ = {isa = PBXFileReference; lastKnownFileType = folder; name = images; path = Resources/images; sourceTree = "<group>"; };
+		6BD4979E302BA54200196E0B /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = README.md; path = Resources/README.md; sourceTree = "<group>"; };
+		6BD4979F302BA54200196E0B /* fastmail-inbox-mode.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "fastmail-inbox-mode.js"; path = "Resources/fastmail-inbox-mode.js"; sourceTree = "<group>"; };
+		6BD497A0302BA54200196E0B /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = Resources/manifest.json; sourceTree = "<group>"; };
+		6BD497A1302BA54200196E0B /* early.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = early.js; path = Resources/early.js; sourceTree = "<group>"; };
+		6BD497A2302BA54200196E0B /* settings.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = settings.html; path = Resources/settings.html; sourceTree = "<group>"; };
+		6BD497A3302BA54200196E0B /* settings.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = settings.js; path = Resources/settings.js; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		6BD4976C302BA54000196E0B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6BD49787302BA54200196E0B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		6BD49766302BA54000196E0B = {
+			isa = PBXGroup;
+			children = (
+				6BD49771302BA54000196E0B /* Fastmail Inbox mode */,
+				6BD4978E302BA54200196E0B /* Fastmail Inbox mode Extension */,
+				6BD49770302BA54000196E0B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		6BD49770302BA54000196E0B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6BD4976F302BA54000196E0B /* Fastmail Inbox mode.app */,
+				6BD4978A302BA54200196E0B /* Fastmail Inbox mode Extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6BD49771302BA54000196E0B /* Fastmail Inbox mode */ = {
+			isa = PBXGroup;
+			children = (
+				6BD49772302BA54000196E0B /* AppDelegate.swift */,
+				6BD4977E302BA54000196E0B /* ViewController.swift */,
+				6BD49780302BA54000196E0B /* Main.storyboard */,
+				6BD49783302BA54200196E0B /* Assets.xcassets */,
+				6BD49785302BA54200196E0B /* Info.plist */,
+				6BD49774302BA54000196E0B /* Resources */,
+			);
+			path = "Fastmail Inbox mode";
+			sourceTree = "<group>";
+		};
+		6BD49774302BA54000196E0B /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				6BD49775302BA54000196E0B /* Main.html */,
+				6BD49778302BA54000196E0B /* Icon.png */,
+				6BD4977A302BA54000196E0B /* Style.css */,
+				6BD4977C302BA54000196E0B /* Script.js */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		6BD4978E302BA54200196E0B /* Fastmail Inbox mode Extension */ = {
+			isa = PBXGroup;
+			children = (
+				6BD4979B302BA54200196E0B /* Resources */,
+				6BD4978F302BA54200196E0B /* SafariWebExtensionHandler.swift */,
+				6BD49791302BA54200196E0B /* Info.plist */,
+			);
+			path = "Fastmail Inbox mode Extension";
+			sourceTree = "<group>";
+		};
+		6BD4979B302BA54200196E0B /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				6BD4979C302BA54200196E0B /* background.js */,
+				6BD4979D302BA54200196E0B /* images */,
+				6BD4979E302BA54200196E0B /* README.md */,
+				6BD4979F302BA54200196E0B /* fastmail-inbox-mode.js */,
+				6BD497A0302BA54200196E0B /* manifest.json */,
+				6BD497A1302BA54200196E0B /* early.js */,
+				6BD497A2302BA54200196E0B /* settings.html */,
+				6BD497A3302BA54200196E0B /* settings.js */,
+			);
+			name = Resources;
+			path = "Fastmail Inbox mode Extension";
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6BD4976E302BA54000196E0B /* Fastmail Inbox mode */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6BD49798302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Inbox mode" */;
+			buildPhases = (
+				6BD4976B302BA54000196E0B /* Sources */,
+				6BD4976C302BA54000196E0B /* Frameworks */,
+				6BD4976D302BA54000196E0B /* Resources */,
+				6BD49797302BA54200196E0B /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6BD4978D302BA54200196E0B /* PBXTargetDependency */,
+			);
+			name = "Fastmail Inbox mode";
+			packageProductDependencies = (
+			);
+			productName = "Fastmail Inbox mode";
+			productReference = 6BD4976F302BA54000196E0B /* Fastmail Inbox mode.app */;
+			productType = "com.apple.product-type.application";
+		};
+		6BD49789302BA54200196E0B /* Fastmail Inbox mode Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6BD49794302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Inbox mode Extension" */;
+			buildPhases = (
+				6BD49786302BA54200196E0B /* Sources */,
+				6BD49787302BA54200196E0B /* Frameworks */,
+				6BD49788302BA54200196E0B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Fastmail Inbox mode Extension";
+			packageProductDependencies = (
+			);
+			productName = "Fastmail Inbox mode Extension";
+			productReference = 6BD4978A302BA54200196E0B /* Fastmail Inbox mode Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		6BD49767302BA54000196E0B /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					6BD4976E302BA54000196E0B = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					6BD49789302BA54200196E0B = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = 6BD4976A302BA54000196E0B /* Build configuration list for PBXProject "Fastmail Inbox mode" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 6BD49766302BA54000196E0B;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 6BD49770302BA54000196E0B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				6BD4976E302BA54000196E0B /* Fastmail Inbox mode */,
+				6BD49789302BA54200196E0B /* Fastmail Inbox mode Extension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		6BD4976D302BA54000196E0B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6BD49779302BA54000196E0B /* Icon.png in Resources */,
+				6BD49782302BA54000196E0B /* Main.storyboard in Resources */,
+				6BD4977D302BA54000196E0B /* Script.js in Resources */,
+				6BD49777302BA54000196E0B /* Main.html in Resources */,
+				6BD49784302BA54200196E0B /* Assets.xcassets in Resources */,
+				6BD4977B302BA54000196E0B /* Style.css in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6BD49788302BA54200196E0B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6BD497A6302BA54200196E0B /* README.md in Resources */,
+				6BD497A7302BA54200196E0B /* fastmail-inbox-mode.js in Resources */,
+				6BD497A8302BA54200196E0B /* manifest.json in Resources */,
+				6BD497AA302BA54200196E0B /* settings.html in Resources */,
+				6BD497A5302BA54200196E0B /* images in Resources */,
+				6BD497A9302BA54200196E0B /* early.js in Resources */,
+				6BD497A4302BA54200196E0B /* background.js in Resources */,
+				6BD497AB302BA54200196E0B /* settings.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6BD4976B302BA54000196E0B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6BD4977F302BA54000196E0B /* ViewController.swift in Sources */,
+				6BD49773302BA54000196E0B /* AppDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6BD49786302BA54200196E0B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6BD49790302BA54200196E0B /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		6BD4978D302BA54200196E0B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6BD49789302BA54200196E0B /* Fastmail Inbox mode Extension */;
+			targetProxy = 6BD4978C302BA54200196E0B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		6BD49775302BA54000196E0B /* Main.html */ = {
+			isa = PBXVariantGroup;
+			children = (
+				6BD49776302BA54000196E0B /* Base */,
+			);
+			name = Main.html;
+			sourceTree = "<group>";
+		};
+		6BD49780302BA54000196E0B /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				6BD49781302BA54000196E0B /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		6BD49792302BA54200196E0B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		6BD49793302BA54200196E0B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		6BD49795302BA54200196E0B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = D3S5M885YQ;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Fastmail Inbox mode Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Inbox mode Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.Fastmail-Inbox-mode.Extension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		6BD49796302BA54200196E0B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = D3S5M885YQ;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Fastmail Inbox mode Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Inbox mode Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.Fastmail-Inbox-mode.Extension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		6BD49799302BA54200196E0B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = D3S5M885YQ;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Fastmail Inbox mode/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Inbox mode";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.Fastmail-Inbox-mode";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		6BD4979A302BA54200196E0B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = D3S5M885YQ;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Fastmail Inbox mode/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Inbox mode";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.yourCompany.Fastmail-Inbox-mode";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		6BD4976A302BA54000196E0B /* Build configuration list for PBXProject "Fastmail Inbox mode" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6BD49792302BA54200196E0B /* Debug */,
+				6BD49793302BA54200196E0B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6BD49794302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Inbox mode Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6BD49795302BA54200196E0B /* Debug */,
+				6BD49796302BA54200196E0B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6BD49798302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Inbox mode" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6BD49799302BA54200196E0B /* Debug */,
+				6BD4979A302BA54200196E0B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 6BD49767302BA54000196E0B /* Project object */;
+}

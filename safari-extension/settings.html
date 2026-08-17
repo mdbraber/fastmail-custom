@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fastmail Inbox mode</title>
+<style>
+    :root {
+        color-scheme: light dark;
+        --fg: #1c1c1e;
+        --muted: #6b6b70;
+        --bg: #ffffff;
+        --line: #e3e3e6;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --fg: #f2f2f7;
+            --muted: #9a9aa0;
+            --bg: #1c1c1e;
+            --line: #38383a;
+        }
+    }
+
+    /* Safari sizes the popup to the document and stops at a ceiling of its
+       own; past that the rest is cut off rather than reachable, because
+       nothing here was scrollable. Capping the document under that ceiling
+       and letting it scroll is what keeps the last option reachable however
+       many there are. */
+    html {
+        max-height: 560px;
+        overflow-y: scroll;
+    }
+
+    /* macOS hides an overlay scrollbar until you happen to scroll, which in a
+       popup means nothing tells you the list carries on past the bottom edge.
+       Giving the bar a width and a thumb of its own keeps it there. */
+    html::-webkit-scrollbar {
+        width: 11px;
+        background: var(--bg);
+    }
+
+    html::-webkit-scrollbar-thumb {
+        background: var(--muted);
+        border: 3px solid var(--bg);
+        border-radius: 6px;
+    }
+
+    html::-webkit-scrollbar-track {
+        background: var(--bg);
+    }
+
+    body {
+        margin: 0;
+        padding: 16px 18px;
+        min-width: 300px;
+        background: var(--bg);
+        color: var(--fg);
+        font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    }
+
+    h1 {
+        margin: 0 0 14px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    label {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
+        padding: 9px 0;
+        border-top: 1px solid var(--line);
+        cursor: pointer;
+    }
+
+    label:first-of-type { border-top: none; }
+
+    /* A suboption belongs to the option above it, so it is indented and its
+       rule dropped — the group reads as one thing */
+    label.sub {
+        border-top: none;
+        padding: 3px 0 3px 26px;
+    }
+
+    label.sub + label:not(.sub) { border-top: 1px solid var(--line); }
+
+    /* Off with its parent: still legible, plainly not in play */
+    label.is-disabled {
+        cursor: default;
+        opacity: 0.45;
+    }
+
+    input { margin: 1px 0 0; flex: none; }
+
+    .title { font-weight: 500; }
+
+    .sub .title { font-weight: 400; }
+
+    label.text { display: block; }
+
+    label.text input[type="text"] {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 5px 7px;
+        box-sizing: border-box;
+        font: inherit;
+        color: var(--fg);
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 5px;
+    }
+
+    .hint {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+    }
+</style>
+</head>
+<body>
+    <h1>Inbox mode</h1>
+
+    <label>
+        <input type="checkbox" id="labelColours">
+        <span>
+            <span class="title">Colour rows by label</span>
+            <span class="hint">Rows take the colour of a label they carry.</span>
+        </span>
+    </label>
+
+    <label class="sub" data-parent="labelColours">
+        <input type="checkbox" id="labelColoursSidebarOnly">
+        <span>
+            <span class="title">Only labels that are inboxes</span>
+            <span class="hint">Plain filing tags stay unpainted.</span>
+        </span>
+    </label>
+
+    <label class="sub" data-parent="labelColours">
+        <input type="checkbox" id="labelColoursSkipProcess">
+        <span>
+            <span class="title">Ignore the kept marker</span>
+            <span class="hint">Everything kept carries it; its colour would tint the whole list.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="sidebarSeparators">
+        <span>
+            <span class="title">Separate folders from labels</span>
+            <span class="hint">A line where the system folders end and your labels begin.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="hideLoneExpando">
+        <span>
+            <span class="title">Hide the Labels collapse arrow</span>
+            <span class="hint">Until a second account actually shows sidebar sources.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="dragAdditive">
+        <span>
+            <span class="title">Dragging adds a label</span>
+            <span class="hint">A drop files the message and leaves it in the Inbox; Option moves.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="hideInboxLabel">
+        <span>
+            <span class="title">Hide the Inbox chip</span>
+            <span class="hint">Wherever every row is in the Inbox anyway.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="stripLabelPrefix">
+        <span>
+            <span class="title">Show only the label&rsquo;s own name</span>
+            <span class="hint">&ldquo;Work&rdquo;, not &ldquo;Projects/Work&rdquo;; hover for the full path.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="labelsShortcut">
+        <span>
+            <span class="title">V keeps a message</span>
+            <span class="hint">Adds the kept marker, clears deferrals; unfiled mail gets the picker first. Shift-V labels only, Option-V is stock Move&nbsp;to.</span>
+        </span>
+    </label>
+
+    <label class="sub" data-parent="labelsShortcut">
+        <input type="checkbox" id="labelsSidebarOnly">
+        <span>
+            <span class="title">Only labels that are inboxes</span>
+            <span class="hint">The picker hides Trash, Spam and plain tags; typing still finds any label.</span>
+        </span>
+    </label>
+
+    <label class="sub" data-parent="labelsShortcut">
+        <input type="checkbox" id="labelsAutoSave">
+        <span>
+            <span class="title">Auto-save the last label standing</span>
+            <span class="hint">One match left applies itself and closes the menu.</span>
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">The kept marker</span>
+            <span class="hint">On everything kept; stripped again on archive and snooze.</span>
+            <input type="text" id="processLabel" spellcheck="false" autocapitalize="off" placeholder="Next">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Qualifier labels</span>
+            <span class="hint">Cut across topics and never count as filing; first named wins the row colour. Comma-separated paths.</span>
+            <input type="text" id="qualifierLabels" spellcheck="false" autocapitalize="off" placeholder="Admin, Waiting">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Deferred labels</span>
+            <span class="hint">Hidden from Actionable; filing into one drops the kept marker. Comma-separated paths.</span>
+            <input type="text" id="deferredLabels" spellcheck="false" autocapitalize="off" placeholder="Waiting, Snoozed">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">The waiting label</span>
+            <span class="hint">Where <code>w</code> parks mail blocked on someone else.</span>
+            <input type="text" id="waitingLabel" spellcheck="false" autocapitalize="off" placeholder="Waiting">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">The someday label</span>
+            <span class="hint">Where <code>o</code> parks mail with no commitment attached.</span>
+            <input type="text" id="somedayLabel" spellcheck="false" autocapitalize="off" placeholder="Someday">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Labels that are never topics</span>
+            <span class="hint">Never offered as topics; alone they don&rsquo;t count as filed. Comma-separated paths.</span>
+            <input type="text" id="excludedLabels" spellcheck="false" autocapitalize="off" placeholder="Later">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Urgent key</span>
+            <span class="hint">Runs keep + pin.</span>
+            <input type="text" id="urgentKey" spellcheck="false" autocapitalize="off" placeholder="s">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Waiting key</span>
+            <span class="hint">Parks on the waiting label.</span>
+            <input type="text" id="waitingKey" spellcheck="false" autocapitalize="off" placeholder="w">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Someday key</span>
+            <span class="hint">Parks on the someday label. Claims Fastmail&rsquo;s open key; Enter still opens.</span>
+            <input type="text" id="somedayKey" spellcheck="false" autocapitalize="off" placeholder="o">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Bottom bar verbs</span>
+            <span class="hint">The phone bar&rsquo;s slots, in order; the rest wait in More. From: Snooze, Pin, Archive, Labels, Delete, Move, Keep, Waiting, Someday.</span>
+            <input type="text" id="bottomBarSlots" spellcheck="false" autocapitalize="off" placeholder="Snooze, Pin, Archive, Labels">
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="showFilteredCounts">
+        <span>
+            <span class="title">Show exact filtered counts</span>
+            <span class="hint">Headings and sidebar badges show the server-exact count of each label&rsquo;s own filter, with unread in parens.</span>
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">App badge label</span>
+            <span class="hint">The shell apps&rsquo; icon badge counts this label. Empty for the app&rsquo;s own default.</span>
+            <input type="text" id="appBadgeLabel" spellcheck="false" autocapitalize="off" placeholder="Inbox">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">App badge filter</span>
+            <span class="hint">actionable, triage, deferred &mdash; or empty for the plain total.</span>
+            <input type="text" id="appBadgeFilter" spellcheck="false" autocapitalize="off" placeholder="actionable">
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="swapArchiveExpand">
+        <span>
+            <span class="title">Swap E and Y</span>
+            <span class="hint">E archives and Y expands, the other way round from Fastmail. H still archives.</span>
+        </span>
+    </label>
+
+    <script src="settings.js"></script>
+</body>
+</html>

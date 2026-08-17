@@ -1,0 +1,42 @@
+{
+    "manifest_version": 3,
+    "name": "Fastmail Inbox mode injector",
+    "version": "1.0",
+    "description": "Runs Fastmail Inbox mode in the page world, which Fastmail's Content Security Policy blocks for an ordinary userscript.",
+    "icons": {
+        "48": "images/icon-48.png",
+        "96": "images/icon-96.png",
+        "128": "images/icon-128.png",
+        "256": "images/icon-256.png",
+        "512": "images/icon-512.png"
+    },
+    "permissions": [
+        "scripting",
+        "tabs",
+        "storage"
+    ],
+    "action": {
+        "default_title": "Inbox mode",
+        "default_popup": "settings.html"
+    },
+    "options_ui": {
+        "page": "settings.html"
+    },
+    "host_permissions": [
+        "https://app.fastmail.com/*"
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "https://app.fastmail.com/*"
+            ],
+            "js": [
+                "early.js"
+            ],
+            "run_at": "document_start"
+        }
+    ],
+    "background": {
+        "service_worker": "background.js"
+    }
+}

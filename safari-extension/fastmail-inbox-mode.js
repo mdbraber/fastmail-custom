@@ -1,0 +1,1 @@
+../fastmail-inbox-mode.user.js
