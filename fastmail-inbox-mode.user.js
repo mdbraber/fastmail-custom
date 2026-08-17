@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.39
+// @version      2.40
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -285,6 +285,21 @@ other user label is a topic.
     // A user label is a mailbox without a system role
     const isUserLabel = (mailbox) => !!mailbox && !mailbox.get('role');
 
+    // Which class a view is. FastMail.classes is keyed by the Name every
+    // class declares, so the class object itself can be had and asked about
+    // — which beats comparing constructor.name to a string twice over: a
+    // subclass answers yes, and nothing depends on the minifier having kept
+    // the constructor's function name, which is a property nobody promised.
+    // The name comparison stays behind it for a class that is not exported.
+    const isViewOfClass = (view, name) => {
+        if (!view || !view.constructor) return false;
+
+        const Class = FastMail.classes && FastMail.classes[name];
+        if (Class) return view instanceof Class;
+
+        return view.constructor.name === name;
+    };
+
     // Fastmail names a chip by the mailbox's full path — "Projects/Work", not
     // "Work" — while the record's name and displayName are only the leaf. Every
     // rule that selects on a chip, and every comparison against one, has to use
@@ -301,7 +316,20 @@ other user label is a topic.
         }
     };
 
+    // Mailbox has a pathName of its own — parent's pathName, a slash, this
+    // one's displayName — and the row chips carry it as their title, so
+    // asking for it is both shorter and the only way to be sure the two
+    // agree. The walk below says the same thing by hand, which is one more
+    // place to drift; it stays as the answer for a record that has not got
+    // the property.
     const mailboxPath = (mailbox) => {
+        try {
+            const own = mailbox && mailbox.get && mailbox.get('pathName');
+            if (typeof own === 'string' && own) return own;
+        } catch (error) {
+            // Fall through to working it out
+        }
+
         const parts = [];
         let node = mailbox;
 
@@ -1599,8 +1627,7 @@ other user label is a topic.
         const children = toolbar && toolbar.get('childViews');
         if (!children) return null;
 
-        return children.find(view =>
-            view.constructor && view.constructor.name === 'MenuButtonView') || null;
+        return children.find(view => isViewOfClass(view, 'MenuButtonView')) || null;
     };
 
     const filterButtonNode = () => {
@@ -1724,6 +1751,89 @@ other user label is a topic.
     const messageToolbar = () => {
         const bar = document.querySelector('.v-BottomToolbar .v-Toolbar');
         return bar ? FastMail.getViewFromNode(bar) : null;
+    };
+
+    /*
+     * A button's real name.
+     *
+     * ToolbarView keeps every view it was built with in a registry — the
+     * message bar registers archive, removeLabel, snooze, trash, spam,
+     * phishing, labels, move, copy, read, unread, flag, unflag, follow,
+     * unfollow and mute, on both platforms, plus overflow for the More
+     * button itself — and getView hands one back by that name. Identical
+     * names on desktop and mobile, measured in the app's own toolbar
+     * construction.
+     *
+     * That name is the sturdiest handle there is. It survives translation,
+     * which a label does not. It survives a bar too narrow to draw the
+     * button, which a glyph search does not. It survives a platform with no
+     * keyboard, which a shortcut does not — and that last one is the whole
+     * history of the topic picker failing on the phone. So it is asked
+     * first everywhere, and the older tests stay behind it for a toolbar
+     * that registers nothing under the name.
+     */
+    // Which bar answers to a name is remembered, because the predicates
+    // below are called once per view in a filter and a fresh sweep of the
+    // document each time would be paid for on every pass of the bar
+    const registryBars = {};
+
+    const toolbarsOnScreen = () =>
+        Array.from(document.querySelectorAll('.v-Toolbar'))
+            .map(node => FastMail.getViewFromNode(node))
+            .filter(view => view && typeof view.getView === 'function');
+
+    const registeredToolbarView = (name) => {
+        const cached = registryBars[name];
+
+        try {
+            if (cached && cached.get('isInDocument')) {
+                const view = cached.getView(name);
+                if (view) return view;
+            }
+        } catch (error) {
+            // Gone; look for another bar below
+        }
+
+        // Every bar on screen, not just the phone's: the desktop registers
+        // the same names on the toolbar it draws beside an open message,
+        // and a bar that has never heard of the name simply says so.
+        for (const bar of toolbarsOnScreen()) {
+            try {
+                const view = bar.getView(name);
+                if (view) {
+                    registryBars[name] = bar;
+                    return view;
+                }
+            } catch (error) {
+                // Next bar
+            }
+        }
+
+        registryBars[name] = null;
+        return null;
+    };
+
+    const isRegisteredAs = (target, name) =>
+        !!target && registeredToolbarView(name) === target;
+
+    // The More button. ToolbarView registers its own under "overflow" in
+    // init, before any caller adds a thing, so the name is there on every
+    // bar there is; the class scan behind it covers a toolbar we were
+    // handed rather than found.
+    const toolbarOverflowView = (toolbar) => {
+        if (!toolbar || typeof toolbar.get !== 'function') return null;
+
+        try {
+            if (typeof toolbar.getView === 'function') {
+                const registered = toolbar.getView('overflow');
+                if (registered) return registered;
+            }
+
+            return (toolbar.get('childViews') || []).filter(view =>
+                isViewOfClass(view, 'OverflowMenuView'))[0] || null;
+        } catch (error) {
+            return null;
+        }
     };
 
     const actionOf = (view) => {
@@ -1877,9 +1987,7 @@ other user label is a topic.
         const toolbar = messageToolbar();
         if (!toolbar) return;
 
-        const children = toolbar.get('childViews') || [];
-        const overflow = children.filter(view =>
-            view.constructor && view.constructor.name === 'OverflowMenuView')[0];
+        const overflow = toolbarOverflowView(toolbar);
         const menu = overflow && overflow.get('menuView');
         if (!menu) return;
 
@@ -2984,6 +3092,10 @@ other user label is a topic.
     // asked here, and a press that opens nothing is caught by the deadline
     // rather than left to strand the verb.
     const toolbarLabelsView = () => {
+        // The name first: it answers wherever the button is, drawn or not
+        const registered = registeredToolbarView('labels');
+        if (registered) return registered;
+
         const toolbar = messageToolbar();
         if (!toolbar) return null;
 
@@ -2991,8 +3103,7 @@ other user label is a topic.
             const onBar = (toolbar.get('childViews') || []).filter(isLabelsButton)[0];
             if (onBar) return onBar;
 
-            const overflow = (toolbar.get('childViews') || []).filter(view =>
-                view.constructor && view.constructor.name === 'OverflowMenuView')[0];
+            const overflow = toolbarOverflowView(toolbar);
             const menu = overflow && overflow.get('menuView');
             const options = menu && menu.get('options');
 
@@ -3927,10 +4038,12 @@ other user label is a topic.
         }
     };
 
-    const isLabelsButton = (target) => hasShortcut(target, LABELS_SHORTCUT) ||
+    const isLabelsButton = (target) => isRegisteredAs(target, 'labels') ||
+        hasShortcut(target, LABELS_SHORTCUT) ||
         viewHasIcon(target, 'i-label');
 
-    const isMoveButton = (target) => hasShortcut(target, MOVE_SHORTCUT) ||
+    const isMoveButton = (target) => isRegisteredAs(target, 'move') ||
+        hasShortcut(target, MOVE_SHORTCUT) ||
         viewHasIcon(target, 'i-folder');
 
     // Where "l" would have gone. Captured from the registration rather than
@@ -4768,7 +4881,15 @@ other user label is a topic.
 
         // The ⋯ in the page header. Its icon is how it is told apart from
         // the account switcher beside it, which is also a menu button.
-        const icon = document.querySelector('.v-PageHeader svg.i-morecircle');
+        //
+        // Two icons, not one: the app draws this glyph through
+        // drawIconPlatformOverflow, which picks i-morecircle — dots in a
+        // ring, the iOS shape — or i-morevertical, dots in a column, by
+        // platform. Matching only the first is a selector that quietly stops
+        // finding the button on the platform it was not written on, taking
+        // the filter options out of this menu with it.
+        const icon = document.querySelector(
+            '.v-PageHeader svg.i-morecircle, .v-PageHeader svg.i-morevertical');
         const node = icon && icon.closest('button');
         const view = node && FastMail.getViewFromNode(node);
         if (!view || view.customFilterMenu) return;
