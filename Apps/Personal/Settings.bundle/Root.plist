@@ -430,7 +430,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Drag to order in the in-app settings; what fits on screen shows, the rest wait in More.</string>
+			<string>Drag to order the phone bar’s verbs; what fits on screen shows, the rest wait in More.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
