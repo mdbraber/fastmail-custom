@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.29
+// @version      2.30
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, actionable is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -4175,11 +4175,18 @@ other user label is a topic.
                 const mailbox = this.get('mailbox');
                 const list = this.get('mailboxMessageList');
 
+                // An empty slice goes without a number: "Inbox • Triage"
+                // already says there is nothing, and a 0 after it only adds
+                // what the absence of a count says better — the same rule
+                // the sidebar badges follow.
                 if (list && list.get('hasTotal')) {
-                    let count = String(list.get('length'));
-                    const unread = mailbox && headerUnreadFor(mailbox, filter);
-                    if (unread) count += ' (' + unread + ')';
-                    rebuilt = rebuilt + ' ' + count;
+                    const total = list.get('length');
+                    if (total) {
+                        let count = String(total);
+                        const unread = mailbox && headerUnreadFor(mailbox, filter);
+                        if (unread) count += ' (' + unread + ')';
+                        rebuilt = rebuilt + ' ' + count;
+                    }
                 } else if (list && !list.customPrimed && list.get('where')) {
                     primeListForCount(list);
                 }
