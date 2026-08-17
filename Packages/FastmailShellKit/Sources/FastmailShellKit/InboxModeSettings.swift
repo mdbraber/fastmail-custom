@@ -144,6 +144,12 @@ public enum InboxModeSettings {
             default: .text("Someday")
         ),
         Option(
+            "referenceLabels",
+            title: "Reference labels",
+            hint: "Filed but not work: v into one leaves the marker off, so the mail leaves the queue as well as the Inbox. A topic on the thread outranks it. Comma-separated paths.",
+            default: .text("")
+        ),
+        Option(
             "excludedLabels",
             title: "Labels that are never topics",
             hint: "Never offered as topics; alone they don’t count as filed. Comma-separated paths.",

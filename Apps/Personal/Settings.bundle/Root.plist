@@ -320,6 +320,28 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
+			<string>Filed but not work: v into one leaves the marker off, so the mail leaves the queue as well as the Inbox. A topic on the thread outranks it. Comma-separated paths.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>Reference labels</string>
+			<key>Key</key>
+			<string>inboxMode.referenceLabels</string>
+			<key>DefaultValue</key>
+			<string></string>
+			<key>IsSecure</key>
+			<false/>
+			<key>AutocapitalizationType</key>
+			<string>None</string>
+			<key>AutocorrectionType</key>
+			<string>No</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
 			<string>Never offered as topics; alone they don’t count as filed. Comma-separated paths.</string>
 		</dict>
 		<dict>
