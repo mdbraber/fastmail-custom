@@ -40,6 +40,7 @@ const DEFAULT_SETTINGS = {
     deferredLabels: 'Waiting, Snoozed',
     waitingLabel: 'Waiting',
     somedayLabel: 'Someday',
+    referenceLabels: '',
     urgentKey: 's',
     waitingKey: 'w',
     somedayKey: 'o',
