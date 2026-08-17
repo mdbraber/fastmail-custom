@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.33
+// @version      2.34
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, actionable is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -19,28 +19,30 @@ Spec: docs/superpowers/specs/2026-08-15-fastmail-triage-flow-design.md
 
 # The model
 
-| State     | Carries              | List             |
-|-----------|----------------------|------------------|
-| Untriaged | Inbox                | the Inbox        |
-| Kept      | Process, not Inbox   | Process          |
-| Deferred  | Waiting or Someday   | its own label    |
-| Reference | a reference label    | its own label    |
-| Done      | neither              | —                |
+| State     | Carries                 | List             |
+|-----------|-------------------------|------------------|
+| Untriaged | Inbox                   | the Inbox        |
+| Kept      | Inbox + Process         | the Inbox        |
+| Filed     | Process, not Inbox      | its own label    |
+| Deferred  | Waiting or Someday      | its own label    |
+| Done      | neither                 | —                |
 
-Kept and Reference are both `v`, and what you file it under decides which:
-a topic is work and gets the marker, a label named in referenceLabels is
-not and does not. Both leave the Inbox. The difference is the queue —
-actionable is Inbox-or-marker, so reference mail is outside it, which is
-the whole point of the state.
+Kept and Filed are both `v`, and what you file it under decides which. Every
+keep writes the marker — being kept is being work — and the label decides
+one thing only: whether the Inbox stays. A topic keeps it, because the Inbox
+is everything live and a message you have committed to is still live; what
+takes it out of Triage is the marker, not leaving. A label named in
+referenceLabels takes the Inbox off instead: those are worked from the label
+rather than from the queue, so leaving them in the Inbox shows them twice.
 
 Verbs, all working on the selection and the whole conversation:
 
 * `e`       done — archive; also drops Process, the deferred labels and the
             pin. Opens the topic picker first when no topic is on the thread.
-* `v`       keep — adds Process, removes Inbox and any deferred label.
-            Same picker rule. Filed under a reference label instead, the
-            marker is left off and the message leaves the queue as well as
-            the Inbox; a topic anywhere on the thread outranks that.
+* `v`       keep — adds Process and removes any deferred label, leaving the
+            Inbox where it is. Same picker rule. Filed under a reference
+            label instead, the Inbox comes off too; a topic anywhere on the
+            thread outranks that.
 * `s`       urgent — keep + pin; on something already kept, a pin toggle.
 * `w`       waiting — parks it on settings.waitingLabel: the state goes on,
             Process and any rival verdict come off, the Inbox stays. Same
@@ -65,6 +67,7 @@ While Inbox mode is on:
   `deferred`, the complement of actionable. `reference` is the fourth, shown
   only once referenceLabels names something. All are ordinary values in
   Fastmail's own filter menu, carried by ?filter= and remembered per label.
+  `actionable` is the stored value; the menu and the headings call it Next.
 * Sidebar badges: the Inbox, Process and the deferred labels show their exact
   server-side thread counts. Topics carry no badge by default; with
   showFilteredCounts on they show their exact actionable count, from a
@@ -795,13 +798,20 @@ other user label is a topic.
      * settings.appBadgeFilter, summed across accounts. In plain Safari
      * there is no window.native and none of this runs.
      */
-    const APP_BADGE_KINDS = { actionable: 1, triage: 1, deferred: 1 };
+    // The slice names the badge setting accepts. `next` is the word the
+    // menu and the headings show for it, so it is taken as a spelling of
+    // `actionable` rather than left to read as a typo that badges nothing.
+    const APP_BADGE_ALIASES = { next: DEFAULT_FILTER };
+    const APP_BADGE_KINDS = {
+        actionable: 1, triage: 1, deferred: 1, reference: 1
+    };
 
     const appBadgeCount = () => {
         const path = String(settings.appBadgeLabel || '').trim().toLowerCase();
         if (!path) return null;
 
-        const kindName = String(settings.appBadgeFilter || '').trim().toLowerCase();
+        const named = String(settings.appBadgeFilter || '').trim().toLowerCase();
+        const kindName = APP_BADGE_ALIASES[named] || named;
         const kind = APP_BADGE_KINDS[kindName] ? kindName : '';
 
         let total = 0;
@@ -1419,9 +1429,13 @@ other user label is a topic.
 
         // Under the `inbox` filter every row is in the Inbox by definition,
         // and under `triage` the query itself demands it. Under `actionable`
-        // it is the flow that guarantees it: keeping never takes a message
-        // out of the Inbox, so Inbox-or-Process is the Inbox in practice.
-        // The chip that tells kept from untriaged is Process, and it stays.
+        // it is the flow that guarantees it: keeping leaves the Inbox on, so
+        // Inbox-or-Process is the Inbox in practice. The chip that tells kept
+        // from untriaged is Process, and it stays.
+        //
+        // Mail filed under a reference label is the exception — it is the one
+        // thing here without the Inbox — and it needs no exception, since a
+        // chip it does not carry cannot be the one being hidden.
         const filter = mailController.get('mailboxFilter');
         const inboxOnly = isInboxSearch() ||
             ((filter === 'inbox' || filter === DEFAULT_FILTER ||
@@ -1631,9 +1645,8 @@ other user label is a topic.
         // A deferred label has nothing for a per-label switch to mean — its
         // default is All mail, and `actionable` would show an empty list — so
         // the button is the global switch there, as on the Inbox. A reference
-        // label is the same: nothing filed there is ever actionable.
-        return isUserLabel(mailbox) && !isDeferred(mailbox) &&
-            !isReference(mailbox) ? mailbox : null;
+        // label is an ordinary label for this: its mail is actionable.
+        return isUserLabel(mailbox) && !isDeferred(mailbox) ? mailbox : null;
     };
 
     const indicatorIsActive = () => {
@@ -2963,17 +2976,22 @@ other user label is a topic.
         }
     };
 
-    // keep — `v`: into Process, out of the Inbox and the deferred set.
+    // keep — `v`: the marker on, the deferred set off. Every keep is work, so
+    // every keep gets the marker; what the message is filed under decides one
+    // thing only, which is whether it stays in the Inbox.
     //
-    // Unless what it is being filed under is reference, in which case the
-    // marker is the one thing it does not get: the message leaves the Inbox
-    // and the queue both, and the label is where it lives now. Read from
-    // what the threads will carry once this lands rather than from the pick
-    // alone, so filing something that is already a topic under a reference
-    // label still counts as work — the topic wins, as it should, since a
-    // message that is about a project is work whatever else is stuck to it.
-    // Urgent forces the same: pinning something and hiding it from the queue
-    // says two opposite things.
+    // A topic keeps it. The Inbox is everything live, and a message you have
+    // committed to is still live — the marker is what takes it out of Triage,
+    // and Triage is the list of what has not been decided yet.
+    //
+    // A reference label takes the Inbox off. Those are the labels whose mail
+    // you work from the label rather than from the queue, so leaving it in the
+    // Inbox would be asking to be shown it twice.
+    //
+    // Read from what the threads will carry once this lands rather than from
+    // the pick alone, so a message that is already about a project stays in
+    // the Inbox even when a reference label is put on it as well: the topic
+    // wins, and a topic means work you do from the queue.
     const runKeep = (actions, keys, topic, andPin) => {
         const first = messagesFrom(keys)[0];
         if (!first) return;
@@ -2982,26 +3000,20 @@ other user label is a topic.
         const process = processMailbox(accountId);
         const inbox = inboxMailbox(accountId);
 
-        const carried = Array.from(mailboxesAmong(keys));
-        const after = topic ? carried.concat([topic]) : carried;
-        const asReference = !andPin &&
-            after.some(isReference) && !after.some(isTopic);
-
-        if (!process && !asReference) {
+        if (!process) {
             console.warn('Inbox mode: no "' + settings.processLabel +
                 '" label; create it or change settings.processLabel');
             return;
         }
 
-        const adds = [];
-        if (topic) adds.push(topic);
-        if (!asReference) adds.push(process);
+        const carried = Array.from(mailboxesAmong(keys));
+        const after = topic ? carried.concat([topic]) : carried;
+        const leavesInbox = after.some(isReference) && !after.some(isTopic);
 
-        // Filed as reference, the marker is a disposition like any other and
-        // goes with them; kept as work, it is the one being written
+        const adds = topic ? [topic, process] : [process];
         const removes = carriedDispositions(keys)
-            .filter(mailbox => asReference || mailbox !== process);
-        if (inbox) removes.unshift(inbox);
+            .filter(mailbox => mailbox !== process);
+        if (leavesInbox && inbox) removes.unshift(inbox);
 
         const commit = () => actions.addremove(keys, adds, removes);
 
@@ -3020,9 +3032,12 @@ other user label is a topic.
 
         const accountId = first.get('accountId');
         const process = processMailbox(accountId);
-        const inbox = inboxMailbox(accountId);
 
-        const alreadyKept = anyIn(keys, process) && !anyIn(keys, inbox);
+        // Carrying the marker is the whole of being kept. It used to have to
+        // be out of the Inbox as well, back when keeping took the Inbox off —
+        // now that a kept topic stays there, that half would read every kept
+        // message as untriaged and re-keep it instead of toggling the pin.
+        const alreadyKept = anyIn(keys, process);
         if (alreadyKept) {
             if (allFlagged(keys)) actions.unflag(keys);
             else actions.flag(keys);
@@ -3996,11 +4011,12 @@ other user label is a topic.
 
         // A deferred label under `actionable` would show nothing at all —
         // it is the very set the filter hides — so those open unfiltered:
-        // the label already is the deferred list. A reference label is the
-        // same case for the same reason: nothing filed there carries the
-        // Inbox or the marker, so actionable would draw an empty list over
-        // a full label.
-        return isDeferred(mailbox) || isReference(mailbox) ? '' : DEFAULT_FILTER;
+        // the label already is the deferred list.
+        //
+        // A reference label is not that case: its mail carries the marker
+        // like any other kept mail, so actionable is exactly the live half
+        // of it and the default stands.
+        return isDeferred(mailbox) ? '' : DEFAULT_FILTER;
     };
 
     // Storing nothing for the default keeps the record to the labels you have
@@ -4010,9 +4026,7 @@ other user label is a topic.
         const id = mailbox && mailbox.get('id');
         if (!id) return;
 
-        const fallback = isDeferred(mailbox) || isReference(mailbox)
-            ? ''
-            : DEFAULT_FILTER;
+        const fallback = isDeferred(mailbox) ? '' : DEFAULT_FILTER;
 
         if (filter === fallback) delete rememberedFilters[id];
         else rememberedFilters[id] = filter;
@@ -4224,8 +4238,12 @@ other user label is a topic.
      * ours, and — behind showFilteredCounts — restores the number Fastmail
      * drops for every filtered view, exact or absent, never an estimate.
      */
+    // The words the headings and the filter menu show. The values behind
+    // them stay as they are — `actionable` is in every remembered filter and
+    // every ?filter= you have ever bookmarked, and renaming what a slice is
+    // called is no reason to lose those.
     const FILTER_WORDS = {
-        actionable: 'Actionable', deferred: 'Deferred',
+        actionable: 'Next', deferred: 'Deferred',
         triage: 'Triage', reference: 'Reference'
     };
 
@@ -4353,16 +4371,16 @@ other user label is a topic.
         const last = options[options.length - 1];
         if (last && last.isLastOfSection) last.isLastOfSection = false;
 
-        const rows = [
-            customFilterOption('Actionable', DEFAULT_FILTER),
-            customFilterOption('Triage', TRIAGE_FILTER),
-            customFilterOption('Deferred', DEFERRED_FILTER)
-        ];
+        // Named from the same map the heading reads, so a row and the title
+        // it produces are the same word by construction
+        const rows = [DEFAULT_FILTER, TRIAGE_FILTER, DEFERRED_FILTER]
+            .map(kind => customFilterOption(FILTER_WORDS[kind], kind));
 
         // Only where there is reference mail to show: a row that can only
         // ever draw an empty list is a row in the way
         if (referenceMailboxes(controller().get('accountId')).length) {
-            rows.push(customFilterOption('Reference', REFERENCE_FILTER));
+            rows.push(customFilterOption(
+                FILTER_WORDS[REFERENCE_FILTER], REFERENCE_FILTER));
         }
 
         rows[rows.length - 1].isLastOfSection = true;
