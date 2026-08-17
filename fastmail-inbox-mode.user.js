@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.26
+// @version      2.27
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, actionable is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -699,6 +699,9 @@ other user label is a topic.
     // that opens unfiltered reads the Mailbox record, canonical and free.
     // With showFilteredCounts off, the old economy: state mailboxes show
     // plain totals, topics stay bare.
+    const ownKind = (kind) => kind === DEFAULT_FILTER ||
+        kind === TRIAGE_FILTER || kind === DEFERRED_FILTER;
+
     const countFor = (mailbox) => {
         if (!settings.showFilteredCounts) {
             if (mailbox.get('role') === 'inbox' ||
@@ -708,20 +711,22 @@ other user label is a topic.
             return 0;
         }
 
+        // Only the mode's own slices have a query to ask; a remembered
+        // stock filter gets the plain total rather than a borrowed one
         const kind = filterFor(mailbox);
-        if (!kind) return mailbox.get('totalThreads') || 0;
+        if (!ownKind(kind)) return mailbox.get('totalThreads') || 0;
 
         return exactLength(badgeQueryFor(mailbox, kind, false)) || 0;
     };
 
-    // The unread half of the badge, by the same rules
+    // The unread half of the badge — only where it is the shown slice's
+    // own number. A pair whose halves come from different views would
+    // read as one badge fighting itself, so anything else goes without.
     const unreadFor = (mailbox) => {
-        if (!settings.showFilteredCounts) {
-            return mailbox.get('unreadThreads') || 0;
-        }
+        if (!settings.showFilteredCounts) return 0;
 
         const kind = filterFor(mailbox);
-        if (!kind) return mailbox.get('unreadThreads') || 0;
+        if (!ownKind(kind)) return 0;
 
         return exactLength(badgeQueryFor(mailbox, kind, true)) || 0;
     };
@@ -729,8 +734,7 @@ other user label is a topic.
     // The heading's unread half: only the mode's own slices have an unread
     // query to ask; stock filters go without rather than guessing
     const headerUnreadFor = (mailbox, kind) => {
-        if (kind !== DEFAULT_FILTER && kind !== TRIAGE_FILTER &&
-                kind !== DEFERRED_FILTER) return null;
+        if (!ownKind(kind)) return null;
 
         return exactLength(badgeQueryFor(mailbox, kind, true));
     };
