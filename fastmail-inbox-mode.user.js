@@ -4810,7 +4810,7 @@ other user label is a topic.
             // gets no number.
             const count = modeIsOn && settings.showFilteredCounts &&
                     !isPinnedSearch(query)
-                ? exactLength(badgeQueryFor(label))
+                ? exactLength(badgeQueryFor(label, DEFAULT_FILTER, false))
                 : null;
             const link = el.querySelector('a');
 
