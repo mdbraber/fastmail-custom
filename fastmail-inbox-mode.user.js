@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.37
+// @version      2.38
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -1410,6 +1410,7 @@ other user label is a topic.
             .concat(PIN_STATE_RULES)
             .concat(BADGE_UNREAD_RULES)
             .concat(TOAST_RULES)
+            .concat(PICKER_RULES)
             .join('\n');
         const existing = document.getElementById(STYLE_ID);
 
@@ -2908,11 +2909,212 @@ other user label is a topic.
         return false;
     };
 
+    /*
+     * Our own picker.
+     *
+     * Every other route asks Fastmail for a menu by finding the button that
+     * owns one, and on the phone that has failed a different way each time it
+     * was fixed: the buttons carry no shortcut to be named by, the glyph is
+     * not always there to match, and the button is not always in the toolbar
+     * or in the More menu at all. But the verb does not need Fastmail's menu.
+     * It needs a topic — and the labels are in the store, and the commit is
+     * ours. So where the borrowing fails, this asks the question directly
+     * instead of falling back to a dialog that cannot answer it.
+     *
+     * The last resort only. Where the stock menu opens it stays the better
+     * thing: it searches, it creates labels, and it looks native.
+     */
+    const PICKER_CLASS = 'custom-inbox-picker';
+
+    const PICKER_RULES = [
+        `.${PICKER_CLASS}-backdrop {` +
+        ' position: fixed; inset: 0; z-index: 2147483646;' +
+        ' background: rgba(0, 0, 0, 0.35); display: flex;' +
+        ' align-items: center; justify-content: center; padding: 24px; }',
+        `.${PICKER_CLASS} {` +
+        ' width: min(420px, 100%); max-height: min(60vh, 520px);' +
+        ' display: flex; flex-direction: column; overflow: hidden;' +
+        ' border-radius: 12px; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);' +
+        ' background: var(--ui-page-color-bg, #fff);' +
+        ' color: var(--ui-page-color-text, #1c1c1e);' +
+        ' font: 15px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }',
+        `.${PICKER_CLASS}-title {` +
+        ' padding: 12px 14px 8px; font-size: 13px; font-weight: 600;' +
+        ' opacity: 0.6; }',
+        `.${PICKER_CLASS}-search {` +
+        ' margin: 0 12px 8px; padding: 8px 10px; font: inherit;' +
+        ' color: inherit; background: var(--ui-page-color-bg-focused, #f0f0f2);' +
+        ' border: none; border-radius: 8px; outline: none; }',
+        `.${PICKER_CLASS}-list { overflow-y: auto; padding: 0 6px 8px; }`,
+        `.${PICKER_CLASS}-option {` +
+        ' display: flex; align-items: center; gap: 8px; width: 100%;' +
+        ' padding: 10px; font: inherit; color: inherit; text-align: left;' +
+        ' background: none; border: none; border-radius: 8px; cursor: pointer; }',
+        `.${PICKER_CLASS}-option.is-focused {` +
+        ' background: var(--ui-page-color-bg-selected, #e6f2fb); }',
+        `.${PICKER_CLASS}-dot {` +
+        ' width: 10px; height: 10px; border-radius: 3px; flex: none;' +
+        ' background: currentColor; opacity: 0.65; }',
+        `.${PICKER_CLASS}-none { opacity: 0.6; font-style: italic; }`
+    ];
+
+    // The labels that answer the topic rule, for the account the selection is
+    // in: a topic, or a non-inbox label, which files just as surely
+    const pickerLabels = (keys) => {
+        const first = messagesFrom(keys)[0];
+        const accountId = first && first.get('accountId');
+
+        return mailboxesOf(accountId)
+            .filter(isFiled)
+            .sort((a, b) => mailboxPath(a).localeCompare(mailboxPath(b)));
+    };
+
+    const openOwnPicker = (keys, onCommit) => {
+        const labels = pickerLabels(keys);
+        if (!labels.length) return false;
+
+        const backdrop = document.createElement('div');
+        backdrop.className = PICKER_CLASS + '-backdrop';
+
+        const panel = document.createElement('div');
+        panel.className = PICKER_CLASS;
+
+        const heading = document.createElement('div');
+        heading.className = PICKER_CLASS + '-title';
+        heading.textContent = 'File under';
+
+        const search = document.createElement('input');
+        search.className = PICKER_CLASS + '-search';
+        search.type = 'text';
+        search.placeholder = 'Search labels';
+        search.autocapitalize = 'off';
+        search.autocomplete = 'off';
+        search.spellcheck = false;
+
+        const list = document.createElement('div');
+        list.className = PICKER_CLASS + '-list';
+
+        panel.appendChild(heading);
+        panel.appendChild(search);
+        panel.appendChild(list);
+        backdrop.appendChild(panel);
+
+        let focused = 0;
+        let shown = [];
+
+        const close = () => {
+            document.removeEventListener('keydown', onKey, true);
+            backdrop.remove();
+        };
+
+        const choose = (mailbox) => {
+            close();
+            onCommit(mailbox || null);
+        };
+
+        const option = (label, colour, onPick, extra) => {
+            const row = document.createElement('button');
+            row.type = 'button';
+            row.className = PICKER_CLASS + '-option' + (extra || '');
+
+            if (colour !== null) {
+                const dot = document.createElement('span');
+                dot.className = PICKER_CLASS + '-dot';
+                if (colour) dot.style.background = colour;
+                row.appendChild(dot);
+            }
+
+            const name = document.createElement('span');
+            name.textContent = label;
+            row.appendChild(name);
+
+            // pointerdown rather than click: the tap lands without waiting
+            // for the click that follows it, and the input keeps its focus
+            row.addEventListener('pointerdown', (event) => {
+                event.preventDefault();
+                onPick();
+            });
+
+            return row;
+        };
+
+        const draw = () => {
+            const typed = search.value.trim().toLowerCase();
+            shown = labels.filter(m =>
+                !typed || mailboxPath(m).toLowerCase().indexOf(typed) !== -1);
+
+            if (focused >= shown.length) focused = Math.max(0, shown.length - 1);
+            list.textContent = '';
+
+            shown.forEach((mailbox, index) => {
+                list.appendChild(option(
+                    mailboxPath(mailbox),
+                    mailbox.get('color') || '',
+                    () => choose(mailbox),
+                    index === focused ? ' is-focused' : ''
+                ));
+            });
+
+            // Committing empty is a decision too, and the one the dialog was
+            // the only way to make
+            list.appendChild(option('Continue without a topic', null,
+                () => choose(null), ' ' + PICKER_CLASS + '-none'));
+        };
+
+        const onKey = (event) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                close();
+                return;
+            }
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                event.stopPropagation();
+                choose(shown[focused] || null);
+                return;
+            }
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                event.stopPropagation();
+                focused = Math.min(
+                    Math.max(0, focused + (event.key === 'ArrowDown' ? 1 : -1)),
+                    Math.max(0, shown.length - 1)
+                );
+                draw();
+            }
+        };
+
+        backdrop.addEventListener('pointerdown', (event) => {
+            if (event.target === backdrop) close();
+        });
+        search.addEventListener('input', () => {
+            focused = 0;
+            draw();
+        });
+        document.addEventListener('keydown', onKey, true);
+
+        draw();
+        document.body.appendChild(backdrop);
+
+        // Focused only where a keyboard is already there: on a phone this
+        // would throw the software one up over the list you came to read
+        if (!FastMail.isMobile) search.focus();
+
+        return true;
+    };
+
     const askBare = (onCommit) => {
+        if (openOwnPicker(pendingPickerKeys || [], onCommit)) return;
+
         if (window.confirm('No topic on this conversation. Continue without one?')) {
             onCommit(null);
         }
     };
+
+    // The selection the picker is being opened for, so the fallback can list
+    // that account's labels without every caller having to hand them over
+    let pendingPickerKeys = null;
 
     // How long a press gets to produce a menu before the verb gives up on it.
     // Generous: the cost of being early is a dialog nobody asked for, and the
@@ -3047,6 +3249,9 @@ other user label is a topic.
 
     const openTopicPicker = (keys, onCommit) => {
         const single = keys.length === 1;
+
+        // Whatever the verb ends up asking with, it is asking about these
+        pendingPickerKeys = keys;
 
         // Move to is the quick one and suits a single conversation; the
         // tristate is what a multi-selection needs. Either will do when the
