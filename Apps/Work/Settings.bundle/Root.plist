@@ -326,9 +326,9 @@
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Reference labels</string>
+			<string>Non-inbox labels</string>
 			<key>Key</key>
-			<string>inboxMode.referenceLabels</string>
+			<string>inboxMode.nonInboxLabels</string>
 			<key>DefaultValue</key>
 			<string></string>
 			<key>IsSecure</key>
@@ -506,7 +506,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>next, triage, deferred, reference — or empty for the plain total.</string>
+			<string>next, triage, deferred, noninbox — or empty for the plain total.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -516,7 +516,7 @@
 			<key>Key</key>
 			<string>inboxMode.appBadgeFilter</string>
 			<key>DefaultValue</key>
-			<string>actionable</string>
+			<string>next</string>
 			<key>IsSecure</key>
 			<false/>
 			<key>AutocapitalizationType</key>

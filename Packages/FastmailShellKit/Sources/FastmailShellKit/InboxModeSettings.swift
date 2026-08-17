@@ -144,8 +144,8 @@ public enum InboxModeSettings {
             default: .text("Someday")
         ),
         Option(
-            "referenceLabels",
-            title: "Reference labels",
+            "nonInboxLabels",
+            title: "Non-inbox labels",
             hint: "Worked from the label, not the Inbox: v into one marks it Next and takes the Inbox off, where a topic leaves the Inbox on. A topic on the thread outranks it. Comma-separated paths.",
             default: .text("")
         ),
@@ -200,8 +200,8 @@ public enum InboxModeSettings {
         Option(
             "appBadgeFilter",
             title: "App badge filter",
-            hint: "next, triage, deferred, reference — or empty for the plain total.",
-            default: .text("actionable")
+            hint: "next, triage, deferred, noninbox — or empty for the plain total.",
+            default: .text("next")
         ),
         Option(
             "swapArchiveExpand",
