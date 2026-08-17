@@ -380,6 +380,66 @@
         })();
     }
 
+    // The profile panel does not draw through MenuView, so it is dressed in
+    // the DOM instead: whenever a Log out control is on screen, an App
+    // settings row shaped like it goes in just above — beneath the
+    // switch-user section, where settings belong.
+    function visibleLogoutNode() {
+        var nodes = document.querySelectorAll('a, button');
+        for (var i = 0; i < nodes.length; i += 1) {
+            var node = nodes[i];
+            var text = collapse(node.textContent).toLowerCase();
+            if (text !== 'log out' && text !== 'logout' && text !== 'sign out') continue;
+            if (node.getClientRects().length) return node;
+        }
+        return null;
+    }
+
+    function dressProfilePanel() {
+        var logout = visibleLogoutNode();
+        if (!logout) return false;
+
+        var row = logout.closest('li') || logout;
+        var host = row.parentNode;
+        if (!host) return false;
+        if (host.querySelector('.fmshell-app-settings')) return true;
+
+        var item = document.createElement(logout.tagName.toLowerCase());
+        item.className = logout.className;
+        item.classList.add('fmshell-app-settings');
+        item.textContent = 'App settings';
+        if (item.tagName === 'A') item.setAttribute('href', '#');
+        item.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            post('openSettings', {});
+        });
+
+        if (row !== logout) {
+            var wrapper = document.createElement(row.tagName.toLowerCase());
+            wrapper.className = row.className;
+            wrapper.appendChild(item);
+            host.insertBefore(wrapper, row);
+        } else {
+            host.insertBefore(item, row);
+        }
+        return true;
+    }
+
+    function watchProfilePanel() {
+        var pending = null;
+        document.addEventListener('click', function () {
+            if (pending) return;
+            var tries = 0;
+            (function poll() {
+                pending = null;
+                if (dressProfilePanel() || tries >= 8) return;
+                tries += 1;
+                pending = window.setTimeout(poll, 120);
+            })();
+        }, true);
+    }
+
     var SHARE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"' +
         ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"' +
         ' stroke-linejoin="round" class="u-standardicon v-Icon">' +
@@ -606,4 +666,5 @@
     watchTheme();
     watchDragRegions();
     watchMenus();
+    watchProfilePanel();
 })();

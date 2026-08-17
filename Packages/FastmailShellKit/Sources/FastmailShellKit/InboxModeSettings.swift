@@ -176,7 +176,13 @@ public enum InboxModeSettings {
         Option(
             "showFilteredCounts",
             title: "Show exact filtered counts",
-            hint: "Headings and sidebar badges show the server-exact count of each label’s own filter, with unread in parens.",
+            hint: "Sidebar badges show the server-exact count of each label’s own filter, with unread in parens.",
+            default: .toggle(true)
+        ),
+        Option(
+            "showHeaderCounts",
+            title: "Counts in list headings",
+            hint: "The heading carries the same pair as the sidebar badge — total, unread in parens — including in the apps.",
             default: .toggle(true)
         ),
         Option(

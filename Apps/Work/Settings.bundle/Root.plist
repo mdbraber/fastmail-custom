@@ -430,7 +430,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Headings and sidebar badges show the server-exact count of each label’s own filter, with unread in parens.</string>
+			<string>Sidebar badges show the server-exact count of each label’s own filter, with unread in parens.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -439,6 +439,22 @@
 			<string>Show exact filtered counts</string>
 			<key>Key</key>
 			<string>inboxMode.showFilteredCounts</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
+			<string>The heading carries the same pair as the sidebar badge — total, unread in parens — including in the apps.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Counts in list headings</string>
+			<key>Key</key>
+			<string>inboxMode.showHeaderCounts</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
