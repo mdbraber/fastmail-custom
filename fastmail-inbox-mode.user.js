@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.40
+// @version      2.41
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -1887,7 +1887,36 @@ other user label is a topic.
         return svg;
     };
 
-    const removeLabelIcon = () => standardIcon('i-removelabel', REMOVE_LABEL_SHAPES);
+    // The app's own glyph, taken from the button that owns it.
+    //
+    // Both shape tables above exist because these options serve exactly the
+    // views where the stock button is not on the bar, so there was no copy
+    // in the document to clone — only a copy in the source to transcribe,
+    // which is what a shape table is, and what stops matching the moment
+    // Fastmail redraws an icon. The registry settles it: it hands over the
+    // button whether or not it is drawn, and the icon element it was built
+    // with comes with it.
+    //
+    // The class is checked rather than assumed, because the slot these
+    // stand in for is contextual — one view reading Archive or Remove by
+    // where you are standing — and a glyph that is not the one asked for is
+    // worse than the transcribed one.
+    const borrowedIcon = (name, className) => {
+        try {
+            const view = registeredToolbarView(name);
+            const icon = view && view.get('icon');
+            if (!icon || icon.nodeType !== 1 || !icon.cloneNode) return null;
+
+            const copy = icon.cloneNode(true);
+            const classes = (copy.getAttribute('class') || '').split(/\s+/);
+            return classes.indexOf(className) === -1 ? null : copy;
+        } catch (error) {
+            return null;
+        }
+    };
+
+    const removeLabelIcon = () => borrowedIcon('removeLabel', 'i-removelabel') ||
+        standardIcon('i-removelabel', REMOVE_LABEL_SHAPES);
 
     const removeLabelOption = () => new FastMail.classes.ButtonView({
         label: 'Remove label',
@@ -1905,7 +1934,8 @@ other user label is a topic.
         ['line', { x1: '9.75', y1: '12.25', x2: '14.25', y2: '12.25' }]
     ];
 
-    const archiveIcon = () => standardIcon('i-archive', ARCHIVE_SHAPES);
+    const archiveIcon = () => borrowedIcon('archive', 'i-archive') ||
+        standardIcon('i-archive', ARCHIVE_SHAPES);
 
     // The processed archive for a label view: the same wrapped verb the
     // Inbox's own button runs — Process and the deferred set come off if
