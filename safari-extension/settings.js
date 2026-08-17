@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS = {
     deferredLabels: 'Waiting, Snoozed',
     waitingLabel: 'Waiting',
     somedayLabel: 'Someday',
-    referenceLabels: '',
+    nonInboxLabels: '',
     urgentKey: 's',
     waitingKey: 'w',
     somedayKey: 'o',
@@ -25,7 +25,7 @@ const DEFAULT_SETTINGS = {
     showFilteredCounts: true,
     showHeaderCounts: true,
     appBadgeLabel: 'Inbox',
-    appBadgeFilter: 'actionable',
+    appBadgeFilter: 'next',
     swapArchiveExpand: true,
     sidebarSeparators: true,
     hideLoneExpando: true
