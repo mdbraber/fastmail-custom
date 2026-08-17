@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.24
+// @version      2.25
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, actionable is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -2931,21 +2931,24 @@ other user label is a topic.
 
     const pressButtonView = (view) => {
         try {
-            const target = typeof view.get === 'function' && view.get('target');
-            const method = typeof view.get === 'function' && view.get('method');
-            if (target && method && typeof target[method] === 'function') {
-                target[method]();
-                return true;
-            }
+            // activate() is the button's own press, and the only route
+            // that reliably opens a menu-owning button — calling its bare
+            // target method skips the presentation and strands the verb.
+            // Pressed by code, released by nobody: without a touch-up the
+            // button keeps its active tint, so it is let go by hand.
             if (typeof view.activate === 'function') {
                 view.activate();
-                // Pressed by code, released by nobody: without a touch-up
-                // the button keeps its active tint, so it is let go by hand.
                 try {
                     view.set('isActive', false);
                 } catch (error) {
                     // A button without the property has nothing to let go
                 }
+                return true;
+            }
+            const target = typeof view.get === 'function' && view.get('target');
+            const method = typeof view.get === 'function' && view.get('method');
+            if (target && method && typeof target[method] === 'function') {
+                target[method]();
                 return true;
             }
         } catch (error) {
@@ -2973,8 +2976,21 @@ other user label is a topic.
             // swallowing the tap reads as a dead button.
             const labels = mobileLabelsButtonView();
             if (labels) {
-                pendingVerb = { keys, onCommit, touchPicker: true };
-                if (pressButtonView(labels)) return;
+                const verb = { keys, onCommit, touchPicker: true };
+                pendingVerb = verb;
+                if (pressButtonView(labels)) {
+                    // A press that opens nothing would leave the verb
+                    // dangling — and every archive after it dead. If no
+                    // sheet has adopted it shortly, fall back to the
+                    // dialog instead of silence.
+                    setTimeout(() => {
+                        if (pendingVerb === verb && !verb.opened) {
+                            pendingVerb = null;
+                            askBare(onCommit);
+                        }
+                    }, 800);
+                    return;
+                }
                 pendingVerb = null;
             }
             askBare(onCommit);
@@ -3170,8 +3186,30 @@ other user label is a topic.
 
     // The one undo everything routes through — the toast's button and the
     // keyboard's z alike. Found by shape rather than pinned by name: the
-    // object on the FastMail namespace that carries undo and redo.
+    // object on the FastMail namespace that carries undo and redo, or,
+    // failing that, whatever registers itself under the z key.
     let undoTarget = null;
+    let warnedNoUndo = false;
+
+    const wrapUndoOn = (owner, method) => {
+        if (undoTarget || !owner || typeof owner[method] !== 'function') {
+            return false;
+        }
+
+        undoTarget = owner;
+        const original = owner[method];
+
+        owner[method] = function () {
+            const back = lastUndoReturn;
+            lastUndoReturn = null;
+
+            const result = original.apply(this, arguments);
+            if (modeIsOn && back) goToUrl(back);
+            return result;
+        };
+
+        return true;
+    };
 
     const patchUndo = () => {
         if (undoTarget) return;
@@ -3194,19 +3232,7 @@ other user label is a topic.
         if (!manager && typeof controller().actions.undo === 'function') {
             manager = controller().actions;
         }
-        if (!manager) return;
-
-        undoTarget = manager;
-        const original = manager.undo;
-
-        manager.undo = function () {
-            const back = lastUndoReturn;
-            lastUndoReturn = null;
-
-            const result = original.apply(this, arguments);
-            if (modeIsOn && back) goToUrl(back);
-            return result;
-        };
+        if (manager) wrapUndoOn(manager, 'undo');
     };
 
     /*
@@ -3311,11 +3337,23 @@ other user label is a topic.
 
         // The stamp rides the checkpoint: whichever didAction cuts one
         // takes the pending return with it — the archive verbs set it the
-        // moment before, everything else stamps null
+        // moment before, everything else stamps null. Discovery retries
+        // here too: the manager may not exist yet when the patch first
+        // runs, and a stamp nobody can use deserves a loud word once.
         const originalDidAction = actions.didAction;
         actions.didAction = function () {
             lastUndoReturn = pendingUndoReturn;
             pendingUndoReturn = null;
+
+            if (!undoTarget) {
+                patchUndo();
+                if (!undoTarget && lastUndoReturn && !warnedNoUndo) {
+                    warnedNoUndo = true;
+                    console.warn('Inbox mode: no undo manager found to wrap;' +
+                        ' undo will not walk back to the message');
+                }
+            }
+
             return originalDidAction.apply(this, arguments);
         };
 
@@ -3588,9 +3626,12 @@ other user label is a topic.
         };
 
         proto.didEnterDocument = function () {
-            // Opened while a verb waits: this menu is that verb's picker
+            // Opened while a verb waits: this menu is that verb's picker.
+            // The stamp is what tells the dead-man fallback the press
+            // actually opened something.
             if (pendingVerb) {
                 this.customVerbOpen = true;
+                pendingVerb.opened = true;
             }
 
             if (isLabelsMenu(this)) {
@@ -3877,6 +3918,15 @@ other user label is a topic.
             // its registration the way the Move button is
             if (key === LABELS_SHORTCUT && isLabelsButton(target)) {
                 labelsButton = { target: target, method: method };
+            }
+
+            // z's owner is the undo route worth wrapping — the same object
+            // the toast's button presses — so its registration is another
+            // way to find what the namespace scan may have missed
+            if (key === 'z' && !undoTarget && target &&
+                    typeof target === 'object' &&
+                    typeof target[method] === 'function') {
+                wrapUndoOn(target, method);
             }
 
             if (key !== MOVE_SHORTCUT || !isMoveButton(target)) {
@@ -4226,14 +4276,6 @@ other user label is a topic.
      */
     const FILTER_WORDS = { actionable: 'Actionable', deferred: 'Deferred', triage: 'Triage' };
 
-    // In standalone/app mode the stock string carries no number at all — it
-    // doubles as the window title — and ours follows suit
-    const standaloneApp = () =>
-        !!(window.FM && FM.isApp) ||
-        (window.matchMedia && (
-            window.matchMedia('(display-mode: standalone)').matches ||
-            window.matchMedia('(display-mode: window-controls-overlay)').matches));
-
     // A stock filtered query never asks the server for its total — only a
     // top-level inMailbox filter does — but the server answers for any filter
     // when asked. One raw call with the query's own arguments routes back to
@@ -4266,30 +4308,20 @@ other user label is a topic.
 
             // The pair trails the name and the filter — "Inbox • Actionable
             // 37 (1)" — reading as one sentence: the place, its slice, what
-            // it holds. In the shell apps the stock heading carries no
-            // number at all, so with the option on the unfiltered heading
-            // matches the sidebar badge instead of following stock silence.
-            if (settings.showHeaderCounts) {
+            // it holds. Only where one of our filter words is drawn: the
+            // same string feeds back buttons and bare headings, and a count
+            // glued straight onto a lone name reads as clutter there.
+            if (settings.showHeaderCounts && word) {
                 const mailbox = this.get('mailbox');
+                const list = this.get('mailboxMessageList');
 
-                if (filter) {
-                    const list = this.get('mailboxMessageList');
-
-                    if (list && list.get('hasTotal')) {
-                        let count = String(list.get('length'));
-                        const unread = mailbox && headerUnreadFor(mailbox, filter);
-                        if (unread) count += ' (' + unread + ')';
-                        title = title + ' ' + count;
-                    } else if (list && !list.customPrimed && list.get('where')) {
-                        primeListForCount(list);
-                    }
-                } else if (standaloneApp() && mailbox) {
-                    const total = mailbox.get('totalThreads') || 0;
-                    const unread = mailbox.get('unreadThreads') || 0;
-                    if (total) {
-                        title = title + ' ' + total +
-                            (unread ? ' (' + unread + ')' : '');
-                    }
+                if (list && list.get('hasTotal')) {
+                    let count = String(list.get('length'));
+                    const unread = mailbox && headerUnreadFor(mailbox, filter);
+                    if (unread) count += ' (' + unread + ')';
+                    title = title + ' ' + count;
+                } else if (list && !list.customPrimed && list.get('where')) {
+                    primeListForCount(list);
                 }
             }
 
