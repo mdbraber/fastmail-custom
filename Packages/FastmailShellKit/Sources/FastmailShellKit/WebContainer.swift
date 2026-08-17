@@ -64,7 +64,8 @@ public struct WebContainer {
             onBadge: { count in BadgeController.shared.apply(count) },
             onActions: { names in
                 UserDefaults.standard.set(names, forKey: IntentSupport.actionNamesKey)
-            }
+            },
+            onOpenSettings: { SettingsPresenter.shared.open() }
         )
         configuration.userContentController.addScriptMessageHandler(
             bridge,

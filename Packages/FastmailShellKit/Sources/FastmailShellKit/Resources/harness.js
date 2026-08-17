@@ -254,39 +254,79 @@
         return reply && forward;
     }
 
+    function optionProbe(option) {
+        if (!option || typeof option.get !== 'function') return '';
+        var probe = '';
+        try {
+            probe = String(option.get('action') || '') + ' ' +
+                String(option.get('url') || '') + ' ' +
+                String(option.get('href') || '') + ' ' +
+                String(option.get('method') || '');
+        } catch (error) {
+            return '';
+        }
+        return probe;
+    }
+
+    function logoutIndex(options) {
+        for (var i = 0; i < options.length; i += 1) {
+            if (/logout|log-out|signout/i.test(optionProbe(options[i]))) return i;
+        }
+        return -1;
+    }
+
+    function menuKindOf(options) {
+        if (isMessageActionsMenu(options)) return 'message';
+        if (logoutIndex(options) !== -1) return 'profile';
+        return null;
+    }
+
+    function menuItemButton(item) {
+        var ButtonView = window.FastMail.classes.ButtonView;
+        var button = new ButtonView({
+            label: item.label,
+            icon: item.icon ? iconNode(item.icon) : undefined,
+            method: 'chooseItem',
+            chooseItem: function () {
+                var layer = null;
+                try {
+                    layer = this.get('layer');
+                } catch (error) {}
+                var rect = layer && layer.getBoundingClientRect
+                    ? layer.getBoundingClientRect() : null;
+                try {
+                    item.onSelect({ rect: rect });
+                } catch (error) {
+                    report(error);
+                }
+            }
+        });
+        button.__fmshellItem = item.id;
+        return button;
+    }
+
     function injectMenuItems(menu) {
         if (!menuItems.length) return;
         var options = menu && typeof menu.get === 'function' && menu.get('options');
         if (!options || typeof options.unshift !== 'function') return;
-        if (!isMessageActionsMenu(options)) return;
+        var kind = menuKindOf(options);
+        if (!kind) return;
         if (options.some(function (option) { return option && option.__fmshellItem; })) return;
 
-        var ButtonView = window.FastMail.classes.ButtonView;
-        var added = [];
-        menuItems.forEach(function (item) {
-            var button = new ButtonView({
-                label: item.label,
-                icon: item.icon ? iconNode(item.icon) : undefined,
-                method: 'chooseItem',
-                chooseItem: function () {
-                    var layer = null;
-                    try {
-                        layer = this.get('layer');
-                    } catch (error) {}
-                    var rect = layer && layer.getBoundingClientRect
-                        ? layer.getBoundingClientRect() : null;
-                    try {
-                        item.onSelect({ rect: rect });
-                    } catch (error) {
-                        report(error);
-                    }
-                }
-            });
-            button.__fmshellItem = item.id;
-            added.push(button);
-        });
-        added.push(null);
-        options.unshift.apply(options, added);
+        var wanted = menuItems.filter(function (item) { return item.menu === kind; });
+        if (!wanted.length) return;
+
+        var added = wanted.map(menuItemButton);
+
+        if (kind === 'message') {
+            added.push(null);
+            options.unshift.apply(options, added);
+            return;
+        }
+
+        var at = logoutIndex(options);
+        var splice = [at < 0 ? options.length : at, 0].concat(added);
+        options.splice.apply(options, splice);
     }
 
     function installMenuInjection() {
@@ -461,6 +501,7 @@
             id: item.id,
             label: item.label,
             icon: typeof item.icon === 'string' ? item.icon : null,
+            menu: item.menu === 'profile' ? 'profile' : 'message',
             onSelect: item.onSelect
         });
         installMenuInjection();
@@ -507,6 +548,25 @@
                     rect: context && context.rect
                 });
             }).catch(function () {});
+        }
+    });
+
+    var SETTINGS_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"' +
+        ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"' +
+        ' stroke-linejoin="round" class="u-standardicon v-Icon">' +
+        '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>' +
+        '<line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>' +
+        '<line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>' +
+        '<line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/>' +
+        '<line x1="17" y1="16" x2="23" y2="16"/></svg>';
+
+    window.native.addMenuItem({
+        id: 'app-settings',
+        label: 'App settings',
+        icon: SETTINGS_ICON,
+        menu: 'profile',
+        onSelect: function () {
+            post('openSettings', {});
         }
     });
 

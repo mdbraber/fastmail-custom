@@ -13,8 +13,8 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     let settings = InboxModeSettings.current(from: freshDefaults(#function))
     #expect(settings.count == InboxModeSettings.options.count)
     #expect(settings["labelColours"] as? Bool == true)
-    #expect(settings["showFilteredCounts"] as? Bool == false)
-    #expect(settings["processLabel"] as? String == "Process")
+    #expect(settings["showFilteredCounts"] as? Bool == true)
+    #expect(settings["processLabel"] as? String == "Next")
     #expect(settings["qualifierLabels"] as? String == "Admin, Waiting")
     #expect(settings["deferredLabels"] as? String == "Waiting, Snoozed")
 }

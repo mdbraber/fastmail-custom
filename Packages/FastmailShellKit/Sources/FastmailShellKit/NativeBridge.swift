@@ -16,6 +16,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onShare: @MainActor (ShareRequest) -> Void
     private let onBadge: @MainActor (Int) -> Void
     private let onActions: @MainActor ([String]) -> Void
+    private let onOpenSettings: @MainActor () -> Void
 
     public init(
         expectedHost: String,
@@ -25,7 +26,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onDragRegions: @escaping (CGRect, [CGRect]) async -> Void = { _, _ in },
         onShare: @escaping @MainActor (ShareRequest) -> Void = { $0.completion() },
         onBadge: @escaping @MainActor (Int) -> Void = { _ in },
-        onActions: @escaping @MainActor ([String]) -> Void = { _ in }
+        onActions: @escaping @MainActor ([String]) -> Void = { _ in },
+        onOpenSettings: @escaping @MainActor () -> Void = {}
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
@@ -35,6 +37,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onShare = onShare
         self.onBadge = onBadge
         self.onActions = onActions
+        self.onOpenSettings = onOpenSettings
     }
 
     static func rect(from values: [Double]) -> CGRect? {
@@ -98,6 +101,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "actions":
             let names = (payload["names"] as? [Any] ?? []).compactMap { $0 as? String }
             onActions(names)
+            return BridgeReply(value: nil, error: nil)
+        case "openSettings":
+            onOpenSettings()
             return BridgeReply(value: nil, error: nil)
         case "subject":
             if let webView {

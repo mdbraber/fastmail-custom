@@ -10,6 +10,7 @@ public struct AppShell: View {
     private let profile: Profile
     @StateObject private var model = ShellModel()
     @ObservedObject private var downloads = DownloadManager.shared
+    @ObservedObject private var settings = SettingsPresenter.shared
 
     public init(profile: Profile) {
         self.profile = profile
@@ -48,7 +49,11 @@ public struct AppShell: View {
         .onOpenURL { url in
             handle(url)
         }
-        #if !canImport(UIKit)
+        #if canImport(UIKit)
+        .sheet(isPresented: $settings.isPresented) {
+            MobileSettingsSheet(profile: profile)
+        }
+        #else
         .onAppear {
             ComposeWindows.shared.configure(profile: profile)
         }

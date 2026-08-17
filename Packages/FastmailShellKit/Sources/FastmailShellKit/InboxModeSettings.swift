@@ -46,101 +46,155 @@ public enum InboxModeSettings {
         Option(
             "labelColours",
             title: "Colour rows by label",
-            hint: "While Inbox mode is on, marks each message with the colour of a label it carries. Only labels you have given a colour show up.",
+            hint: "Rows take the colour of a label they carry.",
             default: .toggle(true)
         ),
         Option(
             "labelColoursSidebarOnly",
             parent: "labelColours",
             title: "Only labels that are inboxes",
-            hint: "Only labels that a saved search names as an inbox get a colour. Everything else you file into stays uncoloured, so the list shows which inbox a message belongs to rather than every tag it carries.",
+            hint: "Plain filing tags stay unpainted.",
             default: .toggle(true)
         ),
         Option(
             "labelColoursSkipProcess",
             parent: "labelColours",
-            title: "Ignore the Process marker",
-            hint: "Everything you keep carries it, so colouring by it would tint the whole list one shade. Turn this off to see its colour like any other.",
+            title: "Ignore the kept marker",
+            hint: "Everything kept carries it; its colour would tint the whole list.",
             default: .toggle(true)
         ),
         Option(
             "sidebarSeparators",
             title: "Separate folders from labels",
-            hint: "Draws a line in the sidebar wherever the system folders give way to your labels, or back again. A label kept inside the Inbox stays with it, without a line of its own.",
+            hint: "A line where the system folders end and your labels begin.",
             default: .toggle(true)
         ),
         Option(
             "hideLoneExpando",
             title: "Hide the Labels collapse arrow",
-            hint: "Fastmail puts an arrow on the Labels heading as soon as you have a second mail account, even when that account shows nothing in the sidebar — leaving it to collapse the only section there is. This hides it until another account’s sources actually appear.",
+            hint: "Until a second account actually shows sidebar sources.",
             default: .toggle(true)
         ),
         Option(
             "dragAdditive",
             title: "Dragging adds a label",
-            hint: "Dropping a message on a label files it there and leaves it in the Inbox. Hold Option to move instead.",
+            hint: "A drop files the message and leaves it in the Inbox; Option moves.",
             default: .toggle(true)
         ),
         Option(
             "hideInboxLabel",
             title: "Hide the Inbox chip",
-            hint: "In a view where every row is in the Inbox — a label filtered to the Inbox, or on the Actionable or Triage filter — the chip says nothing, so it is left out.",
+            hint: "Wherever every row is in the Inbox anyway.",
             default: .toggle(true)
         ),
         Option(
             "stripLabelPrefix",
             title: "Show only the label’s own name",
-            hint: "A nested label reads “Work” rather than “Projects/Work”, both in the list and on an open message. Hovering still shows the full path.",
+            hint: "“Work”, not “Projects/Work”; hover for the full path.",
             default: .toggle(true)
         ),
         Option(
             "labelsShortcut",
             title: "V keeps a message",
-            hint: "Adds the Process marker and takes off any deferred label, leaving the message in the Inbox. A message with no topic label yet first opens a picker narrowed to your sidebar, so it can be filed by typing. Shift-V opens the same narrowed menu just to change labels, and Option-V opens Move to as Fastmail ships it.",
+            hint: "Adds the kept marker, clears deferrals; unfiled mail gets the picker first. Shift-V labels only, Option-V is stock Move to.",
             default: .toggle(true)
         ),
         Option(
             "labelsSidebarOnly",
             parent: "labelsShortcut",
             title: "Only labels that are inboxes",
-            hint: "Leaves out Trash, Archive, Spam and any label no saved search names as an inbox, so a stray letter cannot land on one. Typing a name still finds any label of your own; Trash and the rest stay out either way.",
+            hint: "The picker hides Trash, Spam and plain tags; typing still finds any label.",
             default: .toggle(true)
         ),
         Option(
             "labelsAutoSave",
             parent: "labelsShortcut",
             title: "Auto-save the last label standing",
-            hint: "Once typing has left one label, it is applied and the menu closes, with no Enter to press. Never applies to creating a new label.",
+            hint: "One match left applies itself and closes the menu.",
             default: .toggle(true)
         ),
         Option(
             "processLabel",
-            title: "Label that marks kept mail",
-            hint: "The verbs put this label on whatever you keep and strip it again on archive and snooze, so its badge counts what is still to work through. A marker, not a place — kept messages stay in the Inbox.",
-            default: .text("Process")
+            title: "The kept marker",
+            hint: "On everything kept; stripped again on archive and snooze.",
+            default: .text("Next")
         ),
         Option(
             "qualifierLabels",
-            title: "Labels that qualify rather than place",
-            hint: "Labels that cut across your inboxes — a message is urgent and somewhere. Their colour outranks the inbox’s on a message row, and when more than one applies the first named wins. Comma-separated, matched on the full path.",
+            title: "Qualifier labels",
+            hint: "Cut across topics and never count as filing; first named wins the row colour. Comma-separated paths.",
             default: .text("Admin, Waiting")
         ),
         Option(
             "deferredLabels",
-            title: "Labels that defer",
-            hint: "What the actionable filter hides: a message on any of these drops out of the Inbox and every topic until it comes back. Filing into one also takes the Process marker off — deferring is a move, not a tag. Comma-separated, matched on the full path.",
+            title: "Deferred labels",
+            hint: "Hidden from Actionable; filing into one drops the kept marker. Comma-separated paths.",
             default: .text("Waiting, Snoozed")
+        ),
+        Option(
+            "waitingLabel",
+            title: "The waiting label",
+            hint: "Where w parks mail blocked on someone else.",
+            default: .text("Waiting")
+        ),
+        Option(
+            "somedayLabel",
+            title: "The someday label",
+            hint: "Where o parks mail with no commitment attached.",
+            default: .text("Someday")
+        ),
+        Option(
+            "excludedLabels",
+            title: "Labels that are never topics",
+            hint: "Never offered as topics; alone they don’t count as filed. Comma-separated paths.",
+            default: .text("Later")
+        ),
+        Option(
+            "urgentKey",
+            title: "Urgent key",
+            hint: "Runs keep + pin.",
+            default: .text("s")
+        ),
+        Option(
+            "waitingKey",
+            title: "Waiting key",
+            hint: "Parks on the waiting label.",
+            default: .text("w")
+        ),
+        Option(
+            "somedayKey",
+            title: "Someday key",
+            hint: "Parks on the someday label. Claims Fastmail’s open key; Enter still opens.",
+            default: .text("o")
+        ),
+        Option(
+            "bottomBarSlots",
+            title: "Bottom bar verbs",
+            hint: "The phone bar’s slots, in order; the rest wait in More. From: Snooze, Pin, Archive, Labels, Delete, Move, Keep, Waiting, Someday.",
+            default: .text("Snooze, Pin, Archive, Labels")
         ),
         Option(
             "showFilteredCounts",
             title: "Show exact filtered counts",
-            hint: "The heading of a filtered list and the badge on each topic label show their exact actionable count, asked of the server once and kept fresh from then on. Off, filtered headings show no number and topics carry no badge.",
-            default: .toggle(false)
+            hint: "Headings and sidebar badges show the server-exact count of each label’s own filter, with unread in parens.",
+            default: .toggle(true)
+        ),
+        Option(
+            "appBadgeLabel",
+            title: "App badge label",
+            hint: "The app icon’s badge counts this label. Empty for the app’s own default.",
+            default: .text("Inbox")
+        ),
+        Option(
+            "appBadgeFilter",
+            title: "App badge filter",
+            hint: "actionable, triage, deferred — or empty for the plain total.",
+            default: .text("actionable")
         ),
         Option(
             "swapArchiveExpand",
             title: "Swap E and Y",
-            hint: "E archives and Y expands a thread, the other way round from Fastmail. H still archives.",
+            hint: "E archives and Y expands, the other way round from Fastmail. H still archives.",
             default: .toggle(true)
         )
     ]
