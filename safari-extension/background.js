@@ -43,7 +43,7 @@ const DEFAULT_SETTINGS = {
     urgentKey: 's',
     waitingKey: 'w',
     somedayKey: 'o',
-    bottomBarSlots: 'Snooze, Pin, Archive, Labels',
+    bottomBarSlots: 'Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move',
     excludedLabels: 'Later',
     showFilteredCounts: true,
     appBadgeLabel: 'Inbox',

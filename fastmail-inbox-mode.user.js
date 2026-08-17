@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.21
+// @version      2.22
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, actionable is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -208,10 +208,11 @@ other user label is a topic.
         urgentKey: 's',
         waitingKey: 'w',
         somedayKey: 'o',
-        // The phone bar's verb slots, in order; every verb not named here
-        // waits in More. Choose from: Snooze, Pin, Archive, Labels,
-        // Delete, Move, Keep, Waiting, Someday.
-        bottomBarSlots: 'Snooze, Pin, Archive, Labels',
+        // The phone bar's verbs, as one ordered list over all of them: the
+        // bar takes as many leading ones as the screen fits — More always
+        // keeps a slot — and the rest wait inside More, in the same order.
+        // Kinds missing from a saved value join at the end.
+        bottomBarSlots: 'Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move',
         // Never offered as topics, even from the sidebar
         excludedLabels: 'Later',
         // Show exact counts on filtered views and topic badges
@@ -1904,6 +1905,24 @@ other user label is a topic.
         return option;
     };
 
+    // How many verbs fit: the bar's own width over a thumb-sized slot,
+    // one always held back for More. Falls back to the viewport when the
+    // bar has not been measured yet.
+    const SLOT_WIDTH = 76;
+
+    const barCapacity = (toolbar) => {
+        let width = 0;
+        try {
+            const layer = toolbar.get('layer');
+            width = (layer && layer.offsetWidth) || 0;
+        } catch (error) {
+            width = 0;
+        }
+        if (!width) width = window.innerWidth || 375;
+
+        return Math.max(1, Math.floor(width / SLOT_WIDTH) - 1);
+    };
+
     const dressToolbar = () => {
         const toolbar = messageToolbar();
         if (!toolbar) return;
@@ -1958,10 +1977,22 @@ other user label is a topic.
                 }
             };
 
-            const slotNames = String(settings.bottomBarSlots || '')
+            // The setting is an order over every verb, not a subset: kinds
+            // it does not name join at the end, so an older saved value
+            // still places all nine somewhere
+            const named = String(settings.bottomBarSlots || '')
                 .split(',')
                 .map(part => part.trim().toLowerCase())
                 .filter(name => SLOT_KINDS[name]);
+
+            Object.keys(SLOT_KINDS).forEach((name) => {
+                if (named.indexOf(name) === -1) named.push(name);
+            });
+
+            // Sizing decides visibility: as many leading verbs as the bar
+            // is wide, one slot always held back for More
+            const slotNames = named.slice(0, barCapacity(toolbar));
+            const overflowNames = named.slice(slotNames.length);
 
             // A topic or Process view is past filing: getting here at all
             // means the label is on, so the slot Fastmail fills contextually
@@ -2006,12 +2037,10 @@ other user label is a topic.
                 }
             }
 
-            // Off the bar and into More: every kind the setting does not
-            // name. A stock view keeps existing in More; a state verb's
-            // button is reused the same way.
-            Object.keys(SLOT_KINDS).forEach((name) => {
-                if (slotNames.indexOf(name) !== -1) return;
-
+            // Off the bar and into More: every kind past the cut. A stock
+            // view keeps existing in More; a state verb's button is reused
+            // the same way.
+            overflowNames.forEach((name) => {
                 const view = onBar(SLOT_KINDS[name].test);
                 if (!view) return;
 
@@ -2090,6 +2119,20 @@ other user label is a topic.
                     if (inMore(SLOT_KINDS[kind].test)) return;
                     addToMore(stateVerbOption(label, kind));
                 });
+
+            // More reads in the list's order too: the known verbs are
+            // pulled out and re-appended in sequence, after Fastmail's own
+            const moreNow = menu.get('options') || [];
+            const ordered = [];
+            named.forEach((name) => {
+                const view = inMore(SLOT_KINDS[name].test);
+                if (view) ordered.push(view);
+            });
+            if (ordered.length) {
+                menu.set('options', moreNow
+                    .filter(option => ordered.indexOf(option) === -1)
+                    .concat(ordered));
+            }
 
             const current = menu.get('options') || [];
             if (!current.some(option => option.customRemoveLabel)) {
@@ -5304,6 +5347,17 @@ other user label is a topic.
         updateStyles();
         installAppBadge();
         shortcut(SHORTCUT, toggleMode);
+
+        // Rotation and split view change how many verbs fit on the bar
+        let redressTimer = null;
+        window.addEventListener('resize', () => {
+            if (!FastMail.isMobile) return;
+            if (redressTimer) clearTimeout(redressTimer);
+            redressTimer = setTimeout(() => {
+                redressTimer = null;
+                updateIndicator();
+            }, 150);
+        });
 
         for (let i = 1; i <= SOURCE_SHORTCUT_COUNT; i += 1) {
             SOURCE_SHORTCUT_MODIFIERS.forEach((modifier) => {
