@@ -170,8 +170,8 @@ public enum InboxModeSettings {
         Option(
             "bottomBarSlots",
             title: "Bottom bar verbs",
-            hint: "The phone bar’s slots, in order; the rest wait in More. From: Snooze, Pin, Archive, Labels, Delete, Move, Keep, Waiting, Someday.",
-            default: .text("Snooze, Pin, Archive, Labels")
+            hint: "Drag to order the phone bar’s verbs; what fits on screen shows, the rest wait in More.",
+            default: .text("Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move")
         ),
         Option(
             "showFilteredCounts",

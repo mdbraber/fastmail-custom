@@ -261,7 +261,8 @@
             probe = String(option.get('action') || '') + ' ' +
                 String(option.get('url') || '') + ' ' +
                 String(option.get('href') || '') + ' ' +
-                String(option.get('method') || '');
+                String(option.get('method') || '') + ' ' +
+                String(option.get('label') || '');
         } catch (error) {
             return '';
         }
@@ -270,7 +271,7 @@
 
     function logoutIndex(options) {
         for (var i = 0; i < options.length; i += 1) {
-            if (/logout|log-out|signout/i.test(optionProbe(options[i]))) return i;
+            if (/log\s*-?\s*out|logout|sign\s*-?\s*out/i.test(optionProbe(options[i]))) return i;
         }
         return -1;
     }
@@ -279,6 +280,23 @@
         if (isMessageActionsMenu(options)) return 'message';
         if (logoutIndex(options) !== -1) return 'profile';
         return null;
+    }
+
+    // When neither fingerprint matches, say what the menu was made of —
+    // once per shape — so a missed menu can be identified from the log
+    // instead of guessed at.
+    var loggedMenuShapes = {};
+
+    function logMenuShape(options) {
+        var parts = [];
+        for (var i = 0; i < options.length && i < 12; i += 1) {
+            var probe = collapse(optionProbe(options[i]));
+            parts.push(probe ? probe.slice(0, 48) : '-');
+        }
+        var shape = parts.join(' | ');
+        if (!shape || loggedMenuShapes[shape]) return;
+        loggedMenuShapes[shape] = true;
+        post('log', { message: 'menu shape: ' + shape });
     }
 
     function menuItemButton(item) {
@@ -310,7 +328,10 @@
         var options = menu && typeof menu.get === 'function' && menu.get('options');
         if (!options || typeof options.unshift !== 'function') return;
         var kind = menuKindOf(options);
-        if (!kind) return;
+        if (!kind) {
+            logMenuShape(options);
+            return;
+        }
         if (options.some(function (option) { return option && option.__fmshellItem; })) return;
 
         var wanted = menuItems.filter(function (item) { return item.menu === kind; });

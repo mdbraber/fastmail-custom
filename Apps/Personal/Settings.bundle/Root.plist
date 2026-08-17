@@ -408,7 +408,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>The phone bar’s slots, in order; the rest wait in More. From: Snooze, Pin, Archive, Labels, Delete, Move, Keep, Waiting, Someday.</string>
+			<string>Drag to order in the in-app settings; what fits on screen shows, the rest wait in More.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -418,7 +418,7 @@
 			<key>Key</key>
 			<string>inboxMode.bottomBarSlots</string>
 			<key>DefaultValue</key>
-			<string>Snooze, Pin, Archive, Labels</string>
+			<string>Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move</string>
 			<key>IsSecure</key>
 			<false/>
 			<key>AutocapitalizationType</key>

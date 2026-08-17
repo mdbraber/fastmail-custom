@@ -11,8 +11,43 @@ public struct InboxModeSettingsForm: View {
 
     public var body: some View {
         ForEach(InboxModeSettings.options) { option in
-            row(for: option)
+            if option.key == "bottomBarSlots" {
+                barOrderRows(for: option)
+            } else {
+                row(for: option)
+            }
         }
+    }
+
+    // The bar order is dragged, not typed: one row per verb, reordered
+    // with onMove and written back as the same comma string the userscript
+    // reads. On iOS the grips appear in edit mode — the sheet carries an
+    // Edit button for it.
+    @ViewBuilder
+    private func barOrderRows(for option: InboxModeSettings.Option) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(option.title)
+            Text(option.hint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        #if canImport(UIKit)
+        ForEach(model.barOrder, id: \.self) { name in
+            Label(name, systemImage: "line.3.horizontal")
+                .foregroundStyle(.primary)
+        }
+        .onMove { from, to in model.moveBarSlot(from: from, to: to) }
+        #else
+        List {
+            ForEach(model.barOrder, id: \.self) { name in
+                Text(name)
+            }
+            .onMove { from, to in model.moveBarSlot(from: from, to: to) }
+        }
+        .frame(height: 248)
+        .scrollDisabled(true)
+        #endif
     }
 
     @ViewBuilder
@@ -91,6 +126,11 @@ public struct MobileSettingsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
+                #if canImport(UIKit)
+                ToolbarItem(placement: .cancellationAction) {
+                    EditButton()
+                }
+                #endif
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
@@ -106,6 +146,44 @@ public struct MobileSettingsSheet: View {
 @MainActor
 final class InboxModeSettingsModel: ObservableObject {
     private let defaults = UserDefaults.standard
+
+    static let barSlotNames = [
+        "Snooze", "Pin", "Archive", "Labels", "Keep",
+        "Waiting", "Someday", "Delete", "Move"
+    ]
+
+    @Published var barOrder: [String]
+
+    init() {
+        barOrder = Self.loadBarOrder(from: UserDefaults.standard)
+    }
+
+    private static var barSlotsKey: String {
+        InboxModeSettings.options
+            .first(where: { $0.key == "bottomBarSlots" })?
+            .defaultsKey ?? "inboxMode.bottomBarSlots"
+    }
+
+    // Stored order first, then whatever it does not name, so a value saved
+    // by an older build still lists every verb once
+    static func loadBarOrder(from defaults: UserDefaults) -> [String] {
+        let stored = (defaults.string(forKey: barSlotsKey) ?? "")
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+
+        var order = stored.compactMap { name in
+            barSlotNames.first { $0.lowercased() == name }
+        }
+        for name in barSlotNames where !order.contains(name) {
+            order.append(name)
+        }
+        return order
+    }
+
+    func moveBarSlot(from source: IndexSet, to destination: Int) {
+        barOrder.move(fromOffsets: source, toOffset: destination)
+        defaults.set(barOrder.joined(separator: ", "), forKey: Self.barSlotsKey)
+    }
 
     // A suboption only means anything while the option above it is on, so it
     // follows its parent rather than sitting there looking available — the
