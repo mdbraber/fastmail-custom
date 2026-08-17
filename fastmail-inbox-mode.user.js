@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.36
+// @version      2.37
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -3011,6 +3011,40 @@ other user label is a topic.
         toolbarLabelsView() ||
         visibleViewForIcon('svg.v-Icon.i-folder');
 
+    // The bar's ⋯. Its own view rather than an icon, because that is what
+    // holds the options the Labels button may be waiting in.
+    const overflowView = () => {
+        const toolbar = messageToolbar();
+        if (!toolbar) return null;
+
+        try {
+            return (toolbar.get('childViews') || []).filter(view =>
+                view.constructor &&
+                view.constructor.name === 'OverflowMenuView')[0] || null;
+        } catch (error) {
+            return null;
+        }
+    };
+
+    // Open More, then press the Labels button that draws inside it. Returns
+    // whether the first half got anywhere; the second half runs a tick later
+    // and is watched by the deadline like every other route, so a More menu
+    // that turns out not to hold Labels still ends in the question rather
+    // than in silence.
+    const openPickerViaMore = (verb) => {
+        const overflow = overflowView();
+        if (!overflow || !pressButtonView(overflow)) return false;
+
+        setTimeout(() => {
+            if (pendingVerb !== verb || verb.opened) return;
+
+            const labels = mobileLabelsButtonView();
+            if (labels) pressButtonView(labels);
+        }, 150);
+
+        return true;
+    };
+
     const openTopicPicker = (keys, onCommit) => {
         const single = keys.length === 1;
 
@@ -3043,6 +3077,19 @@ other user label is a topic.
         if (drawn) {
             pendingVerb = verb;
             if (armPicker(verb, pressButtonView(drawn), onCommit)) return;
+        }
+
+        // Still nothing on screen, so put something there: open the bar's
+        // More menu and press Labels once it has drawn inside it. Pressing
+        // what is visible is the one route that has always worked on touch —
+        // this only arranges for the button to be visible first, which is
+        // what a thumb would do. The tick between the two is the same one
+        // the More menu's own verbs wait for; two menus opening in one
+        // moment is how taps get eaten.
+        if (openPickerViaMore(verb)) {
+            pendingVerb = verb;
+            armPicker(verb, true, onCommit);
+            return;
         }
 
         // Out of menus. The one question a dialog can carry stands in,
@@ -3756,18 +3803,48 @@ other user label is a topic.
         }
     };
 
-    const isLabelsButton = (target) => hasShortcut(target, LABELS_SHORTCUT);
-
-    const isMoveButton = (target) => {
+    // A shortcut is a keyboard's way of naming a button, and the phone has no
+    // keyboard: its toolbar buttons carry no shortcut property at all, which
+    // is why the captured registrations are null there. Naming Labels and Move
+    // by the shortcut alone therefore matched nothing on the phone — so the
+    // bar's Labels and Move slots quietly did nothing, which is a configured
+    // order that does not apply, and the topic picker had no button to open,
+    // which is the bare-archive dialog turning up in place of the picker.
+    //
+    // The glyph is the other name a button has. A drawn view carries it in its
+    // layer; one built from an icon element carries it there before ever being
+    // drawn. isInDocument guards the layer read, because asking an undrawn view
+    // for its layer is what renders it, and a button waiting in a closed menu
+    // should stay closed.
+    const viewHasIcon = (target, name) => {
         if (!target || typeof target.get !== 'function') return false;
 
         try {
-            return String(target.get('shortcut')).trim().split(/\s+/)
-                .indexOf(MOVE_SHORTCUT) !== -1;
+            const icon = target.get('icon');
+            if (icon && icon.nodeType === 1 && icon.getAttribute) {
+                const classes = (icon.getAttribute('class') || '').split(/\s+/);
+                if (classes.indexOf(name) !== -1) return true;
+            }
+        } catch (error) {
+            // The drawn glyph below is the other half of the answer
+        }
+
+        try {
+            if (!target.get('isInDocument')) return false;
+
+            const layer = target.get('layer');
+            return !!(layer && layer.querySelector &&
+                layer.querySelector('svg.' + name));
         } catch (error) {
             return false;
         }
     };
+
+    const isLabelsButton = (target) => hasShortcut(target, LABELS_SHORTCUT) ||
+        viewHasIcon(target, 'i-label');
+
+    const isMoveButton = (target) => hasShortcut(target, MOVE_SHORTCUT) ||
+        viewHasIcon(target, 'i-folder');
 
     // Where "l" would have gone. Captured from the registration rather than
     // looked up, so whatever Fastmail bound is what we call.
