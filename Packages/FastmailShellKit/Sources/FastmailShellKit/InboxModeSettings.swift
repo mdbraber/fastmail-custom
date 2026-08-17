@@ -128,7 +128,7 @@ public enum InboxModeSettings {
         Option(
             "deferredLabels",
             title: "Deferred labels",
-            hint: "Hidden from Actionable; filing into one drops the kept marker. Comma-separated paths.",
+            hint: "Hidden from Next; filing into one drops the kept marker. Comma-separated paths.",
             default: .text("Waiting, Snoozed")
         ),
         Option(
@@ -146,7 +146,7 @@ public enum InboxModeSettings {
         Option(
             "referenceLabels",
             title: "Reference labels",
-            hint: "Filed but not work: v into one leaves the marker off, so the mail leaves the queue as well as the Inbox. A topic on the thread outranks it. Comma-separated paths.",
+            hint: "Worked from the label, not the Inbox: v into one marks it Next and takes the Inbox off, where a topic leaves the Inbox on. A topic on the thread outranks it. Comma-separated paths.",
             default: .text("")
         ),
         Option(
@@ -200,7 +200,7 @@ public enum InboxModeSettings {
         Option(
             "appBadgeFilter",
             title: "App badge filter",
-            hint: "actionable, triage, deferred — or empty for the plain total.",
+            hint: "next, triage, deferred, reference — or empty for the plain total.",
             default: .text("actionable")
         ),
         Option(

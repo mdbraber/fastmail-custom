@@ -254,7 +254,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Hidden from Actionable; filing into one drops the kept marker. Comma-separated paths.</string>
+			<string>Hidden from Next; filing into one drops the kept marker. Comma-separated paths.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -320,7 +320,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Filed but not work: v into one leaves the marker off, so the mail leaves the queue as well as the Inbox. A topic on the thread outranks it. Comma-separated paths.</string>
+			<string>Worked from the label, not the Inbox: v into one marks it Next and takes the Inbox off, where a topic leaves the Inbox on. A topic on the thread outranks it. Comma-separated paths.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -506,7 +506,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>actionable, triage, deferred — or empty for the plain total.</string>
+			<string>next, triage, deferred, reference — or empty for the plain total.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
