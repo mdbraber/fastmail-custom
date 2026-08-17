@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.30
+// @version      2.31
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, actionable is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -1202,9 +1202,9 @@ other user label is a topic.
         '.v-MailboxSource-badge b { font-weight: 800; }'
     ];
 
-    // A pill for passive confirmations. Fastmail's own toast belongs to the
-    // undo machinery — didAction cuts a checkpoint to show one — so a note
-    // with nothing to undo brings its own: fixed above the bottom bar, dark
+    // A pill for passive confirmations — the fallback only: showToast asks
+    // Fastmail's own notification layer first and draws this by hand when
+    // that container is not there to ask. Fixed above the bottom bar, dark
     // in either theme, gone on its own. pointer-events stays off so a toast
     // mid-fade never eats a tap meant for what is under it.
     const TOAST_RULES = [
@@ -5048,11 +5048,37 @@ other user label is a topic.
 
     const currentMessageLink = () => urlForMessage(controller().get('message'));
 
-    // One toast at a time: a fresh message replaces whatever is still
+    // Fastmail's own notification layer. The container view is built with
+    // the root view at boot and inserted right after it, on desktop and on
+    // the phone alike, so its drawn node is always there to ask for the
+    // instance. Its show() wraps a bare string in the same NotificationView
+    // every stock toast is — same corner, same look, same close button —
+    // and manages the queue of them itself.
+    const TOAST_MS = 5000;
+
+    const notificationContainer = () => {
+        const node = document.querySelector('.v-NotificationContainer');
+        const view = node && FastMail.getViewFromNode(node);
+        return view && typeof view.show === 'function' ? view : null;
+    };
+
+    // One pill at a time: a fresh message replaces whatever is still
     // fading rather than stacking under it
     let toastTimer = null;
 
     const showToast = (message) => {
+        try {
+            const container = notificationContainer();
+            if (container) {
+                container.show(message, TOAST_MS, true);
+                return;
+            }
+        } catch (error) {
+            // The pill below owes the container nothing
+        }
+
+        // The hand-drawn pill, kept as the fallback for a renamed or
+        // not-yet-drawn container
         const previous = document.querySelector('.custom-inbox-toast');
         if (previous) previous.remove();
         if (toastTimer) clearTimeout(toastTimer);
