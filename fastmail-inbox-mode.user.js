@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.25
+// @version      2.26
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, actionable is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -4297,21 +4297,21 @@ other user label is a topic.
         const original = mailController.mailboxTitleAndCount;
 
         mailController.mailboxTitleAndCount = wrapComputed(original, function () {
-            let title = original.call(this);
+            const title = original.call(this);
             if (!modeIsOn || this.get('search')) return title;
 
-            // The word follows the name, the way Fastmail's own filters
-            // read — the mailbox is the subject, the filter qualifies it
             const filter = this.get('mailboxFilter');
             const word = FILTER_WORDS[filter];
-            if (word) title = title + ' • ' + word;
+            if (!word) return title;
 
-            // The pair trails the name and the filter — "Inbox • Actionable
-            // 37 (1)" — reading as one sentence: the place, its slice, what
-            // it holds. Only where one of our filter words is drawn: the
-            // same string feeds back buttons and bare headings, and a count
-            // glued straight onto a lone name reads as clutter there.
-            if (settings.showHeaderCounts && word) {
+            // Rebuilt from the bare name rather than suffixed onto the
+            // stock string: priming the list for an exact total makes the
+            // stock heading grow a number of its own, and "Inbox • 1 •
+            // Triage 2" reads as two headings fighting. Ours is the whole
+            // sentence — the place, its slice, the filtered total alone.
+            let rebuilt = (this.get('mailboxTitle') || title) + ' • ' + word;
+
+            if (settings.showHeaderCounts) {
                 const mailbox = this.get('mailbox');
                 const list = this.get('mailboxMessageList');
 
@@ -4319,13 +4319,13 @@ other user label is a topic.
                     let count = String(list.get('length'));
                     const unread = mailbox && headerUnreadFor(mailbox, filter);
                     if (unread) count += ' (' + unread + ')';
-                    title = title + ' ' + count;
+                    rebuilt = rebuilt + ' ' + count;
                 } else if (list && !list.customPrimed && list.get('where')) {
                     primeListForCount(list);
                 }
             }
 
-            return title;
+            return rebuilt;
         });
 
         mailController.computedPropertyDidChange('mailboxTitleAndCount');
