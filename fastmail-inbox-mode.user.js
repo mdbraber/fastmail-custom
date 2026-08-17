@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.35
+// @version      2.36
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -2860,12 +2860,12 @@ other user label is a topic.
     // button is, so the tristate picker can be opened programmatically
     let labelsButton = null;
 
-    // The phone's own Labels control, found by its icon the way the ⋯
-    // button is: the message toolbar draws it as an i-label ButtonView.
-    // Pressing it opens the stock tristate — a MailboxMenuView, so the
-    // verb hooks below adopt it like any other picker.
-    const mobileLabelsButtonView = () => {
-        const icons = document.querySelectorAll('svg.v-Icon.i-label');
+    // A drawn control, found by its icon the way the ⋯ button is. Visibility
+    // is the test rather than mere presence: a button parked in the bar's
+    // More menu is in the document and has no rectangle, and pressing one
+    // that is not on screen opens nothing.
+    const visibleViewForIcon = (selector) => {
+        const icons = document.querySelectorAll(selector);
         for (const icon of icons) {
             if (!icon.getClientRects().length) continue;
             const view = FastMail.getViewFromNode(icon);
@@ -2873,6 +2873,12 @@ other user label is a topic.
         }
         return null;
     };
+
+    // The Labels control: the message toolbar draws it as an i-label
+    // ButtonView. Pressing it opens the stock tristate — a MailboxMenuView,
+    // so the verb hooks below adopt it like any other picker.
+    const mobileLabelsButtonView = () =>
+        visibleViewForIcon('svg.v-Icon.i-label');
 
     const pressButtonView = (view) => {
         try {
@@ -2908,45 +2914,142 @@ other user label is a topic.
         }
     };
 
-    const openTopicPicker = (keys, onCommit) => {
-        const single = keys.length === 1;
-        const button = single ? moveButton : (labelsButton || moveButton);
+    // How long a press gets to produce a menu before the verb gives up on it.
+    // Generous: the cost of being early is a dialog nobody asked for, and the
+    // cost of being late is nothing at all, since a menu that does open stamps
+    // the verb and this stands down.
+    const PICKER_DEADLINE_MS = 1000;
 
-        if (!button) {
-            // The phone registers no shortcut buttons to borrow, so the verb
-            // rides the toolbar's own Labels button instead: the sheet it
-            // opens is the picker, closed-with-a-topic is the commit. With
-            // no Labels button in sight — a swipe in the list — the one
-            // question a dialog can carry stands in, because silently
-            // swallowing the tap reads as a dead button.
-            const labels = mobileLabelsButtonView();
-            if (labels) {
-                const verb = { keys, onCommit, touchPicker: true };
-                pendingVerb = verb;
-                if (pressButtonView(labels)) {
-                    // A press that opens nothing would leave the verb
-                    // dangling — and every archive after it dead. If no
-                    // sheet has adopted it shortly, fall back to the
-                    // dialog instead of silence.
-                    setTimeout(() => {
-                        if (pendingVerb === verb && !verb.opened) {
-                            pendingVerb = null;
-                            askBare(onCommit);
-                        }
-                    }, 800);
-                    return;
-                }
-                pendingVerb = null;
-            }
-            askBare(onCommit);
-            return;
+    // Every way of opening the picker ends here: a press that opened nothing
+    // must not leave the verb pending, because a pending verb is a click that
+    // did nothing and — until v2.25 on touch, and until now everywhere else —
+    // said nothing about it either. Either a menu adopts the verb and stamps
+    // it, or the deadline hands the question to a dialog.
+    const armPicker = (verb, pressed, onCommit) => {
+        if (!pendingVerb || pendingVerb !== verb) return true;
+
+        if (!pressed) {
+            pendingVerb = null;
+            wantOurMove = false;
+            return false;
         }
 
-        pendingVerb = { keys, onCommit };
+        setTimeout(() => {
+            if (pendingVerb !== verb || verb.opened) return;
 
-        if (button === moveButton) wantOurMove = true;
+            pendingVerb = null;
+            wantOurMove = false;
+            console.warn('Inbox mode: the topic picker did not open;' +
+                ' asking for the verb instead');
+            askBare(onCommit);
+        }, PICKER_DEADLINE_MS);
 
-        button.target[button.method]();
+        return true;
+    };
+
+    // A captured registration is only as good as the view behind it. The
+    // shortcut is registered when a button enters the document and is never
+    // taken back here when it leaves, so what is captured can be a view that
+    // has since been destroyed — or nothing at all, if the button has not
+    // been drawn this session, which is the ordinary case on the phone and
+    // on a desktop that has not opened a message yet.
+    const capturedIsLive = (entry) => {
+        if (!entry || !entry.target || typeof entry.target.get !== 'function') {
+            return false;
+        }
+        if (typeof entry.target[entry.method] !== 'function') return false;
+
+        try {
+            const layer = entry.target.get('layer');
+            return !!layer && layer.isConnected;
+        } catch (error) {
+            return false;
+        }
+    };
+
+    const pressCaptured = (entry) => {
+        try {
+            entry.target[entry.method]();
+            return true;
+        } catch (error) {
+            console.warn('Inbox mode: could not open the topic picker', error);
+            return false;
+        }
+    };
+
+    // The Labels button wherever the bar has put it. dressToolbar moves it
+    // between the bar and More by width, and a button waiting in More is
+    // drawn nowhere — so the icon search misses it, which is how a narrow
+    // bar turned the picker into the bare-archive dialog. Both places are
+    // asked here, and a press that opens nothing is caught by the deadline
+    // rather than left to strand the verb.
+    const toolbarLabelsView = () => {
+        const toolbar = messageToolbar();
+        if (!toolbar) return null;
+
+        try {
+            const onBar = (toolbar.get('childViews') || []).filter(isLabelsButton)[0];
+            if (onBar) return onBar;
+
+            const overflow = (toolbar.get('childViews') || []).filter(view =>
+                view.constructor && view.constructor.name === 'OverflowMenuView')[0];
+            const menu = overflow && overflow.get('menuView');
+            const options = menu && menu.get('options');
+
+            return (options || []).filter(isLabelsButton)[0] || null;
+        } catch (error) {
+            return null;
+        }
+    };
+
+    // Anything that opens a label menu. The Labels control is the one to
+    // want: it opens the tristate, which serves as the picker on either
+    // platform. Found by what is drawn and by what the bar is holding,
+    // rather than by a registration, so a button in the More menu — or one
+    // whose shortcut never reached the registry — is still reachable.
+    const drawnPickerView = () => mobileLabelsButtonView() ||
+        toolbarLabelsView() ||
+        visibleViewForIcon('svg.v-Icon.i-folder');
+
+    const openTopicPicker = (keys, onCommit) => {
+        const single = keys.length === 1;
+
+        // Move to is the quick one and suits a single conversation; the
+        // tristate is what a multi-selection needs. Either will do when the
+        // preferred one is not on screen — being asked where something goes
+        // is the point, and which menu asks is a detail.
+        const order = single
+            ? [moveButton, labelsButton]
+            : [labelsButton, moveButton];
+        const captured = order.filter(capturedIsLive)[0];
+
+        const verb = { keys, onCommit };
+        // Closing a touch sheet with a topic ticked is the commit, since
+        // there is no Enter to press. On a pointer the tristate keeps its
+        // own rule, where dismissing aborts and Enter commits.
+        if (FastMail.isMobile) verb.touchPicker = true;
+        pendingVerb = verb;
+
+        if (captured) {
+            if (captured === moveButton) wantOurMove = true;
+            if (armPicker(verb, pressCaptured(captured), onCommit)) return;
+        }
+
+        // Nothing registered, or what was registered is gone: press whatever
+        // label menu is actually drawn. This is the path the phone has always
+        // taken, and the one a desktop falls back to when the Move to button
+        // has never been drawn for its shortcut to be captured from.
+        const drawn = drawnPickerView();
+        if (drawn) {
+            pendingVerb = verb;
+            if (armPicker(verb, pressButtonView(drawn), onCommit)) return;
+        }
+
+        // Out of menus. The one question a dialog can carry stands in,
+        // because silently swallowing the click reads as a dead button.
+        pendingVerb = null;
+        wantOurMove = false;
+        askBare(onCommit);
     };
 
     /*
