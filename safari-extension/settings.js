@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS = {
     somedayKey: 'o',
     bottomBarSlots: 'Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move',
     excludedLabels: 'Later',
+    contactGroupLabels: '',
     showFilteredCounts: true,
     showHeaderCounts: true,
     appBadgeLabel: 'Inbox',

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.41
+// @version      2.42
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -232,6 +232,12 @@ other user label is a topic.
         bottomBarSlots: 'Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move',
         // Never offered as topics, even from the sidebar
         excludedLabels: 'Later',
+        // Labels that file the sender as well as the message: picking one in
+        // the topic picker puts from[0] into the contact group of the same
+        // name, creating the contact if it is new. Empty by default, because
+        // writing to your address book is not something a mail script should
+        // start doing unasked.
+        contactGroupLabels: '',
         // Show exact counts on filtered views and topic badges
         showFilteredCounts: true,
         // The list heading carries the same pair as the sidebar badge —
@@ -2697,6 +2703,164 @@ other user label is a topic.
         if (typeof menuController.setOptions === 'function') menuController.setOptions();
     };
 
+    /*
+     * ----------------------------------------------------------------
+     * Filing the sender as well as the message
+     * ----------------------------------------------------------------
+     *
+     * Picking a label named in contactGroupLabels files from[0] into the
+     * contact group of the same name, creating the contact if it is new.
+     *
+     * Contacts are ordinary records in the same store the mail lives in —
+     * measured in a running app: ten thousand of them, resident without the
+     * Contacts app ever being opened, which is what makes this a lookup
+     * rather than a fetch. A group is a contact too: kind "group", with a
+     * members object keyed by member uid, and addContact/removeContact on
+     * the record itself. Fastmail's own VIPs feature is the same shape, and
+     * its find-or-create is the pattern followed here.
+     *
+     * The contact is created the way the Contacts app creates one — isShared
+     * and a uid, then saveToStore — with the address book set explicitly,
+     * because a group only holds members of its own account and the picker
+     * can be standing in either one.
+     */
+
+    const contactGroupPaths = () => pathsFromSetting(settings.contactGroupLabels);
+
+    const wantsContactGroup = (mailbox) => {
+        if (!contactGroupPaths().length) return false;
+
+        const path = mailboxPath(mailbox).toLowerCase();
+        return contactGroupPaths().some(named => named.toLowerCase() === path);
+    };
+
+    // The book a new contact goes in: the account's default one, or any it
+    // may write to. Set rather than left to work itself out, because the
+    // group is in one account and the message may be in the other.
+    const addressBookFor = (accountId) => {
+        const AddressBook = FastMail.classes.AddressBook;
+        if (!AddressBook) return null;
+
+        const mine = (data) => data.accountId === accountId &&
+            (!data.myRights || data.myRights.mayWrite);
+
+        return FastMail.store.getOne(AddressBook, data => mine(data) && data.isDefault) ||
+            FastMail.store.getOne(AddressBook, mine) ||
+            null;
+    };
+
+    // Group names live on the record as name.full; a person's name is a
+    // components list instead, which is why this reads the raw data rather
+    // than the computed property — getOne hands over stored data, not records.
+    const contactGroupNamed = (accountId, name) => {
+        const Contact = FastMail.classes.Contact;
+        if (!Contact) return null;
+
+        const wanted = String(name || '').toLowerCase();
+        if (!wanted) return null;
+
+        return FastMail.store.getOne(Contact, data =>
+            data.accountId === accountId &&
+            data.kind === 'group' &&
+            String((data.name && data.name.full) || '').toLowerCase() === wanted) || null;
+    };
+
+    const contactWithEmail = (accountId, email) => {
+        const Contact = FastMail.classes.Contact;
+        if (!Contact) return null;
+
+        const wanted = String(email || '').toLowerCase();
+        if (!wanted) return null;
+
+        return FastMail.store.getOne(Contact, (data) => {
+            if (data.kind === 'group' || data.accountId !== accountId) return false;
+            if (!data.emails) return false;
+
+            return Object.keys(data.emails).some(key =>
+                String(data.emails[key].address || '').toLowerCase() === wanted);
+        }) || null;
+    };
+
+    const makeContact = (accountId, email, name) => {
+        const Contact = FastMail.classes.Contact;
+        const book = addressBookFor(accountId);
+        if (!Contact || !book) return null;
+
+        const contact = new Contact(FastMail.store)
+            .set('isShared', false)
+            .set('uid', crypto.randomUUID())
+            .set('addressBook', book)
+            .set('name', name || email)
+            .set('emails', [{
+                type: 'personal',
+                label: null,
+                value: String(email).toLowerCase(),
+                isDefault: true
+            }]);
+
+        contact.saveToStore();
+        return contact;
+    };
+
+    // What the next undo takes back. One deep and cleared on use, the same
+    // shape the return-to-message stamp uses: the membership is undone
+    // because it was this pick that added it, and the contact is left alone
+    // because a contact that now exists is not a mistake.
+    let lastGroupAdds = null;
+
+    const undoGroupAdds = () => {
+        const adds = lastGroupAdds;
+        lastGroupAdds = null;
+        if (!adds) return;
+
+        adds.forEach(({ group, contact }) => {
+            try {
+                group.removeContact(contact);
+            } catch (error) {
+                console.warn('Inbox mode: could not take the contact back out', error);
+            }
+        });
+    };
+
+    const fileSendersIntoGroup = (mailbox, keys) => {
+        if (!modeIsOn || !mailbox || !wantsContactGroup(mailbox)) return;
+
+        try {
+            const accountId = mailbox.get('accountId');
+            const group = contactGroupNamed(accountId, mailbox.get('displayName')) ||
+                contactGroupNamed(accountId, mailboxPath(mailbox));
+
+            if (!group) {
+                console.warn('Inbox mode: no contact group named ' +
+                    mailboxPath(mailbox) + ' in this account');
+                return;
+            }
+
+            const added = [];
+
+            messagesFrom(keys).forEach((message) => {
+                const from = message.get('from');
+                const sender = from && from[0];
+                if (!sender || !sender.email) return;
+
+                const contact = contactWithEmail(accountId, sender.email) ||
+                    makeContact(accountId, sender.email, sender.name);
+                if (!contact) return;
+
+                // Already a member: nothing to add, and nothing an undo
+                // should take away either
+                if (group.includes(contact)) return;
+
+                group.addContact(contact);
+                added.push({ group: group, contact: contact });
+            });
+
+            lastGroupAdds = added.length ? added : null;
+        } catch (error) {
+            console.warn('Inbox mode: could not file the sender', error);
+        }
+    };
+
     const addInsteadOfMoving = (menu) => {
         if (menu.customAdditive) return;
         menu.customAdditive = true;
@@ -2705,6 +2869,13 @@ other user label is a topic.
 
         menu.didSelect = function (mailbox) {
             if (!this.customOurs) return originalDidSelect.apply(this, arguments);
+
+            // The pick itself, before any branch below acts on it: the keys
+            // are read here because the verb clears itself on the way past
+            // and the label-only branches hand actions a null selection.
+            fileSendersIntoGroup(mailbox, pendingVerb
+                ? pendingVerb.keys
+                : resolveKeys(controller().actions, null));
 
             // A verb is waiting on this pick: hand the topic over and let the
             // verb do every label change in its own single checkpoint
@@ -3547,6 +3718,12 @@ other user label is a topic.
         owner[method] = function () {
             const back = lastUndoReturn;
             lastUndoReturn = null;
+
+            // Fastmail's undo knows nothing about the address book, so the
+            // group membership is taken back here. Only the membership: a
+            // contact that did not exist before now does, and that is not
+            // the part anyone means to undo.
+            undoGroupAdds();
 
             const result = original.apply(this, arguments);
             if (modeIsOn && back) goToUrl(back);
