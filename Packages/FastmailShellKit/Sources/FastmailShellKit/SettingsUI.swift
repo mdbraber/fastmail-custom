@@ -57,10 +57,15 @@ public struct InboxModeSettingsForm: View {
                 Toggle(option.title, isOn: model.toggleBinding(for: option))
             case .text(let fallback):
                 Text(option.title)
+                // A clearable field shows its default as text rather than as
+                // a placeholder, because for those two an empty box is
+                // ambiguous — never touched, or emptied on purpose — and
+                // they mean opposite things. Written out, the box always
+                // says what is in force, and clearing it says none.
                 TextField(
                     option.title,
                     text: model.textBinding(for: option),
-                    prompt: Text(fallback)
+                    prompt: Text(option.clearable ? "none" : fallback)
                 )
                 .labelsHidden()
                 .autocorrectionDisabled()
@@ -205,9 +210,17 @@ final class InboxModeSettingsModel: ObservableObject {
     }
 
     func textBinding(for option: InboxModeSettings.Option) -> Binding<String> {
-        Binding(
+        var fallback = ""
+        if option.clearable, case .text(let value) = option.defaultValue {
+            fallback = value
+        }
+
+        return Binding(
             get: { [defaults] in
-                defaults.string(forKey: option.defaultsKey) ?? ""
+                // Only the clearable ones fall back here: for the rest an
+                // empty box already means the default, so the placeholder
+                // tells the truth and there is nothing to spell out
+                defaults.string(forKey: option.defaultsKey) ?? fallback
             },
             set: { [weak self] value in
                 self?.objectWillChange.send()

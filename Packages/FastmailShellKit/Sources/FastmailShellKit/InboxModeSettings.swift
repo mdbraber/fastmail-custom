@@ -23,6 +23,18 @@ public enum InboxModeSettings {
         public let key: String
         /// The toggle this one is a sub-option of, if any.
         public let parent: String?
+        /// Whether an empty text field is an answer rather than an omission.
+        ///
+        /// For most text settings it is an omission: a kept marker with no
+        /// name, or a waiting label called nothing, is not something anyone
+        /// means, so emptying the field asks for the default back. But a
+        /// list of labels has a meaningful empty — none of them — and
+        /// without this there was no way to say it: clearing "Labels that
+        /// are never topics" put Later straight back, which is what sent me
+        /// looking. Two hints already promised this behaviour ("Empty for
+        /// the app's own default", "or empty for the plain total") and could
+        /// not deliver it.
+        public let clearable: Bool
         public let title: String
         public let hint: String
         public let defaultValue: Value
@@ -33,9 +45,17 @@ public enum InboxModeSettings {
         /// own keys (startView, …) and the page's cannot collide with it.
         public var defaultsKey: String { "inboxMode.\(key)" }
 
-        init(_ key: String, parent: String? = nil, title: String, hint: String, default value: Value) {
+        init(
+            _ key: String,
+            parent: String? = nil,
+            clearable: Bool = false,
+            title: String,
+            hint: String,
+            default value: Value
+        ) {
             self.key = key
             self.parent = parent
+            self.clearable = clearable
             self.title = title
             self.hint = hint
             self.defaultValue = value
@@ -121,12 +141,14 @@ public enum InboxModeSettings {
         ),
         Option(
             "qualifierLabels",
+            clearable: true,
             title: "Qualifier labels",
             hint: "Cut across topics and never count as filing; first named wins the row colour. Comma-separated paths.",
             default: .text("Admin, Waiting")
         ),
         Option(
             "deferredLabels",
+            clearable: true,
             title: "Deferred labels",
             hint: "Hidden from Next; filing into one drops the kept marker. Comma-separated paths.",
             default: .text("Waiting, Snoozed")
@@ -145,12 +167,14 @@ public enum InboxModeSettings {
         ),
         Option(
             "nonInboxLabels",
+            clearable: true,
             title: "Non-inbox labels",
             hint: "Worked from the label, not the Inbox: v into one marks it Next and takes the Inbox off, where a topic leaves the Inbox on. A topic on the thread outranks it. Comma-separated paths.",
             default: .text("")
         ),
         Option(
             "excludedLabels",
+            clearable: true,
             title: "Labels that are never topics",
             hint: "Never offered as topics; alone they don’t count as filed. Comma-separated paths.",
             default: .text("Later")
@@ -193,12 +217,14 @@ public enum InboxModeSettings {
         ),
         Option(
             "appBadgeLabel",
+            clearable: true,
             title: "App badge label",
             hint: "The app icon’s badge counts this label. Empty for the app’s own default.",
             default: .text("Inbox")
         ),
         Option(
             "appBadgeFilter",
+            clearable: true,
             title: "App badge filter",
             hint: "next, triage, deferred, noninbox — or empty for the plain total.",
             default: .text("next")
@@ -212,8 +238,17 @@ public enum InboxModeSettings {
     ]
 
     /// The settings as the userscript should see them: stored value if one
-    /// exists, the default otherwise. A text field left empty falls back to
-    /// its default too — an empty label name means nothing to the userscript.
+    /// exists, the default otherwise.
+    ///
+    /// An empty text field means one of two things, and which one depends on
+    /// the setting rather than on the value. For most it is an omission and
+    /// the default comes back. For a `clearable` one it is an answer — none
+    /// of them — and it is passed through as the empty string, which the
+    /// userscript's own merge then lays over its default.
+    ///
+    /// Never set and set-to-empty are told apart by the presence of the key,
+    /// not by the value, so a field nobody has touched still gets the
+    /// default even where empty would have been honoured.
     public static func current(from defaults: UserDefaults = .standard) -> [String: Any] {
         var settings: [String: Any] = [:]
         for option in options {
@@ -221,9 +256,17 @@ public enum InboxModeSettings {
             case .toggle(let fallback):
                 settings[option.key] = defaults.object(forKey: option.defaultsKey) as? Bool ?? fallback
             case .text(let fallback):
-                let stored = defaults.string(forKey: option.defaultsKey)?
-                    .trimmingCharacters(in: .whitespaces)
-                settings[option.key] = (stored?.isEmpty == false) ? stored! : fallback
+                guard let stored = defaults.string(forKey: option.defaultsKey) else {
+                    settings[option.key] = fallback
+                    continue
+                }
+
+                let trimmed = stored.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty {
+                    settings[option.key] = trimmed
+                } else {
+                    settings[option.key] = option.clearable ? "" : fallback
+                }
             }
         }
         return settings

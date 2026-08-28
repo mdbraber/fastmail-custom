@@ -20,12 +20,16 @@ CATALOG = (ROOT / "Packages/FastmailShellKit/Sources/FastmailShellKit"
                   "/InboxModeSettings.swift")
 APPS = ("Personal", "Work")
 
-# One Option(...) entry. `parent:` is optional and deliberately unused; the
-# default is a .toggle(bool) or a .text("string").
+# One Option(...) entry. `parent:` and `clearable:` are optional and
+# deliberately unused here — Settings.bundle greys nothing out, and a text
+# field emptied there reaches UserDefaults as an empty string regardless,
+# which is exactly what `clearable` asks the resolver to honour. The default
+# is a .toggle(bool) or a .text("string").
 OPTION = re.compile(
     r'Option\(\s*'
     r'"(?P<key>\w+)",\s*'
     r'(?:parent:\s*"\w+",\s*)?'
+    r'(?:clearable:\s*(?:true|false),\s*)?'
     r'title:\s*"(?P<title>[^"]*)",\s*'
     r'hint:\s*"(?P<hint>[^"]*)",\s*'
     r'default:\s*\.(?:toggle\((?P<toggle>true|false)\)'

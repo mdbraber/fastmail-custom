@@ -30,11 +30,42 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     #expect(settings["processLabel"] as? String == "Keep")
 }
 
-@Test func emptyTextFallsBackToTheDefault() {
+// Emptying a field that names one thing asks for the default back: a kept
+// marker called nothing is not something anyone means.
+@Test func emptyTextFallsBackToTheDefaultWhereEmptyMeansNothing() {
     let defaults = freshDefaults(#function)
-    defaults.set("   ", forKey: "inboxMode.deferredLabels")
+    defaults.set("   ", forKey: "inboxMode.processLabel")
+    defaults.set("   ", forKey: "inboxMode.waitingLabel")
     let settings = InboxModeSettings.current(from: defaults)
-    #expect(settings["deferredLabels"] as? String == "Waiting, Snoozed")
+    #expect(settings["processLabel"] as? String == "Next")
+    #expect(settings["waitingLabel"] as? String == "Waiting")
+}
+
+// Emptying a field that names a list says none of them, and has to survive
+// the trip: clearing "Labels that are never topics" used to hand Later
+// straight back, so there was no way to stop excluding it.
+@Test func emptyTextIsHonouredWhereEmptyMeansNone() {
+    let defaults = freshDefaults(#function)
+    for key in ["excludedLabels", "qualifierLabels", "deferredLabels",
+                "appBadgeLabel", "appBadgeFilter"] {
+        defaults.set("   ", forKey: "inboxMode.\(key)")
+    }
+
+    let settings = InboxModeSettings.current(from: defaults)
+    #expect(settings["excludedLabels"] as? String == "")
+    #expect(settings["qualifierLabels"] as? String == "")
+    #expect(settings["deferredLabels"] as? String == "")
+    #expect(settings["appBadgeLabel"] as? String == "")
+    #expect(settings["appBadgeFilter"] as? String == "")
+}
+
+// Never set is not the same as set to empty, even for those: a field nobody
+// has touched still gets the default.
+@Test func untouchedClearableFieldsStillGetTheirDefaults() {
+    let settings = InboxModeSettings.current(from: freshDefaults(#function))
+    #expect(settings["excludedLabels"] as? String == "Later")
+    #expect(settings["qualifierLabels"] as? String == "Admin, Waiting")
+    #expect(settings["appBadgeFilter"] as? String == "next")
 }
 
 @Test func scriptsCarryTheSettingsAndTheApplyCall() throws {
