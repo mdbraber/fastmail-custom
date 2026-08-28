@@ -364,13 +364,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Picking one in the topic picker also files the sender into the contact group of the same name, creating the contact if it is new. Comma-separated paths.</string>
+			<string>Picking one in the topic picker also adds the sender to the contact group of the same name, creating the contact, and the group, if either is new. Comma-separated paths.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Labels that add the sender contacts group</string>
+			<string>Labels that add the sender to the contacts group</string>
 			<key>Key</key>
 			<string>inboxMode.contactGroupLabels</string>
 			<key>DefaultValue</key>
