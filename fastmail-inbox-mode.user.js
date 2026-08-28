@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.43
+// @version      2.44
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -233,10 +233,10 @@ other user label is a topic.
         // Never offered as topics, even from the sidebar
         excludedLabels: 'Later',
         // Labels that file the sender as well as the message: picking one in
-        // the topic picker puts from[0] into the contact group of the same
-        // name, creating the contact if it is new. Empty by default, because
-        // writing to your address book is not something a mail script should
-        // start doing unasked.
+        // the topic picker adds from[0] to the contact group of the same
+        // name, making the contact, and the group, if either is new. Empty
+        // by default, because writing to your address book is not something
+        // a mail script should start doing unasked.
         contactGroupLabels: '',
         // Show exact counts on filtered views and topic badges
         showFilteredCounts: true,
@@ -2708,8 +2708,9 @@ other user label is a topic.
      * Filing the sender as well as the message
      * ----------------------------------------------------------------
      *
-     * Picking a label named in contactGroupLabels files from[0] into the
-     * contact group of the same name, creating the contact if it is new.
+     * Picking a label named in contactGroupLabels adds from[0] to the
+     * contact group of the same name, making the contact, and the group,
+     * if either is new.
      *
      * Contacts are ordinary records in the same store the mail lives in —
      * measured in a running app: ten thousand of them, resident without the
@@ -2802,6 +2803,25 @@ other user label is a topic.
         return contact;
     };
 
+    // A group is a contact with kind "group", so making one is the same call
+    // with the kind set and no email — the shape the Contacts app's own
+    // new-group flow builds before handing it to its edit dialog.
+    const makeContactGroup = (accountId, name) => {
+        const Contact = FastMail.classes.Contact;
+        const book = addressBookFor(accountId);
+        if (!Contact || !book || !name) return null;
+
+        const group = new Contact(FastMail.store)
+            .set('isShared', false)
+            .set('uid', crypto.randomUUID())
+            .set('kind', 'group')
+            .set('addressBook', book)
+            .set('name', name);
+
+        group.saveToStore();
+        return group;
+    };
+
     // What the next undo takes back. One deep and cleared on use, the same
     // shape the return-to-message stamp uses: the membership is undone
     // because it was this pick that added it, and the contact is left alone
@@ -2827,12 +2847,19 @@ other user label is a topic.
 
         try {
             const accountId = mailbox.get('accountId');
-            const group = contactGroupNamed(accountId, mailbox.get('displayName')) ||
-                contactGroupNamed(accountId, mailboxPath(mailbox));
+            const leaf = mailbox.get('displayName');
+
+            // Found by the label's own name — its leaf first, then its full
+            // path — and made under the leaf when neither turns one up. A
+            // label named here that has no group yet is a group waiting to
+            // be made, not a mistake to warn about.
+            const group = contactGroupNamed(accountId, leaf) ||
+                contactGroupNamed(accountId, mailboxPath(mailbox)) ||
+                makeContactGroup(accountId, leaf);
 
             if (!group) {
-                console.warn('Inbox mode: no contact group named ' +
-                    mailboxPath(mailbox) + ' in this account');
+                console.warn('Inbox mode: could not find or make a contact' +
+                    ' group named ' + mailboxPath(mailbox));
                 return;
             }
 
