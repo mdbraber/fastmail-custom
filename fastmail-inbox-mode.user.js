@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.45
+// @version      2.46
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -3203,6 +3203,22 @@ other user label is a topic.
         return ownKind(controller().get('mailboxFilter'));
     };
 
+    // The slices a keep empties out from under you.
+    //
+    // Not every one of them: keeping in Next adds a marker that is already
+    // there and leaves the row exactly where it was, so advancing would step
+    // past a message nothing happened to. Triage is defined as the inbox
+    // without the marker, and deferred as the deferred labels — a keep
+    // writes the first and clears the second, so in both the row is gone by
+    // the time the toast lands and the next one is what you want to be
+    // looking at, which is what archive has always done here.
+    const keepLeavesThisView = () => {
+        if (!modeIsOn) return false;
+
+        const filter = controller().get('mailboxFilter');
+        return filter === TRIAGE_FILTER || filter === DEFERRED_FILTER;
+    };
+
     /*
      * The topic picker.
      *
@@ -3635,11 +3651,23 @@ other user label is a topic.
 
         const commit = () => actions.addremove(keys, adds, removes);
 
-        if (andPin) {
-            silencingDidAction(actions, commit);
-            actions.flag(keys);
+        // The one unswallowed didAction, whichever it turns out to be: the
+        // addremove on its own, or the flag that follows it when pinning.
+        const finish = andPin
+            ? () => {
+                silencingDidAction(actions, commit);
+                actions.flag(keys);
+            }
+            : commit;
+
+        // Same walk-on as archive, in the views a keep empties. Fastmail
+        // reads whether to stay put off the filter's AND nodes and cannot
+        // see the marker inside triage's NOT, so left alone it decides
+        // nothing moved and holds the focus on a row that has gone.
+        if (keepLeavesThisView()) {
+            withDidAction(actions, navigateAfter, finish);
         } else {
-            commit();
+            finish();
         }
     };
 
