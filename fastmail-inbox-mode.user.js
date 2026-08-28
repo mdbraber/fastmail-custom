@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.44
+// @version      2.45
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -2864,13 +2864,28 @@ other user label is a topic.
             }
 
             const added = [];
+            const names = [];
+            let made = 0;
 
             messagesFrom(keys).forEach((message) => {
+                // Only a label that was not there already. Re-picking a label
+                // a conversation is filed under is a correction or a
+                // no-op — the sender was dealt with the first time, and
+                // filing them again on every pass is how a group fills up
+                // with people you only meant to add once.
+                //
+                // The whole conversation is asked, the way every other verb
+                // here asks it: a label counts wherever it sits in one. And
+                // it is asked now, before the branches below apply anything,
+                // which is the only moment the answer means what it says.
+                if (carriesMailbox(message, mailbox)) return;
+
                 const from = message.get('from');
                 const sender = from && from[0];
                 if (!sender || !sender.email) return;
 
-                const contact = contactWithEmail(accountId, sender.email) ||
+                const existing = contactWithEmail(accountId, sender.email);
+                const contact = existing ||
                     makeContact(accountId, sender.email, sender.name);
                 if (!contact) return;
 
@@ -2880,9 +2895,25 @@ other user label is a topic.
 
                 group.addContact(contact);
                 added.push({ group: group, contact: contact });
+                names.push(sender.name || sender.email);
+                if (!existing) made += 1;
             });
 
             lastGroupAdds = added.length ? added : null;
+            if (added.length) {
+                // Fastmail's own toast, and Fastmail's own precedence with
+                // it: a verb's undo toast lands after this one and takes the
+                // corner from it, which is the right way round — the button
+                // that undoes an archive matters more than a line saying a
+                // contact was filed.
+                const who = names.length === 1
+                    ? names[0]
+                    : names.length + ' senders';
+
+                showToast(made
+                    ? who + ' added to contacts and ' + group.get('name')
+                    : who + ' added to ' + group.get('name'));
+            }
         } catch (error) {
             console.warn('Inbox mode: could not file the sender', error);
         }
@@ -3037,6 +3068,11 @@ other user label is a topic.
 
     const anyIn = (storeKeys, mailbox) => !!mailbox &&
         mailboxesAmong(storeKeys).has(mailbox);
+
+    // The same question for one conversation rather than a selection
+    const carriesMailbox = (message, mailbox) => !!mailbox && !!message &&
+        threadOf(message).some(other =>
+            toArray(other.get('mailboxes')).indexOf(mailbox) !== -1);
 
     /*
      * Keeping a filtered list honest after a change.
