@@ -182,7 +182,7 @@ public enum InboxModeSettings {
         Option(
             "contactGroupLabels",
             clearable: true,
-            title: "Labels that file the sender too",
+            title: "Labels that add the sender contacts group",
             hint: "Picking one in the topic picker also files the sender into the contact group of the same name, creating the contact if it is new. Comma-separated paths.",
             default: .text("")
         ),

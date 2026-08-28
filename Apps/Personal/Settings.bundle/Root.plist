@@ -370,7 +370,7 @@
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Labels that file the sender too</string>
+			<string>Labels that add the sender contacts group</string>
 			<key>Key</key>
 			<string>inboxMode.contactGroupLabels</string>
 			<key>DefaultValue</key>
