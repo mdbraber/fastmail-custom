@@ -11,15 +11,29 @@ public struct AppShell: View {
     @StateObject private var model = ShellModel()
     @ObservedObject private var downloads = DownloadManager.shared
     @ObservedObject private var settings = SettingsPresenter.shared
+    @AppStorage(Backend.defaultsKey) private var backendName = Backend.production.rawValue
 
     public init(profile: Profile) {
         self.profile = profile
     }
 
+    // The profile as the setting currently has it. Everything that builds an
+    // address reads it from here, so nothing is left pointing at the server
+    // the app was launched against.
+    private var live: Profile {
+        profile.on(Backend.resolve(backendName))
+    }
+
     public var body: some View {
         ZStack(alignment: .top) {
-            WebContainer(profile: profile, model: model, loadURL: profile.startURL(readingFrom: .standard))
+            // Keyed on the backend so choosing the other server builds a new
+            // web view rather than steering the old one there. The scripts are
+            // gated to the host they were injected for and the bridge only
+            // answers that host, both fixed when the view is made — so the
+            // page has to be rebuilt, not merely sent somewhere else.
+            WebContainer(profile: live, model: model, loadURL: live.startURL(readingFrom: .standard))
                 .ignoresSafeArea()
+                .id(backendName)
             if let banner = model.banner {
                 HStack(alignment: .top) {
                     Text(banner)
@@ -55,13 +69,16 @@ public struct AppShell: View {
         }
         #else
         .onAppear {
-            ComposeWindows.shared.configure(profile: profile)
+            ComposeWindows.shared.configure(profile: live)
+        }
+        .onChange(of: backendName) {
+            ComposeWindows.shared.configure(profile: live)
         }
         #endif
     }
 
     private func handle(_ url: URL) {
-        switch LinkRouter.route(url, profile: profile) {
+        switch LinkRouter.route(url, profile: live) {
         case .load(let target):
             model.pendingLoad = target
         case .refuse(let message):
@@ -73,7 +90,7 @@ public struct AppShell: View {
 
     private func openInOtherApp(_ target: URL) {
         let model = model
-        let name = profile.displayName
+        let name = live.displayName
         let loadLocally: @MainActor () -> Void = {
             model.banner = "This link belongs to your other account; \(name) opened it instead."
             if let inner = LinkRouter.handoffTarget(target) {

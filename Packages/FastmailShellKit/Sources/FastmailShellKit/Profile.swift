@@ -8,6 +8,11 @@ public struct Profile: Equatable, Sendable {
     public let urlScheme: String
     public let accountID: String?
     public let handoffScheme: String?
+    /// Which server this profile is pointed at. Carried rather than looked up
+    /// so the pieces that build addresses — compose, link routing, the host
+    /// the bridge expects — cannot disagree with the page that is actually
+    /// loaded, whatever the defaults say by the time they are asked.
+    public let backend: Backend
 
     public init(
         id: String,
@@ -16,7 +21,8 @@ public struct Profile: Equatable, Sendable {
         overlayScriptName: String?,
         urlScheme: String,
         accountID: String?,
-        handoffScheme: String? = nil
+        handoffScheme: String? = nil,
+        backend: Backend = .production
     ) {
         self.id = id
         self.displayName = displayName
@@ -25,10 +31,39 @@ public struct Profile: Equatable, Sendable {
         self.urlScheme = urlScheme
         self.accountID = accountID
         self.handoffScheme = handoffScheme
+        self.backend = backend
     }
 
+    /// The same profile pointed at another server.
+    public func on(_ backend: Backend) -> Profile {
+        Profile(
+            id: id,
+            displayName: displayName,
+            startURL: startURL,
+            overlayScriptName: overlayScriptName,
+            urlScheme: urlScheme,
+            accountID: accountID,
+            handoffScheme: handoffScheme,
+            backend: backend
+        )
+    }
+
+    /// The address to open, which is two settings at once: the backend says
+    /// which server, the start view says which page on it. `startURL` is the
+    /// profile's own default and stands in for the second when it is unset.
     public func startURL(readingFrom defaults: UserDefaults) -> URL {
-        StartView.resolve(defaults.string(forKey: StartView.defaultsKey), default: startURL)
+        let backend = Backend.current(defaults)
+        return StartView.resolve(
+            defaults.string(forKey: StartView.defaultsKey),
+            default: startURL,
+            backend: backend
+        )
+    }
+
+    /// The host the page will be on, which is what the native bridge is told
+    /// to expect and what the injected harness is gated to.
+    public func host(readingFrom defaults: UserDefaults) -> String {
+        Backend.current(defaults).host
     }
 }
 

@@ -50,7 +50,11 @@ public struct WebContainer {
         configuration.websiteDataStore = .default()
 
         let bridge = NativeBridge(
-            expectedHost: profile.startURL.host ?? "",
+            // The page this view is being built for, not the profile's
+            // default: the two differ the moment a backend is chosen, and
+            // a bridge expecting the wrong host refuses every message the
+            // page sends.
+            expectedHost: loadURL.host ?? "",
             onLog: { message in print("[userscript] \(message)") },
             onError: { [model] message in model.show(message) },
             onTheme: { [model] color in Task { @MainActor in model.tint = color } },
@@ -84,9 +88,9 @@ public struct WebContainer {
                 loader: loader,
                 overlayName: profile.overlayScriptName
             ).load()
-            let injected = try ScriptInjector.userScripts(from: scripts, url: profile.startURL)
+            let injected = try ScriptInjector.userScripts(from: scripts, url: loadURL)
             if !injected.userScriptIncluded {
-                let message = "User script @match does not cover \(profile.startURL.absoluteString)"
+                let message = "User script @match does not cover \(loadURL.absoluteString)"
                 Task { @MainActor in model.show(message) }
             }
             for script in injected.scripts {

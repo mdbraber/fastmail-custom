@@ -90,6 +90,7 @@ public struct InboxModeSettingsForm: View {
 public struct MobileSettingsSheet: View {
     private let profile: Profile
     @AppStorage(StartView.defaultsKey) private var startView = ""
+    @AppStorage(Backend.defaultsKey) private var backendName = Backend.production.rawValue
     @Environment(\.dismiss) private var dismiss
 
     public init(profile: Profile) {
@@ -100,10 +101,22 @@ public struct MobileSettingsSheet: View {
         NavigationStack {
             Form {
                 Section {
+                    Picker("Backend", selection: $backendName) {
+                        ForEach(Backend.allCases, id: \.rawValue) { backend in
+                            Text(backend.title).tag(backend.rawValue)
+                        }
+                    }
+                } header: {
+                    Text("General")
+                } footer: {
+                    Text("Beta is Fastmail's test server. It is a separate sign-in with its own settings, so switching reloads the page and asks you to log in again.")
+                }
+
+                Section {
                     TextField(
                         "Start URL",
                         text: $startView,
-                        prompt: Text("https://app.fastmail.com/mail/Inbox")
+                        prompt: Text("https://\(Backend.resolve(backendName).host)/mail/Inbox")
                     )
                     .autocorrectionDisabled()
                     #if canImport(UIKit)
@@ -114,10 +127,8 @@ public struct MobileSettingsSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
-                } header: {
-                    Text("General")
                 } footer: {
-                    Text("Must be on app.fastmail.com; empty for the default view. Takes effect on the next launch.")
+                    Text("Must be a Fastmail address; the backend decides which server it opens on. Empty for the default view. Takes effect on the next launch.")
                 }
 
                 Section("Inbox mode") {
@@ -137,7 +148,11 @@ public struct MobileSettingsSheet: View {
     }
 
     private var resolved: String {
-        StartView.resolve(startView, default: profile.startURL).absoluteString
+        StartView.resolve(
+            startView,
+            default: profile.startURL,
+            backend: Backend.resolve(backendName)
+        ).absoluteString
     }
 }
 

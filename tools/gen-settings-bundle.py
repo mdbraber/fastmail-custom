@@ -62,10 +62,25 @@ def specifiers(catalog):
     rows = [
         {
             "Type": "PSGroupSpecifier",
+            "FooterText": "Beta is Fastmail's test server. It is a separate "
+            "sign-in with its own settings, so switching reloads the page and "
+            "asks you to log in again.",
+        },
+        {
+            "Type": "PSMultiValueSpecifier",
+            "Title": "Backend",
+            "Key": "backend",
+            "DefaultValue": "production",
+            "Titles": ["Production", "Beta"],
+            "Values": ["production", "beta"],
+        },
+        {
+            "Type": "PSGroupSpecifier",
             "FooterText": "The full address to open, for example "
-            "https://app.fastmail.com/mail/Archive. Must be on "
-            "app.fastmail.com. Leave empty for the default view. Takes "
-            "effect next time the app starts.",
+            "https://app.fastmail.com/mail/Archive. Must be a Fastmail "
+            "address; the backend above decides which server it opens on. "
+            "Leave empty for the default view. Takes effect next time the "
+            "app starts.",
         },
         {
             "Type": "PSTextFieldSpecifier",

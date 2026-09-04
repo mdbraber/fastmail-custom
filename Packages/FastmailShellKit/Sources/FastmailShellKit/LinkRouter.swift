@@ -7,7 +7,9 @@ public enum LinkRouter {
         case refuse(String)
     }
 
-    static let composeBase = "https://app.fastmail.com/mail/compose"
+    static func composeBase(for backend: Backend) -> String {
+        "https://\(backend.host)/mail/compose"
+    }
 
     public static func route(_ url: URL, profile: Profile) -> Route {
         guard
@@ -20,7 +22,11 @@ public enum LinkRouter {
             return routeCommand(components, profile: profile)
         }
         if scheme == "mailto" {
-            return .load(composeURL(mailto: url.absoluteString, accountID: profile.accountID))
+            return .load(composeURL(
+                mailto: url.absoluteString,
+                accountID: profile.accountID,
+                backend: profile.backend
+            ))
         }
         if scheme == "https" {
             return routeWebLink(url, profile: profile, arrivedViaHandoff: false)
@@ -48,7 +54,11 @@ public enum LinkRouter {
             else {
                 return .refuse("The link had no message to compose.")
             }
-            return .load(composeURL(mailto: raw, accountID: profile.accountID))
+            return .load(composeURL(
+                mailto: raw,
+                accountID: profile.accountID,
+                backend: profile.backend
+            ))
         default:
             return .refuse("Unknown link command “\(command)”.")
         }
@@ -60,7 +70,7 @@ public enum LinkRouter {
             components.scheme?.lowercased() == "https",
             isFastmailHost(components.host)
         else {
-            return .refuse("Only app.fastmail.com links can be opened.")
+            return .refuse("Only Fastmail links can be opened.")
         }
         let items = components.queryItems ?? []
         let localOnly = arrivedViaHandoff || items.contains { $0.name == "handoff" && $0.value == "1" }
@@ -85,12 +95,17 @@ public enum LinkRouter {
         return .handoff(handoff)
     }
 
-    static func composeURL(mailto: String, accountID: String?) -> URL {
+    static func composeURL(
+        mailto: String,
+        accountID: String?,
+        backend: Backend = .production
+    ) -> URL {
+        let base = composeBase(for: backend)
         var query = "mailto=" + percentEncode(mailto)
         if let accountID {
             query += "&u=" + percentEncode(accountID)
         }
-        return URL(string: composeBase + "?" + query) ?? URL(string: composeBase)!
+        return URL(string: base + "?" + query) ?? URL(string: base)!
     }
 
     static func handoffURL(scheme: String, target: URL) -> URL? {
@@ -116,11 +131,15 @@ public enum LinkRouter {
         charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
     )
 
+    // Either server counts, not just the selected one: a link to the other
+    // side is still a Fastmail link, and the page it opens is one the shell
+    // knows how to run. Which server new addresses are built on is a separate
+    // question, and that one does follow the setting.
     static func isFastmailHost(_ host: String?) -> Bool {
         guard var host = host?.lowercased() else { return false }
         if host.hasSuffix(".") {
             host.removeLast()
         }
-        return host == "app.fastmail.com"
+        return Backend.knownHosts.contains(host)
     }
 }

@@ -116,10 +116,11 @@ public enum IntentSupport {
         if trimmed.lowercased().hasPrefix("https://") {
             target = URL(string: trimmed)
         } else {
-            target = URL(string: "https://app.fastmail.com" + (trimmed.hasPrefix("/") ? trimmed : "/" + trimmed))
+            let host = Backend.current().host
+            target = URL(string: "https://" + host + (trimmed.hasPrefix("/") ? trimmed : "/" + trimmed))
         }
         guard let target, LinkRouter.isFastmailHost(target.host) else {
-            throw IntentSupportError("Only app.fastmail.com paths can be opened.")
+            throw IntentSupportError("Only Fastmail paths can be opened.")
         }
         try webView().load(URLRequest(url: target))
     }

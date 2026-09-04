@@ -9,39 +9,49 @@ private let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()
     .deletingLastPathComponent()
 
+private let apps = ["Personal", "Work"]
+
+private func specifiers(for app: String) throws -> [[String: Any]] {
+    let url = repoRoot
+        .appendingPathComponent("Apps")
+        .appendingPathComponent(app)
+        .appendingPathComponent("Settings.bundle")
+        .appendingPathComponent("Root.plist")
+    let data = try Data(contentsOf: url)
+    let plist = try #require(
+        try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+    )
+    return try #require(plist["PreferenceSpecifiers"] as? [[String: Any]])
+}
+
 @Test func settingsBundleKeyMatchesTheDefaultsKey() throws {
-    for app in ["Personal", "Work"] {
-        let url = repoRoot
-            .appendingPathComponent("Apps")
-            .appendingPathComponent(app)
-            .appendingPathComponent("Settings.bundle")
-            .appendingPathComponent("Root.plist")
-        let data = try Data(contentsOf: url)
-        let plist = try #require(
-            try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-        )
-        let specifiers = try #require(plist["PreferenceSpecifiers"] as? [[String: Any]])
-        let keys = specifiers.compactMap { $0["Key"] as? String }
+    for app in apps {
+        let keys = try specifiers(for: app).compactMap { $0["Key"] as? String }
         #expect(keys.contains(StartView.defaultsKey))
+    }
+}
+
+// The plist names the backends in strings the generator writes by hand, so
+// this is what stops them drifting from the cases the app actually resolves
+@Test func settingsBundleOffersEveryBackend() throws {
+    for app in apps {
+        let row = try #require(
+            try specifiers(for: app).first { $0["Key"] as? String == Backend.defaultsKey },
+            "\(app) is missing the backend row"
+        )
+        #expect(row["Type"] as? String == "PSMultiValueSpecifier")
+        #expect(row["DefaultValue"] as? String == Backend.production.rawValue)
+        #expect(row["Values"] as? [String] == Backend.allCases.map(\.rawValue))
+        #expect(row["Titles"] as? [String] == Backend.allCases.map(\.title))
     }
 }
 
 // The iOS Settings screen and the injected settings share the catalog's keys
 // and defaults; a drifted plist would write values nothing reads.
 @Test func settingsBundleCarriesEveryInboxModeOption() throws {
-    for app in ["Personal", "Work"] {
-        let url = repoRoot
-            .appendingPathComponent("Apps")
-            .appendingPathComponent(app)
-            .appendingPathComponent("Settings.bundle")
-            .appendingPathComponent("Root.plist")
-        let data = try Data(contentsOf: url)
-        let plist = try #require(
-            try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-        )
-        let specifiers = try #require(plist["PreferenceSpecifiers"] as? [[String: Any]])
+    for app in apps {
         let byKey = Dictionary(
-            specifiers.compactMap { row in (row["Key"] as? String).map { ($0, row) } },
+            try specifiers(for: app).compactMap { row in (row["Key"] as? String).map { ($0, row) } },
             uniquingKeysWith: { first, _ in first }
         )
         for option in InboxModeSettings.options {

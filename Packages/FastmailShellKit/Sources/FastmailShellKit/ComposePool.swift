@@ -2,11 +2,12 @@ import Foundation
 
 public enum ComposeURL {
     public static func url(for profile: Profile) -> URL {
-        var text = "https://app.fastmail.com/mail/compose"
+        let base = LinkRouter.composeBase(for: profile.backend)
+        var text = base
         if let accountID = profile.accountID {
             text += "?u=" + LinkRouter.percentEncode(accountID)
         }
-        return URL(string: text) ?? URL(string: "https://app.fastmail.com/mail/compose")!
+        return URL(string: text) ?? URL(string: base)!
     }
 }
 
@@ -55,11 +56,17 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
     public static let shared = ComposeWindows()
 
     private var pool: ComposePool<NSWindow>?
+    private var configuredURL: URL?
     private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
 
+    // Called again when the backend changes. A pooled window has already been
+    // preloaded with the old server's compose page, so the pool is rebuilt
+    // rather than kept: reusing it would open a window on the server the app
+    // is no longer signed in to.
     public func configure(profile: Profile) {
-        guard pool == nil else { return }
         let composeURL = ComposeURL.url(for: profile)
+        guard configuredURL != composeURL else { return }
+        configuredURL = composeURL
         pool = ComposePool(
             create: { [weak self] in self?.makeWindow() ?? NSWindow() },
             prepare: { window in
@@ -67,6 +74,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
             }
         )
         pool?.preload()
+        guard observers.isEmpty else { return }
         observers.append(NotificationCenter.default.addObserver(
             forName: .fmshellCompose, object: nil, queue: .main
         ) { _ in

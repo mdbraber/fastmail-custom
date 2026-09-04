@@ -18,19 +18,37 @@ struct SettingsView: View {
 private struct GeneralSettingsView: View {
     let profile: Profile
     @AppStorage(StartView.defaultsKey) private var startView = ""
+    @AppStorage(Backend.defaultsKey) private var backendName = Backend.production.rawValue
     @AppStorage(AttachmentOpener.autoOpenDefaultsKey) private var autoOpen = false
     @AppStorage(DownloadManager.folderDefaultsKey) private var downloadFolder = ""
 
     var body: some View {
         Form {
             Section {
-                TextField("Start URL", text: $startView, prompt: Text("https://app.fastmail.com/mail/Inbox"))
+                Picker("Backend", selection: $backendName) {
+                    ForEach(Backend.allCases, id: \.rawValue) { backend in
+                        Text(backend.title).tag(backend.rawValue)
+                    }
+                }
+            } footer: {
+                Text("Beta is Fastmail's test server. It is a separate sign-in with its own settings, so switching reloads the page and asks you to log in again.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                TextField(
+                    "Start URL",
+                    text: $startView,
+                    // The example follows the setting, so it never suggests a
+                    // host the app is not on
+                    prompt: Text("https://\(Backend.resolve(backendName).host)/mail/Inbox")
+                )
                 Text(resolved)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             } footer: {
-                Text("The full address to open. Must be on app.fastmail.com. Leave empty for the default view. Takes effect in new windows.")
+                Text("The full address to open. Must be a Fastmail address; the backend above decides which server it opens on. Leave empty for the default view. Takes effect in new windows.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -60,7 +78,11 @@ private struct GeneralSettingsView: View {
     }
 
     private var resolved: String {
-        StartView.resolve(startView, default: profile.startURL).absoluteString
+        StartView.resolve(
+            startView,
+            default: profile.startURL,
+            backend: Backend.resolve(backendName)
+        ).absoluteString
     }
 
     #if os(macOS)

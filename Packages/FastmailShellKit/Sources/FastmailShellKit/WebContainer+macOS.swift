@@ -31,7 +31,7 @@ extension WebContainer: NSViewRepresentable {
         guard
             let bundle = try? ScriptStore(loader: loader, overlayName: profile.overlayScriptName).load(),
             let chromeCSS = bundle.chromeCSS,
-            let injected = try? ScriptInjector.userScripts(from: bundle, url: profile.startURL, chromeCSS: chromeCSS),
+            let injected = try? ScriptInjector.userScripts(from: bundle, url: loadURL, chromeCSS: chromeCSS),
             let styleScript = injected.styleScript
         else { return }
         controller.addUserScript(styleScript)

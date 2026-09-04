@@ -207,3 +207,48 @@ private func fastmailComposeFields(of composeURL: URL) -> [String: String] {
     #expect(fields["to"] == "a@b.com")
     #expect(fields["subject"] == "Hi")
 }
+
+@Test func aLinkToTheOtherServerIsStillAFastmailLink() {
+    let beta = url("fastmail-personal://open?url=https%3A%2F%2Fapp.beta.fastmail.com%2Fmail%2FInbox%2F")
+    #expect(LinkRouter.route(beta, profile: profile())
+        == .load(url("https://app.beta.fastmail.com/mail/Inbox/")))
+    #expect(LinkRouter.isFastmailHost("app.beta.fastmail.com"))
+    #expect(LinkRouter.isFastmailHost("APP.BETA.FASTMAIL.COM."))
+    #expect(!LinkRouter.isFastmailHost("beta.fastmail.com"))
+    #expect(!LinkRouter.isFastmailHost("app.beta.fastmail.com.evil.example"))
+}
+
+// Incoming links take either server; addresses the app builds itself follow
+// the profile, which is the setting
+@Test func composeIsBuiltOnTheProfilesBackend() {
+    let onBeta = profile().on(.beta)
+    let compose = LinkRouter.composeURL(
+        mailto: "mailto:a@b.com",
+        accountID: nil,
+        backend: onBeta.backend
+    )
+    #expect(compose.host == "app.beta.fastmail.com")
+    #expect(ComposeURL.url(for: onBeta).absoluteString
+        .hasPrefix("https://app.beta.fastmail.com/mail/compose"))
+    #expect(ComposeURL.url(for: profile()).absoluteString
+        .hasPrefix("https://app.fastmail.com/mail/compose"))
+}
+
+@Test func aMailtoLinkComposesOnTheProfilesBackend() {
+    guard case .load(let target) = LinkRouter.route(url("mailto:a@b.com"), profile: profile().on(.beta)) else {
+        Issue.record("a mailto link did not compose")
+        return
+    }
+    #expect(target.host == "app.beta.fastmail.com")
+}
+
+@Test func aProfileMovedToAnotherBackendKeepsEverythingElse() {
+    let base = profile()
+    let moved = base.on(.beta)
+    #expect(moved.backend == .beta)
+    #expect(base.backend == .production)
+    #expect(moved.id == base.id)
+    #expect(moved.accountID == base.accountID)
+    #expect(moved.handoffScheme == base.handoffScheme)
+    #expect(moved.urlScheme == base.urlScheme)
+}

@@ -8,7 +8,33 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>The full address to open, for example https://app.fastmail.com/mail/Archive. Must be on app.fastmail.com. Leave empty for the default view. Takes effect next time the app starts.</string>
+			<string>Beta is Fastmail's test server. It is a separate sign-in with its own settings, so switching reloads the page and asks you to log in again.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Title</key>
+			<string>Backend</string>
+			<key>Key</key>
+			<string>backend</string>
+			<key>DefaultValue</key>
+			<string>production</string>
+			<key>Titles</key>
+			<array>
+				<string>Production</string>
+				<string>Beta</string>
+			</array>
+			<key>Values</key>
+			<array>
+				<string>production</string>
+				<string>beta</string>
+			</array>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
+			<string>The full address to open, for example https://app.fastmail.com/mail/Archive. Must be a Fastmail address; the backend above decides which server it opens on. Leave empty for the default view. Takes effect next time the app starts.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
