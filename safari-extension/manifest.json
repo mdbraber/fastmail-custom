@@ -23,12 +23,14 @@
         "page": "settings.html"
     },
     "host_permissions": [
-        "https://app.fastmail.com/*"
+        "https://app.fastmail.com/*",
+        "https://app.beta.fastmail.com/*"
     ],
     "content_scripts": [
         {
             "matches": [
-                "https://app.fastmail.com/*"
+                "https://app.fastmail.com/*",
+                "https://app.beta.fastmail.com/*"
             ],
             "js": [
                 "early.js"

@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.46
+// @version      2.47
 // @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
+// @match        https://app.beta.fastmail.com/*
 // @run-at       document-idle
 // @inject-into  context
 // @grant        none

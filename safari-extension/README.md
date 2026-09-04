@@ -1,7 +1,13 @@
 # Fastmail Inbox mode injector
 
 A minimal Safari web extension whose only job is to start
-`fastmail-inbox-mode.user.js` on `app.fastmail.com`.
+`fastmail-inbox-mode.user.js` on `app.fastmail.com` and `app.beta.fastmail.com`.
+
+The two hosts are named outright rather than matched with a subdomain wildcard,
+which would take in the marketing site and everything else on `fastmail.com`
+along with them. They are separate origins, so `localStorage` is not shared:
+each keeps its own `early.js` cache and its own on/off state, while the settings
+in extension storage are common to both.
 
 ## Why this exists
 
@@ -34,7 +40,7 @@ userscripts have no `browser.scripting`. See
 
 | File | Purpose |
 |---|---|
-| `manifest.json` | MV3 manifest, scoped to `https://app.fastmail.com/*` |
+| `manifest.json` | MV3 manifest, scoped to `app.fastmail.com` and `app.beta.fastmail.com` |
 | `background.js` | Injects the payload with `world: "MAIN"` on page load |
 | `early.js` | Content script at `document_start`, replaying last load's styles |
 | `settings.html` / `settings.js` | The options popup |

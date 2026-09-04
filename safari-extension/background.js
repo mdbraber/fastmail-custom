@@ -20,8 +20,12 @@ reload.
 
 const api = globalThis.browser || globalThis.chrome;
 
-const TARGET = 'https://app.fastmail.com/*';
-const TARGET_PATTERN = /^https:\/\/app\.fastmail\.com\//;
+// The beta site is the same app on its own origin, so it gets the same
+// treatment. Both are named outright rather than matched with a subdomain
+// wildcard, which would take in the marketing site and everything else on
+// fastmail.com along with them.
+const TARGETS = ['https://app.fastmail.com/*', 'https://app.beta.fastmail.com/*'];
+const TARGET_PATTERN = /^https:\/\/app\.(beta\.)?fastmail\.com\//;
 const PAYLOAD = 'fastmail-inbox-mode.js';
 
 // Kept in step with the userscript's DEFAULT_SETTINGS and settings.js
@@ -92,7 +96,7 @@ api.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 // Push a changed setting to whatever is already open
 api.storage.onChanged.addListener(async () => {
     const settings = await getSettings();
-    const tabs = await api.tabs.query({ url: TARGET });
+    const tabs = await api.tabs.query({ url: TARGETS });
 
     tabs.forEach((tab) => {
         api.scripting.executeScript({
