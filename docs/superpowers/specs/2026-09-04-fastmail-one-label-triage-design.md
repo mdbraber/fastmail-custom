@@ -27,15 +27,22 @@ state and nothing else. History is search.
 
 ## Model
 
-| State | Carries |
-|---|---|
-| Triage | `Inbox` + `Triage` |
-| Filed | `Inbox` + exactly one project label |
-| Done | neither; helper labels untouched |
+| State | Carries | Who put it there |
+|---|---|---|
+| Triage | `Inbox` + `Triage` | the catch-all rule |
+| Pre-filed | `Inbox` + `Triage` + one project label | the catch-all rule and a sender rule |
+| Filed | `Inbox` + exactly one project label | you |
+| Done | neither; helper labels untouched | you |
 
-Snoozed is not a state of its own: it is a Triage or Filed message that
-Fastmail has taken out of the Inbox for a while. It comes back as whatever it
-was, with its label still on.
+Pre-filed is what a sender rule produces — mail from `pknhaarlem.nl` gets
+`Kerk` on arrival — and it is still yours to look at: `Triage` is on it,
+and the Triage group comes before the project groups, so that is where it
+shows. Keeping it is one key (`v`, below); archiving it is `e`. A rule can
+file; only you can decide.
+
+Snoozed is not a state of its own: it is any of the above that Fastmail has
+taken out of the Inbox for a while. It comes back as whatever it was, with
+its labels still on.
 
 Invariants:
 
@@ -46,8 +53,10 @@ Invariants:
   (Option-drag, or the Move menu), which takes the Inbox off and is left
   alone: it is asked for with a modifier, and the message shows in its
   label until archived.
-- **At most one of `Triage` or a project label.** `v` replaces, never adds a
-  second.
+- **At most one project label.** Adding one replaces any other.
+- **`Triage` and a project label coexist only when rules put both there.**
+  The client never adds `Triage`, and adding a project label from the
+  client takes it off; the first verb on a pre-filed message resolves it.
 - **Helper labels are invisible to the scheme.** Never added, removed,
   counted, offered in the picker, or coloured. They are what the stock
   labels menu is for.
@@ -91,7 +100,8 @@ lands as one undo checkpoint under one toast.
 
 | Key | Meaning | What it opens or does |
 |---|---|---|
-| `v` | file | the picker: Fastmail's mailbox menu narrowed to projects, one pick, adds rather than moves; typing reaches anything. The pick is an ordinary add; the rules below do the rest |
+| `v` | keep | with a project label already on the thread: `Triage` off, nothing else, no picker. Without one: the picker — Fastmail's mailbox menu narrowed to projects, one pick, adds rather than moves, typing reaches anything. The pick is an ordinary add; the rules below do the rest |
+| `Shift-V` | refile | always the picker, whatever is on the thread |
 | `e` | done | archive: `Inbox`, `Triage`, every project label and the pin come off |
 | `s` | pin | toggles the pin, nothing else |
 | `w` | snooze | Fastmail's snooze dialog, prefilled for the default period |
@@ -140,8 +150,11 @@ filing something in order to strip it is pointless. `Shift-E` therefore goes.
 a verb to wait on a pick, and there is no longer a pick to wait on. Filing
 is `v`.
 
-`Shift-V` (label only) and `o` (someday) go. `Shift-V` filed without
-triaging, a distinction that no longer exists. `o` returns to Fastmail as
+`v` is "keep": the picker only when there is nothing to keep it under. That
+is the current script's picker rule, kept because sender rules make the
+pre-filed case the common one, and one key is what it deserves. `Shift-V`
+is the picker forced — the way to move a filed message to another project
+without touching `l`. `o` (someday) goes and returns to Fastmail as
 open-conversation.
 
 **The picker stays; its job shrinks.** `v` opens what it opens today:
@@ -287,7 +300,7 @@ Features:
 - Filtered sidebar counts and the header count (`showFilteredCounts`,
   `showHeaderCounts`) — the user-facing settings go; the counting code is
   part of what is retired.
-- `Shift-E`, `Shift-V`.
+- `Shift-E`.
 - The snooze patch.
 - The picker's authority: the pending verb, `onCommit`, and the
   label-changing and sender-filing branches of its `didSelect`. The picker
@@ -362,7 +375,9 @@ with the generated `Settings.bundle/Root.plist` for both apps
 1. Create the `Triage` label. Hidden or shown as preferred; the script
    finds it by name.
 2. Add a rule that applies `Triage` to all incoming mail (confirmed
-   possible).
+   possible). It must not stop rule processing, and sender rules that add
+   a project label must run as well — order them so both apply, or the
+   pre-filed state never arises.
 3. Edit the Inbox grouping to the table above: Triage → `in:Triage`,
    remove the Waiting group.
 4. Delete the empty `Waiting` label.
@@ -403,8 +418,9 @@ Gone from the Inbox; found by search.
 **3 — Finishing a filed message (1 key).** In Personal. `e`: Inbox and
 Personal off. Gone from both the Inbox and the Personal label.
 
-**4 — Refile.** In Personal, `v`, pick Kerk: Kerk on; rule 2 takes
-Personal off.
+**4 — Refile.** In Personal, `Shift-V`, pick Kerk: Kerk on; rule 2 takes
+Personal off. (`v` here would keep, and there is no `Triage` to take off,
+so it would do nothing.)
 
 **5 — Urgent.** `s`: pinned. Now in the Pinned group (first match),
 whatever its label. `s` again: unpinned, back to its group.
@@ -424,6 +440,11 @@ still takes `Triage` off, the Inbox is left off as asked. The old
 
 **9 — Un-archived by hand.** Dragged from Archive back to the Inbox: no
 label, so it lands in the catch-all group. `v` files it.
+
+**9b — Pre-filed by a sender rule (1 key).** Mail from `pknhaarlem.nl`
+arrives with `Triage` and `Kerk`. In the Triage group, because Triage
+comes first. `v`: `Triage` off, nothing else asked — now in the Kerk
+group and the Kerk label, exactly as if you had filed it. Or `e`: gone.
 
 **9a — Later, from anywhere.** `l`, type "Lat", pick Later; or drag onto
 Later. Later is a helper, so rule 2 does nothing — the project stays. Later
