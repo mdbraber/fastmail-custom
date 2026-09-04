@@ -240,21 +240,55 @@ Features:
 - Waiting and Someday as states, and `w`/`o` as their verbs. `w` is
   reassigned to snooze; `o` reverts to Fastmail.
 - Non-inbox labels (`nonInboxLabels`).
-- The per-label filter system: `next`, `triage`, `deferred`, `noninbox`,
-  their older spellings, the `?filter=` parameter, the remembered choice per
-  label, and the registered queries that counted them. Fastmail's groups do
-  this on the server now, and every label list is already the right slice.
+- The per-label filter system — **retired, not removed**; see below.
+  Fastmail's groups do its job on the server now, and every label list is
+  already the right slice.
 - Filtered sidebar counts and the header count (`showFilteredCounts`,
-  `showHeaderCounts`).
+  `showHeaderCounts`) — the user-facing settings go; the counting code is
+  part of what is retired.
 - `Shift-E`, `Shift-V`.
 - The snooze patch.
 
-Settings removed: `processLabel`, `qualifierLabels`, `deferredLabels`,
-`waitingLabel`, `somedayLabel`, `nonInboxLabels`, `waitingKey`,
-`somedayKey`, `showFilteredCounts`, `showHeaderCounts`, `appBadgeFilter`,
-`labelColoursSkipProcess`.
+Settings removed from the catalog: `processLabel`, `qualifierLabels`,
+`deferredLabels`, `waitingLabel`, `somedayLabel`, `nonInboxLabels`,
+`waitingKey`, `somedayKey`, `showFilteredCounts`, `showHeaderCounts`,
+`appBadgeFilter`, `labelColoursSkipProcess`. The first six and the two
+count settings survive as internal constants beside the retired filter
+code, not as anything a user sees.
 
 Most of the change is deletion.
+
+### Retired, not removed: the filter system
+
+The per-label filters — `next`, `triage`, `deferred`, `noninbox`, their
+older spellings, the `?filter=` parameter, the remembered choice per label,
+the query builder, and the registered queries that counted them — stay in
+the source, switched off, so they can be brought back if the groups turn
+out not to be enough.
+
+The code is two contiguous sections ("Sticky filter" and "The Next filter",
+roughly lines 4658–5090 today) plus the counting section they draw on and
+about a dozen one-line hooks elsewhere: configuration, state, the badge
+queries, init. The sections are kept verbatim. The hooks are guarded by one
+constant near the top, `LABEL_FILTERS = false`, and with it off nothing
+installs: no entries in Fastmail's filter menu, `?filter=` ignored, no
+registered count queries. Guarding rather than commenting out keeps the
+code parsing and greppable; where a hook cannot be gated cleanly it is
+commented out with the same `LABEL_FILTERS` marker so every retired piece
+is found by one search.
+
+Two things to know before turning it back on:
+
+- The filter definitions are written against the old model — `next` is
+  "Inbox or Process minus the deferred labels", `triage` is "Inbox with no
+  verb yet". They would need re-basing on the new labels (`triage` is
+  simply `in:Triage`; `next` has no meaning) before they say anything true.
+- The settings they read (`processLabel`, `deferredLabels`,
+  `qualifierLabels`, `nonInboxLabels`, `showFilteredCounts`,
+  `showHeaderCounts`) leave the user-facing catalog. Where the retired code
+  reads them it reads a small internal block of the same names, kept next
+  to the retired code with the old defaults, so nothing references a
+  setting that no longer exists.
 
 ## Settings
 
@@ -299,8 +333,9 @@ with the generated `Settings.bundle/Root.plist` for both apps
   list until touched. Options: leave them (harmless, the list is just
   longer), or clear the labels off archived mail once by search. Not the
   script's job.
-- `?filter=` on a URL is ignored. The stored per-label filter choice is
-  ignored and may be removed.
+- `?filter=` on a URL is ignored while `LABEL_FILTERS` is off. The stored
+  per-label filter choice is likewise ignored, and left in place rather than
+  removed, since the retired code would read it again.
 - Settings values stored under removed keys are ignored.
 - A `Next`/`Process` label, if any account still has one, is an ordinary
   project by the label rule; the user hides or deletes it.
@@ -373,9 +408,15 @@ the extension is enabled there:
   the Inbox, over the whole account, run before and after a session.
 - The settings catalog: `make test` in `fastmail-app` for the plist parity
   guard; the extension's settings page by eye.
+- The retired filter system stays retired: Fastmail's filter menu shows only
+  its own entries, a `?filter=next` URL opens the label unfiltered, and no
+  count query is registered. `node --check` on the userscript, since the
+  retired sections must still parse.
 
 ## Not in scope
 
+- Re-basing the retired filters on the new model. They are kept, not
+  revived.
 - The script maintaining the Inbox grouping.
 - Adding `Triage` from the script to mail that missed the rule.
 - The native Fastmail iOS app.
