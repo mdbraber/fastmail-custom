@@ -59,7 +59,54 @@ paired_devices () {
     | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}'
 }
 
-typeset -A done_p done_w seen
+# A friendlier label than the UDID, because the thing a failure usually asks
+# for is physical: pick up that device and unlock it.
+device_name () {
+  xcrun devicectl list devices 2>/dev/null \
+    | grep -F "$1" | head -1 | awk '{print $1}'
+}
+
+# Why an install failed, in one line. A locked device and a sleeping one both
+# refuse in the same place, and only the second is worth waiting out in
+# silence — so the difference has to be said rather than retried blindly.
+failure_reason () {
+  case "$1" in
+    *DeviceLocked*|*"device is locked"*|*"The device is locked"*)
+      print -r -- "locked — unlock it and this will go through" ;;
+    *"developer mode"*|*"Developer Mode"*)
+      print -r -- "Developer Mode is off — Settings › Privacy & Security" ;;
+    *"not paired"*|*"pairing"*|*"trust"*|*"Trust"*)
+      print -r -- "not trusted — accept the trust prompt on the device" ;;
+    *"could not be found"*|*"not connected"*|*Unavailable*|*unavailable*)
+      print -r -- "not reachable — asleep or off the network" ;;
+    *)
+      # The first ERROR: line the tool printed, which is the useful one.
+      # Split into an array first: subscripting the expansion inline indexes
+      # the joined string, and hands back a single character.
+      local -a lines
+      lines=(${(M)${(f)1}:#ERROR:*})
+      print -r -- "${lines[1]:-install failed}" ;;
+  esac
+}
+
+typeset -A done_p done_w seen last_error told
+
+# Install, keeping the error rather than discarding it, and say why the first
+# time a device's reason changes — once per reason, not once per attempt, so a
+# long wait stays readable.
+install_to () {
+  local udid=$1 app=$2 out reason
+  if out=$(xcrun devicectl device install app --device $udid "$app" 2>&1); then
+    return 0
+  fi
+  reason=$(failure_reason "$out")
+  last_error[$udid]="$reason"
+  if [ "${told[$udid]}" != "$reason" ]; then
+    echo "$(device_name $udid) ($udid): $reason"
+    told[$udid]="$reason"
+  fi
+  return 1
+}
 
 for try in $(seq 1 $TRIES); do
   devices=(${(f)"$(paired_devices)"})
@@ -70,12 +117,10 @@ for try in $(seq 1 $TRIES); do
     seen[$udid]=1
     : ${done_p[$udid]:=0} ${done_w[$udid]:=0}
 
-    if [ ${done_p[$udid]} -eq 0 ] && \
-       xcrun devicectl device install app --device $udid "$P_APP" >/dev/null 2>&1; then
+    if [ ${done_p[$udid]} -eq 0 ] && install_to $udid "$P_APP"; then
       done_p[$udid]=1; echo "personal ok on $udid (try $try)"
     fi
-    if [ ${done_w[$udid]} -eq 0 ] && \
-       xcrun devicectl device install app --device $udid "$W_APP" >/dev/null 2>&1; then
+    if [ ${done_w[$udid]} -eq 0 ] && install_to $udid "$W_APP"; then
       done_w[$udid]=1; echo "work ok on $udid (try $try)"
     fi
   done
@@ -113,9 +158,12 @@ for try in $(seq 1 $TRIES); do
 done
 
 # Whatever landed still landed, so say which: a device that never woke up
-# should read as a missing device rather than as a failed build
+# should read as a missing device rather than as a failed build. The reason
+# goes with it — without one, a device that only needed unlocking is
+# indistinguishable from a broken build, which is a long way to look for a
+# short answer.
 for udid in ${(k)seen}; do
-  echo "$udid: personal=${done_p[$udid]} work=${done_w[$udid]}"
+  echo "$(device_name $udid) ($udid): personal=${done_p[$udid]} work=${done_w[$udid]} — ${last_error[$udid]:-no error recorded}"
 done
 [ ${#seen} -eq 0 ] && echo "no paired devices found"
 echo "IOS INSTALL TIMED OUT"
