@@ -2961,13 +2961,6 @@ other user label is a topic.
         menu.didSelect = function (mailbox) {
             if (!this.customOurs) return originalDidSelect.apply(this, arguments);
 
-            // The pick itself, before any branch below acts on it: the keys
-            // are read here because the verb clears itself on the way past
-            // and the label-only branches hand actions a null selection.
-            fileSendersIntoGroup(mailbox, pendingVerb
-                ? pendingVerb.keys
-                : resolveKeys(controller().actions, null));
-
             // A verb is waiting on this pick: hand the topic over and let the
             // verb do every label change in its own single checkpoint
             if (pendingVerb) {
@@ -3033,9 +3026,86 @@ other user label is a topic.
 
     /*
      * ----------------------------------------------------------------
-     * The verbs
+     * The rules under every menu
      * ----------------------------------------------------------------
      */
+
+    // Every label change in the client passes through these actions —
+    // whichever menu, key, drag or swipe asked for it — so the model is
+    // enforced here rather than inside any one picker. add, copy and move
+    // take one label as their second argument; addremove takes a list.
+    const LABEL_ACTIONS = ['add', 'copy', 'addremove', 'move'];
+
+    // True while a rule is issuing its own addremove, so the wrapper does
+    // not read that call as one more request to apply the rules to
+    let applyingLabelRules = false;
+
+    // Rule 2 — a project label replaces. What comes off the selected threads
+    // when `adds` lands on them: Triage and every other project. The Inbox
+    // is not touched — an add leaves it on, a move took it off on purpose —
+    // and a helper label triggers nothing.
+    const replacedBy = (storeKeys, adds) => {
+        if (!adds.some(isProject)) return [];
+
+        const removes = [];
+        mailboxesAmong(storeKeys).forEach((mailbox) => {
+            if (adds.indexOf(mailbox) !== -1) return;
+            if (isTriage(mailbox) || isProject(mailbox)) removes.push(mailbox);
+        });
+        return removes;
+    };
+
+    const patchLabelActions = () => {
+        const actions = controller().actions;
+        if (actions.customLabelRules) return;
+        actions.customLabelRules = true;
+
+        LABEL_ACTIONS.forEach((verb) => {
+            const original = actions[verb];
+            if (typeof original !== 'function') return;
+
+            actions[verb] = function (storeKeys) {
+                if (!modeIsOn || applyingLabelRules) {
+                    return original.apply(this, arguments);
+                }
+
+                const keys = resolveKeys(this, storeKeys);
+                if (!keys) return original.apply(this, arguments);
+
+                const adds = verb === 'addremove'
+                    ? toArray(arguments[1])
+                    : [arguments[1]].filter(Boolean);
+
+                // Rule 3 — a named label files the sender, from any route
+                adds.forEach(mailbox => fileSendersIntoGroup(mailbox, keys));
+
+                const removes = replacedBy(keys, adds);
+                if (!removes.length) return original.apply(this, arguments);
+
+                applyingLabelRules = true;
+                try {
+                    if (verb === 'addremove') {
+                        // One call, one checkpoint: the rule's removals ride
+                        // the same addremove as the pick
+                        const own = toArray(arguments[2]);
+                        const merged = own.concat(removes.filter(m => own.indexOf(m) === -1));
+                        return original.call(this, keys, adds, merged);
+                    }
+
+                    // The removals go first and silenced, so the add's own
+                    // didAction is the one that cuts the checkpoint — and
+                    // everything queued before it joins that checkpoint
+                    const self = this;
+                    silencingDidAction(this, () => {
+                        self.addremove(keys, [], removes);
+                    });
+                    return original.apply(this, arguments);
+                } finally {
+                    applyingLabelRules = false;
+                }
+            };
+        });
+    };
 
     // Archive in labels mode is `move(messages, null, Inbox, true)` against
     // the account's Inbox by role — it never touches the label being viewed —
@@ -6070,6 +6140,7 @@ other user label is a topic.
         patchDrop();
         patchMailboxMenu();
         patchArchive();
+        patchLabelActions();
         installLongPressArchive();
         patchSnooze();
         patchMessageList();
