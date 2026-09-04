@@ -116,6 +116,11 @@ other user label is a topic.
 
     // Keystroke that toggles Inbox mode
     const SHORTCUT = 'Shift-I';
+    // The per-label filter system — next, triage, deferred, noninbox — is
+    // retired but kept: Fastmail's groups do its job on the server now.
+    // Off, nothing of it installs. Every hook it had is guarded by this
+    // one name, so a search for LABEL_FILTERS finds all of it.
+    const LABEL_FILTERS = false;
     // 1 … 9 and 0 go to the sources listed above the Labels heading.
     //
     // Cmd is the one to reach for, but Safari keeps Cmd-1 … Cmd-9 for its tabs
@@ -192,6 +197,9 @@ other user label is a topic.
         // The marker label sits on everything kept, so tinting rows by it
         // would colour the whole Process list one shade and say nothing
         labelColoursSkipProcess: true,
+        // Triage is on every undecided row, so tinting by it would paint
+        // the whole group one shade and say nothing
+        labelColoursSkipTriage: true,
         dragAdditive: true,
         hideInboxLabel: true,
         stripLabelPrefix: true,
@@ -220,6 +228,14 @@ other user label is a topic.
         // one of each is work, and the topic wins. Empty by default, so
         // nothing changes until you name one.
         nonInboxLabels: '',
+        // The label a rule puts on everything incoming. Taken off by keeping
+        // or filing; the script never adds it.
+        triageLabel: 'Triage',
+        // w opens Fastmail's own snooze dialog filled in for this far ahead —
+        // a count and d, w or m — at this time of day
+        snoozeKey: 'w',
+        snoozeDefault: '2w',
+        snoozeTime: '08:00',
         // The verb keys, in Fastmail's own key spelling. o replaces the
         // stock open-conversation key while the mode is on; Enter still
         // opens either way.
@@ -488,6 +504,7 @@ other user label is a topic.
 
         cached = {
             inbox: mailboxesOf(accountId).filter(m => m.get('role') === 'inbox')[0] || null,
+            triage: findByPath(accountId, settings.triageLabel),
             process: findByPath(accountId, settings.processLabel),
             waiting: findByPath(accountId, settings.waitingLabel),
             someday: findByPath(accountId, settings.somedayLabel),
@@ -509,6 +526,21 @@ other user label is a topic.
     const somedayMailbox = (accountId) => stateLabels(accountId).someday;
     const deferredMailboxes = (accountId) => stateLabels(accountId).deferred;
     const nonInboxMailboxes = (accountId) => stateLabels(accountId).nonInbox;
+    const triageMailbox = (accountId) => stateLabels(accountId).triage;
+
+    const isTriage = (mailbox) => !!mailbox &&
+        mailbox === triageMailbox(mailbox.get('accountId'));
+
+    // A project: a user label shown in the sidebar, not struck out by name,
+    // and not Triage. Sidebar membership is the rule — the archive shelf of
+    // hidden labels tags history, it does not queue work.
+    const isProject = (mailbox) => isUserLabel(mailbox) &&
+        isSidebarLabel(mailbox) && !isExcludedLabel(mailbox) && !isTriage(mailbox);
+
+    // Everything else a user label can be. Never added, removed, counted or
+    // offered by anything here; the stock labels menu is for these.
+    const isHelper = (mailbox) => isUserLabel(mailbox) &&
+        !isTriage(mailbox) && !isProject(mailbox);
 
     const isProcess = (mailbox) => !!mailbox &&
         mailbox === processMailbox(mailbox.get('accountId'));
@@ -3074,6 +3106,18 @@ other user label is a topic.
     const carriesMailbox = (message, mailbox) => !!mailbox && !!message &&
         threadOf(message).some(other =>
             toArray(other.get('mailboxes')).indexOf(mailbox) !== -1);
+
+    const projectsAmong = (storeKeys) =>
+        Array.from(mailboxesAmong(storeKeys)).filter(isProject);
+
+    const triageAmong = (storeKeys) =>
+        Array.from(mailboxesAmong(storeKeys)).filter(isTriage);
+
+    // The keep rule's question: does every selected conversation carry a
+    // project? Those that do not are asked where they go.
+    const unfiledAmong = (storeKeys) => messagesFrom(storeKeys)
+        .filter(message => !threadOf(message).some(other =>
+            toArray(other.get('mailboxes')).some(isProject)));
 
     /*
      * Keeping a filtered list honest after a change.
