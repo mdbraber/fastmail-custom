@@ -91,17 +91,16 @@ lands as one undo checkpoint under one toast.
 
 | Key | Meaning | What it opens or does |
 |---|---|---|
-| `v` | file | Fastmail's Labels menu, narrowed to projects; typing reaches anything. Picking a project is the action; the rules below do the rest |
+| `v` | file | the picker: Fastmail's mailbox menu narrowed to projects, one pick, adds rather than moves; typing reaches anything. The pick is an ordinary add; the rules below do the rest |
 | `e` | done | archive: `Inbox`, `Triage`, every project label and the pin come off |
 | `s` | pin | toggles the pin, nothing else |
 | `w` | snooze | Fastmail's snooze dialog, prefilled for the default period |
-| `l` | labels | the same Labels menu, unnarrowed — helper labels live here |
+| `l` | labels | Fastmail's tristate Labels menu, narrowed as today — helper labels live here |
 | drag onto a label | add that label | Fastmail's drag; the rules below apply |
 | Option-drag | Fastmail's move | Inbox off, label on; left alone |
 
-There is no picker of the script's own any more. Every label change goes
-through Fastmail's own menus and gestures, and the model is enforced
-underneath them:
+The picker stays as a way of choosing; it no longer carries the model. The
+model is enforced underneath every menu and gesture, the picker included:
 
 ### Enforced at the action level
 
@@ -145,17 +144,21 @@ is `v`.
 triaging, a distinction that no longer exists. `o` returns to Fastmail as
 open-conversation.
 
-**The narrowing stays; the picker goes.** The script already narrows
-Fastmail's Labels menu to the labels that mean something here
-(`labelsMenuOptions`, with typing reaching anything), and `v` simply opens
-that menu narrowed to projects — visible, not excluded, not `Triage`. What
-is retired is everything that made a menu "ours": adopting Fastmail's
-mailbox menu as a picker (`applyMoveMode`), turning its move into an add
-(`addInsteadOfMoving`), saving when one option is left
-(`autoSaveWhenAlone`), the pending verb that waited on a pick, the phone's
-adoption of its Labels button as that picker, and the Keep slot.
-`labelsAutoSave` goes with it; the menu is Fastmail's and confirms as
-Fastmail's does.
+**The picker stays; its job shrinks.** `v` opens what it opens today:
+Fastmail's mailbox menu adopted as a picker (`applyMoveMode`), narrowed to
+projects — visible, not excluded, not `Triage` — with typing reaching
+anything, a single pick, the pick made an add rather than a move
+(`addInsteadOfMoving`), and saved as soon as one option is left
+(`autoSaveWhenAlone`, `labelsAutoSave`). That is a better way to file than
+the tristate menu and it already exists. On the phone the File slot opens
+the same picker.
+
+What the picker no longer does is decide anything. The pick issues an
+ordinary `add`, and rule 2 takes the other labels off in the same
+checkpoint; the sender filing that lived inside the picker's `didSelect`
+becomes rule 3 and fires from every route. Retired with that: the pending
+verb that waited on a pick and handed it to `onCommit`, and the
+label-changing branches of `didSelect` itself.
 
 ### `w` — snooze for a default period
 
@@ -228,14 +231,15 @@ the same Inbox is the working surface on every device.
 The message bar keeps its shape — Snooze / Labels / Archive / Move to / More
 — and the slot vocabulary shrinks with the verbs:
 
-- **Labels** is Fastmail's own menu, narrowed as on the desktop; picking a
-  project there files, by rule 2. This is `v` and `l` in one button.
+- **Labels** is Fastmail's tristate menu, narrowed as on the desktop —
+  `l`. Picking a project there files too, by rule 2.
+- **File** (formerly Keep) opens the picker — `v`.
 - Archive is `e`. Pin is `s`. Snooze is Fastmail's menu, untouched.
 - More carries whatever the bar cannot fit, in order, plus **Snooze 2
   weeks** (the `w` dialog). Keep, Waiting and Someday are gone.
 
-`bottomBarSlots` default becomes `Snooze, Pin, Archive, Labels, Delete,
-Move`.
+`bottomBarSlots` default becomes `Snooze, Pin, Archive, Labels, File,
+Delete, Move`.
 
 All three rules are at the action level, so a swipe, a tap and a key do
 the same thing. A rule at the keystroke would leave a swipe-archive on the
@@ -285,15 +289,14 @@ Features:
   part of what is retired.
 - `Shift-E`, `Shift-V`.
 - The snooze patch.
-- The script's own picker: the adopted mailbox menu, add-instead-of-move,
-  auto-save-when-alone, the pending verb, the phone's picker adoption and
-  Keep slot. Fastmail's menus, narrowed, do the job; the rules underneath
-  them do the rest.
+- The picker's authority: the pending verb, `onCommit`, and the
+  label-changing and sender-filing branches of its `didSelect`. The picker
+  itself stays as a menu; the rules underneath it do the rest.
 
 Settings removed from the catalog: `processLabel`, `qualifierLabels`,
 `deferredLabels`, `waitingLabel`, `somedayLabel`, `nonInboxLabels`,
 `waitingKey`, `somedayKey`, `showFilteredCounts`, `showHeaderCounts`,
-`appBadgeFilter`, `labelColoursSkipProcess`, `labelsAutoSave`. The first six and the two
+`appBadgeFilter`, `labelColoursSkipProcess`. The first six and the two
 count settings survive as internal constants beside the retired filter
 code, not as anything a user sees.
 
@@ -341,11 +344,11 @@ Two things to know before turning it back on:
 | `snoozeKey` | `w` | new |
 | `snoozeDefault` | `2w` | new |
 | `snoozeTime` | `08:00` | new |
-| `bottomBarSlots` | `Snooze, Pin, Archive, Labels, Delete, Move` | changed |
+| `bottomBarSlots` | `Snooze, Pin, Archive, Labels, File, Delete, Move` | changed |
 | `appBadgeLabel` | `Triage` | changed default |
 | `labelColoursSkipTriage` | `true` | renamed |
 | `contactGroupLabels` | as today | unchanged in meaning; now applies from every route |
-| `labelColours`, `labelColoursSidebarOnly`, `dragAdditive`, `hideInboxLabel`, `stripLabelPrefix`, `labelsShortcut`, `labelsSidebarOnly`, `swapArchiveExpand`, `sidebarSeparators`, `hideLoneExpando` | as today | unchanged |
+| `labelColours`, `labelColoursSidebarOnly`, `dragAdditive`, `hideInboxLabel`, `stripLabelPrefix`, `labelsShortcut`, `labelsSidebarOnly`, `labelsAutoSave`, `swapArchiveExpand`, `sidebarSeparators`, `hideLoneExpando` | as today | unchanged |
 
 The settings catalog lives in three places and they change together: the
 userscript's `DEFAULT_SETTINGS`; the Safari extension's `background.js` and
@@ -390,9 +393,9 @@ with the generated `Settings.bundle/Root.plist` for both apps
 ## Scenarios
 
 **1 — New mail, known project (1 key).** Arrives with `Triage`. In the
-Triage group. `v` opens the Labels menu; pick Personal. The add is the
-action; rule 2 takes `Triage` off in the same checkpoint. Inbox stays.
-Now in the Personal group and in the Personal label.
+Triage group. `v` opens the picker; pick Personal. The pick is an add;
+rule 2 takes `Triage` off in the same checkpoint. Inbox stays. Now in the
+Personal group and in the Personal label.
 
 **2 — New mail, done on sight (1 key).** `e`: Inbox and `Triage` off.
 Gone from the Inbox; found by search.
@@ -436,9 +439,9 @@ later: Inbox and Personal off, `c` untouched.
 Personal, selected; `v` → Kerk: all three end up Inbox + Kerk only. `e`:
 all three lose Inbox and every project label. One checkpoint, one toast.
 
-**12 — Phone.** Swipe to archive: rule 1, so as scenario 3. Tap Labels,
-pick a project: rule 2, as scenario 1. More → Snooze 2 weeks: as
-scenario 6.
+**12 — Phone.** Swipe to archive: rule 1, so as scenario 3. Tap File,
+pick a project: as scenario 1; tap Labels and tick one: rule 2 all the
+same. More → Snooze 2 weeks: as scenario 6.
 
 ## Constraints kept from the earlier specs
 
