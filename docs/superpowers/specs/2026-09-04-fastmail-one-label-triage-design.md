@@ -40,9 +40,12 @@ was, with its label still on.
 Invariants:
 
 - **A project label implies the Inbox.** Opening a label is therefore the
-  sub-inbox for that project, with no filter. The verbs keep this true; a
-  message that lost the Inbox some other way shows in its label until the
-  next verb heals it (see Compatibility).
+  sub-inbox for that project, with no filter. The rule keeps it true on
+  arrival, adding a label keeps the Inbox where it is, and archive takes
+  both off together. The one deliberate exception is Fastmail's own move
+  (Option-drag, or the Move menu), which takes the Inbox off and is left
+  alone: it is asked for with a modifier, and the message shows in its
+  label until archived.
 - **At most one of `Triage` or a project label.** `v` replaces, never adds a
   second.
 - **Helper labels are invisible to the scheme.** Never added, removed,
@@ -86,15 +89,44 @@ paper over.
 All work on the selection and the whole conversation, as today, and each
 lands as one undo checkpoint under one toast.
 
-| Key | Meaning | Adds | Removes | Picker |
-|---|---|---|---|---|
-| `v` | file | chosen project; `Inbox` if missing | `Triage`, every other project label | always |
-| `e` | done | — | `Inbox`, `Triage`, every project label, pin | never |
-| `s` | urgent | pin (and files first if unfiled) | as `v` when it files | if unfiled |
-| `w` | snooze | — | — (Fastmail's snooze takes the Inbox off and back; the label rides along) | Fastmail's snooze dialog, prefilled |
-| `l` | stock labels menu | — | — | Fastmail's own, for helper labels |
-| drag onto a project | as `v` | | | — |
-| Option-drag | Fastmail's stock move | | | — |
+| Key | Meaning | What it opens or does |
+|---|---|---|
+| `v` | file | Fastmail's Labels menu, narrowed to projects; typing reaches anything. Picking a project is the action; the rules below do the rest |
+| `e` | done | archive: `Inbox`, `Triage`, every project label and the pin come off |
+| `s` | pin | toggles the pin, nothing else |
+| `w` | snooze | Fastmail's snooze dialog, prefilled for the default period |
+| `l` | labels | the same Labels menu, unnarrowed — helper labels live here |
+| drag onto a label | add that label | Fastmail's drag; the rules below apply |
+| Option-drag | Fastmail's move | Inbox off, label on; left alone |
+
+There is no picker of the script's own any more. Every label change goes
+through Fastmail's own menus and gestures, and the model is enforced
+underneath them:
+
+### Enforced at the action level
+
+Every label change in the client passes through five actions on the mail
+controller — `add`, `remove`, `addremove`, `copy`, `move` — whichever menu,
+key, drag or swipe asked for it. The script already wraps actions at this
+level for archive (`patchArchive`), and that is what makes a swipe and `e`
+do the same thing. The same wrapping carries three rules:
+
+1. **Archive strips.** Any archive verb takes off `Inbox`, `Triage`, every
+   project label and the pin. As today.
+2. **A project label replaces.** Whenever the adds of an action include a
+   project label, `Triage` and every other project label on those messages
+   come off in the same action — silenced `didAction`, so it is one undo
+   checkpoint and one toast. The Inbox is not touched: an `add` leaves it
+   on, a `move` has taken it off on purpose. Helper labels never trigger
+   this, and adding one never removes anything.
+3. **A named label files the sender.** Whenever the adds include a label
+   named in `contactGroupLabels`, the sender of each message goes into the
+   contact group of that name, made if missing — as the picker did, now
+   from every route. Filing to `Later` from the `l` menu, by typing its
+   name, or by drag all count.
+
+The wraps guard against re-entry: the removals rule 2 issues are
+themselves an `addremove`, and must not be seen by rule 2 again.
 
 `e` is the same from every list — the Inbox, a group inside it, a project's
 own list, the Triage label, search — because there is no longer a difference
@@ -105,16 +137,25 @@ labels: marked read, reported not-spam.
 durable category before anything left the Inbox; with search as history,
 filing something in order to strip it is pointless. `Shift-E` therefore goes.
 
-`s` has two cases, down from three: unfiled → picker, then file and pin;
-filed → toggle the pin.
+`s` is a pin toggle and nothing more: the old "file first if unfiled" needed
+a verb to wait on a pick, and there is no longer a pick to wait on. Filing
+is `v`.
 
 `Shift-V` (label only) and `o` (someday) go. `Shift-V` filed without
-triaging, a distinction that no longer exists; helper labels are added with
-`l`. `o` returns to Fastmail as open-conversation.
+triaging, a distinction that no longer exists. `o` returns to Fastmail as
+open-conversation.
 
-The picker is unchanged except for what it offers: projects only — visible,
-not excluded, not `Triage`. Contact-group filing (`contactGroupLabels`)
-hangs off the picker and is unchanged.
+**The narrowing stays; the picker goes.** The script already narrows
+Fastmail's Labels menu to the labels that mean something here
+(`labelsMenuOptions`, with typing reaching anything), and `v` simply opens
+that menu narrowed to projects — visible, not excluded, not `Triage`. What
+is retired is everything that made a menu "ours": adopting Fastmail's
+mailbox menu as a picker (`applyMoveMode`), turning its move into an add
+(`addInsteadOfMoving`), saving when one option is left
+(`autoSaveWhenAlone`), the pending verb that waited on a pick, the phone's
+adoption of its Labels button as that picker, and the Keep slot.
+`labelsAutoSave` goes with it; the menu is Fastmail's and confirms as
+Fastmail's does.
 
 ### `w` — snooze for a default period
 
@@ -185,37 +226,33 @@ the same Inbox is the working surface on every device.
 ## The phone
 
 The message bar keeps its shape — Snooze / Labels / Archive / Move to / More
-— and the slot vocabulary shrinks with the verbs. As on the desktop, the
-stock labels control and the picker are two different things and stay two
-different slots:
+— and the slot vocabulary shrinks with the verbs:
 
-- **Labels** is Fastmail's own tristate menu, for helper labels — `l`.
-- **File** (formerly Keep) is `v`: it opens the project picker, which is
-  the Labels button's menu adopted and narrowed, as today.
+- **Labels** is Fastmail's own menu, narrowed as on the desktop; picking a
+  project there files, by rule 2. This is `v` and `l` in one button.
 - Archive is `e`. Pin is `s`. Snooze is Fastmail's menu, untouched.
 - More carries whatever the bar cannot fit, in order, plus **Snooze 2
   weeks** (the `w` dialog). Keep, Waiting and Someday are gone.
 
-`bottomBarSlots` default becomes `Snooze, Pin, Archive, Labels, File,
-Delete, Move`.
+`bottomBarSlots` default becomes `Snooze, Pin, Archive, Labels, Delete,
+Move`.
 
-Archive is patched at Fastmail's action level (`actions[verb]` for every
-archive verb, `patchArchive`), which the current script already does. That
-is what makes a swipe, the toolbar button and `e` strip the same labels; it
-must stay there. A patch at the keystroke would leave a swipe-archive on
-the phone stripping the Inbox alone, and the message would then linger in
-its label's list — the invariant broken by the most common gesture.
+All three rules are at the action level, so a swipe, a tap and a key do
+the same thing. A rule at the keystroke would leave a swipe-archive on the
+phone stripping the Inbox alone, and the message would then linger in its
+label's list — the invariant broken by the most common gesture.
 
 The native Fastmail iOS app is out of scope. Its archive leaves the project
 label on; the message is healed by the next verb in a shell app.
 
 ## Drag
 
-Unchanged in mechanism, changed in effect. A plain drag onto a project files
-as `v` does: adds the project, removes `Triage` and any other project,
-keeps the Inbox. Option-drag is Fastmail's stock move (`dragAdditive`,
-on by default). Dragging onto a helper label is not offered as filing: the
-helper is simply added, as dragging onto a qualifier is today.
+A plain drag onto a label adds it, and rule 2 does the rest when it is a
+project: `Triage` and any other project come off, the Inbox stays.
+Option-drag is Fastmail's stock move — Inbox off, label on — and is left
+alone (`dragAdditive`, on by default, is what makes the plain drag an add
+rather than Fastmail's default move). Dragging onto a helper label adds the
+helper and nothing else.
 
 ## Sidebar and counts
 
@@ -248,11 +285,15 @@ Features:
   part of what is retired.
 - `Shift-E`, `Shift-V`.
 - The snooze patch.
+- The script's own picker: the adopted mailbox menu, add-instead-of-move,
+  auto-save-when-alone, the pending verb, the phone's picker adoption and
+  Keep slot. Fastmail's menus, narrowed, do the job; the rules underneath
+  them do the rest.
 
 Settings removed from the catalog: `processLabel`, `qualifierLabels`,
 `deferredLabels`, `waitingLabel`, `somedayLabel`, `nonInboxLabels`,
 `waitingKey`, `somedayKey`, `showFilteredCounts`, `showHeaderCounts`,
-`appBadgeFilter`, `labelColoursSkipProcess`. The first six and the two
+`appBadgeFilter`, `labelColoursSkipProcess`, `labelsAutoSave`. The first six and the two
 count settings survive as internal constants beside the retired filter
 code, not as anything a user sees.
 
@@ -300,10 +341,11 @@ Two things to know before turning it back on:
 | `snoozeKey` | `w` | new |
 | `snoozeDefault` | `2w` | new |
 | `snoozeTime` | `08:00` | new |
-| `bottomBarSlots` | `Snooze, Pin, Archive, Labels, File, Delete, Move` | changed |
+| `bottomBarSlots` | `Snooze, Pin, Archive, Labels, Delete, Move` | changed |
 | `appBadgeLabel` | `Triage` | changed default |
 | `labelColoursSkipTriage` | `true` | renamed |
-| `labelColours`, `labelColoursSidebarOnly`, `dragAdditive`, `hideInboxLabel`, `stripLabelPrefix`, `labelsShortcut`, `labelsSidebarOnly`, `labelsAutoSave`, `contactGroupLabels`, `swapArchiveExpand`, `sidebarSeparators`, `hideLoneExpando` | as today | unchanged |
+| `contactGroupLabels` | as today | unchanged in meaning; now applies from every route |
+| `labelColours`, `labelColoursSidebarOnly`, `dragAdditive`, `hideInboxLabel`, `stripLabelPrefix`, `labelsShortcut`, `labelsSidebarOnly`, `swapArchiveExpand`, `sidebarSeparators`, `hideLoneExpando` | as today | unchanged |
 
 The settings catalog lives in three places and they change together: the
 userscript's `DEFAULT_SETTINGS`; the Safari extension's `background.js` and
@@ -324,15 +366,17 @@ with the generated `Settings.bundle/Root.plist` for both apps
 5. Optionally `Triage` the current Inbox by hand once, so the group is
    correct from the start. Anything not triaged sits in the catch-all,
    which is also fine.
+6. Check that `Later` is named in `contactGroupLabels` if filing to it
+   should keep adding senders to the Later group (147 members today).
 
 ## Compatibility
 
 - Existing messages carrying a project label but not the Inbox — the
   current model's "Non-inbox" state, and anything archived-from-label — are
   Done by the new reading but still labelled. They show in their label's
-  list until touched. Options: leave them (harmless, the list is just
-  longer), or clear the labels off archived mail once by search. Not the
-  script's job.
+  list until archived from there. Options: leave them (harmless, the list
+  is just longer), or clear the labels off archived mail once by search.
+  Not the script's job.
 - `?filter=` on a URL is ignored while `LABEL_FILTERS` is off. The stored
   per-label filter choice is likewise ignored, and left in place rather than
   removed, since the retired code would read it again.
@@ -346,7 +390,8 @@ with the generated `Settings.bundle/Root.plist` for both apps
 ## Scenarios
 
 **1 — New mail, known project (1 key).** Arrives with `Triage`. In the
-Triage group. `v`, pick Personal: `Triage` off, Personal on, Inbox stays.
+Triage group. `v` opens the Labels menu; pick Personal. The add is the
+action; rule 2 takes `Triage` off in the same checkpoint. Inbox stays.
 Now in the Personal group and in the Personal label.
 
 **2 — New mail, done on sight (1 key).** `e`: Inbox and `Triage` off.
@@ -355,10 +400,11 @@ Gone from the Inbox; found by search.
 **3 — Finishing a filed message (1 key).** In Personal. `e`: Inbox and
 Personal off. Gone from both the Inbox and the Personal label.
 
-**4 — Refile.** In Personal, `v`, pick Kerk: Personal off, Kerk on.
+**4 — Refile.** In Personal, `v`, pick Kerk: Kerk on; rule 2 takes
+Personal off.
 
-**5 — Urgent.** In Triage, `s`: picker, file, pin. Now in the Pinned group
-(first match). `s` again: unpinned, drops to its project's group.
+**5 — Urgent.** `s`: pinned. Now in the Pinned group (first match),
+whatever its label. `s` again: unpinned, back to its group.
 
 **6 — Park for two weeks.** `w`: Fastmail's snooze dialog, date two weeks
 out at 08:00. Enter. Out of the Inbox; project label still on, so still
@@ -368,12 +414,19 @@ project's group, unread if Fastmail's setting says so.
 **7 — Reply arrives to a snoozed thread.** Fastmail wakes the thread; it
 returns to the Inbox with its label. Nothing for the script to do.
 
-**8 — Drag.** From the Triage group onto Kerk in the sidebar: as scenario
-1. Option-drag: Fastmail's move — Inbox off, Kerk on — which is the old
-"non-inbox" outcome, chosen deliberately with a modifier.
+**8 — Drag.** From the Triage group onto Kerk in the sidebar: an add, so
+as scenario 1. Option-drag: Fastmail's move — Inbox off, Kerk on; rule 2
+still takes `Triage` off, the Inbox is left off as asked. The old
+"non-inbox" outcome, chosen with a modifier.
 
 **9 — Un-archived by hand.** Dragged from Archive back to the Inbox: no
 label, so it lands in the catch-all group. `v` files it.
+
+**9a — Later, from anywhere.** `l`, type "Lat", pick Later; or drag onto
+Later. Later is a helper, so rule 2 does nothing — the project stays. Later
+is named in `contactGroupLabels`, so rule 3 puts the sender in the Later
+contact group, with the toast saying so. Same from the phone's Labels
+button.
 
 **10 — Helper label.** A calendar invite arrives with `c` (rule) and
 `Triage`. `v` → Personal: `Triage` off, Personal on, `c` untouched. `e`
@@ -383,8 +436,9 @@ later: Inbox and Personal off, `c` untouched.
 Personal, selected; `v` → Kerk: all three end up Inbox + Kerk only. `e`:
 all three lose Inbox and every project label. One checkpoint, one toast.
 
-**12 — Phone.** Swipe to archive: through `patchArchive`, so as scenario 3.
-Tap Labels: the picker, as scenario 1. More → Snooze 2 weeks: as scenario 6.
+**12 — Phone.** Swipe to archive: rule 1, so as scenario 3. Tap Labels,
+pick a project: rule 2, as scenario 1. More → Snooze 2 weeks: as
+scenario 6.
 
 ## Constraints kept from the earlier specs
 
@@ -419,6 +473,8 @@ the extension is enabled there:
   revived.
 - The script maintaining the Inbox grouping.
 - Adding `Triage` from the script to mail that missed the rule.
+- Filing the sender when a *server-side rule* adds a label. The rules run
+  on the server; the script sees only the client's actions.
 - The native Fastmail iOS app.
 - `Shift-W` (snooze without the dialog).
 - Any change to prefix stripping, colours, separators or contact-group
