@@ -536,3 +536,57 @@ the extension is enabled there:
 - `Shift-W` (snooze without the dialog).
 - Any change to prefix stripping, colours, separators or contact-group
   filing.
+
+## Folded in: two shell-app changes
+
+Both are in `~/src/fastmail-app`, independent of the model above, and ride
+this update because they were asked for alongside it.
+
+### Compose in a new window
+
+The macOS compose window opens
+`https://<backend host>/mail/Inbox/compose?u=<account>&ui=minimal`:
+Fastmail's minimal chrome, no sidebar or list, just the message. The
+`mailto:` route into the main window is unchanged.
+
+### Notifications on macOS
+
+A Safari web app gets notifications because Safari implements Web Push and
+shows what the site's service worker asks for. The shell is a `WKWebView`,
+which has no Push API (`PushManager` is undefined inside it, measured), so
+that path never fires there.
+
+Fastmail ships a desktop app built on Electron and its code carries a hook
+for it. The service worker decides and formats every notification itself —
+fed by the page's own live JMAP connection over a `BroadcastChannel`, so no
+push is needed — and when it believes it is inside the desktop app, hands
+the notification to the page, which calls
+`window.electron.showNotification({title, body, icon}, data)`. "Inside the
+desktop app" is decided twice: the page by `typeof electron == "object"`,
+the worker by `Electron/` in the user agent. A click posts a
+`notificationclick` message back to the worker, which opens the message.
+Reading or archiving a message makes the page call
+`electron.updateNotifications({dismissEmailIds})`.
+
+The shell becomes that object. On macOS only:
+
+- `WKWebViewConfiguration.applicationNameForUserAgent` adds
+  `Electron/0.0.0 FastmailShell`, so the worker takes the desktop branch.
+- The harness defines `window.electron` before Fastmail boots — only when
+  the token is present, so the phone is untouched — with every member
+  Fastmail's bundles call unguarded: `showNotification`,
+  `playNotificationSound` (marks the pending notification to carry the
+  system sound), `updateNotifications` (dismisses; Fastmail's unread badge
+  is ignored, the shell's badge is Triage), `showWindow`,
+  `setTitleBarOverlay` (no-op), `featuresSupported` (empty),
+  `checkForUpdate` (resolves). `showContextMenu` and `printToPDF` are
+  checked for before use and left undefined, so Fastmail keeps its own
+  context menu.
+- Three bridge actions — `notify`, `dismissNotifications`, `showWindow` —
+  reach a `NotificationPresenter` on `UNUserNotificationCenter`:
+  authorization asked once on first notification; a banner suppressed
+  while the app is frontmost; a click activates the app and hands the
+  payload back to the page for the worker to open the message.
+
+Expected and accepted: believing it is the desktop app, Fastmail may show a
+"Check for updates" entry, which does nothing.
