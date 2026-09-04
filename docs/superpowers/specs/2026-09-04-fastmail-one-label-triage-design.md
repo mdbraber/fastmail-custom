@@ -220,11 +220,32 @@ The recommended Inbox grouping, which replaces the current one:
 
 | Group | Query | Why |
 |---|---|---|
-| Unread | `is:unread` | new mail first |
-| Triage | `in:Triage` | undecided, at the top; never goes stale |
+| Attention (name to taste) | `in:Triage OR is:unread` | everything that needs you: undecided, or not yet read |
 | Pinned | `is:pinned` | |
 | one per project | `in:Personal`, `in:Kerk`, … | the sub-inboxes |
 | *catch-all* | — | anything that arrived without passing the rule |
+
+The first group is one group, not two. `in:Triage` alone would surface only
+what the rule marked; `is:unread` alongside it also surfaces a filed thread
+the moment a reply lands in it, since the reply arrives unread — and, as a
+new message, with `Triage` of its own from the catch-all rule, so it
+qualifies twice. Either way the thread comes to the top without leaving
+its project.
+
+That gives `v` on such a thread a precise meaning. "A project label already
+on the thread" is read across the whole conversation, as every verb reads
+it, so `v` keeps: `Triage` comes off every message in the thread, nothing
+else changes. The thread then stays at the top *while it is unread* — the
+group is "needs attention" and unread is attention — and drops into its
+project group when read. `v` does not mark it read; a message kept from
+the list without being opened is still one to read. (If that turns out to
+be the wrong call in use, "keep marks read" is one line.)
+
+A reply into a thread that was archived is the other case. Archive stripped
+the project label, so the thread has none; the reply arrives with `Inbox`
+and `Triage` only and the thread is back in Triage from scratch — `v`
+opens the picker. Unless a sender rule pre-files it, which is the point of
+sender rules.
 
 The current Triage group is a NOT-list over every project label, which
 must be edited as projects come and go and already names a label that no
@@ -378,8 +399,9 @@ with the generated `Settings.bundle/Root.plist` for both apps
    possible). It must not stop rule processing, and sender rules that add
    a project label must run as well — order them so both apply, or the
    pre-filed state never arises.
-3. Edit the Inbox grouping to the table above: Triage → `in:Triage`,
-   remove the Waiting group.
+3. Edit the Inbox grouping to the table above: merge Unread and Triage
+   into one group with `in:Triage OR is:unread`, remove the Waiting group.
+   The editor refuses a query it cannot parse, so a typo shows at once.
 4. Delete the empty `Waiting` label.
 5. Optionally `Triage` the current Inbox by hand once, so the group is
    correct from the start. Anything not triaged sits in the catch-all,
@@ -445,6 +467,17 @@ label, so it lands in the catch-all group. `v` files it.
 arrives with `Triage` and `Kerk`. In the Triage group, because Triage
 comes first. `v`: `Triage` off, nothing else asked — now in the Kerk
 group and the Kerk label, exactly as if you had filed it. Or `e`: gone.
+
+**9c — Reply into a filed thread.** A Kerk thread, read and kept. A reply
+arrives: unread, `Inbox` + `Triage` on the new message, `Kerk` on the old
+ones. The thread is in the Attention group. `v`: `Triage` off the whole
+thread; still at the top, unread. Open it: read, and now in the Kerk group.
+Or `e`: gone, all labels off every message.
+
+**9d — Reply into an archived thread.** Same thread, archived last week —
+no `Inbox`, no `Kerk`. A reply arrives with `Inbox` + `Triage`. The thread
+has no project label anywhere, so `v` opens the picker. A sender rule for
+`pknhaarlem.nl` would have made it 9b instead.
 
 **9a — Later, from anywhere.** `l`, type "Lat", pick Later; or drag onto
 Later. Later is a helper, so rule 2 does nothing — the project stays. Later
