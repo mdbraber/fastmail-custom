@@ -3014,19 +3014,40 @@ other user label is a topic.
         return period.count + ' ' + unit + (period.count === 1 ? '' : 's');
     };
 
+    // A view that is drawn: its layer is in the document and has a size.
+    // The message list keeps a bulk-selection bar in the document at no
+    // size while nothing is selected, and it registers the same names as
+    // the reading pane's bar, so a name alone can answer with a button
+    // nobody can see.
+    const isDrawn = (view) => {
+        try {
+            const layer = view.get('layer');
+            if (!layer || !layer.isConnected) return false;
+            const box = layer.getBoundingClientRect();
+            return box.width > 0 && box.height > 0;
+        } catch (error) {
+            return false;
+        }
+    };
+
     // The Snooze button on whichever bar is drawn: by its registered name
     // first, which survives translation and a bar too narrow to draw it;
-    // by its shortcut behind that.
+    // by its shortcut behind that. Every bar on screen is asked, and the
+    // first drawn answer wins; an undrawn one is only a last resort.
     const snoozeButtonView = () => {
-        const registered = registeredToolbarView('snooze');
-        if (registered) return registered;
-
+        const candidates = [];
         for (const bar of toolbarsOnScreen()) {
-            const found = (bar.get('childViews') || [])
-                .filter(view => hasShortcut(view, SNOOZE_SHORTCUT))[0];
-            if (found) return found;
+            try {
+                const named = bar.getView('snooze');
+                if (named) candidates.push(named);
+            } catch (error) {
+                // A bar that has never heard of the name
+            }
+            (bar.get('childViews') || [])
+                .filter(view => hasShortcut(view, SNOOZE_SHORTCUT))
+                .forEach(view => candidates.push(view));
         }
-        return null;
+        return candidates.filter(isDrawn)[0] || candidates[0] || null;
     };
 
     const openSnoozeDialog = () => {
