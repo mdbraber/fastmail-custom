@@ -261,9 +261,9 @@ other user label is a topic.
         // total, unread in parens — including in the shell apps, whose
         // stock heading carries no number at all
         showHeaderCounts: true,
-        // The app icon's badge, for the shell apps: the total of this label
-        // under this filter (next, triage, deferred, noninbox, or empty for the
-        // plain total). An empty label hands the shell its own fallback.
+        // The app icon's badge, for the shell apps: this label's total —
+        // Triage is what is left to decide. An empty label hands the shell
+        // its own fallback.
         appBadgeLabel: 'Triage',
         swapArchiveExpand: true,
         sidebarSeparators: true,
@@ -873,13 +873,12 @@ other user label is a topic.
      * The app icon's badge, for the shell apps. The harness they inject
      * exposes window.native — a resolver it pulls on foreground, a setBadge
      * it forwards to the dock and the home screen — so the whole feature is
-     * choosing the number: the total of settings.appBadgeLabel under
-     * settings.appBadgeFilter, summed across accounts. In plain Safari
-     * there is no window.native and none of this runs.
+     * choosing the number: the total of settings.appBadgeLabel, summed
+     * across accounts. In plain Safari there is no window.native and none
+     * of this runs.
      */
-    // The slices the badge setting accepts. A value written under the old
-    // names is read as what it meant rather than as a typo that badges
-    // nothing, which is what FILTER_ALIASES is for.
+    // The filtered slices the badge once offered, kept with the retired
+    // filter system; the badge is the label's plain total now.
     const APP_BADGE_KINDS = {
         next: 1, triage: 1, deferred: 1, noninbox: 1
     };
