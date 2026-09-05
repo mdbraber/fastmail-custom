@@ -246,7 +246,7 @@ other user label is a topic.
         // bar takes as many leading ones as the screen fits — More always
         // keeps a slot — and the rest wait inside More, in the same order.
         // Kinds missing from a saved value join at the end.
-        bottomBarSlots: 'Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move',
+        bottomBarSlots: 'Snooze, Pin, Archive, Labels, File, Delete, Move',
         // Never offered as topics, even from the sidebar
         excludedLabels: 'Later',
         // Labels that file the sender as well as the message: picking one in
@@ -2005,31 +2005,32 @@ other user label is a topic.
     // scaled rather than a transform put over it, so the stroke keeps the
     // weight the rest of the bar is drawn at.
     const STATE_VERB_SHAPES = {
-        keep: [
+        file: [
             ['path', { d: 'M19.75,11.29V12a7.75,7.75,0,1,1-4.6-7.08' }],
             ['polyline', { points: '19.75 5.8 12 13.56 9.68 11.23' }]
         ],
-        waiting: [
+        snooze: [
             ['circle', { cx: '12', cy: '12', r: '7.75' }],
             ['polyline', { points: '12 7.81 12 12 14.93 13.47' }]
-        ],
-        someday: [
-            ['path', { d: 'M19.75,12.68A7.75,7.75,0,1,1,11.32,4.25,6.03,6.03,0,0,0,19.75,12.68Z' }]
         ]
     };
 
     // Dispatched a tick later so the More popover has finished closing:
-    // an unfiled conversation sends these to the Labels sheet, and two
-    // menus fighting over the same moment is how taps get eaten
+    // File sends an unfiled conversation to the Labels sheet, and two menus
+    // fighting over the same moment is how taps get eaten
     const stateVerbOption = (label, kind) => {
+        const run = kind === 'snooze'
+            ? () => setTimeout(openSnoozeDialog, 0)
+            : () => setTimeout(() => runVerb('keep', null), 0);
+
         const option = new FastMail.classes.ButtonView({
             label: label,
             icon: standardIcon('i-' + kind, STATE_VERB_SHAPES[kind]),
-            target: { run: () => setTimeout(() => runVerb(kind, null), 0) },
+            target: { run },
             method: 'run'
         });
 
-        // The kind, not a bare flag: the bar slots tell the three apart
+        // The kind, not a bare flag: the bar slots tell them apart
         option.customStateVerb = kind;
         return option;
     };
@@ -2077,9 +2078,9 @@ other user label is a topic.
             const addToMore = (view) => menu.set('options',
                 (menu.get('options') || []).concat([view]));
 
-            // The slot vocabulary. The three state verbs can be made from
-            // nothing, since Fastmail draws no button for them; the rest are
-            // stock views, found wherever the last pass left them.
+            // The slot vocabulary. File can be made from nothing, since
+            // Fastmail draws no button for it; the rest are stock views,
+            // found wherever the last pass left them.
             const SLOT_KINDS = {
                 snooze: { test: (view) => hasShortcut(view, SNOOZE_SHORTCUT) },
                 pin: { test: isPin },
@@ -2090,18 +2091,10 @@ other user label is a topic.
                 labels: { test: isLabelsButton },
                 move: { test: isMoveButton },
                 'delete': { test: (view) => actionOf(view) === DELETE_ACTION },
-                keep: {
-                    test: (view) => view.customStateVerb === 'keep',
-                    make: () => stateVerbOption('Keep', 'keep')
+                file: {
+                    test: (view) => view.customStateVerb === 'file',
+                    make: () => stateVerbOption('File', 'file')
                 },
-                waiting: {
-                    test: (view) => view.customStateVerb === 'waiting',
-                    make: () => stateVerbOption('Waiting', 'waiting')
-                },
-                someday: {
-                    test: (view) => view.customStateVerb === 'someday',
-                    make: () => stateVerbOption('Someday', 'someday')
-                }
             };
 
             // The setting is an order over every verb, not a subset: kinds
@@ -2245,15 +2238,16 @@ other user label is a topic.
                 };
             }
 
-            // The states the keyboard spells v, w and o, for thumbs. One
-            // named as a slot is already on the bar; the rest wait in More,
-            // one tap further.
-            [['Keep', 'keep'], ['Waiting', 'waiting'], ['Someday', 'someday']]
-                .forEach(([label, kind]) => {
-                    if (slotNames.indexOf(kind) !== -1) return;
-                    if (inMore(SLOT_KINDS[kind].test)) return;
-                    addToMore(stateVerbOption(label, kind));
-                });
+            // The keyboard's v and w, for thumbs. File named as a slot is
+            // already on the bar; otherwise it waits in More. Snooze for the
+            // default period is More-only: the bar's Snooze is Fastmail's.
+            if (slotNames.indexOf('file') === -1 && !inMore(SLOT_KINDS.file.test)) {
+                addToMore(stateVerbOption('File', 'file'));
+            }
+            if (!inMore(view => view.customStateVerb === 'snooze')) {
+                addToMore(stateVerbOption(
+                    'Snooze ' + snoozePeriodLabel(settings.snoozeDefault), 'snooze'));
+            }
 
             // More reads in the list's order too: the known verbs are
             // pulled out and re-appended in sequence, after Fastmail's own.
