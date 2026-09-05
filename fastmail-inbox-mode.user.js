@@ -255,12 +255,6 @@ other user label is a topic.
         // by default, because writing to your address book is not something
         // a mail script should start doing unasked.
         contactGroupLabels: '',
-        // Show exact counts on filtered views and topic badges
-        showFilteredCounts: true,
-        // The list heading carries the same pair as the sidebar badge —
-        // total, unread in parens — including in the shell apps, whose
-        // stock heading carries no number at all
-        showHeaderCounts: true,
         // The app icon's badge, for the shell apps: this label's total —
         // Triage is what is left to decide. An empty label hands the shell
         // its own fallback.
@@ -603,7 +597,7 @@ other user label is a topic.
     // one node covers the whole deferred set.
     const whereFor = (mailbox, kind) => {
         const accountId = mailbox.get('accountId');
-        const { inbox, process, deferred, nonInbox } = stateLabels(accountId);
+        const { inbox, process, deferred, nonInbox } = retiredStateLabels(accountId);
         if (!inbox) return null;
 
         const conditions = [{ inMailbox: mailbox.get('id') }];
@@ -810,7 +804,7 @@ other user label is a topic.
         // label implies the Inbox, so its total is its queue
         if (!LABEL_FILTERS) return mailbox.get('totalThreads') || 0;
 
-        if (!settings.showFilteredCounts) {
+        if (!RETIRED_SETTINGS.showFilteredCounts) {
             if (mailbox.get('role') === 'inbox' ||
                     isProcess(mailbox) || isDeferred(mailbox)) {
                 return mailbox.get('totalThreads') || 0;
@@ -831,7 +825,7 @@ other user label is a topic.
     // read as one badge fighting itself, so anything else goes without.
     const unreadFor = (mailbox) => {
         if (!LABEL_FILTERS) return 0;
-        if (!settings.showFilteredCounts) return 0;
+        if (!RETIRED_SETTINGS.showFilteredCounts) return 0;
 
         const kind = filterFor(mailbox);
         if (!ownKind(kind)) return 0;
@@ -2403,9 +2397,11 @@ other user label is a topic.
             removeIndicator();
         }
 
-        ensureFilterMenuPatched();
-        ensureMobileFilterMenuPatched();
-        updateFilterButton();
+        if (LABEL_FILTERS) {
+            ensureFilterMenuPatched();
+            ensureMobileFilterMenuPatched();
+            updateFilterButton();
+        }
         updateInboxLabelVisibility();
     };
 
@@ -3373,7 +3369,7 @@ other user label is a topic.
     };
 
     const inFilteredView = () => {
-        if (!modeIsOn) return false;
+        if (!modeIsOn || !LABEL_FILTERS) return false;
         return ownKind(controller().get('mailboxFilter'));
     };
 
@@ -4355,6 +4351,43 @@ other user label is a topic.
      * ----------------------------------------------------------------
      */
 
+    // The settings the retired code reads, kept here with their old defaults
+    // so nothing below references a setting the catalog no longer has.
+    // Written against the old model — Process, qualifiers, the deferred
+    // labels — and so would need re-basing on Triage before any of this
+    // said something true again.
+    const RETIRED_SETTINGS = {
+        processLabel: 'Next',
+        qualifierLabels: 'Admin, Waiting',
+        deferredLabels: 'Waiting, Snoozed',
+        waitingLabel: 'Waiting',
+        somedayLabel: 'Someday',
+        nonInboxLabels: '',
+        showFilteredCounts: true,
+        showHeaderCounts: true,
+        appBadgeFilter: 'next'
+    };
+
+    // The old state-label set, for the filter builder below
+    const retiredStateLabels = (accountId) => {
+        const deferredPaths = pathsFromSetting(RETIRED_SETTINGS.deferredLabels);
+        [RETIRED_SETTINGS.waitingLabel, RETIRED_SETTINGS.somedayLabel].forEach((path) => {
+            const trimmed = String(path || '').trim();
+            if (trimmed && !deferredPaths.some(other =>
+                other.toLowerCase() === trimmed.toLowerCase())) {
+                deferredPaths.push(trimmed);
+            }
+        });
+
+        return {
+            inbox: mailboxesOf(accountId).filter(m => m.get('role') === 'inbox')[0] || null,
+            process: findByPath(accountId, RETIRED_SETTINGS.processLabel),
+            deferred: deferredPaths.map(path => findByPath(accountId, path)).filter(Boolean),
+            nonInbox: pathsFromSetting(RETIRED_SETTINGS.nonInboxLabels)
+                .map(path => findByPath(accountId, path)).filter(Boolean)
+        };
+    };
+
     // Each label — and the Inbox — keeps whichever filter you last chose for
     // it, so one you set to All mail or Unread stays that way when you come
     // back. Anything you have not chosen for gets the Next filter.
@@ -4691,7 +4724,7 @@ other user label is a topic.
             // sentence — the place, its slice, the filtered total alone.
             let rebuilt = (this.get('mailboxTitle') || title) + ' • ' + word;
 
-            if (settings.showHeaderCounts) {
+            if (RETIRED_SETTINGS.showHeaderCounts) {
                 const mailbox = this.get('mailbox');
                 const list = this.get('mailboxMessageList');
 
@@ -5412,7 +5445,7 @@ other user label is a topic.
             console.warn('Inbox mode: could not persist the mode', error);
         }
 
-        if (applyToCurrentView) applyModeToCurrentView();
+        if (applyToCurrentView && LABEL_FILTERS) applyModeToCurrentView();
 
         // The colour rules are only emitted while the mode is on
         updateStyles();
@@ -5494,7 +5527,7 @@ other user label is a topic.
                 forgetLabelCache();
                 scheduleStyles();
                 scheduleBadgeRepaint();
-                refreshCustomListOnArrival();
+                if (LABEL_FILTERS) refreshCustomListOnArrival();
             }
         }, 'go');
 
@@ -5522,7 +5555,7 @@ other user label is a topic.
         // change, including ones made from its own menu
         controller().addObserverForKey('mailboxFilter', {
             go: () => {
-                rememberCurrentFilter();
+                if (LABEL_FILTERS) rememberCurrentFilter();
                 refreshToolbar();
             }
         }, 'go');
@@ -5716,16 +5749,16 @@ other user label is a topic.
     };
 
     const start = () => {
-        loadFilters();
+        if (LABEL_FILTERS) loadFilters();
         patchBadgeRendering();
-        patchGoSource();
+        if (LABEL_FILTERS) patchGoSource();
         patchDrop();
         patchMailboxMenu();
         patchArchive();
         patchLabelActions();
-        patchMessageList();
+        if (LABEL_FILTERS) patchMessageList();
         patchMessageMenu();
-        patchTitleAndCount();
+        if (LABEL_FILTERS) patchTitleAndCount();
         patchShortcuts();
         updateStyles();
         installAppBadge();
