@@ -13,7 +13,8 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
     /// hand it to the service worker that wrote it.
     public var onClick: @MainActor (String) -> Void = { _ in }
 
-    private var authorizationRequested = false
+    private var authorizationGranted = false
+    private var authorizationPending = false
     private var authorizationDenied = false
     private var waiting: [MailNotification] = []
 
@@ -33,16 +34,23 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
 
     public func show(_ notification: MailNotification) {
         if authorizationDenied { return }
-        guard authorizationRequested else {
-            authorizationRequested = true
+        guard authorizationGranted else {
+            // Every notification that arrives while authorization is still
+            // undetermined waits here, not just the one that triggered the
+            // request — otherwise a second or third notification in the same
+            // burst falls through to deliver() before the prompt resolves.
             waiting.append(notification)
+            guard !authorizationPending else { return }
+            authorizationPending = true
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
                 [weak self] granted, _ in
                 Task { @MainActor in
                     guard let self else { return }
+                    self.authorizationPending = false
                     let queued = self.waiting
                     self.waiting = []
                     if granted {
+                        self.authorizationGranted = true
                         queued.forEach(self.deliver)
                     } else {
                         self.authorizationDenied = true
@@ -74,7 +82,7 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
     }
 
     public func showWindow() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         (NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
     }
 
