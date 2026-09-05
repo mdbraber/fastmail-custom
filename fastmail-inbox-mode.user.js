@@ -2620,16 +2620,7 @@ other user label is a topic.
                 // is an option in this list too
                 if (!(option instanceof FastMail.classes.Mailbox)) return true;
 
-                // The marker never belongs in a picker: v and s manage it
-                if (isProcess(option)) return false;
-
-                // The same rebasing as the colours: topics are the living
-                // form of "labels that are inboxes". Non-inbox labels are
-                // offered too — filing there is the whole point of them.
-                return !settings.labelsSidebarOnly ||
-                    isFiled(option) ||
-                    qualifierRank(option) !== -1 ||
-                    isDeferred(option);
+                return !settings.labelsSidebarOnly || isProject(option);
             });
         };
     };
@@ -2673,53 +2664,23 @@ other user label is a topic.
             if (!(option instanceof FastMail.classes.Mailbox)) return result;
             if (qualifierRank(option) !== -1) return result;
 
-            // A verb is waiting on this tristate: a placing pick is a commit,
-            // not a dismissal. The menu's own apply lands inside the verb's
-            // checkpoint, and the verb runs with the labels already changed.
-            if (pendingVerb && menu.customVerbOpen) {
-                const verb = pendingVerb;
-                pendingVerb = null;
-
-                silencingDidAction(controller().actions, () => {
-                    if (typeof menu.done === 'function') menu.done();
-                });
-
-                verb.onCommit(null);
-                return result;
-            }
-
             if (typeof menu.done === 'function') menu.done();
 
             return result;
         };
     };
 
-    // Narrowed to the labels that mean something here: the topics you can
-    // place a message under, and the qualifiers you can mark it with. The
-    // Inbox itself is left out — in labels mode it is an option like any
-    // other, and putting a message back in the Inbox is not what this menu
-    // is for.
-    //
-    // Typing still reaches anything, as in the other menu: being handed a
-    // shorter list is not the same as being told a label does not exist.
+    // Narrowed to the projects you can file under. Typing still reaches
+    // anything, as in the other menu: being handed a shorter list is not the
+    // same as being told a label does not exist — which is how a helper
+    // label like `c` or Later is ticked from here.
     const labelsMenuOptions = (menuController, options) => {
         if (menuController.get('search')) return options;
-
-        const menu = menuController.customMenu;
-        const asVerbPicker = !!(pendingVerb && menu && menu.customVerbOpen);
 
         return options.filter((option) => {
             if (!(option instanceof FastMail.classes.Mailbox)) return true;
             if (option.get('role')) return false;
-
-            if (isFiled(option) || qualifierRank(option) !== -1) return true;
-
-            // The tristate is still the correction tool for the verdicts you
-            // can see — the deferred states — but the marker is nobody's to
-            // tick: Process is written by the verbs alone. Not while a verb
-            // waits, though: then this is the topic picker, and the state
-            // labels are answers to a question nobody asked.
-            return !asVerbPicker && isDeferred(option);
+            return isProject(option);
         });
     };
 
@@ -2961,30 +2922,9 @@ other user label is a topic.
         menu.didSelect = function (mailbox) {
             if (!this.customOurs) return originalDidSelect.apply(this, arguments);
 
-            // A verb is waiting on this pick: hand the topic over and let the
-            // verb do every label change in its own single checkpoint
-            if (pendingVerb) {
-                const verb = pendingVerb;
-                pendingVerb = null;
-                verb.onCommit(mailbox);
-                return;
-            }
-
+            // A pick is an add. Rule 2 takes Triage and any other project off
+            // underneath, rule 3 files the sender; nothing is decided here.
             const actions = controller().actions;
-
-            // Deferring is a move: the deferred label goes on and the marker
-            // comes off in one addremove — which also makes Fastmail expand
-            // the change to the whole conversation, so no message of it keeps
-            // the thread visible in the Next lists
-            if (isDeferred(mailbox)) {
-                const keys = resolveKeys(actions, null);
-                const process = keys ? carriedDispositions(keys).filter(isProcess) : [];
-                actions.addremove(keys, [mailbox], process);
-                return;
-            }
-
-            // Label only — the topic rule: Shift-V never triages, which is
-            // what makes it usable to correct a wrong auto-label
             if (FastMail.preferences.get('inLabelsMode')) {
                 actions.add(null, mailbox);
             } else {
@@ -3328,46 +3268,19 @@ other user label is a topic.
         return ownKind(controller().get('mailboxFilter'));
     };
 
-    // The slices a keep empties out from under you.
-    //
-    // Not every one of them: keeping in Next adds a marker that is already
-    // there and leaves the row exactly where it was, so advancing would step
-    // past a message nothing happened to. Triage is defined as the inbox
-    // without the marker, and deferred as the deferred labels — a keep
-    // writes the first and clears the second, so in both the row is gone by
-    // the time the toast lands and the next one is what you want to be
-    // looking at, which is what archive has always done here.
-    const keepLeavesThisView = () => {
-        if (!modeIsOn) return false;
-
-        const filter = controller().get('mailboxFilter');
-        return filter === TRIAGE_FILTER || filter === DEFERRED_FILTER;
-    };
-
     /*
-     * The topic picker.
+     * The project picker.
      *
-     * A verb that finds no topic on the selection halts and asks. One
-     * conversation gets the quick Move-to menu, narrowed and auto-saving;
-     * a multi-selection gets the stock tristate Labels menu. Both close two
-     * ways and they mean opposite things: committing — Enter, or picking —
-     * proceeds, even topicless; Escape or dismissal aborts the whole verb.
+     * A keep that finds no project on the selection opens a menu and stops.
+     * One conversation gets the quick Move-to menu, narrowed and adding
+     * rather than moving; a multi-selection gets the stock tristate Labels
+     * menu. Whatever is picked is an ordinary add, and the rules under every
+     * menu take Triage and any other project off in the same checkpoint.
+     * Nothing waits on the pick and nothing is asked twice.
      *
-     * The phone has no shortcut buttons to borrow, so the verb presses the
-     * message toolbar's own Labels button and adopts the sheet it opens.
-     * Touch changes the close gestures: with a topic ticked, closing is the
-     * commit; closed bare, the verb aborts — archiving unfiled has its own
-     * gesture, the long press. With no Labels button in sight — a swipe in
-     * the list — a dialog alone stands in for the picker.
+     * The phone has no shortcut buttons to borrow, so the bar's File button
+     * presses the message toolbar's own Labels button.
      */
-
-    // The verb waiting on a picker. commit(topic) runs it — topic null means
-    // proceed bare; abort() drops it.
-    let pendingVerb = null;
-
-    const abortPendingVerb = () => {
-        pendingVerb = null;
-    };
 
     // The Labels button, captured from its registration the way the Move
     // button is, so the tristate picker can be opened programmatically
@@ -3419,45 +3332,6 @@ other user label is a topic.
             console.warn('Inbox mode: could not press the button', error);
         }
         return false;
-    };
-
-    const askBare = (onCommit) => {
-        if (window.confirm('No topic on this conversation. Continue without one?')) {
-            onCommit(null);
-        }
-    };
-
-    // How long a press gets to produce a menu before the verb gives up on it.
-    // Generous: the cost of being early is a dialog nobody asked for, and the
-    // cost of being late is nothing at all, since a menu that does open stamps
-    // the verb and this stands down.
-    const PICKER_DEADLINE_MS = 1000;
-
-    // Every way of opening the picker ends here: a press that opened nothing
-    // must not leave the verb pending, because a pending verb is a click that
-    // did nothing and — until v2.25 on touch, and until now everywhere else —
-    // said nothing about it either. Either a menu adopts the verb and stamps
-    // it, or the deadline hands the question to a dialog.
-    const armPicker = (verb, pressed, onCommit) => {
-        if (!pendingVerb || pendingVerb !== verb) return true;
-
-        if (!pressed) {
-            pendingVerb = null;
-            wantOurMove = false;
-            return false;
-        }
-
-        setTimeout(() => {
-            if (pendingVerb !== verb || verb.opened) return;
-
-            pendingVerb = null;
-            wantOurMove = false;
-            console.warn('Inbox mode: the topic picker did not open;' +
-                ' asking for the verb instead');
-            askBare(onCommit);
-        }, PICKER_DEADLINE_MS);
-
-        return true;
     };
 
     // A captured registration is only as good as the view behind it. The
@@ -3652,54 +3526,31 @@ other user label is a topic.
         }
     };
 
-    const openTopicPicker = (keys, onCommit) => {
+    // Open the project picker for these conversations. Nothing waits on the
+    // pick: it is an add like any other, and the rules underneath finish it.
+    // Move to is the quick one and suits a single conversation; the tristate
+    // is what a multi-selection needs. Either will do when the preferred one
+    // is not on screen.
+    const openProjectPicker = (keys) => {
         const single = keys.length === 1;
-
-        // Move to is the quick one and suits a single conversation; the
-        // tristate is what a multi-selection needs. Either will do when the
-        // preferred one is not on screen — being asked where something goes
-        // is the point, and which menu asks is a detail.
         const order = single
             ? [moveButton, labelsButton]
             : [labelsButton, moveButton];
         const captured = order.filter(capturedIsLive)[0];
 
-        const verb = { keys, onCommit };
-        // Closing a touch sheet with a topic ticked is the commit, since
-        // there is no Enter to press. On a pointer the tristate keeps its
-        // own rule, where dismissing aborts and Enter commits.
-        if (FastMail.isMobile) verb.touchPicker = true;
-        pendingVerb = verb;
-
         if (captured) {
             if (captured === moveButton) wantOurMove = true;
-            if (armPicker(verb, pressCaptured(captured), onCommit)) return;
+            if (pressCaptured(captured)) return;
         }
 
-        // Nothing registered, or what was registered is gone: press whatever
-        // label menu is actually drawn. This is the path the phone has always
-        // taken, and the one a desktop falls back to when the Move to button
-        // has never been drawn for its shortcut to be captured from.
+        // The phone's path, and a desktop that has never drawn Move to
         const drawn = drawnPickerView();
-        if (drawn) {
-            pendingVerb = verb;
-            if (armPicker(verb, pressButtonView(drawn), onCommit)) return;
-        }
+        if (drawn && pressButtonView(drawn)) return;
 
-        // Still no button anywhere. Stop looking for one: ask Fastmail for
-        // the menu the button would have opened. Set the verb pending first,
-        // because the menu adopts it as it enters the document and show()
-        // gets that far before it returns.
-        pendingVerb = verb;
-        if (buildPicker(keys)) {
-            if (armPicker(verb, true, onCommit)) return;
-        }
+        // No button anywhere: ask Fastmail for the menu itself
+        if (buildPicker(keys)) return;
 
-        // Out of menus. The one question a dialog can carry stands in,
-        // because silently swallowing the click reads as a dead button.
-        pendingVerb = null;
-        wantOurMove = false;
-        askBare(onCommit);
+        console.warn('Inbox mode: no label menu to open');
     };
 
     /*
@@ -3735,135 +3586,35 @@ other user label is a topic.
         }
     };
 
-    // keep — `v`: the marker on, the deferred set off. Every keep is work, so
-    // every keep gets the marker; what the message is filed under decides one
-    // thing only, which is whether it stays in the Inbox.
-    //
-    // A topic keeps it. The Inbox is everything live, and a message you have
-    // committed to is still live — the marker is what takes it out of Triage,
-    // and Triage is the list of what has not been decided yet.
-    //
-    // A non-inbox label takes the Inbox off. Those are the labels whose mail
-    // you work from the label rather than from the queue, so leaving it in the
-    // Inbox would be asking to be shown it twice.
-    //
-    // Read from what the threads will carry once this lands rather than from
-    // the pick alone, so a message that is already about a project stays in
-    // the Inbox even when a non-inbox label is put on it as well: the topic
-    // wins, and a topic means work you do from the queue.
-    const runKeep = (actions, keys, topic, andPin) => {
-        const first = messagesFrom(keys)[0];
-        if (!first) return;
-
-        const accountId = first.get('accountId');
-        const process = processMailbox(accountId);
-        const inbox = inboxMailbox(accountId);
-
-        if (!process) {
-            console.warn('Inbox mode: no "' + settings.processLabel +
-                '" label; create it or change settings.processLabel');
-            return;
-        }
-
-        const carried = Array.from(mailboxesAmong(keys));
-        const after = topic ? carried.concat([topic]) : carried;
-        const leavesInbox = after.some(isNonInbox) && !after.some(isTopic);
-
-        const adds = topic ? [topic, process] : [process];
-        const removes = carriedDispositions(keys)
-            .filter(mailbox => mailbox !== process);
-        if (leavesInbox && inbox) removes.unshift(inbox);
-
-        const commit = () => actions.addremove(keys, adds, removes);
-
-        // The one unswallowed didAction, whichever it turns out to be: the
-        // addremove on its own, or the flag that follows it when pinning.
-        const finish = andPin
-            ? () => {
-                silencingDidAction(actions, commit);
-                actions.flag(keys);
-            }
-            : commit;
-
-        // Same walk-on as archive, in the views a keep empties. Fastmail
-        // reads whether to stay put off the filter's AND nodes and cannot
-        // see the marker inside triage's NOT, so left alone it decides
-        // nothing moved and holds the focus on a row that has gone.
-        if (keepLeavesThisView()) {
-            withDidAction(actions, navigateAfter, finish);
-        } else {
-            finish();
-        }
+    // keep — `v`. A thread that already carries a project is kept by taking
+    // Triage off it and nothing else. One that carries none is asked where it
+    // goes, and the pick is an ordinary add that rule 2 finishes.
+    const runKeep = (actions, keys) => {
+        const triage = triageAmong(keys);
+        if (!triage.length) return;
+        actions.addremove(keys, [], triage);
     };
 
-    // urgent — `s`: keep and pin; on something already kept, a pin toggle
-    const runUrgent = (actions, keys, topic) => {
-        const first = messagesFrom(keys)[0];
-        if (!first) return;
-
-        const accountId = first.get('accountId');
-        const process = processMailbox(accountId);
-
-        // Carrying the marker is the whole of being kept. It used to have to
-        // be out of the Inbox as well, back when keeping took the Inbox off —
-        // now that a kept topic stays there, that half would read every kept
-        // message as untriaged and re-keep it instead of toggling the pin.
-        const alreadyKept = anyIn(keys, process);
-        if (alreadyKept) {
-            if (allFlagged(keys)) actions.unflag(keys);
-            else actions.flag(keys);
-            return;
-        }
-
-        runKeep(actions, keys, topic, true);
+    // pin — `s`. A toggle over the selection: all pinned, unpin; else pin.
+    const runUrgent = (actions, keys) => {
+        if (allFlagged(keys)) actions.unflag(keys);
+        else actions.flag(keys);
     };
 
-    // waiting — `w`; someday — `o`. A deferral is a verdict like keep: the
-    // state label goes on, the marker and any rival verdict come off, and
-    // the Inbox stays where it is — the deferred slice reads this-mailbox
-    // AND deferred, so taking the Inbox off would hide the parked pile
-    // from the Inbox's own Deferred filter.
-    const runDefer = (actions, keys, topic, kind) => {
-        const first = messagesFrom(keys)[0];
-        if (!first) return;
-
-        const accountId = first.get('accountId');
-        const state = kind === 'waiting'
-            ? waitingMailbox(accountId)
-            : somedayMailbox(accountId);
-
-        if (!state) {
-            const wanted = kind === 'waiting'
-                ? settings.waitingLabel
-                : settings.somedayLabel;
-            console.warn('Inbox mode: no "' + wanted +
-                '" label; create it or change the setting');
-            return;
-        }
-
-        const adds = topic ? [topic, state] : [state];
-        const removes = carriedDispositions(keys)
-            .filter(mailbox => mailbox !== state);
-
-        actions.addremove(keys, adds, removes);
-    };
-
-    // A verb entry: resolve the keys, apply the topic rule, run
     const runVerb = (kind, storeKeys) => {
         const actions = controller().actions;
         const keys = resolveKeys(actions, storeKeys);
         if (!keys) return;
 
-        const run = (topic) => {
-            if (kind === 'keep') runKeep(actions, keys, topic, false);
-            else if (kind === 'urgent') runUrgent(actions, keys, topic);
-            else runDefer(actions, keys, topic, kind);
-        };
+        if (kind === 'urgent') {
+            runUrgent(actions, keys);
+            return;
+        }
 
-        if (untopicedAmong(keys).length) {
-            openTopicPicker(keys, run);
+        if (unfiledAmong(keys).length) {
+            openProjectPicker(keys);
         } else {
-            run(null);
+            runKeep(actions, keys);
         }
     };
 
@@ -4248,110 +3999,20 @@ other user label is a topic.
         };
     };
 
-    // A verb picker that is dismissed must abort the whole verb, label
-    // changes included — only committing proceeds. The tristate's stock
-    // behaviour is the opposite (dismissal applies), so its apply is wrapped
-    // to drop pending changes while a verb is still waiting.
-    //
-    // A touch picker has no Enter, so closing it is the only gesture there
-    // is — with changes ticked it reads as the commit: the tristate applies
-    // its own changes, silenced so they fold into the verb's checkpoint,
-    // and the verb continues bare with its topic already on the message.
-    const wrapApplyForVerb = (menu) => {
-        if (menu.customApplyWrapped) return;
-        menu.customApplyWrapped = true;
-
-        const originalApply = menu.apply;
-        if (typeof originalApply !== 'function') return;
-
-        menu.apply = function () {
-            if (this.customVerbOpen && pendingVerb && this._changed) {
-                if (pendingVerb.touchPicker && this._changed.size) {
-                    const verb = pendingVerb;
-                    pendingVerb = null;
-
-                    const self = this;
-                    const args = arguments;
-                    let result;
-                    silencingDidAction(controller().actions, function () {
-                        result = originalApply.apply(self, args);
-                    });
-
-                    verb.onCommit(null);
-                    return result;
-                }
-                this._changed = new Map();
-            }
-
-            const result = originalApply.apply(this, arguments);
-
-            // The tristate no longer shows the marker, but a verdict ticked
-            // here must still take it off — the same exclusivity the quick
-            // picker's defer branch keeps. Read back from the messages
-            // rather than sniffed out of _changed: the applied state is the
-            // one thing with a stable shape.
-            if (modeIsOn && !pendingVerb) {
-                try {
-                    const actions = controller().actions;
-                    const keys = resolveKeys(actions, null);
-                    const carried = keys ? carriedDispositions(keys) : [];
-                    const marker = carried.filter(isProcess);
-
-                    if (marker.length && carried.some(isDeferred)) {
-                        silencingDidAction(actions, () => {
-                            actions.addremove(keys, [], marker);
-                        });
-                    }
-                } catch (error) {
-                    // The verdict landed; the marker waits for the next verb
-                }
-            }
-
-            return result;
-        };
-    };
-
     const patchMailboxMenu = () => {
         const proto = FastMail.classes.MailboxMenuView.prototype;
         // Resolved through the chain: the class has none of its own
         const originalDidEnterDocument = proto.didEnterDocument;
-        const originalDidLeaveDocument = proto.didLeaveDocument;
 
-        // Enter with nothing typed commits: what you have chosen is chosen, and
-        // the menu applies it as it closes. With something typed it still picks
-        // out what the typing has focused, which is Fastmail's own behaviour.
-        //
-        // For a picker a verb is waiting on, committing with nothing set is
-        // the deliberate escape: the verb proceeds bare. The tristate's own
-        // label changes are folded into the verb's checkpoint by silencing
-        // the didAction its apply fires on the way out.
+        // Enter with nothing typed commits: what you have ticked is ticked,
+        // and the tristate applies it as it closes. With something typed it
+        // still picks out what the typing has focused, which is Fastmail's
+        // own behaviour.
         const originalKeydown = proto.keydown;
 
         proto.keydown = function (event) {
             const menuController = this.get('controller');
             const typed = menuController && menuController.get('search');
-
-            if (this.customVerbOpen && pendingVerb && !typed &&
-                event && event.key === 'Enter') {
-                event.preventDefault();
-
-                const verb = pendingVerb;
-                pendingVerb = null;
-
-                const actions = controller().actions;
-                const close = () => {
-                    if (typeof this.done === 'function') this.done();
-                };
-
-                if (menuController && menuController.customLabels) {
-                    silencingDidAction(actions, close);
-                } else {
-                    close();
-                }
-
-                verb.onCommit(null);
-                return undefined;
-            }
 
             if (menuController && menuController.customLabels && !typed &&
                 event && event.key === 'Enter') {
@@ -4364,19 +4025,7 @@ other user label is a topic.
         };
 
         proto.didEnterDocument = function () {
-            // Opened while a verb waits: this menu is that verb's picker.
-            // The stamp is what tells the dead-man fallback the press
-            // actually opened something.
-            if (pendingVerb) {
-                this.customVerbOpen = true;
-                pendingVerb.opened = true;
-            }
-
             if (isLabelsMenu(this)) {
-                // Wrapped for every opening, not just a verb's: the manual
-                // tristate's apply is where a hand-ticked verdict takes the
-                // marker off
-                wrapApplyForVerb(this);
                 applyLabelsMode(this);
                 return originalDidEnterDocument.apply(this, arguments);
             }
@@ -4385,20 +4034,6 @@ other user label is a topic.
             wantOurMove = false;
 
             return originalDidEnterDocument.apply(this, arguments);
-        };
-
-        // Closing without committing — Escape, clicking away, or a bare
-        // close on the phone — aborts the verb. Commits clear pendingVerb
-        // before the menu leaves, so only a genuine dismissal lands here
-        // with it still set. Archiving unfiled has its own gesture — the
-        // long press — so a dismissed sheet owes nobody a dialog.
-        proto.didLeaveDocument = function () {
-            if (this.customVerbOpen) {
-                this.customVerbOpen = false;
-                if (pendingVerb) abortPendingVerb();
-            }
-
-            return originalDidLeaveDocument.apply(this, arguments);
         };
     };
 
@@ -4497,9 +4132,9 @@ other user label is a topic.
 
     const ourMoveWanted = () => modeIsOn && settings.labelsShortcut;
 
-    // v is the keep verb now: on a topiced selection it runs directly, and
-    // only an untopiced one opens the picker — which is the same narrowed
-    // menu, opened by the verb machinery with a continuation waiting.
+    // v is keep: on a filed selection it takes Triage off directly, and only
+    // an unfiled one opens the picker — the same narrowed menu, opened with
+    // nothing waiting on it.
     const openMove = () => {
         if (!ourMoveWanted()) {
             if (!moveButton) return;
@@ -4611,13 +4246,10 @@ other user label is a topic.
 
     const wantedClaims = () => {
         const wanted = {
-            'Shift-E': () => escapeVerb(),
             'Shift-V': () => openLabelPicker()
         };
 
         wanted[sanitizedKey(settings.urgentKey, 's')] = () => runVerb('urgent', null);
-        wanted[sanitizedKey(settings.waitingKey, 'w')] = () => runVerb('waiting', null);
-        wanted[sanitizedKey(settings.somedayKey, 'o')] = () => runVerb('someday', null);
 
         return wanted;
     };
