@@ -92,15 +92,15 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Everything kept carries it; its colour would tint the whole list.</string>
+			<string>Everything undecided carries it; its colour would tint the whole group.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Ignore the kept marker</string>
+			<string>Ignore the triage label</string>
 			<key>Key</key>
-			<string>inboxMode.labelColoursSkipProcess</string>
+			<string>inboxMode.labelColoursSkipTriage</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -236,17 +236,17 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>On everything kept; stripped again on archive and snooze.</string>
+			<string>Put on every incoming message by a rule; taken off by keeping or filing. Archive strips it too.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>The kept marker</string>
+			<string>The triage label</string>
 			<key>Key</key>
-			<string>inboxMode.processLabel</string>
+			<string>inboxMode.triageLabel</string>
 			<key>DefaultValue</key>
-			<string>Next</string>
+			<string>Triage</string>
 			<key>IsSecure</key>
 			<false/>
 			<key>AutocapitalizationType</key>
@@ -258,123 +258,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Cut across topics and never count as filing; first named wins the row colour. Comma-separated paths.</string>
+			<string>Shown in the sidebar but worked as piles, not queues: never filed into, never stripped by archive. Comma-separated paths.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Qualifier labels</string>
-			<key>Key</key>
-			<string>inboxMode.qualifierLabels</string>
-			<key>DefaultValue</key>
-			<string>Admin, Waiting</string>
-			<key>IsSecure</key>
-			<false/>
-			<key>AutocapitalizationType</key>
-			<string>None</string>
-			<key>AutocorrectionType</key>
-			<string>No</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
-			<string>Hidden from Next; filing into one drops the kept marker. Comma-separated paths.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>Deferred labels</string>
-			<key>Key</key>
-			<string>inboxMode.deferredLabels</string>
-			<key>DefaultValue</key>
-			<string>Waiting, Snoozed</string>
-			<key>IsSecure</key>
-			<false/>
-			<key>AutocapitalizationType</key>
-			<string>None</string>
-			<key>AutocorrectionType</key>
-			<string>No</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
-			<string>Where w parks mail blocked on someone else.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>The waiting label</string>
-			<key>Key</key>
-			<string>inboxMode.waitingLabel</string>
-			<key>DefaultValue</key>
-			<string>Waiting</string>
-			<key>IsSecure</key>
-			<false/>
-			<key>AutocapitalizationType</key>
-			<string>None</string>
-			<key>AutocorrectionType</key>
-			<string>No</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
-			<string>Where o parks mail with no commitment attached.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>The someday label</string>
-			<key>Key</key>
-			<string>inboxMode.somedayLabel</string>
-			<key>DefaultValue</key>
-			<string>Someday</string>
-			<key>IsSecure</key>
-			<false/>
-			<key>AutocapitalizationType</key>
-			<string>None</string>
-			<key>AutocorrectionType</key>
-			<string>No</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
-			<string>Worked from the label, not the Inbox: v into one marks it Next and takes the Inbox off, where a topic leaves the Inbox on. A topic on the thread outranks it. Comma-separated paths.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>Non-inbox labels</string>
-			<key>Key</key>
-			<string>inboxMode.nonInboxLabels</string>
-			<key>DefaultValue</key>
-			<string></string>
-			<key>IsSecure</key>
-			<false/>
-			<key>AutocapitalizationType</key>
-			<string>None</string>
-			<key>AutocorrectionType</key>
-			<string>No</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
-			<string>Never offered as topics; alone they don’t count as filed. Comma-separated paths.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>Labels that are never topics</string>
+			<string>Labels that are never projects</string>
 			<key>Key</key>
 			<string>inboxMode.excludedLabels</string>
 			<key>DefaultValue</key>
@@ -390,7 +280,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Picking one in the topic picker also adds the sender to the contact group of the same name, creating the contact, and the group, if either is new. Comma-separated paths.</string>
+			<string>Adding one — from any menu, by typing, or by drag — adds the sender to the contact group of the same name, making it if new. Comma-separated paths.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -434,15 +324,15 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Parks on the waiting label.</string>
+			<string>Opens the snooze dialog filled in for the default period.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Waiting key</string>
+			<string>Snooze key</string>
 			<key>Key</key>
-			<string>inboxMode.waitingKey</string>
+			<string>inboxMode.snoozeKey</string>
 			<key>DefaultValue</key>
 			<string>w</string>
 			<key>IsSecure</key>
@@ -456,17 +346,39 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Parks on the someday label. Claims Fastmail’s open key; Enter still opens.</string>
+			<string>How far ahead the dialog proposes: a number and d, w or m — days, weeks, months.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Someday key</string>
+			<string>Default snooze</string>
 			<key>Key</key>
-			<string>inboxMode.somedayKey</string>
+			<string>inboxMode.snoozeDefault</string>
 			<key>DefaultValue</key>
-			<string>o</string>
+			<string>2w</string>
+			<key>IsSecure</key>
+			<false/>
+			<key>AutocapitalizationType</key>
+			<string>None</string>
+			<key>AutocorrectionType</key>
+			<string>No</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
+			<string>When on that day, as HH:MM.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>Snooze time of day</string>
+			<key>Key</key>
+			<string>inboxMode.snoozeTime</string>
+			<key>DefaultValue</key>
+			<string>08:00</string>
 			<key>IsSecure</key>
 			<false/>
 			<key>AutocapitalizationType</key>
@@ -488,7 +400,7 @@
 			<key>Key</key>
 			<string>inboxMode.bottomBarSlots</string>
 			<key>DefaultValue</key>
-			<string>Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move</string>
+			<string>Snooze, Pin, Archive, Labels, File, Delete, Move</string>
 			<key>IsSecure</key>
 			<false/>
 			<key>AutocapitalizationType</key>
@@ -500,39 +412,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Sidebar badges show the server-exact count of each label’s own filter, with unread in parens.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSToggleSwitchSpecifier</string>
-			<key>Title</key>
-			<string>Show exact filtered counts</string>
-			<key>Key</key>
-			<string>inboxMode.showFilteredCounts</string>
-			<key>DefaultValue</key>
-			<true/>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
-			<string>The heading carries the same pair as the sidebar badge — total, unread in parens — including in the apps.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSToggleSwitchSpecifier</string>
-			<key>Title</key>
-			<string>Counts in list headings</string>
-			<key>Key</key>
-			<string>inboxMode.showHeaderCounts</string>
-			<key>DefaultValue</key>
-			<true/>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
-			<string>The app icon’s badge counts this label. Empty for the app’s own default.</string>
+			<string>The app icon’s badge: this label’s total. Empty hands the shell its own fallback.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -542,29 +422,7 @@
 			<key>Key</key>
 			<string>inboxMode.appBadgeLabel</string>
 			<key>DefaultValue</key>
-			<string>Inbox</string>
-			<key>IsSecure</key>
-			<false/>
-			<key>AutocapitalizationType</key>
-			<string>None</string>
-			<key>AutocorrectionType</key>
-			<string>No</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
-			<string>next, triage, deferred, noninbox — or empty for the plain total.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>App badge filter</string>
-			<key>Key</key>
-			<string>inboxMode.appBadgeFilter</string>
-			<key>DefaultValue</key>
-			<string>next</string>
+			<string>Triage</string>
 			<key>IsSecure</key>
 			<false/>
 			<key>AutocapitalizationType</key>

@@ -25,14 +25,13 @@ public enum InboxModeSettings {
         public let parent: String?
         /// Whether an empty text field is an answer rather than an omission.
         ///
-        /// For most text settings it is an omission: a kept marker with no
-        /// name, or a waiting label called nothing, is not something anyone
-        /// means, so emptying the field asks for the default back. But a
-        /// list of labels has a meaningful empty — none of them — and
-        /// without this there was no way to say it: clearing "Labels that
-        /// are never topics" put Later straight back, which is what sent me
-        /// looking. Two hints already promised this behaviour ("Empty for
-        /// the app's own default", "or empty for the plain total") and could
+        /// For most text settings it is an omission: a triage label with no
+        /// name is not something anyone means, so emptying the field asks
+        /// for the default back. But a list of labels has a meaningful
+        /// empty — none of them — and without this there was no way to say
+        /// it: clearing "Labels that are never projects" put Later straight
+        /// back, which is what sent me looking. A hint already promised this
+        /// behaviour ("Empty hands the shell its own fallback") and could
         /// not deliver it.
         public let clearable: Bool
         public let title: String
@@ -77,10 +76,10 @@ public enum InboxModeSettings {
             default: .toggle(true)
         ),
         Option(
-            "labelColoursSkipProcess",
+            "labelColoursSkipTriage",
             parent: "labelColours",
-            title: "Ignore the kept marker",
-            hint: "Everything kept carries it; its colour would tint the whole list.",
+            title: "Ignore the triage label",
+            hint: "Everything undecided carries it; its colour would tint the whole group.",
             default: .toggle(true)
         ),
         Option(
@@ -134,56 +133,23 @@ public enum InboxModeSettings {
             default: .toggle(true)
         ),
         Option(
-            "processLabel",
-            title: "The kept marker",
-            hint: "On everything kept; stripped again on archive and snooze.",
-            default: .text("Next")
-        ),
-        Option(
-            "qualifierLabels",
-            clearable: true,
-            title: "Qualifier labels",
-            hint: "Cut across topics and never count as filing; first named wins the row colour. Comma-separated paths.",
-            default: .text("Admin, Waiting")
-        ),
-        Option(
-            "deferredLabels",
-            clearable: true,
-            title: "Deferred labels",
-            hint: "Hidden from Next; filing into one drops the kept marker. Comma-separated paths.",
-            default: .text("Waiting, Snoozed")
-        ),
-        Option(
-            "waitingLabel",
-            title: "The waiting label",
-            hint: "Where w parks mail blocked on someone else.",
-            default: .text("Waiting")
-        ),
-        Option(
-            "somedayLabel",
-            title: "The someday label",
-            hint: "Where o parks mail with no commitment attached.",
-            default: .text("Someday")
-        ),
-        Option(
-            "nonInboxLabels",
-            clearable: true,
-            title: "Non-inbox labels",
-            hint: "Worked from the label, not the Inbox: v into one marks it Next and takes the Inbox off, where a topic leaves the Inbox on. A topic on the thread outranks it. Comma-separated paths.",
-            default: .text("")
+            "triageLabel",
+            title: "The triage label",
+            hint: "Put on every incoming message by a rule; taken off by keeping or filing. Archive strips it too.",
+            default: .text("Triage")
         ),
         Option(
             "excludedLabels",
             clearable: true,
-            title: "Labels that are never topics",
-            hint: "Never offered as topics; alone they don’t count as filed. Comma-separated paths.",
+            title: "Labels that are never projects",
+            hint: "Shown in the sidebar but worked as piles, not queues: never filed into, never stripped by archive. Comma-separated paths.",
             default: .text("Later")
         ),
         Option(
             "contactGroupLabels",
             clearable: true,
             title: "Labels that add the sender to the contacts group",
-            hint: "Picking one in the topic picker also adds the sender to the contact group of the same name, creating the contact, and the group, if either is new. Comma-separated paths.",
+            hint: "Adding one — from any menu, by typing, or by drag — adds the sender to the contact group of the same name, making it if new. Comma-separated paths.",
             default: .text("")
         ),
         Option(
@@ -193,48 +159,35 @@ public enum InboxModeSettings {
             default: .text("s")
         ),
         Option(
-            "waitingKey",
-            title: "Waiting key",
-            hint: "Parks on the waiting label.",
+            "snoozeKey",
+            title: "Snooze key",
+            hint: "Opens the snooze dialog filled in for the default period.",
             default: .text("w")
         ),
         Option(
-            "somedayKey",
-            title: "Someday key",
-            hint: "Parks on the someday label. Claims Fastmail’s open key; Enter still opens.",
-            default: .text("o")
+            "snoozeDefault",
+            title: "Default snooze",
+            hint: "How far ahead the dialog proposes: a number and d, w or m — days, weeks, months.",
+            default: .text("2w")
+        ),
+        Option(
+            "snoozeTime",
+            title: "Snooze time of day",
+            hint: "When on that day, as HH:MM.",
+            default: .text("08:00")
         ),
         Option(
             "bottomBarSlots",
             title: "Bottom bar verbs",
             hint: "Drag to order the phone bar’s verbs; what fits on screen shows, the rest wait in More.",
-            default: .text("Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move")
-        ),
-        Option(
-            "showFilteredCounts",
-            title: "Show exact filtered counts",
-            hint: "Sidebar badges show the server-exact count of each label’s own filter, with unread in parens.",
-            default: .toggle(true)
-        ),
-        Option(
-            "showHeaderCounts",
-            title: "Counts in list headings",
-            hint: "The heading carries the same pair as the sidebar badge — total, unread in parens — including in the apps.",
-            default: .toggle(true)
+            default: .text("Snooze, Pin, Archive, Labels, File, Delete, Move")
         ),
         Option(
             "appBadgeLabel",
             clearable: true,
             title: "App badge label",
-            hint: "The app icon’s badge counts this label. Empty for the app’s own default.",
-            default: .text("Inbox")
-        ),
-        Option(
-            "appBadgeFilter",
-            clearable: true,
-            title: "App badge filter",
-            hint: "next, triage, deferred, noninbox — or empty for the plain total.",
-            default: .text("next")
+            hint: "The app icon’s badge: this label’s total. Empty hands the shell its own fallback.",
+            default: .text("Triage")
         ),
         Option(
             "swapArchiveExpand",

@@ -13,50 +13,47 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     let settings = InboxModeSettings.current(from: freshDefaults(#function))
     #expect(settings.count == InboxModeSettings.options.count)
     #expect(settings["labelColours"] as? Bool == true)
-    #expect(settings["showFilteredCounts"] as? Bool == true)
-    #expect(settings["processLabel"] as? String == "Next")
-    #expect(settings["qualifierLabels"] as? String == "Admin, Waiting")
-    #expect(settings["deferredLabels"] as? String == "Waiting, Snoozed")
+    #expect(settings["swapArchiveExpand"] as? Bool == true)
+    #expect(settings["triageLabel"] as? String == "Triage")
+    #expect(settings["snoozeDefault"] as? String == "2w")
+    #expect(settings["bottomBarSlots"] as? String == "Snooze, Pin, Archive, Labels, File, Delete, Move")
 }
 
 @Test func storedValuesWinOverDefaults() {
     let defaults = freshDefaults(#function)
     defaults.set(false, forKey: "inboxMode.labelColours")
-    defaults.set(true, forKey: "inboxMode.showFilteredCounts")
-    defaults.set("  Keep  ", forKey: "inboxMode.processLabel")
+    defaults.set(false, forKey: "inboxMode.swapArchiveExpand")
+    defaults.set("  Todo  ", forKey: "inboxMode.triageLabel")
     let settings = InboxModeSettings.current(from: defaults)
     #expect(settings["labelColours"] as? Bool == false)
-    #expect(settings["showFilteredCounts"] as? Bool == true)
-    #expect(settings["processLabel"] as? String == "Keep")
+    #expect(settings["swapArchiveExpand"] as? Bool == false)
+    #expect(settings["triageLabel"] as? String == "Todo")
 }
 
-// Emptying a field that names one thing asks for the default back: a kept
-// marker called nothing is not something anyone means.
+// Emptying a field that names one thing asks for the default back: a
+// triage label called nothing is not something anyone means.
 @Test func emptyTextFallsBackToTheDefaultWhereEmptyMeansNothing() {
     let defaults = freshDefaults(#function)
-    defaults.set("   ", forKey: "inboxMode.processLabel")
-    defaults.set("   ", forKey: "inboxMode.waitingLabel")
+    defaults.set("   ", forKey: "inboxMode.triageLabel")
+    defaults.set("   ", forKey: "inboxMode.snoozeTime")
     let settings = InboxModeSettings.current(from: defaults)
-    #expect(settings["processLabel"] as? String == "Next")
-    #expect(settings["waitingLabel"] as? String == "Waiting")
+    #expect(settings["triageLabel"] as? String == "Triage")
+    #expect(settings["snoozeTime"] as? String == "08:00")
 }
 
 // Emptying a field that names a list says none of them, and has to survive
-// the trip: clearing "Labels that are never topics" used to hand Later
+// the trip: clearing "Labels that are never projects" used to hand Later
 // straight back, so there was no way to stop excluding it.
 @Test func emptyTextIsHonouredWhereEmptyMeansNone() {
     let defaults = freshDefaults(#function)
-    for key in ["excludedLabels", "qualifierLabels", "deferredLabels",
-                "appBadgeLabel", "appBadgeFilter"] {
+    for key in ["excludedLabels", "contactGroupLabels", "appBadgeLabel"] {
         defaults.set("   ", forKey: "inboxMode.\(key)")
     }
 
     let settings = InboxModeSettings.current(from: defaults)
     #expect(settings["excludedLabels"] as? String == "")
-    #expect(settings["qualifierLabels"] as? String == "")
-    #expect(settings["deferredLabels"] as? String == "")
+    #expect(settings["contactGroupLabels"] as? String == "")
     #expect(settings["appBadgeLabel"] as? String == "")
-    #expect(settings["appBadgeFilter"] as? String == "")
 }
 
 // Never set is not the same as set to empty, even for those: a field nobody
@@ -64,13 +61,13 @@ private func freshDefaults(_ name: String) -> UserDefaults {
 @Test func untouchedClearableFieldsStillGetTheirDefaults() {
     let settings = InboxModeSettings.current(from: freshDefaults(#function))
     #expect(settings["excludedLabels"] as? String == "Later")
-    #expect(settings["qualifierLabels"] as? String == "Admin, Waiting")
-    #expect(settings["appBadgeFilter"] as? String == "next")
+    #expect(settings["contactGroupLabels"] as? String == "")
+    #expect(settings["appBadgeLabel"] as? String == "Triage")
 }
 
 @Test func scriptsCarryTheSettingsAndTheApplyCall() throws {
     let defaults = freshDefaults(#function)
-    defaults.set("Keep", forKey: "inboxMode.processLabel")
+    defaults.set("Todo", forKey: "inboxMode.triageLabel")
 
     let source = InboxModeSettings.applyScriptSource(from: defaults)
     #expect(source.contains("window.__customInboxModeSettings = {"))
@@ -84,7 +81,7 @@ private func freshDefaults(_ name: String) -> UserDefaults {
         try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
     )
     #expect(object.count == InboxModeSettings.options.count)
-    #expect(object["processLabel"] as? String == "Keep")
+    #expect(object["triageLabel"] as? String == "Todo")
 }
 
 @Test @MainActor func bootstrapScriptRunsFirstAndInTheMainFrameOnly() {
