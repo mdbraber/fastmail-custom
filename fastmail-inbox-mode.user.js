@@ -2627,10 +2627,10 @@ other user label is a topic.
 
     // Move to files by moving: measured, its didSelect is a one-shot
     // `actions.move(null, mailbox)`, where null means the current selection.
-    // Swapping in other work makes it this script's picker three times over:
-    // a verb waiting on a topic takes the pick and runs; otherwise Shift-V's
-    // label-only semantics apply — add, never triage, except that picking a
-    // deferred label also retires the marker, because deferring is a move.
+    // Swapped for an add, it is this script's picker, and the pick decides
+    // nothing: it is an ordinary add, and the rules under every menu finish
+    // it — a project takes Triage and any other project off, a named label
+    // files the sender, a helper label is simply added.
     //
     // didSelect is where the work happens for this menu — there is no apply to
     // commit, unlike the tristate Labels menu — so it is also where the list is
