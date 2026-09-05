@@ -3089,7 +3089,11 @@ other user label is a topic.
                         // the same addremove as the pick
                         const own = toArray(arguments[2]);
                         const merged = own.concat(removes.filter(m => own.indexOf(m) === -1));
-                        return original.call(this, keys, adds, merged);
+                        // The caller's own selection argument goes through
+                        // untouched: null means the focused conversation to
+                        // Fastmail, and resolving it here would move the focus
+                        // afterwards. The resolved keys served the rule only.
+                        return original.call(this, storeKeys, adds, merged);
                     }
 
                     // The removals go first and silenced, so the add's own
@@ -3106,6 +3110,12 @@ other user label is a topic.
             };
         });
     };
+
+    /*
+     * ----------------------------------------------------------------
+     * The verbs
+     * ----------------------------------------------------------------
+     */
 
     // Archive in labels mode is `move(messages, null, Inbox, true)` against
     // the account's Inbox by role — it never touches the label being viewed —
