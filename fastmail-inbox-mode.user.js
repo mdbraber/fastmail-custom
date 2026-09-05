@@ -264,8 +264,7 @@ other user label is a topic.
         // The app icon's badge, for the shell apps: the total of this label
         // under this filter (next, triage, deferred, noninbox, or empty for the
         // plain total). An empty label hands the shell its own fallback.
-        appBadgeLabel: 'Inbox',
-        appBadgeFilter: 'next',
+        appBadgeLabel: 'Triage',
         swapArchiveExpand: true,
         sidebarSeparators: true,
         hideLoneExpando: true
@@ -807,6 +806,10 @@ other user label is a topic.
         kind === NONINBOX_FILTER;
 
     const countFor = (mailbox) => {
+        // Without the filters a badge is the label's own total: a project
+        // label implies the Inbox, so its total is its queue
+        if (!LABEL_FILTERS) return mailbox.get('totalThreads') || 0;
+
         if (!settings.showFilteredCounts) {
             if (mailbox.get('role') === 'inbox' ||
                     isProcess(mailbox) || isDeferred(mailbox)) {
@@ -827,6 +830,7 @@ other user label is a topic.
     // own number. A pair whose halves come from different views would
     // read as one badge fighting itself, so anything else goes without.
     const unreadFor = (mailbox) => {
+        if (!LABEL_FILTERS) return 0;
         if (!settings.showFilteredCounts) return 0;
 
         const kind = filterFor(mailbox);
@@ -838,6 +842,7 @@ other user label is a topic.
     // The heading's unread half: only the mode's own slices have an unread
     // query to ask; stock filters go without rather than guessing
     const headerUnreadFor = (mailbox, kind) => {
+        if (!LABEL_FILTERS) return 0;
         if (!ownKind(kind)) return null;
 
         return exactLength(badgeQueryFor(mailbox, kind, true));
@@ -883,9 +888,9 @@ other user label is a topic.
         const path = String(settings.appBadgeLabel || '').trim().toLowerCase();
         if (!path) return null;
 
-        const named = String(settings.appBadgeFilter || '').trim().toLowerCase();
-        const kindName = FILTER_ALIASES[named] || named;
-        const kind = APP_BADGE_KINDS[kindName] ? kindName : '';
+        // The label's total; the filtered variants belong to the retired
+        // filter system and are not offered
+        const kind = '';
 
         let total = 0;
         let found = false;
@@ -1202,34 +1207,14 @@ other user label is a topic.
         const rules = ROW_COLOUR_RULES.slice();
 
         FastMail.store.getAll(FastMail.classes.Mailbox)
-            // The Process marker is on everything kept, so tinting rows by it
-            // would colour the whole Process list one shade and say nothing.
-            // The colours are there to show what a message is about; being
-            // kept is not what it is about. An option, since a colour you
-            // have given the label is a choice, and you may want to see it.
-            // "Sidebar only" once meant the saved-search inboxes of the old
-            // workflow; that set is empty in the v2 model, which painted
-            // nothing. Sidebar visibility is the living notion of the same
-            // idea — the labels you actually file into.
+            // Triage is on every undecided row, so tinting rows by it would
+            // colour the whole group one shade and say nothing. The colours
+            // are there to show what a message is about. An option, since a
+            // colour you have given the label is a choice.
+            // "Sidebar only" is the labels you actually file into.
             .filter(m => isUserLabel(m) && m.get('color') &&
-                !(settings.labelColoursSkipProcess && isProcess(m)) &&
-                (!settings.labelColoursSidebarOnly || isSidebarLabel(m) ||
-                    isProcess(m) || isDeferred(m)))
-            // A row carrying two coloured labels matches both rules and the
-            // later one wins, so precedence is a matter of emission order.
-            // Qualifiers go last, because being urgent outranks where a message
-            // lives; and among themselves they go in reverse of the order you
-            // named them, so the one you named first is emitted last and wins.
-            .sort((a, b) => {
-                const ra = qualifierRank(a);
-                const rb = qualifierRank(b);
-
-                if (ra === rb) return 0;
-                if (ra === -1) return -1;
-                if (rb === -1) return 1;
-
-                return rb - ra;
-            })
+                !(settings.labelColoursSkipTriage && isTriage(m)) &&
+                (!settings.labelColoursSidebarOnly || isSidebarLabel(m)))
             .forEach(m => {
                 const name = cssString(mailboxPath(m));
                 const chip = `.v-MailboxItem-mailbox span[title="${name}"]`;
@@ -1713,17 +1698,12 @@ other user label is a topic.
         if (mailController.get('search')) return null;
 
         const mailbox = mailController.get('mailbox');
-
-        // A deferred label has nothing for a per-label switch to mean — its
-        // default is All mail, and `actionable` would show an empty list — so
-        // the button is the global switch there, as on the Inbox. A non-inbox
-        // label is an ordinary label for this: its mail carries the marker.
-        return isUserLabel(mailbox) && !isDeferred(mailbox) ? mailbox : null;
+        return isUserLabel(mailbox) ? mailbox : null;
     };
 
     const indicatorIsActive = () => {
         const label = currentLabel();
-        return label ? modeForLabel(label) : modeIsOn;
+        return LABEL_FILTERS && label ? modeForLabel(label) : modeIsOn;
     };
 
     // Fastmail's is-active is a faint grey wash behind the icon — enough to
@@ -2316,7 +2296,7 @@ other user label is a topic.
 
     const toggleCurrent = () => {
         const label = currentLabel();
-        if (!label) return toggleMode();
+        if (!LABEL_FILTERS || !label) return toggleMode();
 
         const turningOn = !modeForLabel(label);
 
