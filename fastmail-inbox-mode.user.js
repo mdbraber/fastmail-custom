@@ -3050,6 +3050,22 @@ other user label is a topic.
         return candidates.filter(isDrawn)[0] || candidates[0] || null;
     };
 
+    // The menu that is drawn. The button's menuView property makes a fresh,
+    // undrawn menu on every read, so it is no use; the one on screen is an
+    // ancestor of the popover's list, and it is the one whose preset list
+    // can be swapped for the custom picker.
+    const drawnSnoozeMenu = () => {
+        const roots = document.querySelectorAll('.v-Menu, .v-PopOver, .v-Sheet');
+        for (const root of Array.from(roots)) {
+            let view = FastMail.getViewFromNode(root);
+            for (let i = 0; view && i < 6; i += 1) {
+                if (typeof view.showCustomPicker === 'function') return view;
+                view = typeof view.get === 'function' ? view.get('parentView') : null;
+            }
+        }
+        return null;
+    };
+
     const openSnoozeDialog = () => {
         const button = snoozeButtonView();
         if (!button || typeof button.get !== 'function') {
@@ -3057,12 +3073,12 @@ other user label is a topic.
             return;
         }
 
-        const menu = button.get('menuView');
         pressButtonView(button);
 
-        if (!menu || typeof menu.showCustomPicker !== 'function') return;
-
         const propose = () => {
+            const menu = drawnSnoozeMenu();
+            if (!menu) return false;
+
             // showCustomPicker replaces the preset list once; menuView is
             // null after it, which is how a second try knows not to
             if (menu.menuView) menu.showCustomPicker();
