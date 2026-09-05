@@ -172,7 +172,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // Views worth remembering an answer for; older ones are dropped
     const EARLY_PATH_LIMIT = 40;
     // Bumped when remembered answers become untrustworthy, to drop them once
-    const EARLY_VERSION = 1;
+    const EARLY_VERSION = 2;
 
     // Options, overridable from the extension's settings. The extension writes
     // them onto the page just before this script is injected; running without
@@ -340,7 +340,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const modeForLabel = (mailbox) =>
         modeIsOn && isUserLabel(mailbox) && filterFor(mailbox) === DEFAULT_FILTER;
 
-    // Labels struck from the topic set by name — Later holds mail, it does
+    // Labels struck from the project set by name — Later holds mail, it does
     // not file it — a rule of yours, so it is named rather than worked out.
     // Memoized, for the same callers that ask it on every option and every
     // row.
@@ -399,6 +399,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             .filter(m => mailboxPath(m).toLowerCase() === wanted)[0] || null;
     };
 
+    let warnedNoTriage = '';
+
     const stateLabels = (accountId) => {
         const key = accountId || '';
         let cached = labelCache.get(key);
@@ -408,6 +410,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             inbox: mailboxesOf(accountId).filter(m => m.get('role') === 'inbox')[0] || null,
             triage: findByPath(accountId, settings.triageLabel)
         };
+
+        if (settings.triageLabel && !cached.triage && warnedNoTriage !== settings.triageLabel) {
+            warnedNoTriage = settings.triageLabel;
+            console.warn('Inbox mode: no label named "' + settings.triageLabel +
+                '" — v takes nothing off and archive strips no Triage until it exists');
+        }
 
         labelCache.set(key, cached);
         return cached;
@@ -424,11 +432,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // hidden labels tags history, it does not queue work.
     const isProject = (mailbox) => isUserLabel(mailbox) &&
         isSidebarLabel(mailbox) && !isExcludedLabel(mailbox) && !isTriage(mailbox);
-
-    // Everything else a user label can be. Never added, removed, counted or
-    // offered by anything here; the stock labels menu is for these.
-    const isHelper = (mailbox) => isUserLabel(mailbox) &&
-        !isTriage(mailbox) && !isProject(mailbox);
 
     /*
      * ----------------------------------------------------------------
@@ -822,10 +825,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // The rows whose badge the mode owns: the Inbox and every user label.
-    // System folders other than the Inbox keep whatever Fastmail draws.
+    // Triage and the projects show their totals; a helper label keeps whatever Fastmail draws
     const managesBadge = (mailbox) => modeIsOn && !!mailbox &&
-        (mailbox.get('role') === 'inbox' || isUserLabel(mailbox));
+        (mailbox.get('role') === 'inbox' || isTriage(mailbox) || isProject(mailbox));
 
     // The unread half, written over the drawn badge: "12 (3)", the parens
     // in bold. Fastmail draws the total through the count swap above; the
@@ -1340,20 +1342,23 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const updateInboxLabelVisibility = () => {
         const mailController = controller();
 
-        // Under the `inbox` filter every row is in the Inbox by definition,
-        // and under `triage` the query itself demands it. Under `next`
-        // it is the flow that guarantees it: keeping leaves the Inbox on, so
-        // Inbox-or-Process is the Inbox in practice. The chip that tells kept
-        // from untriaged is Process, and it stays.
+        // A project list is Inbox-only by the invariant — a project label
+        // implies the Inbox — and so is Triage's, so the chip that says
+        // "Inbox" on every row there says nothing and is hidden. The retired
+        // filters' view names are still honoured, for the day the constant
+        // is flipped back on.
         //
-        // Mail filed under a non-inbox label is the exception — it is the one
-        // thing here without the Inbox — and it needs no exception, since a
-        // chip it does not carry cannot be the one being hidden.
+        // Mail filed under a helper label is the exception — it may sit
+        // outside the Inbox — and it needs no exception here, since a chip
+        // it does carry is worth seeing.
+        const mailbox = mailController.get('mailbox');
         const filter = mailController.get('mailboxFilter');
         const inboxOnly = isInboxSearch() ||
-            ((filter === 'inbox' || filter === DEFAULT_FILTER ||
-                filter === TRIAGE_FILTER) &&
-                isUserLabel(mailController.get('mailbox')));
+            (!!mailbox && (isTriage(mailbox) || isProject(mailbox))) ||
+            (LABEL_FILTERS &&
+                (filter === 'inbox' || filter === DEFAULT_FILTER ||
+                    filter === TRIAGE_FILTER) &&
+                isUserLabel(mailbox));
 
         const hide = modeIsOn && settings.hideInboxLabel && inboxOnly;
 
@@ -1642,7 +1647,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * which a label does not. It survives a bar too narrow to draw the
      * button, which a glyph search does not. It survives a platform with no
      * keyboard, which a shortcut does not — and that last one is the whole
-     * history of the topic picker failing on the phone. So it is asked
+     * history of the project picker failing on the phone. So it is asked
      * first everywhere, and the older tests stay behind it for a toolbar
      * that registers nothing under the name.
      */
@@ -1948,13 +1953,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             const slotNames = named.slice(0, barCapacity(toolbar));
             const overflowNames = named.slice(slotNames.length);
 
-            // A topic or Process view is past filing: getting here at all
-            // means the label is on, so the slot Fastmail fills contextually
-            // holds the wrong verb — Remove label, the unfiling correction —
-            // where processing belongs. Swap the slot for an Archive running
-            // the full verb; Remove label keeps its home in More below. Off
-            // the topic labels — Inbox, deferred lists, mode off, or a bar
-            // configured without Archive — the stock slot stands.
+            // Any label view is past filing: getting here at all means the
+            // label is on, so the slot Fastmail fills contextually holds
+            // the wrong verb — Remove label, the unfiling correction — where
+            // Archive belongs. Swap the slot for an Archive running the full
+            // verb; Remove label keeps its home in More below. Off a label —
+            // the Inbox, mode off, or a bar configured without Archive — the
+            // stock slot stands.
             const wantArchiveSlot = modeIsOn && !!currentLabel() &&
                 slotNames.indexOf('archive') !== -1;
             const barArchive = onBar(view => view.customArchive);
@@ -2458,8 +2463,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // files the sender, a helper label is simply added.
     //
     // didSelect is where the work happens for this menu — there is no apply to
-    // commit, unlike the tristate Labels menu — so it is also where the list is
-    // asked to fetch again, covering both auto-save and picking by hand.
+    // commit, unlike the tristate Labels menu — so it is also where auto-save
+    // and a pick by hand meet, both landing on the same call.
     // The Labels menu is the tristate one: it adds and removes rather than
     // moving, and stays open as you pick. Fastmail asks it for both verbs at
     // once, which is what tells it apart from Move to — measured on a drawn
@@ -3027,9 +3032,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // Archive in labels mode is `move(messages, null, Inbox, true)` against
     // the account's Inbox by role — it never touches the label being viewed —
     // plus a mark-read and a not-spam report, expanded to the whole thread.
-    // What it does not do is retire the dispositions: Process, the deferred
-    // labels and the pin all survive it, so `e` adds those removals, and `v`
-    // and `s` are built from the same parts.
+    // What it does not do is retire the dispositions: Triage, every project
+    // label and the pin all survive it — helper labels stay too — so `e`
+    // adds those removals, and `v` and `s` are built from the same parts.
     //
     // Everything here works through controller().actions, so every route in is
     // covered at once: keys, toolbar, swipes, the context menu, a future one.
@@ -3067,9 +3072,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const carriesMailbox = (message, mailbox) => !!mailbox && !!message &&
         threadOf(message).some(other =>
             toArray(other.get('mailboxes')).indexOf(mailbox) !== -1);
-
-    const projectsAmong = (storeKeys) =>
-        Array.from(mailboxesAmong(storeKeys)).filter(isProject);
 
     const triageAmong = (storeKeys) =>
         Array.from(mailboxesAmong(storeKeys)).filter(isTriage);
@@ -3300,7 +3302,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             entry.target[entry.method]();
             return true;
         } catch (error) {
-            console.warn('Inbox mode: could not open the topic picker', error);
+            console.warn('Inbox mode: could not open the project picker', error);
             return false;
         }
     };
@@ -3462,7 +3464,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             return true;
         } catch (error) {
             wantOurMove = false;
-            console.warn('Inbox mode: could not open the topic picker', error);
+            console.warn('Inbox mode: could not open the project picker', error);
             return false;
         }
     };
@@ -3685,9 +3687,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // at, and so run into the same update blind spot. Wrapped for the refresh
     // alone. `move` takes the current mailbox off on the way; addremove is
     // handed the labels it adds and removes as its second and third
-    // arguments — both directions matter, because under a filtered slice an
-    // added label can take a row out of view just as surely: keeping adds
-    // Process, and the triage slice excludes it.
+    // arguments — both directions matter, because a label's own list gains a
+    // row by filing into it just as surely as it loses one by filing it back
+    // out.
     const REMOVED_BY = {
         move: () => [controller().get('mailbox')],
         addremove: (args) => toArray(args[1]).concat(toArray(args[2]))
@@ -3835,7 +3837,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // is why the captured registrations are null there. Naming Labels and Move
     // by the shortcut alone therefore matched nothing on the phone — so the
     // bar's Labels and Move slots quietly did nothing, which is a configured
-    // order that does not apply, and the topic picker had no button to open,
+    // order that does not apply, and the project picker had no button to open,
     // which is the bare-archive dialog turning up in place of the picker.
     //
     // The glyph is the other name a button has. A drawn view carries it in its
@@ -3917,12 +3919,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         runVerb('keep', null);
     };
 
-    // Shift-V: the label-only picker. Always the menu, never a triage — the
-    // topic rule's escape valve for correcting labels in place.
+    // Shift-V: the picker, whatever the selection carries — the same menu v
+    // opens for an unfiled conversation. A pick is an add, and rule 2 takes
+    // the label it replaces off underneath.
     const openLabelPicker = () => {
-        if (!moveButton) return;
-        wantOurMove = ourMoveWanted();
-        moveButton.target[moveButton.method]();
+        const actions = controller().actions;
+        const keys = resolveKeys(actions, null);
+        if (!keys) return;
+        openProjectPicker(keys);
     };
 
     // A shortcut and the button it stands for should not disagree, so clicking

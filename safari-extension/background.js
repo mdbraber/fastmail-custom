@@ -58,6 +58,36 @@ const getSettings = async () => {
     return Object.assign({}, DEFAULT_SETTINGS, stored.settings || {});
 };
 
+// Settings saved under 2.x keep keys 3.0 no longer has, and two whose
+// default moved: the badge label was Inbox, the bar had nine slots. Once,
+// on the first run of 3.0, a stored value still equal to its 2.x default
+// takes the 3.0 default and unknown keys are dropped; anything the user
+// set on purpose stays. The version mark keeps this from running twice.
+const SETTINGS_VERSION = 3;
+const LEGACY_DEFAULTS = {
+    appBadgeLabel: 'Inbox',
+    bottomBarSlots: 'Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move'
+};
+
+const migrateSettings = async () => {
+    const stored = await api.storage.local.get(['settings', 'settingsVersion']);
+    if (stored.settingsVersion === SETTINGS_VERSION) return;
+
+    const next = {};
+    Object.keys(stored.settings || {}).forEach((key) => {
+        if (!(key in DEFAULT_SETTINGS)) return;
+        const value = stored.settings[key];
+        next[key] = (key in LEGACY_DEFAULTS && value === LEGACY_DEFAULTS[key])
+            ? DEFAULT_SETTINGS[key]
+            : value;
+    });
+    await api.storage.local.set({ settings: next, settingsVersion: SETTINGS_VERSION });
+};
+
+migrateSettings().catch((error) => {
+    console.error('Inbox mode: could not migrate settings', error);
+});
+
 const inject = async (tabId) => {
     const settings = await getSettings();
 
