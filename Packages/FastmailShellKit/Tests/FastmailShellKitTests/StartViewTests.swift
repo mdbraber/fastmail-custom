@@ -10,28 +10,66 @@ private let fallback = URL(string: "https://app.fastmail.com/")!
     #expect(StartView.resolve("   ", default: fallback) == fallback)
 }
 
-@Test func aFastmailURLIsUsedAsIs() {
-    let raw = "https://app.fastmail.com/mail/search:from%3Aboss"
-    #expect(StartView.resolve(raw, default: fallback) == URL(string: raw)!)
+// The field holds a path; the host comes from the backend.
+@Test func aPathIsPlacedOnTheBackend() {
+    #expect(StartView.resolve("/mail/Inbox", default: fallback)
+        == URL(string: "https://app.fastmail.com/mail/Inbox")!)
+    #expect(StartView.resolve("/mail/Archive", default: fallback)
+        == URL(string: "https://app.fastmail.com/mail/Archive")!)
 }
 
-@Test func aURLKeepsItsQueryAndFragment() {
-    let raw = "https://app.fastmail.com/mail/Inbox?u=abc#thread"
-    #expect(StartView.resolve(raw, default: fallback) == URL(string: raw)!)
+@Test func aPathWithoutALeadingSlashStillWorks() {
+    #expect(StartView.resolve("mail/Inbox", default: fallback)
+        == URL(string: "https://app.fastmail.com/mail/Inbox")!)
+    #expect(StartView.resolve("Inbox", default: fallback)
+        == URL(string: "https://app.fastmail.com/Inbox")!)
+}
+
+@Test func aPathKeepsItsQueryAndFragment() {
+    #expect(StartView.resolve("/mail/Inbox?u=abc#thread", default: fallback)
+        == URL(string: "https://app.fastmail.com/mail/Inbox?u=abc#thread")!)
 }
 
 @Test func surroundingWhitespaceIsTolerated() {
-    let raw = "https://app.fastmail.com/mail/Archive"
-    #expect(StartView.resolve("  \(raw)  ", default: fallback) == URL(string: raw)!)
+    #expect(StartView.resolve("  /mail/Archive  ", default: fallback)
+        == URL(string: "https://app.fastmail.com/mail/Archive")!)
 }
 
-@Test func aBareViewNameIsNotAURLAndFallsBack() {
-    #expect(StartView.resolve("Inbox", default: fallback) == fallback)
-    #expect(StartView.resolve("/mail/Inbox", default: fallback) == fallback)
-    #expect(StartView.resolve("app.fastmail.com/mail/Inbox", default: fallback) == fallback)
+// The backend decides the host, whether the field is empty or holds a path.
+@Test func theBackendDecidesTheHost() {
+    #expect(StartView.resolve(nil, default: fallback, backend: .beta)
+        == URL(string: "https://app.beta.fastmail.com/")!)
+    #expect(StartView.resolve("/mail/Inbox", default: fallback, backend: .beta)
+        == URL(string: "https://app.beta.fastmail.com/mail/Inbox")!)
 }
 
-@Test func aURLOnAnotherHostFallsBack() {
+// A pasted full address is tolerated but reduced to its path, and moved onto
+// the selected backend — the host that was typed never survives.
+@Test func aFullAddressIsReducedToItsPath() {
+    #expect(StartView.resolve("https://app.fastmail.com/mail/Archive", default: fallback)
+        == URL(string: "https://app.fastmail.com/mail/Archive")!)
+    #expect(StartView.resolve("https://app.beta.fastmail.com/mail/Inbox?u=abc", default: fallback)
+        == URL(string: "https://app.fastmail.com/mail/Inbox?u=abc")!)
+    #expect(StartView.resolve("https://app.fastmail.com/mail/Archive", default: fallback, backend: .beta)
+        == URL(string: "https://app.beta.fastmail.com/mail/Archive")!)
+}
+
+@Test func aPastedAddressKeepsItsEncodedPathQueryAndFragment() {
+    let raw = "https://app.fastmail.com/mail/search:from%3Aboss"
+    #expect(StartView.resolve(raw, default: fallback) == URL(string: raw)!)
+    #expect(StartView.resolve("https://app.fastmail.com/mail/Inbox?u=abc#thread", default: fallback)
+        == URL(string: "https://app.fastmail.com/mail/Inbox?u=abc#thread")!)
+}
+
+// The host on a pasted address is replaced, not compared, so a shouted one
+// comes back in the backend's own spelling — and a trailing dot is not it.
+@Test func aPastedHostIsCaseInsensitiveButATrailingDotIsRejected() {
+    #expect(StartView.resolve("https://APP.FASTMAIL.COM/mail/Inbox", default: fallback)
+        == URL(string: "https://app.fastmail.com/mail/Inbox")!)
+    #expect(StartView.resolve("https://app.fastmail.com./mail/Inbox", default: fallback) == fallback)
+}
+
+@Test func aFullAddressOnAnotherHostFallsBack() {
     #expect(StartView.resolve("https://evil.example/mail/Inbox", default: fallback) == fallback)
     #expect(StartView.resolve("https://www.fastmail.com/help/", default: fallback) == fallback)
     #expect(StartView.resolve("https://app.fastmail.com.evil.example/", default: fallback) == fallback)
@@ -43,16 +81,11 @@ private let fallback = URL(string: "https://app.fastmail.com/")!
     #expect(StartView.resolve("file:///etc/passwd", default: fallback) == fallback)
 }
 
-// The host is not merely compared but replaced with the selected backend's,
-// so a shouted one comes back in the spelling the backend uses
-@Test func hostComparisonIsCaseInsensitiveButRejectsATrailingDot() {
-    #expect(StartView.resolve("https://APP.FASTMAIL.COM/mail/Inbox", default: fallback)
-        == URL(string: "https://app.fastmail.com/mail/Inbox")!)
-    #expect(StartView.resolve("https://app.fastmail.com./mail/Inbox", default: fallback) == fallback)
-}
-
-@Test func aValueThatCannotBecomeAURLFallsBack() {
-    #expect(StartView.resolve("\u{2028}\u{FFFF}", default: fallback) == fallback)
+@Test func anUnknownHostStillFallsBackOnTheSelectedBackend() {
+    #expect(StartView.resolve("https://evil.example/mail/Inbox", default: fallback, backend: .beta)
+        == URL(string: "https://app.beta.fastmail.com/")!)
+    #expect(StartView.resolve("http://app.beta.fastmail.com/", default: fallback, backend: .beta)
+        == URL(string: "https://app.beta.fastmail.com/")!)
 }
 
 @Test func profileReadsTheSettingFromDefaults() {
@@ -60,33 +93,10 @@ private let fallback = URL(string: "https://app.fastmail.com/")!
     defaults.removePersistentDomain(forName: "start-view-test")
     let profile = Profile.personal(accountID: nil)
     #expect(profile.startURL(readingFrom: defaults) == profile.startURL)
-    defaults.set("https://app.fastmail.com/mail/Archive", forKey: StartView.defaultsKey)
+    defaults.set("/mail/Archive", forKey: StartView.defaultsKey)
     #expect(profile.startURL(readingFrom: defaults)
         == URL(string: "https://app.fastmail.com/mail/Archive")!)
     defaults.removePersistentDomain(forName: "start-view-test")
-}
-
-@Test func theBackendDecidesTheHost() {
-    let beta = URL(string: "https://app.beta.fastmail.com/")!
-    #expect(StartView.resolve(nil, default: fallback, backend: .beta) == beta)
-    #expect(StartView.resolve("https://app.fastmail.com/mail/Archive", default: fallback, backend: .beta)
-        == URL(string: "https://app.beta.fastmail.com/mail/Archive")!)
-    #expect(StartView.resolve("https://app.beta.fastmail.com/mail/Archive", default: fallback, backend: .production)
-        == URL(string: "https://app.fastmail.com/mail/Archive")!)
-}
-
-// A start URL saved on the other server is a view, not a contradiction: it
-// keeps its path and moves across with everything else
-@Test func aURLOnTheOtherKnownHostIsAcceptedAndMoved() {
-    #expect(StartView.resolve("https://app.beta.fastmail.com/mail/Inbox?u=abc", default: fallback)
-        == URL(string: "https://app.fastmail.com/mail/Inbox?u=abc")!)
-}
-
-@Test func anUnknownHostStillFallsBackOnTheSelectedBackend() {
-    #expect(StartView.resolve("https://evil.example/mail/Inbox", default: fallback, backend: .beta)
-        == URL(string: "https://app.beta.fastmail.com/")!)
-    #expect(StartView.resolve("http://app.beta.fastmail.com/", default: fallback, backend: .beta)
-        == URL(string: "https://app.beta.fastmail.com/")!)
 }
 
 @Test func profileFollowsTheBackendSetting() {
@@ -97,7 +107,7 @@ private let fallback = URL(string: "https://app.fastmail.com/")!
     defaults.set("beta", forKey: Backend.defaultsKey)
     #expect(profile.startURL(readingFrom: defaults)
         == URL(string: "https://app.beta.fastmail.com/")!)
-    defaults.set("https://app.fastmail.com/mail/Archive", forKey: StartView.defaultsKey)
+    defaults.set("/mail/Archive", forKey: StartView.defaultsKey)
     #expect(profile.startURL(readingFrom: defaults)
         == URL(string: "https://app.beta.fastmail.com/mail/Archive")!)
     defaults.removePersistentDomain(forName: suite)

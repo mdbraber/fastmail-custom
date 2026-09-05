@@ -37,18 +37,16 @@ private struct GeneralSettingsView: View {
             }
             Section {
                 TextField(
-                    "Start URL",
+                    "Start page",
                     text: $startView,
-                    // The example follows the setting, so it never suggests a
-                    // host the app is not on
-                    prompt: Text("https://\(Backend.resolve(backendName).host)/mail/Inbox")
+                    prompt: Text("/mail/Inbox")
                 )
                 Text(resolved)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             } footer: {
-                Text("The full address to open. Must be a Fastmail address; the backend above decides which server it opens on. Leave empty for the default view. Takes effect in new windows.")
+                Text("A path on the selected server, such as /mail/Inbox. The backend above decides which server it opens on. Leave empty for the default view. Takes effect in new windows.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

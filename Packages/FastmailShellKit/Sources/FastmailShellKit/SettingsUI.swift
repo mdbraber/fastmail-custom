@@ -114,9 +114,9 @@ public struct MobileSettingsSheet: View {
 
                 Section {
                     TextField(
-                        "Start URL",
+                        "Start page",
                         text: $startView,
-                        prompt: Text("https://\(Backend.resolve(backendName).host)/mail/Inbox")
+                        prompt: Text("/mail/Inbox")
                     )
                     .autocorrectionDisabled()
                     #if canImport(UIKit)
@@ -128,7 +128,7 @@ public struct MobileSettingsSheet: View {
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 } footer: {
-                    Text("Must be a Fastmail address; the backend decides which server it opens on. Empty for the default view. Takes effect on the next launch.")
+                    Text("A path on the selected server, such as /mail/Inbox. The backend decides which server it opens on. Empty for the default view. Takes effect on the next launch.")
                 }
 
                 Section("Inbox mode") {
