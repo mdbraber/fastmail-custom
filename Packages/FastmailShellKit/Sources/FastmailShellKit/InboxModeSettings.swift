@@ -155,7 +155,7 @@ public enum InboxModeSettings {
         Option(
             "urgentKey",
             title: "Urgent key",
-            hint: "Runs keep + pin.",
+            hint: "Toggles the pin on the selection.",
             default: .text("s")
         ),
         Option(

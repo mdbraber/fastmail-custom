@@ -302,7 +302,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Runs keep + pin.</string>
+			<string>Toggles the pin on the selection.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
