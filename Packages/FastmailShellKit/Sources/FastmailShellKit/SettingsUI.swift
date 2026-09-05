@@ -160,10 +160,21 @@ public struct MobileSettingsSheet: View {
 final class InboxModeSettingsModel: ObservableObject {
     private let defaults = UserDefaults.standard
 
-    static let barSlotNames = [
-        "Snooze", "Pin", "Archive", "Labels", "Keep",
-        "Waiting", "Someday", "Delete", "Move"
-    ]
+    // The verbs the reorder list offers, in the catalog's own order. Drawn
+    // from the bottomBarSlots default rather than repeated here, so the screen
+    // cannot drift from the verbs the userscript knows — which is exactly how
+    // it once kept offering Keep, Waiting and Someday after the one-label model
+    // retired them and renamed the state verb to File.
+    static let barSlotNames: [String] = {
+        guard
+            let option = InboxModeSettings.options.first(where: { $0.key == "bottomBarSlots" }),
+            case .text(let value) = option.defaultValue
+        else { return [] }
+        return value
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }()
 
     @Published var barOrder: [String]
 

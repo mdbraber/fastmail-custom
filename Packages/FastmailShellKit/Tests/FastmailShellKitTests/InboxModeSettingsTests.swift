@@ -91,6 +91,48 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     #expect(script.source.hasPrefix("window.__customInboxModeSettings = {"))
 }
 
+// The reorder list must offer exactly the verbs the userscript knows, in the
+// catalog's order. It once kept listing Keep, Waiting and Someday — retired in
+// the one-label model — because this vocabulary was hardcoded separately and
+// missed the rename to File, so the screen showed nine stale verbs.
+@Test @MainActor func barSlotNamesAreTheCurrentVerbs() {
+    #expect(InboxModeSettingsModel.barSlotNames
+        == ["Snooze", "Pin", "Archive", "Labels", "File", "Delete", "Move"])
+    #expect(!InboxModeSettingsModel.barSlotNames.contains("Keep"))
+    #expect(!InboxModeSettingsModel.barSlotNames.contains("Waiting"))
+    #expect(!InboxModeSettingsModel.barSlotNames.contains("Someday"))
+}
+
+// Drawn from the catalog's own default so the reorder list cannot drift from
+// the verbs the userscript actually knows.
+@Test @MainActor func barSlotNamesMatchTheCatalogDefault() {
+    let fromDefault = (InboxModeSettings.current(from: freshDefaults(#function))["bottomBarSlots"] as? String ?? "")
+        .split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+    #expect(InboxModeSettingsModel.barSlotNames == fromDefault)
+}
+
+// With nothing stored the reorder list is exactly the current verbs.
+@Test @MainActor func loadBarOrderWithoutAStoredValueListsTheCurrentVerbs() {
+    #expect(InboxModeSettingsModel.loadBarOrder(from: freshDefaults(#function))
+        == ["Snooze", "Pin", "Archive", "Labels", "File", "Delete", "Move"])
+}
+
+// A value saved by an older build still names Keep, Waiting and Someday; those
+// retired verbs are dropped, the recognised ones keep their saved order, and
+// the rest — File included — follow in the catalog's order.
+@Test @MainActor func loadBarOrderDropsRetiredVerbsFromAnOlderStoredValue() {
+    let defaults = freshDefaults(#function)
+    defaults.set("Delete, Keep, Waiting, Someday, Move", forKey: "inboxMode.bottomBarSlots")
+    let order = InboxModeSettingsModel.loadBarOrder(from: defaults)
+    #expect(!order.contains("Keep"))
+    #expect(!order.contains("Waiting"))
+    #expect(!order.contains("Someday"))
+    #expect(order.contains("File"))
+    #expect(Array(order.prefix(2)) == ["Delete", "Move"])
+    #expect(Set(order) == Set(["Snooze", "Pin", "Archive", "Labels", "File", "Delete", "Move"]))
+}
+
 @Test func subOptionsNameARealToggleParent() {
     for option in InboxModeSettings.options {
         guard let parentKey = option.parent else { continue }
