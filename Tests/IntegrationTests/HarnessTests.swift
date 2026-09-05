@@ -507,6 +507,55 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(count, 1)
     }
 
+    // Fastmail sizes the list in pixels (row count times a row height) for its
+    // collapse animation; the added row must grow that inline height so the
+    // next section's header does not lap the last row.
+    private func buildSizedSettingsList() -> String {
+        """
+        (function () {
+          var ul = document.createElement('ul');
+          ul.className = 'v-Sources-list';
+          function item(label, href) {
+            var li = document.createElement('li');
+            li.style.height = '40px';
+            li.style.margin = '0';
+            var a = document.createElement('a');
+            a.className = 'app-source';
+            a.setAttribute('href', href);
+            var span = document.createElement('span');
+            span.className = 'u-truncate';
+            span.textContent = label;
+            a.appendChild(span);
+            li.appendChild(a);
+            return li;
+          }
+          ul.appendChild(item('Notifications', '/settings/notifications'));
+          ul.appendChild(item('Custom swipes', '/settings/actions'));
+          ul.appendChild(item('Offline', '/settings/offline'));
+          ul.style.position = 'relative';
+          ul.style.height = '120px';
+          document.body.appendChild(ul);
+        })();
+        true;
+        """
+    }
+
+    func testDeviceSettingsRowGrowsTheListsPixelHeight() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, buildSizedSettingsList())
+        try await waitUntil {
+            (try await self.evaluate(
+                self.webView, "document.querySelectorAll('.fmshell-device-settings').length"
+            ) as? Int ?? 0) >= 1
+        }
+        let height = try await evaluate(
+            webView, "document.querySelector('.v-Sources-list').style.height"
+        ) as? String
+        // Four rows at 40px once Device settings joins the original three.
+        XCTAssertEqual(height, "160px")
+    }
+
     func testDeviceSettingsOpensShellSettingsWithoutNavigating() async throws {
         webView = try makeWebView(userScript: "", metadata: Self.meta())
         try await load(webView)

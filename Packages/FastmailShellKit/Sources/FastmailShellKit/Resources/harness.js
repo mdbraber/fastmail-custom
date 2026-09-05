@@ -405,7 +405,15 @@
             }
         }
         if (!list) return;
-        if (list.querySelector('.fmshell-device-settings')) return;
+        // Fastmail sizes the list with an inline pixel height for its
+        // collapse animation (row count times a fixed row height); an extra
+        // row overflows it and the next section's header laps the last row.
+        // Recompute it from the current children, and do so on every pass —
+        // a redraw can reset the height while keeping our row.
+        if (list.querySelector('.fmshell-device-settings')) {
+            fixListHeight(list, swipes);
+            return;
+        }
 
         // Cloned from Custom swipes so the row matches, then made the shell's:
         // a fresh icon, a new label, no id to collide, and a click that opens
@@ -438,6 +446,19 @@
         });
 
         list.insertBefore(clone, offline);
+        fixListHeight(list, swipes);
+    }
+
+    // Grow the list's inline height to fit the added row. Only touch a list
+    // that Fastmail is sizing in pixels (its collapse animation); a list left
+    // at auto height flows on its own and needs no help. The row height comes
+    // from a real sibling so it tracks whatever Fastmail renders.
+    function fixListHeight(list, sample) {
+        if (!/px\s*$/.test(list.style.height)) return;
+        var rowHeight = sample ? sample.offsetHeight : 0;
+        if (rowHeight > 0) {
+            list.style.height = (list.children.length * rowHeight) + 'px';
+        }
     }
 
     // The Settings screen is a page, not a popup, and Fastmail redraws its
