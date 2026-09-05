@@ -2649,7 +2649,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // What the next undo takes back. One deep and cleared on use, the same
     // shape the return-to-message stamp uses: the membership is undone
     // because it was this pick that added it, and the contact is left alone
-    // because a contact that now exists is not a mistake.
+    // because a contact that now exists is not a mistake. The adds ride the
+    // checkpoint they belong to — promoted from pending to last when its
+    // didAction fires — and are forgotten by the next.
+    let pendingGroupAdds = null;
     let lastGroupAdds = null;
 
     const undoGroupAdds = () => {
@@ -2723,7 +2726,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 if (!existing) made += 1;
             });
 
-            lastGroupAdds = added.length ? added : null;
+            pendingGroupAdds = added.length ? added : null;
             if (added.length) {
                 // Fastmail's own toast, and Fastmail's own precedence with
                 // it: a verb's undo toast lands after this one and takes the
@@ -3664,6 +3667,23 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             return;
         }
 
+        // z's registration names the manager even when the namespace does
+        // not: the table is read the way the key is
+        if (!manager) {
+            try {
+                const events = FastMail.ViewEventsController;
+                const table = events && events.kbShortcuts;
+                const handler = table && typeof table.getHandlerForKey === 'function' &&
+                    table.getHandlerForKey('z');
+                if (handler && handler[0] && typeof handler[0][handler[1]] === 'function') {
+                    wrapUndoOn(handler[0], handler[1]);
+                    return;
+                }
+            } catch (error) {
+                // No table yet; the register hook catches a later one
+            }
+        }
+
         if (!manager && typeof controller().actions.undo === 'function') {
             manager = controller().actions;
         }
@@ -3756,6 +3776,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         actions.didAction = function () {
             lastUndoReturn = pendingUndoReturn;
             pendingUndoReturn = null;
+            lastGroupAdds = pendingGroupAdds;
+            pendingGroupAdds = null;
 
             if (!undoTarget) {
                 patchUndo();
