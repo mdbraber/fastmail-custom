@@ -3567,13 +3567,16 @@ other user label is a topic.
         return keys && keys.length ? keys : null;
     };
 
-    // done — `e`. `finish` runs the stock archive; everything else is the
-    // preparation it silences.
-    const runDone = (actions, keys, topic, finish) => {
+    // done — `e`. `finish` runs the stock archive, which takes the Inbox off
+    // and marks the thread read; everything else comes off first, silenced,
+    // so the archive's own didAction cuts the one checkpoint: Triage, every
+    // project label and the pin. Helper labels stay.
+    const runDone = (actions, keys, finish) => {
         silencingDidAction(actions, () => {
-            if (topic) actions.addremove(keys, [topic], []);
-
-            const dropped = carriedDispositions(keys);
+            const dropped = [];
+            mailboxesAmong(keys).forEach((mailbox) => {
+                if (isTriage(mailbox) || isProject(mailbox)) dropped.push(mailbox);
+            });
             if (dropped.length) actions.addremove(keys, [], dropped);
 
             if (anyFlagged(keys)) actions.unflag(keys);
@@ -3771,8 +3774,6 @@ other user label is a topic.
             const original = actions[verb];
 
             actions[verb] = function (storeKeys, goTo) {
-                if (consumeGhostArchive()) return this;
-
                 const mailbox = arguments[1];
                 const archiving = modeIsOn && isArchiving(verb, arguments);
 
@@ -3788,36 +3789,15 @@ other user label is a topic.
                 const self = this;
                 const args = arguments;
                 const first = messagesFrom(keys)[0];
-                const inboxes = [];
                 const inbox = first && inboxMailbox(first.get('accountId'));
-                if (inbox) inboxes.push(inbox);
 
-                const finish = (topic, explicitKeys) => {
-                    pendingUndoReturn = urlForMessage(first);
-                    runDone(self, keys, topic, () => {
-                        // The original gets its own arguments when no picker
-                        // interposed: passing resolved keys would flip
-                        // isActioningFocused and move the focus afterwards
-                        if (!explicitKeys) {
-                            original.apply(self, args);
-                        } else if (verb === 'archive') {
-                            original.call(self, keys, goTo);
-                        } else {
-                            // remove(keys, mailbox, direction)
-                            original.call(self, keys, mailbox, args[2]);
-                        }
-                    });
-                    inboxes.forEach(refreshListAfter);
-                };
-
-                // The escape verb suppresses the picker: Shift-E is `e`
-                // committing it empty, in one keystroke
-                if (!suppressPicker && untopicedAmong(keys).length) {
-                    openTopicPicker(keys, (topic) => finish(topic, true));
-                    return this;
-                }
-
-                finish(null, false);
+                pendingUndoReturn = urlForMessage(first);
+                runDone(self, keys, () => {
+                    // The original gets its own arguments: passing resolved
+                    // keys would flip isActioningFocused and move the focus
+                    original.apply(self, args);
+                });
+                if (inbox) refreshListAfter(inbox);
                 return this;
             };
         });
@@ -3847,124 +3827,6 @@ other user label is a topic.
         };
 
         patchUndo();
-    };
-
-    // True while Shift-E is running `e`: the picker is skipped, nothing else
-    // changes
-    let suppressPicker = false;
-
-    const escapeVerb = () => {
-        suppressPicker = true;
-        try {
-            controller().actions.archive(null);
-        } finally {
-            suppressPicker = false;
-        }
-    };
-
-    /*
-     * Long-press to archive bare — the touch Shift-E. Holding the toolbar's
-     * Archive (or Remove-from-Inbox) button half a second runs the verb with
-     * the picker suppressed, firing while the finger is still down: the
-     * archive itself is the feedback. The release is then a ghost — its tap
-     * would run the verb a second time and its touch would land on whatever
-     * slid under the finger — so it is swallowed twice over: the events at
-     * capture, and, in case Fastmail's recognizer got there first, the very
-     * next archive at the verb.
-     */
-    const LONG_PRESS_MS = 500;
-    const LONG_PRESS_SLOP = 12;
-
-    // The ghost window opens when the finger lifts, not when the verb fires:
-    // a hold can outlast any fixed span, and a window keyed to the firing
-    // would have expired by the release — whose tap would then archive
-    // whatever came next.
-    let longPressFired = false;
-    let swallowUntil = 0;
-
-    const consumeGhostArchive = () => {
-        if (Date.now() >= swallowUntil) return false;
-        swallowUntil = 0;
-        return true;
-    };
-
-    const archiveButtonViewFromNode = (node) => {
-        if (!node || typeof node.closest !== 'function') return null;
-        const button = node.closest('button, .v-Button');
-        if (!button) return null;
-        if (!button.querySelector('svg.i-archive, svg.i-removelabel')) return null;
-        try {
-            return FastMail.getViewFromNode(button) || null;
-        } catch (error) {
-            return null;
-        }
-    };
-
-    const pressBare = (view) => {
-        suppressPicker = true;
-        try {
-            pressButtonView(view);
-        } finally {
-            suppressPicker = false;
-        }
-        longPressFired = true;
-    };
-
-    const installLongPressArchive = () => {
-        if (installLongPressArchive.done) return;
-        installLongPressArchive.done = true;
-
-        let timer = null;
-        let startX = 0;
-        let startY = 0;
-
-        const cancel = () => {
-            if (timer) {
-                clearTimeout(timer);
-                timer = null;
-            }
-        };
-
-        document.addEventListener('touchstart', (event) => {
-            cancel();
-            if (!modeIsOn || event.touches.length !== 1) return;
-            const view = archiveButtonViewFromNode(event.target);
-            if (!view) return;
-            startX = event.touches[0].clientX;
-            startY = event.touches[0].clientY;
-            timer = setTimeout(() => {
-                timer = null;
-                pressBare(view);
-            }, LONG_PRESS_MS);
-        }, true);
-
-        document.addEventListener('touchmove', (event) => {
-            if (!timer || !event.touches.length) return;
-            const touch = event.touches[0];
-            if (Math.abs(touch.clientX - startX) > LONG_PRESS_SLOP ||
-                Math.abs(touch.clientY - startY) > LONG_PRESS_SLOP) {
-                cancel();
-            }
-        }, true);
-
-        document.addEventListener('touchcancel', cancel, true);
-
-        document.addEventListener('touchend', (event) => {
-            cancel();
-            if (longPressFired) {
-                longPressFired = false;
-                swallowUntil = Date.now() + 500;
-                event.preventDefault();
-                event.stopImmediatePropagation();
-            }
-        }, true);
-
-        document.addEventListener('click', (event) => {
-            if (Date.now() < swallowUntil) {
-                event.preventDefault();
-                event.stopImmediatePropagation();
-            }
-        }, true);
     };
 
     // Snooze means "gone now, queued later", so the kept-marker comes off on
@@ -5783,7 +5645,6 @@ other user label is a topic.
         patchMailboxMenu();
         patchArchive();
         patchLabelActions();
-        installLongPressArchive();
         patchSnooze();
         patchMessageList();
         patchMessageMenu();
