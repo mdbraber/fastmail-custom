@@ -29,3 +29,10 @@ import Foundation
     #expect(Profile.normalizedAccountID("   ") == nil)
     #expect(Profile.normalizedAccountID("abc123") == "abc123")
 }
+
+// The example config ships "replace-me"; an unconfigured build must not point
+// the compose URL at it, or Fastmail shows the account picker.
+@Test func theExamplePlaceholderIsTreatedAsAbsent() {
+    #expect(Profile.normalizedAccountID("replace-me") == nil)
+    #expect(Profile.normalizedAccountID("  replace-me  ") == nil)
+}

@@ -99,7 +99,14 @@ extension Profile {
     static func normalizedAccountID(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !trimmed.hasPrefix("$(") else { return nil }
+        // Empty, an unsubstituted build setting, or the example placeholder all
+        // mean "not configured". Treat them as absent so the compose URL omits
+        // u= and Fastmail opens the app's active account, rather than pointing
+        // at a bogus account and landing on the account picker.
+        guard !trimmed.isEmpty,
+              !trimmed.hasPrefix("$("),
+              trimmed != "replace-me"
+        else { return nil }
         return trimmed
     }
 }
