@@ -2453,12 +2453,9 @@ other user label is a topic.
     // Overture's copy drag effect, which is what holding Option asks for
     const DRAG_EFFECT_COPY = 1;
 
-    // Dropping a message on a label follows the topic rule, exactly as the
-    // verbs do: a topic triages — the same result as v, so the message gains
-    // the topic and Process and leaves the Inbox — while a qualifier is
-    // additive and the message holds its place in the queue. A deferred label
-    // is a change of disposition, so it also takes the marker off. Option
-    // restores the stock move.
+    // Dropping a message on a label adds it, and the rules under every menu
+    // do the rest: a project takes Triage and any other project off, the
+    // Inbox stays. Option restores the stock move.
     const patchDrop = () => {
         const proto = FastMail.classes.MailboxSourceView.prototype;
         const original = proto.drop;
@@ -2476,17 +2473,15 @@ other user label is a topic.
                 const optionHeld = !!(drag.get('dropEffect') & DRAG_EFFECT_COPY);
 
                 if (optionHeld) {
+                    // Fastmail's move: Inbox off, label on. Asked for with a
+                    // modifier, so left exactly as asked — rule 2 still takes
+                    // Triage and any other project off underneath.
                     actions.move(storeKeys, mailbox);
                 } else if (!FastMail.preferences.get('inLabelsMode')) {
                     actions.copy(storeKeys, mailbox);
-                } else if (isFiled(mailbox)) {
-                    // Non-inbox goes through the same verb: it works out
-                    // for itself that the marker is not wanted
-                    runKeep(actions, storeKeys, mailbox, false);
-                } else if (isDeferred(mailbox)) {
-                    actions.addremove(storeKeys, [mailbox],
-                        carriedDispositions(storeKeys).filter(isProcess));
                 } else {
+                    // An add. A project replaces by rule 2; a helper is just
+                    // added; a named one files the sender by rule 3.
                     actions.add(storeKeys, mailbox);
                 }
             });
