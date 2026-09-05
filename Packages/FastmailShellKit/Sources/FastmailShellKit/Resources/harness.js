@@ -404,6 +404,21 @@
         if (!host) return false;
         if (host.querySelector('.fmshell-app-settings')) return true;
 
+        // The profile menu now draws through MenuView, where injectMenuItems
+        // already adds this same App settings row. If it did, adding a second
+        // one here in the DOM is what put two in the menu. Only dress the panel
+        // when nothing else has — the fallback for a profile panel that is not
+        // a MenuView, which is why this code exists at all.
+        var alreadyPresent = [].slice.call(
+            host.querySelectorAll('.v-MenuOption, li, a, button')
+        ).some(function (node) {
+            return node.getClientRects().length &&
+                !node.classList.contains('fmshell-app-settings') &&
+                !node.querySelector('.fmshell-app-settings') &&
+                collapse(node.textContent).toLowerCase() === 'app settings';
+        });
+        if (alreadyPresent) return true;
+
         var item = document.createElement(logout.tagName.toLowerCase());
         item.className = logout.className;
         item.classList.add('fmshell-app-settings');

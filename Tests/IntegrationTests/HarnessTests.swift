@@ -448,4 +448,74 @@ final class HarnessTests: XCTestCase {
         let title = try await evaluate(webView, "window.__link && window.__link.title") as? String
         XCTAssertEqual(title, "Row subject")
     }
+
+    private func appSettingsCount(_ webView: WKWebView) async throws -> Int {
+        try await evaluate(webView, """
+        [].slice.call(document.querySelectorAll('.v-MenuOption')).filter(function (n) {
+          return n.textContent.trim().toLowerCase() === 'app settings';
+        }).length
+        """) as? Int ?? -1
+    }
+
+    func testProfilePanelIsDressedWhenNoAppSettingsRowExistsYet() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, """
+        (function () {
+          var menu = document.createElement('ul');
+          menu.className = 'v-Menu';
+          var row = document.createElement('li');
+          row.className = 'v-MenuOption';
+          var logout = document.createElement('button');
+          logout.textContent = 'Log out';
+          row.appendChild(logout);
+          menu.appendChild(row);
+          document.body.appendChild(menu);
+          document.body.click();
+        })();
+        true;
+        """)
+        try await waitUntil { try await self.appSettingsCount(self.webView) >= 1 }
+        let count = try await appSettingsCount(webView)
+        XCTAssertEqual(count, 1)
+        let dressed = try await evaluate(
+            webView, "document.querySelectorAll('.fmshell-app-settings').length"
+        ) as? Int
+        XCTAssertEqual(dressed, 1)
+    }
+
+    func testProfilePanelDoesNotAddASecondAppSettingsWhenMenuViewAlreadyDidYouOne() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        // Stand in for the MenuView-injected row that Fastmail now draws.
+        _ = try await evaluate(webView, """
+        (function () {
+          var menu = document.createElement('ul');
+          menu.className = 'v-Menu';
+          var existing = document.createElement('li');
+          existing.className = 'v-MenuOption';
+          var existingButton = document.createElement('button');
+          existingButton.textContent = 'App settings';
+          existing.appendChild(existingButton);
+          var row = document.createElement('li');
+          row.className = 'v-MenuOption';
+          var logout = document.createElement('button');
+          logout.textContent = 'Log out';
+          row.appendChild(logout);
+          menu.appendChild(existing);
+          menu.appendChild(row);
+          document.body.appendChild(menu);
+          document.body.click();
+        })();
+        true;
+        """)
+        // Let the dressing poll run to completion before counting.
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let count = try await appSettingsCount(webView)
+        XCTAssertEqual(count, 1)
+        let dressed = try await evaluate(
+            webView, "document.querySelectorAll('.fmshell-app-settings').length"
+        ) as? Int
+        XCTAssertEqual(dressed, 0)
+    }
 }
