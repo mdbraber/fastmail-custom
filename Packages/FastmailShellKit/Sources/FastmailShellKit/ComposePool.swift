@@ -1,13 +1,22 @@
 import Foundation
 
 public enum ComposeURL {
+    // The compose window is its own window, so it gets Fastmail's minimal
+    // chrome: no sidebar, no list, just the message — ui=minimal. Built
+    // from components rather than pasted, so the account and the flag are
+    // encoded the same way whichever is present.
     public static func url(for profile: Profile) -> URL {
-        let base = LinkRouter.composeBase(for: profile.backend)
-        var text = base
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = profile.backend.host
+        components.path = "/mail/Inbox/compose"
+        var items: [URLQueryItem] = []
         if let accountID = profile.accountID {
-            text += "?u=" + LinkRouter.percentEncode(accountID)
+            items.append(URLQueryItem(name: "u", value: accountID))
         }
-        return URL(string: text) ?? URL(string: base)!
+        items.append(URLQueryItem(name: "ui", value: "minimal"))
+        components.queryItems = items
+        return components.url!
     }
 }
 

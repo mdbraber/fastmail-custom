@@ -229,9 +229,10 @@ private func fastmailComposeFields(of composeURL: URL) -> [String: String] {
     )
     #expect(compose.host == "app.beta.fastmail.com")
     #expect(ComposeURL.url(for: onBeta).absoluteString
-        .hasPrefix("https://app.beta.fastmail.com/mail/compose"))
+        .hasPrefix("https://app.beta.fastmail.com/mail/Inbox/compose"))
     #expect(ComposeURL.url(for: profile()).absoluteString
-        .hasPrefix("https://app.fastmail.com/mail/compose"))
+        .hasPrefix("https://app.fastmail.com/mail/Inbox/compose"))
+    #expect(ComposeURL.url(for: onBeta).query?.contains("ui=minimal") == true)
 }
 
 @Test func aMailtoLinkComposesOnTheProfilesBackend() {

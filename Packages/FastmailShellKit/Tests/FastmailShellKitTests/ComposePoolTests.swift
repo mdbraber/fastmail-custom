@@ -75,6 +75,6 @@ private final class FakeWindow {}
         urlScheme: "fastmail-personal",
         accountID: nil
     )
-    #expect(ComposeURL.url(for: with).absoluteString == "https://app.fastmail.com/mail/compose?u=f00dcafe")
-    #expect(ComposeURL.url(for: without).absoluteString == "https://app.fastmail.com/mail/compose")
+    #expect(ComposeURL.url(for: with).absoluteString == "https://app.fastmail.com/mail/Inbox/compose?u=f00dcafe&ui=minimal")
+    #expect(ComposeURL.url(for: without).absoluteString == "https://app.fastmail.com/mail/Inbox/compose?ui=minimal")
 }
