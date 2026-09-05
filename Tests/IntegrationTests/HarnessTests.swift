@@ -49,7 +49,8 @@ final class HarnessTests: XCTestCase {
         metadata: UserScriptMetadata,
         configURL: URL? = nil,
         chromeCSS: String? = nil,
-        scheme: String? = nil
+        scheme: String? = nil,
+        applicationName: String? = nil
     ) throws -> WKWebView {
         let harnessURL = Bundle(for: HarnessTests.self).url(forResource: "harness", withExtension: "js")!
         let harness = try String(contentsOf: harnessURL, encoding: .utf8)
@@ -61,6 +62,9 @@ final class HarnessTests: XCTestCase {
             metadata: metadata
         )
         let configuration = WKWebViewConfiguration()
+        if let applicationName {
+            configuration.applicationNameForUserAgent = applicationName
+        }
         if let scheme {
             configuration.setURLSchemeHandler(HTMLSchemeHandler(), forURLScheme: scheme)
         }
@@ -127,6 +131,32 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(installed, "object")
         let native = try await evaluate(webView, "typeof window.native.log") as? String
         XCTAssertEqual(native, "function")
+    }
+
+    func testElectronShimAppearsOnlyWithTheElectronTokenAndKeepsEveryNotificationInABatch() async throws {
+        webView = try makeWebView(
+            userScript: "", metadata: Self.meta(),
+            applicationName: WebContainer.electronUserAgentToken
+        )
+        try await load(webView)
+        let electronType = try await evaluate(webView, "typeof window.electron") as? String
+        XCTAssertEqual(electronType, "object")
+
+        _ = try await evaluate(webView, """
+        window.electron.showNotification({title: 'A', body: 'a'}, {id: '1'});
+        window.electron.showNotification({title: 'B', body: 'b'}, {id: '2'});
+        true;
+        """)
+        try await waitUntil {
+            self.received.filter { $0["action"] as? String == "notify" }.count >= 2
+        }
+        let notifyCount = received.filter { $0["action"] as? String == "notify" }.count
+        XCTAssertEqual(notifyCount, 2)
+
+        let withoutToken = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(withoutToken)
+        let withoutElectronType = try await evaluate(withoutToken, "typeof window.electron") as? String
+        XCTAssertEqual(withoutElectronType, "undefined")
     }
 
     func testDocumentIdleScriptRunsAtDocumentEndTiming() async throws {

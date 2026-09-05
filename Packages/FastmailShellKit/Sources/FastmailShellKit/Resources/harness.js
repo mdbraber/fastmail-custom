@@ -671,32 +671,42 @@
     // showContextMenu and printToPDF are checked for before use and are
     // left undefined on purpose, so Fastmail keeps its own context menu.
     if (/Electron\//.test(navigator.userAgent) && typeof window.electron !== 'object') {
-        var pendingNotification = null;
+        var pendingNotifications = [];
 
         // A sound, if wanted, is asked for right after the notification and
-        // synchronously, so the send waits a tick and the two travel as one
-        var flushNotification = function () {
-            var notification = pendingNotification;
-            pendingNotification = null;
-            if (notification) post('notify', notification);
+        // synchronously, so the send waits a tick and the two travel as one.
+        // Fastmail can fire several in the same tick, so this is a queue,
+        // not a single slot — a single slot kept only the last of them.
+        var flushNotifications = function () {
+            var queued = pendingNotifications;
+            pendingNotifications = [];
+            queued.forEach(function (notification) { post('notify', notification); });
         };
 
         window.electron = {
             showNotification: function (payload, data) {
                 payload = payload || {};
                 data = data || {};
-                pendingNotification = {
+                var dataJSON;
+                try {
+                    dataJSON = JSON.stringify(data);
+                } catch (error) {
+                    dataJSON = '';
+                }
+                pendingNotifications.push({
                     id: String(data.emailId || data.calendarEventId || Date.now()),
                     title: String(payload.title || ''),
                     body: String(payload.body || ''),
                     sound: false,
                     threadId: String(data.threadId || ''),
-                    data: JSON.stringify(data)
-                };
-                setTimeout(flushNotification, 0);
+                    data: dataJSON
+                });
+                if (pendingNotifications.length === 1) setTimeout(flushNotifications, 0);
             },
             playNotificationSound: function () {
-                if (pendingNotification) pendingNotification.sound = true;
+                if (pendingNotifications.length) {
+                    pendingNotifications[pendingNotifications.length - 1].sound = true;
+                }
             },
             // Read, archived or deleted: Fastmail says which notifications
             // are stale. Its badge is an unread count and is not the
@@ -717,7 +727,10 @@
         // opens the message, the same way it does for its own clicks
         window.native.notificationClicked = function (dataJSON) {
             var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
-            if (!worker) return;
+            if (!worker) {
+                console.warn('FastmailShell: no service worker to open the notification');
+                return;
+            }
             var data;
             try { data = JSON.parse(dataJSON); } catch (error) { return; }
             worker.postMessage({ type: 'notificationclick', data: data });

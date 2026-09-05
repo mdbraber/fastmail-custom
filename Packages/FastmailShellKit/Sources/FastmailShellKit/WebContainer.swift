@@ -24,6 +24,14 @@ public final class ShellModel: ObservableObject {
 
 @MainActor
 public struct WebContainer {
+    // Fastmail's service worker hands notifications to the page instead of
+    // showing them itself when it sees Electron/ in the user agent — the
+    // mark of Fastmail's own desktop app. Every WKWebView that can host that
+    // worker needs the same token, or a restart picks the other client and
+    // starts the branch that never notifies; shared here so the two can't
+    // drift apart.
+    public static let electronUserAgentToken = "Electron/0.0.0 FastmailShell"
+
     let profile: Profile
     let model: ShellModel
     let loader: ResourceLoading
@@ -56,7 +64,7 @@ public struct WebContainer {
         // window.electron.showNotification, which the harness provides. The
         // token is what makes the worker take that branch; WKWebView cannot
         // receive push, so it is the only branch that can ever notify.
-        configuration.applicationNameForUserAgent = "Electron/0.0.0 FastmailShell"
+        configuration.applicationNameForUserAgent = Self.electronUserAgentToken
         #endif
 
         let bridge = NativeBridge(

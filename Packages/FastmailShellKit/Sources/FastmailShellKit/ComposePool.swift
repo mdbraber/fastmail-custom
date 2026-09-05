@@ -106,6 +106,13 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
 
     private func makeWindow() -> NSWindow {
         let configuration = WKWebViewConfiguration()
+        #if os(macOS)
+        // Its service worker takes its user agent from whichever client
+        // started it. Without this token a compose window can restart
+        // Fastmail's worker into the branch that hands the main window's
+        // notifications to a WKWebView that never shows them.
+        configuration.applicationNameForUserAgent = WebContainer.electronUserAgentToken
+        #endif
         configuration.websiteDataStore = .default()
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.isInspectable = true
