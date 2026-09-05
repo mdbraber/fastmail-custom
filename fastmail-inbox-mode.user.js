@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      2.47
-// @description  Triage flow for Fastmail: the Inbox is the queue, Process is the kept list, Next is the sticky filter
+// @version      3.0
+// @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
 // @match        https://app.beta.fastmail.com/*
@@ -14,87 +14,73 @@
 /*
 Fastmail Inbox mode
 Maarten den Braber <m@mdbraber.com>
-version 2.0 - 2026-08-15
+version 3.0 - 2026-09-04
 
-Spec: docs/superpowers/specs/2026-08-15-fastmail-triage-flow-design.md
+Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
 
 # The model
 
-| State     | Carries                 | List             |
-|-----------|-------------------------|------------------|
-| Untriaged | Inbox                   | the Inbox        |
-| Kept      | Inbox + Process         | the Inbox        |
-| Non-inbox | Process, not Inbox      | its own label    |
-| Deferred  | Waiting or Someday      | its own label    |
-| Done      | neither                 | —                |
+A project label is the live state and nothing else. History is search.
 
-Kept and Non-inbox are both `v`, and what you file it under decides which. Every
-keep writes the marker — being kept is being work — and the label decides
-one thing only: whether the Inbox stays. A topic keeps it, because the Inbox
-is everything live and a message you have committed to is still live; what
-takes it out of Triage is the marker, not leaving. A label named in
-nonInboxLabels takes the Inbox off instead: those are worked from the label
-rather than from the queue, so leaving them in the Inbox shows them twice.
+| State     | Carries                               | Who put it there            |
+|-----------|---------------------------------------|-----------------------------|
+| Triage    | Inbox + Triage                        | the catch-all rule          |
+| Pre-filed | Inbox + Triage + one project label    | that rule and a sender rule |
+| Filed     | Inbox + exactly one project label     | you                         |
+| Done      | neither; helper labels untouched      | you                         |
 
-Verbs, all working on the selection and the whole conversation:
+Snoozed is any of these that Fastmail has taken out of the Inbox for a
+while; it comes back as it was. A project label implies the Inbox; a
+message has at most one project label; Triage and a project coexist only
+when rules put both there. Helper labels — hidden from the sidebar, or named
+in settings.excludedLabels — are never added, removed, counted or offered
+by anything here.
 
-* `e`       done — archive; also drops Process, the deferred labels and the
-            pin. Opens the topic picker first when no topic is on the thread.
-* `v`       keep — adds Process and removes any deferred label, leaving the
-            Inbox where it is. Same picker rule. Filed under a non-inbox
-            label instead, the Inbox comes off too; a topic anywhere on the
-            thread outranks that.
-* `s`       urgent — keep + pin; on something already kept, a pin toggle.
-* `w`       waiting — parks it on settings.waitingLabel: the state goes on,
-            Process and any rival verdict come off, the Inbox stays. Same
-            picker rule.
-* `o`       someday — the same parking on settings.somedayLabel. (`o` was
-            Fastmail's open-conversation key; Enter still opens.)
-* `Shift-E` escape — `e` committing the picker empty: archive without a topic.
-* `Shift-V` label only — always the picker, never triages. Picking a deferred
-            label (Waiting) also removes Process: deferring is a move.
-* `l`       stock tristate Labels menu, narrowed but otherwise untouched.
-            Process never shows: the marker is written by the verbs alone,
-            and a verdict ticked by hand takes it off on its own. On the
-            phone, Keep / Waiting / Someday live in the message bar's More
-            menu.
+The Inbox's groups (Fastmail's own, a setting on the mailbox) are the
+working surface: `in:Triage OR is:unread` first, then Pinned, then one per
+project, then the catch-all for anything that arrived without passing the
+rule. The script never writes them.
 
-While Inbox mode is on:
+# Verbs
 
-* Every label — and the Inbox itself — opens on the `next` filter:
-  what is in the Inbox or in Process, minus the deferred labels. Two more
-  values complete the set: `triage`, the undecided slice (in the Inbox with
-  no verb yet — not kept, not deferred; empty means triage zero), and
-  `deferred`, the complement of it. `noninbox` is the fourth, shown only
-  once nonInboxLabels names something. All are ordinary values in Fastmail's
-  own filter menu, carried by ?filter= and remembered per label. `next` and
-  `noninbox` were spelled `actionable` and `reference` before v2.35; both
-  spellings are still read wherever one was stored.
-* Sidebar badges: the Inbox, Process and the deferred labels show their exact
-  server-side thread counts. Topics carry no badge by default; with
-  showFilteredCounts on they show their exact Next count, from a
-  registered query primed with one calculateTotal call.
-* Dragging a message onto a topic label triages it exactly as `v` does;
-  dragging onto a qualifier just adds the label. Option restores the stock
-  move.
+All work on the selection and the whole conversation; each is one undo
+checkpoint under one toast, and `z` reverts it whole.
 
-A "user label" is any mailbox without a system role. The kept marker —
-"Process" throughout this file's internals — is named by
-settings.processLabel and defaults to "Next"; deferred labels live in
-settings.deferredLabels; qualifiers in settings.qualifierLabels; every
-other user label is a topic.
+* `v`       keep — with a project on the thread: Triage off, nothing else.
+            Without one: the picker, narrowed to projects; the pick is an
+            ordinary add.
+* `Shift-V` refile — always the picker.
+* `e`       done — Inbox, Triage, every project label and the pin come off.
+            The same from every list; never asks first.
+* `s`       pin — a toggle.
+* `w`       snooze — Fastmail's own dialog, on its custom picker, filled in
+            for settings.snoozeDefault at settings.snoozeTime. Enter confirms.
+* `l`       Fastmail's tristate Labels menu, narrowed to projects; typing
+            reaches anything, which is how a helper label is ticked.
+* drag      adds the label; Option-drag is Fastmail's move.
+
+# The rules under every menu
+
+Every label change in the client goes through five actions on the mail
+controller — add, remove, addremove, copy, move — and the model is enforced
+there, so a key, a menu, a drag and a swipe do the same thing:
+
+1. Archive strips: Inbox, Triage, every project label, the pin.
+2. A project label replaces: adding one takes Triage and every other
+   project off in the same checkpoint. The Inbox is not touched.
+3. A label named in settings.contactGroupLabels files the sender into the
+   contact group of that name, from any route.
 
 # Notes
 
-* Nothing here writes to a store record. Badge counts are swapped in around
-  Fastmail's own drawing code and restored immediately, so no record is
-  dirtied; counts come from Mailbox.totalThreads or from a server-computed
-  query total, never from a scan of loaded messages.
-* Opening a label by a bare URL bypasses goSource and so opens unfiltered.
-  Selecting any source afterwards re-applies the filter.
-* Every verb lands as one undo checkpoint under one toast; `z` reverts it
-  whole. The grouping is Fastmail's own: everything queued before the one
-  didAction left unswallowed joins that checkpoint.
+* Nothing here writes to a store record outside a verb, and no verb writes
+  a mailbox setting. Badge counts come from Mailbox.totalThreads.
+* The per-label filter system of v2 (next, triage, deferred, noninbox and
+  the ?filter= parameter) is retired, not removed: it sits behind
+  LABEL_FILTERS, off, with the settings it read kept beside it. It is
+  written against the v2 model and would need re-basing before use.
+* On the phone the message bar is Snooze / Pin / Archive / Labels / More,
+  with File and "Snooze 2 weeks" in More.
 */
 
 (function () {
@@ -194,9 +180,6 @@ other user label is a topic.
     const DEFAULT_SETTINGS = {
         labelColours: true,
         labelColoursSidebarOnly: true,
-        // The marker label sits on everything kept, so tinting rows by it
-        // would colour the whole Process list one shade and say nothing
-        labelColoursSkipProcess: true,
         // Triage is on every undecided row, so tinting by it would paint
         // the whole group one shade and say nothing
         labelColoursSkipTriage: true,
@@ -206,28 +189,6 @@ other user label is a topic.
         labelsShortcut: true,
         labelsSidebarOnly: true,
         labelsAutoSave: true,
-        // The marker for kept mail. A disposition, not durable metadata:
-        // stripped again on archive and on snooze. Named Next because that
-        // is what the list answers: what is next.
-        processLabel: 'Next',
-        // Qualifiers cut across topics; a message can carry any number
-        qualifierLabels: 'Admin, Waiting',
-        // What the Next filter hides. Waiting is an ordinary qualifier
-        // that is also deferred; Snoozed is here as insurance only, since
-        // snoozing already takes the Inbox label off.
-        deferredLabels: 'Waiting, Snoozed',
-        // The two named states the defer verbs park a message in — w and o.
-        // Both are folded into the deferred set and the qualifier set, so
-        // naming them here is the only configuration they need.
-        waitingLabel: 'Waiting',
-        somedayLabel: 'Someday',
-        // The labels worked from the label rather than from the Inbox.
-        // Keeping into one marks it like any other keep and takes the Inbox
-        // off, so it lives in its label instead of the queue's front door.
-        // A label is a topic or one of these, never both; a message carrying
-        // one of each is work, and the topic wins. Empty by default, so
-        // nothing changes until you name one.
-        nonInboxLabels: '',
         // The label a rule puts on everything incoming. Taken off by keeping
         // or filing; the script never adds it.
         triageLabel: 'Triage',
@@ -236,24 +197,21 @@ other user label is a topic.
         snoozeKey: 'w',
         snoozeDefault: '2w',
         snoozeTime: '08:00',
-        // The verb keys, in Fastmail's own key spelling. o replaces the
-        // stock open-conversation key while the mode is on; Enter still
-        // opens either way.
+        // The pin-toggle key, in Fastmail's own key spelling.
         urgentKey: 's',
-        waitingKey: 'w',
-        somedayKey: 'o',
         // The phone bar's verbs, as one ordered list over all of them: the
         // bar takes as many leading ones as the screen fits — More always
         // keeps a slot — and the rest wait inside More, in the same order.
         // Kinds missing from a saved value join at the end.
         bottomBarSlots: 'Snooze, Pin, Archive, Labels, File, Delete, Move',
-        // Never offered as topics, even from the sidebar
+        // Shown in the sidebar but worked as piles, not queues: never filed
+        // into, never stripped by archive
         excludedLabels: 'Later',
-        // Labels that file the sender as well as the message: picking one in
-        // the topic picker adds from[0] to the contact group of the same
-        // name, making the contact, and the group, if either is new. Empty
-        // by default, because writing to your address book is not something
-        // a mail script should start doing unasked.
+        // Labels that file the sender as well as the message: adding one —
+        // from any menu, by typing, or by drag — adds from[0] to the contact
+        // group of the same name, making the contact, and the group, if
+        // either is new. Empty by default, because writing to your address
+        // book is not something a mail script should start doing unasked.
         contactGroupLabels: '',
         // The app icon's badge, for the shell apps: this label's total —
         // Triage is what is left to decide. An empty label hands the shell
@@ -382,48 +340,10 @@ other user label is a topic.
     const modeForLabel = (mailbox) =>
         modeIsOn && isUserLabel(mailbox) && filterFor(mailbox) === DEFAULT_FILTER;
 
-    // Qualifiers cut across the inboxes — a message is urgent *and* somewhere.
-    // Which labels those are is a rule of yours, like the triage label, so it is
-    // named rather than worked out. Order matters: the first named wins when a
-    // message carries more than one.
-    //
-    // Asked for every option a picker filters and every row a rule colours,
-    // so the parse is kept until the settings that feed it change.
-    let qualifierCache = null;
-
-    const qualifierPaths = () => {
-        const key = [settings.qualifierLabels, settings.waitingLabel,
-            settings.somedayLabel].join('\u0000');
-        if (qualifierCache && qualifierCache.key === key) return qualifierCache.paths;
-
-        const named = String(settings.qualifierLabels || '')
-            .split(',')
-            .map(part => part.trim())
-            .filter(Boolean);
-
-        // The verb states qualify by definition — parked is a way of being
-        // marked — so they join without being listed twice
-        [settings.waitingLabel, settings.somedayLabel].forEach((path) => {
-            const trimmed = String(path || '').trim();
-            if (trimmed && !named.some(other =>
-                other.toLowerCase() === trimmed.toLowerCase())) {
-                named.push(trimmed);
-            }
-        });
-
-        qualifierCache = { key: key, paths: named };
-        return named;
-    };
-
-    const qualifierRank = (mailbox) => {
-        const path = mailboxPath(mailbox).toLowerCase();
-        return qualifierPaths().findIndex(named => named.toLowerCase() === path);
-    };
-
     // Labels struck from the topic set by name — Later holds mail, it does
-    // not file it — a rule of yours like the qualifiers, so it is named
-    // rather than worked out. Memoized like the qualifiers, for the same
-    // callers.
+    // not file it — a rule of yours, so it is named rather than worked out.
+    // Memoized, for the same callers that ask it on every option and every
+    // row.
     let excludedCache = null;
 
     const excludedPaths = () => {
@@ -450,7 +370,7 @@ other user label is a topic.
 
     /*
      * ----------------------------------------------------------------
-     * The state mailboxes: Inbox, Process, and the deferred labels
+     * The state mailboxes: Inbox and Triage
      * ----------------------------------------------------------------
      */
 
@@ -484,29 +404,9 @@ other user label is a topic.
         let cached = labelCache.get(key);
         if (cached) return cached;
 
-        // The verb states are deferred by definition, so they fold into the
-        // set without being listed in deferredLabels as well
-        const deferredPaths = pathsFromSetting(settings.deferredLabels);
-        [settings.waitingLabel, settings.somedayLabel].forEach((path) => {
-            const trimmed = String(path || '').trim();
-            if (trimmed && !deferredPaths.some(other =>
-                other.toLowerCase() === trimmed.toLowerCase())) {
-                deferredPaths.push(trimmed);
-            }
-        });
-
         cached = {
             inbox: mailboxesOf(accountId).filter(m => m.get('role') === 'inbox')[0] || null,
-            triage: findByPath(accountId, settings.triageLabel),
-            process: findByPath(accountId, settings.processLabel),
-            waiting: findByPath(accountId, settings.waitingLabel),
-            someday: findByPath(accountId, settings.somedayLabel),
-            deferred: deferredPaths
-                .map(path => findByPath(accountId, path))
-                .filter(Boolean),
-            nonInbox: pathsFromSetting(settings.nonInboxLabels)
-                .map(path => findByPath(accountId, path))
-                .filter(Boolean)
+            triage: findByPath(accountId, settings.triageLabel)
         };
 
         labelCache.set(key, cached);
@@ -514,11 +414,6 @@ other user label is a topic.
     };
 
     const inboxMailbox = (accountId) => stateLabels(accountId).inbox;
-    const processMailbox = (accountId) => stateLabels(accountId).process;
-    const waitingMailbox = (accountId) => stateLabels(accountId).waiting;
-    const somedayMailbox = (accountId) => stateLabels(accountId).someday;
-    const deferredMailboxes = (accountId) => stateLabels(accountId).deferred;
-    const nonInboxMailboxes = (accountId) => stateLabels(accountId).nonInbox;
     const triageMailbox = (accountId) => stateLabels(accountId).triage;
 
     const isTriage = (mailbox) => !!mailbox &&
@@ -534,35 +429,6 @@ other user label is a topic.
     // offered by anything here; the stock labels menu is for these.
     const isHelper = (mailbox) => isUserLabel(mailbox) &&
         !isTriage(mailbox) && !isProject(mailbox);
-
-    const isProcess = (mailbox) => !!mailbox &&
-        mailbox === processMailbox(mailbox.get('accountId'));
-
-    const isDeferred = (mailbox) => !!mailbox &&
-        deferredMailboxes(mailbox.get('accountId')).indexOf(mailbox) !== -1;
-
-    const isNonInbox = (mailbox) => !!mailbox &&
-        nonInboxMailboxes(mailbox.get('accountId')).indexOf(mailbox) !== -1;
-
-    // A topic is any user label that is not the marker, not deferred and not a
-    // qualifier. The topic rule keys off this: only picking a topic triages.
-    // A topic: a user label that lives in the sidebar and is not a state
-    // label, a qualifier, or struck out by name. Sidebar membership is the
-    // rule — the archive shelf of hidden labels files history, not work.
-    //
-    // Non-inbox is excluded because the two are exclusive by construction: a
-    // label either names work or names something kept to find again, and
-    // naming it in nonInboxLabels is what says which.
-    const isTopic = (mailbox) => isUserLabel(mailbox) &&
-        isSidebarLabel(mailbox) && !isExcludedLabel(mailbox) &&
-        !isProcess(mailbox) && !isDeferred(mailbox) && !isNonInbox(mailbox) &&
-        qualifierRank(mailbox) === -1;
-
-    // Filed at all — the question the topic rule actually asks. A non-inbox
-    // label says what a message is about as surely as a topic does, so a
-    // message carrying one has been placed and the picker has nothing left
-    // to ask. Only the disposition differs, and that is runKeep's business.
-    const isFiled = (mailbox) => isTopic(mailbox) || isNonInbox(mailbox);
 
     /*
      * ----------------------------------------------------------------
@@ -805,8 +671,10 @@ other user label is a topic.
         if (!LABEL_FILTERS) return mailbox.get('totalThreads') || 0;
 
         if (!RETIRED_SETTINGS.showFilteredCounts) {
+            const retired = retiredStateLabels(mailbox.get('accountId'));
             if (mailbox.get('role') === 'inbox' ||
-                    isProcess(mailbox) || isDeferred(mailbox)) {
+                    mailbox === retired.process ||
+                    retired.deferred.indexOf(mailbox) !== -1) {
                 return mailbox.get('totalThreads') || 0;
             }
             return 0;
@@ -871,12 +739,6 @@ other user label is a topic.
      * across accounts. In plain Safari there is no window.native and none
      * of this runs.
      */
-    // The filtered slices the badge once offered, kept with the retired
-    // filter system; the badge is the label's plain total now.
-    const APP_BADGE_KINDS = {
-        next: 1, triage: 1, deferred: 1, noninbox: 1
-    };
-
     const appBadgeCount = () => {
         const path = String(settings.appBadgeLabel || '').trim().toLowerCase();
         if (!path) return null;
@@ -2071,7 +1933,7 @@ other user label is a topic.
 
             // The setting is an order over every verb, not a subset: kinds
             // it does not name join at the end, so an older saved value
-            // still places all nine somewhere
+            // still places all seven somewhere
             const named = String(settings.bottomBarSlots || '')
                 .split(',')
                 .map(part => part.trim().toLowerCase())
@@ -2604,11 +2466,11 @@ other user label is a topic.
     // menu, willAdd and willRemove are both true there and neither is here.
     const isLabelsMenu = (menu) => !!menu.get('willAdd') && !!menu.get('willRemove');
 
-    // Picking a qualifier leaves the menu open: a message can be waiting *and*
-    // somewhere, so there is likely another choice coming, and selectFocused
-    // has already cleared what you typed. Picking an inbox label is the placing
-    // decision, so it commits — done() hides the menu, and this menu applies
-    // what you chose on the way out.
+    // Picking a helper label leaves the menu open: there is likely another
+    // one coming, and selectFocused has already cleared what you typed.
+    // Picking a project is the placing decision — a message carries at most
+    // one — so it commits: done() hides the menu, and this menu applies what
+    // you chose on the way out.
     //
     // Wrapped around select rather than around the key or the tap, because both
     // of those arrive here: keydown routes Enter to selectFocused, which selects,
@@ -2625,7 +2487,7 @@ other user label is a topic.
 
             if (!this.customLabels) return result;
             if (!(option instanceof FastMail.classes.Mailbox)) return result;
-            if (qualifierRank(option) !== -1) return result;
+            if (!isProject(option)) return result;
 
             if (typeof menu.done === 'function') menu.done();
 
@@ -3195,37 +3057,11 @@ other user label is a topic.
         return carried;
     };
 
-    // The topic rule's question: does every selected conversation carry at
-    // least one topic? A verb over a selection where any lacks one opens the
-    // picker first.
-    const untopicedAmong = (storeKeys) => messagesFrom(storeKeys)
-        .filter(message => !threadOf(message).some(other =>
-            toArray(other.get('mailboxes')).some(isFiled)));
-
-    // The dispositions to retire alongside a verb: the Process marker and any
-    // deferred label the threads carry. Topics and qualifiers stay — filing
-    // something under Moneybird was a decision; being done with it is not a
-    // reason to undo that.
-    const carriedDispositions = (storeKeys) => {
-        const dropped = [];
-
-        mailboxesAmong(storeKeys).forEach((mailbox) => {
-            // Snoozed is system-managed: it is never removed by a verb
-            if (mailbox.get('role')) return;
-            if (isProcess(mailbox) || isDeferred(mailbox)) dropped.push(mailbox);
-        });
-
-        return dropped;
-    };
-
     const anyFlagged = (storeKeys) => messagesFrom(storeKeys)
         .some(message => threadOf(message).some(other => other.get('isFlagged')));
 
     const allFlagged = (storeKeys) => messagesFrom(storeKeys)
         .every(message => threadOf(message).some(other => other.get('isFlagged')));
-
-    const anyIn = (storeKeys, mailbox) => !!mailbox &&
-        mailboxesAmong(storeKeys).has(mailbox);
 
     // The same question for one conversation rather than a selection
     const carriesMailbox = (message, mailbox) => !!mailbox && !!message &&
@@ -4446,7 +4282,8 @@ other user label is a topic.
         // A non-inbox label is not that case: its mail carries the marker
         // like any other kept mail, so actionable is exactly the live half
         // of it and the default stands.
-        return isDeferred(mailbox) ? '' : DEFAULT_FILTER;
+        return retiredStateLabels(mailbox.get('accountId')).deferred.indexOf(mailbox) !== -1
+            ? '' : DEFAULT_FILTER;
     };
 
     // Storing nothing for the default keeps the record to the labels you have
@@ -4456,7 +4293,8 @@ other user label is a topic.
         const id = mailbox && mailbox.get('id');
         if (!id) return;
 
-        const fallback = isDeferred(mailbox) ? '' : DEFAULT_FILTER;
+        const fallback = retiredStateLabels(mailbox.get('accountId')).deferred.indexOf(mailbox) !== -1
+            ? '' : DEFAULT_FILTER;
 
         if (filter === fallback) delete rememberedFilters[id];
         else rememberedFilters[id] = filter;
@@ -4820,7 +4658,7 @@ other user label is a topic.
 
         // Only where there is non-inbox mail to show: a row that can only
         // ever draw an empty list is a row in the way
-        if (nonInboxMailboxes(controller().get('accountId')).length) {
+        if (retiredStateLabels(controller().get('accountId')).nonInbox.length) {
             rows.push(customFilterOption(
                 FILTER_WORDS[NONINBOX_FILTER], NONINBOX_FILTER));
         }
@@ -5810,8 +5648,8 @@ other user label is a topic.
                 // Turning the chip setting off makes every remembered "hide"
                 // wrong, not just this view's
                 forgetHide();
-                // The label names and the deferred set may have changed, and
-                // every registered query bakes them into its where
+                // The label names may have changed, and every registered
+                // query bakes them into its where
                 forgetLabelCache();
                 dropBadgeQueries();
                 dropListQueries();
