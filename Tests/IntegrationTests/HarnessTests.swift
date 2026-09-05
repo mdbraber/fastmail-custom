@@ -449,73 +449,82 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(title, "Row subject")
     }
 
-    private func appSettingsCount(_ webView: WKWebView) async throws -> Int {
+    private func buildSettingsList() -> String {
+        """
+        (function () {
+          var ul = document.createElement('ul');
+          ul.className = 'v-Sources-list';
+          function item(label, href) {
+            var li = document.createElement('li');
+            var a = document.createElement('a');
+            a.className = 'app-source';
+            a.setAttribute('href', href);
+            var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'u-standardicon v-Icon');
+            a.appendChild(svg);
+            var span = document.createElement('span');
+            span.className = 'u-truncate';
+            span.textContent = label;
+            a.appendChild(span);
+            li.appendChild(a);
+            return li;
+          }
+          ul.appendChild(item('Notifications', '/settings/notifications'));
+          ul.appendChild(item('Custom swipes', '/settings/actions'));
+          ul.appendChild(item('Offline', '/settings/offline'));
+          document.body.appendChild(ul);
+        })();
+        true;
+        """
+    }
+
+    private func settingsLabels(_ webView: WKWebView) async throws -> String {
         try await evaluate(webView, """
-        [].slice.call(document.querySelectorAll('.v-MenuOption')).filter(function (n) {
-          return n.textContent.trim().toLowerCase() === 'app settings';
-        }).length
-        """) as? Int ?? -1
+        [].map.call(
+          document.querySelectorAll('.v-Sources-list a'),
+          function (a) { return (a.querySelector('span') || a).textContent.trim(); }
+        ).join(',')
+        """) as? String ?? ""
     }
 
-    func testProfilePanelIsDressedWhenNoAppSettingsRowExistsYet() async throws {
+    func testSettingsListGetsDeviceSettingsBetweenCustomSwipesAndOffline() async throws {
         webView = try makeWebView(userScript: "", metadata: Self.meta())
         try await load(webView)
-        _ = try await evaluate(webView, """
-        (function () {
-          var menu = document.createElement('ul');
-          menu.className = 'v-Menu';
-          var row = document.createElement('li');
-          row.className = 'v-MenuOption';
-          var logout = document.createElement('button');
-          logout.textContent = 'Log out';
-          row.appendChild(logout);
-          menu.appendChild(row);
-          document.body.appendChild(menu);
-          document.body.click();
-        })();
-        true;
-        """)
-        try await waitUntil { try await self.appSettingsCount(self.webView) >= 1 }
-        let count = try await appSettingsCount(webView)
-        XCTAssertEqual(count, 1)
-        let dressed = try await evaluate(
-            webView, "document.querySelectorAll('.fmshell-app-settings').length"
+        _ = try await evaluate(webView, buildSettingsList())
+        try await waitUntil {
+            (try await self.evaluate(
+                self.webView, "document.querySelectorAll('.fmshell-device-settings').length"
+            ) as? Int ?? 0) >= 1
+        }
+        let labels = try await settingsLabels(webView)
+        XCTAssertEqual(labels, "Notifications,Custom swipes,Device settings,Offline")
+        // Added once, even as the DOM keeps changing.
+        _ = try await evaluate(webView, "document.body.appendChild(document.createElement('div')); true")
+        try await Task.sleep(nanoseconds: 250_000_000)
+        let count = try await evaluate(
+            webView, "document.querySelectorAll('.fmshell-device-settings').length"
         ) as? Int
-        XCTAssertEqual(dressed, 1)
+        XCTAssertEqual(count, 1)
     }
 
-    func testProfilePanelDoesNotAddASecondAppSettingsWhenMenuViewAlreadyDidYouOne() async throws {
+    func testDeviceSettingsOpensShellSettingsWithoutNavigating() async throws {
         webView = try makeWebView(userScript: "", metadata: Self.meta())
         try await load(webView)
-        // Stand in for the MenuView-injected row that Fastmail now draws.
+        _ = try await evaluate(webView, buildSettingsList())
+        try await waitUntil {
+            (try await self.evaluate(
+                self.webView, "document.querySelectorAll('.fmshell-device-settings').length"
+            ) as? Int ?? 0) >= 1
+        }
         _ = try await evaluate(webView, """
-        (function () {
-          var menu = document.createElement('ul');
-          menu.className = 'v-Menu';
-          var existing = document.createElement('li');
-          existing.className = 'v-MenuOption';
-          var existingButton = document.createElement('button');
-          existingButton.textContent = 'App settings';
-          existing.appendChild(existingButton);
-          var row = document.createElement('li');
-          row.className = 'v-MenuOption';
-          var logout = document.createElement('button');
-          logout.textContent = 'Log out';
-          row.appendChild(logout);
-          menu.appendChild(existing);
-          menu.appendChild(row);
-          document.body.appendChild(menu);
-          document.body.click();
-        })();
+        window.__before = location.href;
+        document.querySelector('.fmshell-device-settings').dispatchEvent(
+          new MouseEvent('click', {bubbles: true, cancelable: true, view: window})
+        );
         true;
         """)
-        // Let the dressing poll run to completion before counting.
-        try await Task.sleep(nanoseconds: 300_000_000)
-        let count = try await appSettingsCount(webView)
-        XCTAssertEqual(count, 1)
-        let dressed = try await evaluate(
-            webView, "document.querySelectorAll('.fmshell-app-settings').length"
-        ) as? Int
-        XCTAssertEqual(dressed, 0)
+        try await waitUntil { self.received.contains { $0["action"] as? String == "openSettings" } }
+        let navigated = try await evaluate(webView, "location.href !== window.__before") as? Bool
+        XCTAssertEqual(navigated, false)
     }
 }

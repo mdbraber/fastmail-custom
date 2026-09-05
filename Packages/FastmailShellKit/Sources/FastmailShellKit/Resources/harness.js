@@ -380,104 +380,82 @@
         })();
     }
 
-    // The profile panel does not draw through MenuView, so it is dressed in
-    // the DOM instead: whenever a Log out control is on screen, an App
-    // settings row shaped like it goes in just above — beneath the
-    // switch-user section, where settings belong.
-    function visibleLogoutNode() {
-        var nodes = document.querySelectorAll('a, button');
-        for (var i = 0; i < nodes.length; i += 1) {
-            var node = nodes[i];
-            var text = collapse(node.textContent).toLowerCase();
-            if (text !== 'log out' && text !== 'logout' && text !== 'sign out') continue;
-            if (node.getClientRects().length) return node;
-        }
-        return null;
-    }
-
-    function dressProfilePanel() {
-        var logout = visibleLogoutNode();
-        if (!logout) return false;
-
-        var row = logout.closest('li') || logout;
-        var host = row.parentNode;
-        if (!host) return false;
-        if (host.querySelector('.fmshell-app-settings')) return true;
-
-        // The profile menu now draws through MenuView, where injectMenuItems
-        // already adds this same App settings row. If it did, adding a second
-        // one here in the DOM is what put two in the menu. Only dress the panel
-        // when nothing else has — the fallback for a profile panel that is not
-        // a MenuView, which is why this code exists at all.
-        var alreadyPresent = [].slice.call(
-            host.querySelectorAll('.v-MenuOption, li, a, button')
-        ).some(function (node) {
-            return node.getClientRects().length &&
-                !node.classList.contains('fmshell-app-settings') &&
-                !node.querySelector('.fmshell-app-settings') &&
-                collapse(node.textContent).toLowerCase() === 'app settings';
-        });
-        if (alreadyPresent) return true;
-
-        var item = document.createElement(logout.tagName.toLowerCase());
-        item.className = logout.className;
-        item.classList.add('fmshell-app-settings');
-        if (item.tagName === 'A') item.setAttribute('href', '#');
-
-        // Dressed like its neighbour: the cog takes the logout icon's own
-        // classes when there is one to copy, and the label its span's
-        var logoutIcon = logout.querySelector('svg');
-        var icon = iconNode(SETTINGS_ICON);
-        if (icon) {
-            if (logoutIcon && logoutIcon.getAttribute('class')) {
-                icon.setAttribute('class', logoutIcon.getAttribute('class'));
-            } else if (!logoutIcon) {
-                icon.style.width = '20px';
-                icon.style.height = '20px';
-                icon.style.verticalAlign = 'middle';
-                icon.style.marginRight = '8px';
+    // The shell's own settings live in Fastmail's Settings screen, as a
+    // Device settings row between Custom swipes and Offline. That screen is a
+    // sidebar of app-source links (ul.v-Sources-list) on both desktop and
+    // mobile — the account menus differ by platform and Fastmail redraws
+    // them, so one row in the shared Settings list is the steady home.
+    function dressSettingsList() {
+        var lists = document.querySelectorAll('ul.v-Sources-list');
+        var list, swipes, offline;
+        for (var i = 0; i < lists.length && !list; i += 1) {
+            var foundSwipes = null;
+            var foundOffline = null;
+            [].forEach.call(lists[i].children, function (li) {
+                var link = li.querySelector('a.app-source');
+                if (!link) return;
+                var text = collapse(link.textContent).toLowerCase();
+                if (text === 'custom swipes') foundSwipes = li;
+                if (text === 'offline') foundOffline = li;
+            });
+            if (foundSwipes && foundOffline) {
+                list = lists[i];
+                swipes = foundSwipes;
+                offline = foundOffline;
             }
-            item.appendChild(icon);
+        }
+        if (!list) return;
+        if (list.querySelector('.fmshell-device-settings')) return;
+
+        // Cloned from Custom swipes so the row matches, then made the shell's:
+        // a fresh icon, a new label, no id to collide, and a click that opens
+        // the settings sheet instead of routing to a Fastmail settings pane.
+        var clone = swipes.cloneNode(true);
+        clone.removeAttribute('id');
+        var link = clone.querySelector('a') || clone;
+        link.classList.remove('is-selected');
+        link.classList.add('fmshell-device-settings');
+        link.setAttribute('href', '#');
+        link.removeAttribute('title');
+
+        var oldIcon = link.querySelector('svg');
+        var icon = iconNode(SETTINGS_ICON);
+        if (oldIcon && icon) {
+            oldIcon.parentNode.replaceChild(icon, oldIcon);
         }
 
-        var logoutText = logout.querySelector('span');
-        if (logoutText) {
-            var label = document.createElement('span');
-            label.className = logoutText.className;
-            label.textContent = 'App settings';
-            item.appendChild(label);
+        var label = link.querySelector('span');
+        if (label) {
+            label.textContent = 'Device settings';
         } else {
-            item.appendChild(document.createTextNode('App settings'));
+            link.appendChild(document.createTextNode('Device settings'));
         }
-        item.addEventListener('click', function (event) {
+
+        link.addEventListener('click', function (event) {
             event.preventDefault();
             event.stopPropagation();
             post('openSettings', {});
         });
 
-        if (row !== logout) {
-            var wrapper = document.createElement(row.tagName.toLowerCase());
-            wrapper.className = row.className;
-            wrapper.appendChild(item);
-            host.insertBefore(wrapper, row);
-        } else {
-            host.insertBefore(item, row);
-        }
-        return true;
+        list.insertBefore(clone, offline);
     }
 
-    function watchProfilePanel() {
-        var pending = null;
-        document.addEventListener('click', function () {
-            if (pending) return;
-            var tries = 0;
-            (function poll() {
-                pending = null;
-                if (dressProfilePanel() || tries >= 8) return;
-                tries += 1;
-                pending = window.setTimeout(poll, 120);
-            })();
-        }, true);
+    // The Settings screen is a page, not a popup, and Fastmail redraws its
+    // sidebar as sections change, so the row is re-added whenever the DOM
+    // settles rather than on a single click. dressSettingsList is cheap and
+    // idempotent, so a debounced observer is enough.
+    function watchSettingsList() {
+        var scheduled = false;
+        function run() { scheduled = false; dressSettingsList(); }
+        function schedule() {
+            if (scheduled) return;
+            scheduled = true;
+            window.setTimeout(run, 100);
+        }
+        new MutationObserver(schedule).observe(document.documentElement, {
+            childList: true, subtree: true
+        });
+        schedule();
     }
 
     var SHARE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"' +
@@ -768,16 +746,6 @@
         ' 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51' +
         ' 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 
-    window.native.addMenuItem({
-        id: 'app-settings',
-        label: 'App settings',
-        icon: SETTINGS_ICON,
-        menu: 'profile',
-        onSelect: function () {
-            post('openSettings', {});
-        }
-    });
-
     window.addEventListener('error', function (event) {
         if (!event.error && event.message === 'Script error.') {
             report('a script failed but WebKit suppressed the details; check Web Inspector');
@@ -793,5 +761,5 @@
     watchTheme();
     watchDragRegions();
     watchMenus();
-    watchProfilePanel();
+    watchSettingsList();
 })();
