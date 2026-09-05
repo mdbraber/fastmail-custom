@@ -49,6 +49,16 @@ public struct WebContainer {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
 
+        #if os(macOS)
+        // Fastmail's service worker hands notifications to the page instead
+        // of showing them itself when it sees Electron/ in the user agent —
+        // the mark of Fastmail's own desktop app — and the page then calls
+        // window.electron.showNotification, which the harness provides. The
+        // token is what makes the worker take that branch; WKWebView cannot
+        // receive push, so it is the only branch that can ever notify.
+        configuration.applicationNameForUserAgent = "Electron/0.0.0 FastmailShell"
+        #endif
+
         let bridge = NativeBridge(
             // The page this view is being built for, not the profile's
             // default: the two differ the moment a backend is chosen, and
@@ -69,7 +79,22 @@ public struct WebContainer {
             onActions: { names in
                 UserDefaults.standard.set(names, forKey: IntentSupport.actionNamesKey)
             },
-            onOpenSettings: { SettingsPresenter.shared.open() }
+            onOpenSettings: { SettingsPresenter.shared.open() },
+            onNotify: { notification in
+                #if os(macOS)
+                NotificationPresenter.shared.show(notification)
+                #endif
+            },
+            onDismissNotifications: { ids in
+                #if os(macOS)
+                NotificationPresenter.shared.dismiss(ids: ids)
+                #endif
+            },
+            onShowWindow: {
+                #if os(macOS)
+                NotificationPresenter.shared.showWindow()
+                #endif
+            }
         )
         configuration.userContentController.addScriptMessageHandler(
             bridge,

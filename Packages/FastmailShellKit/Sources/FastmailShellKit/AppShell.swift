@@ -70,6 +70,17 @@ public struct AppShell: View {
         #else
         .onAppear {
             ComposeWindows.shared.configure(profile: live)
+            NotificationPresenter.shared.install()
+            NotificationPresenter.shared.onClick = { data in
+                // Hand the click to the page's service worker, which wrote the
+                // payload and knows how to open the message
+                guard let view = WebViewRegistry.shared.active else { return }
+                let literal = String(data: try! JSONEncoder().encode(data), encoding: .utf8) ?? "\"{}\""
+                view.callAsyncJavaScript(
+                    "window.native && window.native.notificationClicked && window.native.notificationClicked(\(literal));",
+                    arguments: [:], in: nil, in: .page, completionHandler: nil
+                )
+            }
         }
         .onChange(of: backendName) {
             ComposeWindows.shared.configure(profile: live)

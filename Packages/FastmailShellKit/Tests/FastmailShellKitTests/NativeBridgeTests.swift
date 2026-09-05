@@ -133,3 +133,37 @@ actor Recorder {
     func appendError(_ value: String) { errors.append(value) }
     func appendTheme(_ value: String) { themes.append(value) }
 }
+
+@Test @MainActor func notifyRoutesAParsedNotification() async {
+    var received: MailNotification?
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onNotify: { received = $0 }
+    )
+    let reply = await bridge.handle(body: ["action": "notify", "payload": [
+        "id": "M1", "title": "Ada", "body": "hi", "sound": true, "data": "{}"
+    ]])
+    #expect(reply.error == nil)
+    #expect(received?.id == "M1")
+    #expect(received?.sound == true)
+}
+
+@Test @MainActor func notifyWithoutATitleIsAnError() async {
+    let bridge = NativeBridge(expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in })
+    let reply = await bridge.handle(body: ["action": "notify", "payload": ["id": "M1"]])
+    #expect(reply.error != nil)
+}
+
+@Test @MainActor func dismissAndShowWindowRoute() async {
+    var dismissed: [String] = []
+    var shown = 0
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onDismissNotifications: { dismissed = $0 },
+        onShowWindow: { shown += 1 }
+    )
+    _ = await bridge.handle(body: ["action": "dismissNotifications", "payload": ["ids": ["a", "b", 3]]])
+    _ = await bridge.handle(body: ["action": "showWindow", "payload": [:]])
+    #expect(dismissed == ["a", "b"])
+    #expect(shown == 1)
+}

@@ -657,6 +657,73 @@
         }
     });
 
+    // Fastmail's desktop-app hook. Its service worker decides and formats
+    // every notification — fed by the page's own live connection, so no
+    // push is needed — and, when it believes it is inside Fastmail's
+    // Electron app, hands it to the page, which calls
+    // window.electron.showNotification. The page decides "inside Electron"
+    // by `typeof electron == "object"`; the worker by "Electron/" in the
+    // user agent, which the macOS shell adds. Being that object is how the
+    // shell gets Fastmail's own notifications, preferences and all. Only
+    // where the token is present, so the phone is untouched.
+    //
+    // Everything Fastmail's bundles call on the object unguarded is here;
+    // showContextMenu and printToPDF are checked for before use and are
+    // left undefined on purpose, so Fastmail keeps its own context menu.
+    if (/Electron\//.test(navigator.userAgent) && typeof window.electron !== 'object') {
+        var pendingNotification = null;
+
+        // A sound, if wanted, is asked for right after the notification and
+        // synchronously, so the send waits a tick and the two travel as one
+        var flushNotification = function () {
+            var notification = pendingNotification;
+            pendingNotification = null;
+            if (notification) post('notify', notification);
+        };
+
+        window.electron = {
+            showNotification: function (payload, data) {
+                payload = payload || {};
+                data = data || {};
+                pendingNotification = {
+                    id: String(data.emailId || data.calendarEventId || Date.now()),
+                    title: String(payload.title || ''),
+                    body: String(payload.body || ''),
+                    sound: false,
+                    threadId: String(data.threadId || ''),
+                    data: JSON.stringify(data)
+                };
+                setTimeout(flushNotification, 0);
+            },
+            playNotificationSound: function () {
+                if (pendingNotification) pendingNotification.sound = true;
+            },
+            // Read, archived or deleted: Fastmail says which notifications
+            // are stale. Its badge is an unread count and is not the
+            // shell's, which shows Triage; it is ignored here.
+            updateNotifications: function (options) {
+                var ids = (options && options.dismissEmailIds) || [];
+                if (ids.length) post('dismissNotifications', { ids: ids.map(String) });
+            },
+            showWindow: function () {
+                post('showWindow', {});
+            },
+            setTitleBarOverlay: function () {},
+            featuresSupported: {},
+            checkForUpdate: function () { return Promise.resolve(); }
+        };
+
+        // A click, back to the worker that wrote the notification: it
+        // opens the message, the same way it does for its own clicks
+        window.native.notificationClicked = function (dataJSON) {
+            var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+            if (!worker) return;
+            var data;
+            try { data = JSON.parse(dataJSON); } catch (error) { return; }
+            worker.postMessage({ type: 'notificationclick', data: data });
+        };
+    }
+
     var SETTINGS_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"' +
         ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"' +
         ' stroke-linejoin="round" class="u-standardicon v-Icon">' +

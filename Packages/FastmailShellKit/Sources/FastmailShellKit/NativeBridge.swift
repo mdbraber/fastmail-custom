@@ -17,6 +17,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onBadge: @MainActor (Int) -> Void
     private let onActions: @MainActor ([String]) -> Void
     private let onOpenSettings: @MainActor () -> Void
+    private let onNotify: @MainActor (MailNotification) -> Void
+    private let onDismissNotifications: @MainActor ([String]) -> Void
+    private let onShowWindow: @MainActor () -> Void
 
     public init(
         expectedHost: String,
@@ -27,7 +30,10 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onShare: @escaping @MainActor (ShareRequest) -> Void = { $0.completion() },
         onBadge: @escaping @MainActor (Int) -> Void = { _ in },
         onActions: @escaping @MainActor ([String]) -> Void = { _ in },
-        onOpenSettings: @escaping @MainActor () -> Void = {}
+        onOpenSettings: @escaping @MainActor () -> Void = {},
+        onNotify: @escaping @MainActor (MailNotification) -> Void = { _ in },
+        onDismissNotifications: @escaping @MainActor ([String]) -> Void = { _ in },
+        onShowWindow: @escaping @MainActor () -> Void = {}
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
@@ -38,6 +44,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onBadge = onBadge
         self.onActions = onActions
         self.onOpenSettings = onOpenSettings
+        self.onNotify = onNotify
+        self.onDismissNotifications = onDismissNotifications
+        self.onShowWindow = onShowWindow
     }
 
     static func rect(from values: [Double]) -> CGRect? {
@@ -122,6 +131,19 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
                     continuation.resume()
                 })
             }
+            return BridgeReply(value: nil, error: nil)
+        case "notify":
+            guard let notification = MailNotification.parse(payload) else {
+                return BridgeReply(value: nil, error: "notify payload needs an id and a title")
+            }
+            onNotify(notification)
+            return BridgeReply(value: nil, error: nil)
+        case "dismissNotifications":
+            let ids = (payload["ids"] as? [Any] ?? []).compactMap { $0 as? String }
+            onDismissNotifications(ids)
+            return BridgeReply(value: nil, error: nil)
+        case "showWindow":
+            onShowWindow()
             return BridgeReply(value: nil, error: nil)
         default:
             return BridgeReply(value: nil, error: "unknown action: \(action)")
