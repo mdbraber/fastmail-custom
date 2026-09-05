@@ -115,7 +115,7 @@ public enum InboxModeSettings {
         Option(
             "labelsShortcut",
             title: "V keeps a message",
-            hint: "Adds the kept marker, clears deferrals; unfiled mail gets the picker first. Shift-V labels only, Option-V is stock Move to.",
+            hint: "Takes Triage off a filed message; an unfiled one gets the picker, narrowed to your projects. Shift-V refiles, Option-V is stock Move to.",
             default: .toggle(true)
         ),
         Option(

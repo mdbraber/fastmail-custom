@@ -188,7 +188,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Adds the kept marker, clears deferrals; unfiled mail gets the picker first. Shift-V labels only, Option-V is stock Move to.</string>
+			<string>Takes Triage off a filed message; an unfiled one gets the picker, narrowed to your projects. Shift-V refiles, Option-V is stock Move to.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
