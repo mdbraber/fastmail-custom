@@ -1976,11 +1976,10 @@ other user label is a topic.
     const archiveIcon = () => borrowedIcon('archive', 'i-archive') ||
         standardIcon('i-archive', ARCHIVE_SHAPES);
 
-    // The processed archive for a label view: the same wrapped verb the
-    // Inbox's own button runs — Process and the deferred set come off if
-    // present, the Inbox too, the topic stays on as the filing. The
-    // i-archive class is load-bearing: it is how the long press finds
-    // this button.
+    // The archive for a label view: the same wrapped verb the Inbox's own
+    // button runs — Triage, every project label and the pin come off, the
+    // Inbox too; helper labels stay. The i-archive class names the glyph
+    // the way Fastmail's own archive button does.
     const archiveOption = () => new FastMail.classes.ButtonView({
         label: 'Archive',
         icon: archiveIcon(),
@@ -1988,22 +1987,22 @@ other user label is a topic.
         method: 'archive'
     });
 
-    // The phone's spellings of the state verbs, for More: keep a tick,
-    // waiting a clock, someday a moon. Feather glyphs, stroke-drawn like
+    // The phone's spellings of the verbs it has no key for, for More: file
+    // a tick, snooze for a while a clock. Feather glyphs, stroke-drawn like
     // the rest of the bar.
     //
     // Sized to the bar the way the toolbar funnel is, and for the same
     // reason: Feather draws to the edges of its 24-unit box while Fastmail's
-    // glyphs sit well inside theirs. Measured in that box, keep covered 20
-    // units — its circle 2 to 22, its tick reaching past that to the corner
-    // — against the 16.5 of the archive crate beside it and the 14.5 of the
-    // remove-label tag, and read a third too big on the bar.
+    // glyphs sit well inside theirs. Measured in that box, the tick covered
+    // 20 units — its circle 2 to 22, its tick reaching past that to the
+    // corner — against the 16.5 of the archive crate beside it and the 14.5
+    // of the remove-label tag, and read a third too big on the bar.
     //
     // So each is scaled about the centre by whatever brings it to 15.5,
-    // between those two: keep by 0.775, waiting by 0.838, someday by 0.861,
-    // which lands all three on an outer radius of 7.75. The geometry is
-    // scaled rather than a transform put over it, so the stroke keeps the
-    // weight the rest of the bar is drawn at.
+    // between those two: the tick by 0.775, the clock by 0.838, which lands
+    // both on an outer radius of 7.75. The geometry is scaled rather than a
+    // transform put over it, so the stroke keeps the weight the rest of the
+    // bar is drawn at.
     const STATE_VERB_SHAPES = {
         file: [
             ['path', { d: 'M19.75,11.29V12a7.75,7.75,0,1,1-4.6-7.08' }],
