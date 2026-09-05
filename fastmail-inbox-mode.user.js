@@ -2961,6 +2961,111 @@ other user label is a topic.
 
     /*
      * ----------------------------------------------------------------
+     * Snooze for a while — `w`
+     * ----------------------------------------------------------------
+     */
+
+    // Fastmail's Snooze button is a MenuButtonView whose menu is a
+    // FutureTimeMenuView: the presets, and a custom option that swaps them
+    // for a FutureCustomTimeView — a date picker and a time field bound to
+    // that view's `date`, a preview line, Save and Cancel, Enter to save.
+    // So w presses the button, switches the menu to the custom picker, and
+    // proposes a date. Nothing is snoozed until the dialog is confirmed, and
+    // from there it is Fastmail's own code, toast and all.
+
+    // "2w", "14d", "1m": a count and a unit. Anything unreadable is two weeks.
+    const parseSnoozePeriod = (text) => {
+        const match = /^\s*(\d+)\s*([dwm])\s*$/i.exec(String(text || ''));
+        if (!match) return { count: 2, unit: 'w' };
+        return { count: parseInt(match[1], 10), unit: match[2].toLowerCase() };
+    };
+
+    // "08:00". Anything unreadable is eight in the morning.
+    const parseSnoozeTime = (text) => {
+        const match = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(String(text || ''));
+        if (!match) return { hours: 8, minutes: 0 };
+        return {
+            hours: Math.min(23, parseInt(match[1], 10)),
+            minutes: Math.min(59, parseInt(match[2], 10))
+        };
+    };
+
+    // The wall-clock moment to propose: today plus the period, at the time
+    const snoozeTarget = (now, period, time) => {
+        const target = new Date(now.getTime());
+        target.setHours(time.hours, time.minutes, 0, 0);
+        if (period.unit === 'd') target.setDate(target.getDate() + period.count);
+        else if (period.unit === 'w') target.setDate(target.getDate() + period.count * 7);
+        else target.setMonth(target.getMonth() + period.count);
+        return target;
+    };
+
+    // FutureCustomTimeView keeps `date` as the local wall-clock time written
+    // as if it were UTC — its drawCustom subtracts the timezone offset and
+    // its localDate adds it back — so the same shift is applied here, or the
+    // dialog shows the right day at the wrong hour.
+    const asPickerDate = (local) =>
+        new Date(local.getTime() - local.getTimezoneOffset() * 60000);
+
+    // "2w" → "2 weeks", for a button label
+    const snoozePeriodLabel = (text) => {
+        const period = parseSnoozePeriod(text);
+        const unit = { d: 'day', w: 'week', m: 'month' }[period.unit];
+        return period.count + ' ' + unit + (period.count === 1 ? '' : 's');
+    };
+
+    // The Snooze button on whichever bar is drawn: by its registered name
+    // first, which survives translation and a bar too narrow to draw it;
+    // by its shortcut behind that.
+    const snoozeButtonView = () => {
+        const registered = registeredToolbarView('snooze');
+        if (registered) return registered;
+
+        for (const bar of toolbarsOnScreen()) {
+            const found = (bar.get('childViews') || [])
+                .filter(view => hasShortcut(view, SNOOZE_SHORTCUT))[0];
+            if (found) return found;
+        }
+        return null;
+    };
+
+    const openSnoozeDialog = () => {
+        const button = snoozeButtonView();
+        if (!button || typeof button.get !== 'function') {
+            console.warn('Inbox mode: no Snooze button to open');
+            return;
+        }
+
+        const menu = button.get('menuView');
+        pressButtonView(button);
+
+        if (!menu || typeof menu.showCustomPicker !== 'function') return;
+
+        const propose = () => {
+            // showCustomPicker replaces the preset list once; menuView is
+            // null after it, which is how a second try knows not to
+            if (menu.menuView) menu.showCustomPicker();
+
+            const custom = (menu.get('childViews') || [])
+                .filter(view => isViewOfClass(view, 'FutureCustomTimeView'))[0];
+            if (!custom) return false;
+
+            const local = snoozeTarget(
+                new Date(),
+                parseSnoozePeriod(settings.snoozeDefault),
+                parseSnoozeTime(settings.snoozeTime)
+            );
+            custom.set('date', asPickerDate(local));
+            return true;
+        };
+
+        // activate() shows the popover synchronously as a rule; a tick later
+        // covers a bar that builds its menu on the way in
+        if (!propose()) setTimeout(propose, 0);
+    };
+
+    /*
+     * ----------------------------------------------------------------
      * The rules under every menu
      * ----------------------------------------------------------------
      */
@@ -3824,38 +3929,6 @@ other user label is a topic.
         patchUndo();
     };
 
-    // Snooze means "gone now, queued later", so the kept-marker comes off on
-    // the way out: Fastmail strips the Inbox, we strip Process, and both land
-    // in the snooze's own checkpoint. Waking returns it to the queue.
-    const patchSnooze = () => {
-        const actions = controller().actions;
-        if (actions.customTriageSnooze) return;
-        actions.customTriageSnooze = true;
-
-        const original = actions.snooze;
-
-        actions.snooze = function (storeKeys, until) {
-            if (!modeIsOn || !until) return original.apply(this, arguments);
-
-            const keys = resolveKeys(this, storeKeys);
-            if (!keys) return original.apply(this, arguments);
-
-            // Only the marker comes off. A deferred qualifier like Waiting
-            // survives: snooze and Waiting compose, and neither needs to know
-            // about the other.
-            const process = carriedDispositions(keys).filter(isProcess);
-
-            if (process.length) {
-                silencingDidAction(this, () => {
-                    this.addremove(keys, [], process);
-                });
-                process.forEach(refreshListAfter);
-            }
-
-            return original.apply(this, arguments);
-        };
-    };
-
     const patchMailboxMenu = () => {
         const proto = FastMail.classes.MailboxMenuView.prototype;
         // Resolved through the chain: the class has none of its own
@@ -4107,6 +4180,7 @@ other user label is a topic.
         };
 
         wanted[sanitizedKey(settings.urgentKey, 's')] = () => runVerb('urgent', null);
+        wanted[sanitizedKey(settings.snoozeKey, 'w')] = () => openSnoozeDialog();
 
         return wanted;
     };
@@ -5640,7 +5714,6 @@ other user label is a topic.
         patchMailboxMenu();
         patchArchive();
         patchLabelActions();
-        patchSnooze();
         patchMessageList();
         patchMessageMenu();
         patchTitleAndCount();
