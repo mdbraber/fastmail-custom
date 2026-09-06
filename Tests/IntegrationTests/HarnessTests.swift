@@ -507,6 +507,28 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(count, 1)
     }
 
+    // On the Mac the shell's settings open from the app menu and Cmd-comma, so
+    // the Settings screen carries no Device settings row. The Electron token in
+    // the user agent — set only by the macOS build — is the mark it gates on.
+    func testDeviceSettingsRowIsAbsentInTheMacBuild() async throws {
+        webView = try makeWebView(
+            userScript: "",
+            metadata: Self.meta(),
+            applicationName: WebContainer.electronUserAgentToken
+        )
+        try await load(webView)
+        _ = try await evaluate(webView, buildSettingsList())
+        // Give the observer the window it would use to add the row, then
+        // confirm it stayed out and the stock list is untouched.
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let count = try await evaluate(
+            webView, "document.querySelectorAll('.fmshell-device-settings').length"
+        ) as? Int
+        XCTAssertEqual(count, 0)
+        let labels = try await settingsLabels(webView)
+        XCTAssertEqual(labels, "Notifications,Custom swipes,Offline")
+    }
+
     // Fastmail sizes the list in pixels (row count times a row height) for its
     // collapse animation; the added row must grow that inline height so the
     // next section's header does not lap the last row.

@@ -386,6 +386,11 @@
     // mobile — the account menus differ by platform and Fastmail redraws
     // them, so one row in the shared Settings list is the steady home.
     function dressSettingsList() {
+        // On the Mac the shell's own settings open from the app menu and ⌘,
+        // so the Settings screen needs no row for them — the row belongs only
+        // where there is no native way in, the phone and iPad. The Electron
+        // user-agent token, set only by the macOS build, marks the Mac.
+        if (/Electron\//.test(navigator.userAgent)) return;
         var lists = document.querySelectorAll('ul.v-Sources-list');
         var list, swipes, offline;
         for (var i = 0; i < lists.length && !list; i += 1) {
