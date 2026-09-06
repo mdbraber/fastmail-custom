@@ -220,7 +220,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>In the sidebar but not projects: never filed into, untouched by archive. Comma-separated paths.</string>
+			<string>Never filed into or stripped by archive; filing to a project removes them. Comma-separated paths.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
