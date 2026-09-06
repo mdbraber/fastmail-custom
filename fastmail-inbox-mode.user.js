@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      3.3
+// @version      3.4
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -14,9 +14,14 @@
 /*
 Fastmail Inbox mode
 Maarten den Braber <m@mdbraber.com>
-version 3.3 - 2026-09-06
+version 3.4 - 2026-09-06
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
+
+3.4 — archiving moves the view on the same way filing does: to the next
+conversation still waiting for triage, stepping over any already filed, and
+back to the list when none is left. Archive takes the Inbox off, so its own
+step to the next row is held while our walk takes over.
 
 3.3 — filing moves the view on to the next conversation still waiting for
 triage. Filing keeps the message in the Inbox, so nothing leaves the list on
@@ -3015,7 +3020,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                         const result = original.call(this, storeKeys, adds, merged);
                         // A File verb waiting on this pick moves the view on to
                         // the next conversation still waiting for triage.
-                        if (advance) advanceAfterFiling(advance.from);
+                        if (advance) advanceToNextTriage(advance.from);
                         return result;
                     }
 
@@ -3029,7 +3034,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     });
                     const advance = takeFileAdvance();
                     const result = original.apply(self, args);
-                    if (advance) advanceAfterFiling(advance.from);
+                    if (advance) advanceToNextTriage(advance.from);
                     return result;
                 } finally {
                     applyingLabelRules = false;
@@ -3211,28 +3216,24 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // Not an arrow: withDidAction applies the actions object as `this`.
-    // Forces stayHere off: the stock reading walks only AND nodes of the
-    // filter, so it misses the Inbox inside Next's OR and the NOT that
-    // carries triage's verdicts — and concludes nothing left the list,
-    // leaving the focus on a vanished row. In every one of our slices the
-    // verb takes the message out of view, so stayHere is always wrong here.
-    const navigateAfter = function (didAction, text, stayHere, goTo) {
-        return didAction.call(this, text, false, goTo);
-    };
-
-    const inFilteredView = () => {
-        if (!modeIsOn || !LABEL_FILTERS) return false;
-        return ownKind(controller().get('mailboxFilter'));
+    // Hold the view where it is. Archive removes the Inbox, so the message
+    // leaves the list and Fastmail would step to the next row on its own —
+    // often a filed one. Forcing stayHere suppresses that step so our own walk
+    // to the next triage is the only move. Not an arrow: withDidAction applies
+    // the actions object as `this`.
+    const stayHereAfter = function (didAction, text, stayHere, goTo) {
+        return didAction.call(this, text, true, goTo);
     };
 
     /*
-     * Filing moves the view on to the next conversation still waiting for
-     * triage. Filing keeps the message in the Inbox — Filed is Inbox plus one
-     * project — so nothing leaves the list and Fastmail has no reason to move;
-     * the walk is explicit. It steps over conversations already filed and, when
-     * none is left below, drops back to the list rather than opening a filed
-     * one. Only in the Inbox with the mode on, which is the triage surface.
+     * Filing and archiving both move the view on to the next conversation
+     * still waiting for triage. Filing keeps the message in the Inbox — Filed
+     * is Inbox plus one project — so nothing leaves the list on its own;
+     * archiving takes the Inbox off, so Fastmail would step to the next row
+     * (often a filed one) unless held. Either way the walk is explicit: down
+     * the list to the next one carrying Triage, stepping over any already
+     * filed, and back to the list when none is left rather than opening a
+     * filed one. Only in the Inbox with the mode on, the triage surface.
      */
 
     // A conversation still waiting to be triaged carries the Triage label.
@@ -3298,7 +3299,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // Run a tick after the file, so the store has taken Triage off the one
     // just filed and it is not itself the answer.
-    const advanceAfterFiling = (from) => {
+    const advanceToNextTriage = (from) => {
         if (!inInboxTriage()) return;
         setTimeout(() => {
             if (!inInboxTriage()) return;
@@ -3662,6 +3663,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // so the archive's own didAction cuts the one checkpoint: Triage, every
     // project label and the pin. Helper labels stay.
     const runDone = (actions, keys, finish) => {
+        const from = messagesFrom(keys)[0];
+
         silencingDidAction(actions, () => {
             const dropped = [];
             mailboxesAmong(keys).forEach((mailbox) => {
@@ -3672,8 +3675,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             if (anyFlagged(keys)) actions.unflag(keys);
         });
 
-        if (inFilteredView()) {
-            withDidAction(actions, navigateAfter, finish);
+        // Archive takes the Inbox off, so the message leaves the list and
+        // Fastmail would step to the next row on its own — often a filed one.
+        // In the Inbox with the mode on, hold that step and walk to the next
+        // conversation waiting for triage instead, exactly as filing does;
+        // elsewhere the stock archive advances as it always has.
+        if (inInboxTriage()) {
+            withDidAction(actions, stayHereAfter, finish);
+            advanceToNextTriage(from);
         } else {
             finish();
         }
@@ -3689,7 +3698,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         actions.addremove(keys, [], triage);
         // Kept in place; the view moves on to the next conversation waiting
         // for triage, or back to the list when none is left.
-        advanceAfterFiling(from);
+        advanceToNextTriage(from);
     };
 
     // pin — `s`. A toggle over the selection: all pinned, unpin; else pin.
