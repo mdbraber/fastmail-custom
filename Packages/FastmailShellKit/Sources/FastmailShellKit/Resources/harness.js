@@ -599,6 +599,11 @@
                 return null;
             }
         }
+        // With no resolver the desktop reads its sidebar; the phone has none,
+        // and its inbox-total reading would be the wrong number (the whole
+        // Inbox, not what is left to triage), so it waits for the resolver
+        // rather than guessing from a layout it does not have.
+        if (window.FastMail && window.FastMail.isMobile) return null;
         var fromScript = badgeFromScript();
         return fromScript !== null ? fromScript : badgeFromSidebar();
     }

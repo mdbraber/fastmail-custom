@@ -15,13 +15,21 @@ import Testing
     #expect(BadgeController.action(for: 7) == .show(7))
 }
 
-@Test func authorizationIsRequestedOnTheFirstNonZeroCountOnly() {
-    #expect(BadgeController.authorizationMove(requested: false, denied: false, count: 5) == .request)
-    #expect(BadgeController.authorizationMove(requested: true, denied: false, count: 5) == .proceed)
-    #expect(BadgeController.authorizationMove(requested: false, denied: false, count: 0) == .proceed)
+// The prompt is worth showing only when there is a number to show.
+@Test func authorizationIsRequestedOnlyWhenUndecidedAndThereIsACount() {
+    #expect(BadgeController.move(authorization: .notDetermined, count: 5) == .request)
+    #expect(BadgeController.move(authorization: .notDetermined, count: 0) == .skip)
 }
 
-@Test func declinedAuthorizationIsNeverReRequested() {
-    #expect(BadgeController.authorizationMove(requested: true, denied: true, count: 9) == .skip)
-    #expect(BadgeController.authorizationMove(requested: true, denied: true, count: 0) == .skip)
+// Read live, so a grant in Settings is honoured at once.
+@Test func allowedProceedsWhateverTheCount() {
+    #expect(BadgeController.move(authorization: .allowed, count: 9) == .proceed)
+    #expect(BadgeController.move(authorization: .allowed, count: 0) == .proceed)
+}
+
+// Denied is denied — nothing to do until the user changes it, which the live
+// read will see on the next badge.
+@Test func deniedSkips() {
+    #expect(BadgeController.move(authorization: .denied, count: 9) == .skip)
+    #expect(BadgeController.move(authorization: .denied, count: 0) == .skip)
 }

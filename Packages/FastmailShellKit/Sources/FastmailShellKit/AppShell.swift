@@ -12,6 +12,7 @@ public struct AppShell: View {
     @ObservedObject private var downloads = DownloadManager.shared
     @ObservedObject private var settings = SettingsPresenter.shared
     @AppStorage(Backend.defaultsKey) private var backendName = Backend.production.rawValue
+    @Environment(\.scenePhase) private var scenePhase
 
     public init(profile: Profile) {
         self.profile = profile
@@ -66,6 +67,17 @@ public struct AppShell: View {
         #if canImport(UIKit)
         .sheet(isPresented: $settings.isPresented) {
             MobileSettingsSheet(profile: profile)
+        }
+        .onAppear {
+            // Ask for badge permission up front, so the prompt appears even on
+            // an account whose Triage starts empty.
+            BadgeController.shared.prime()
+        }
+        .onChange(of: scenePhase) {
+            // Coming back to the front is when a badge permission just granted
+            // in Settings first takes effect, and when a number that drifted
+            // while the app slept gets corrected.
+            if scenePhase == .active { BadgeController.shared.prime() }
         }
         #else
         .onAppear {
