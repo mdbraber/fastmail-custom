@@ -220,7 +220,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Never filed into or stripped by archive; filing to a project removes them. Comma-separated paths.</string>
+			<string>Filing destinations that hold mail rather than queue it; archive leaves them on. Comma-separated paths.</string>
 		</dict>
 		<dict>
 			<key>Type</key>

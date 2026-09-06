@@ -196,7 +196,7 @@ public enum InboxModeSettings {
             group: .labelsFiling,
             clearable: true,
             title: "Labels that are never projects",
-            hint: "Never filed into or stripped by archive; filing to a project removes them. Comma-separated paths.",
+            hint: "Filing destinations that hold mail rather than queue it; archive leaves them on. Comma-separated paths.",
             default: .text("Later")
         ),
         Option(
