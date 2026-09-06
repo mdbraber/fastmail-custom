@@ -132,8 +132,8 @@
     <label class="sub" data-parent="labelColours">
         <input type="checkbox" id="labelColoursSidebarOnly">
         <span>
-            <span class="title">Only labels that are inboxes</span>
-            <span class="hint">Plain filing tags stay unpainted.</span>
+            <span class="title">Only labels in the sidebar</span>
+            <span class="hint">Plain tags stay uncoloured.</span>
         </span>
     </label>
 
@@ -141,7 +141,7 @@
         <input type="checkbox" id="labelColoursSkipTriage">
         <span>
             <span class="title">Ignore the triage label</span>
-            <span class="hint">Everything undecided carries it; its colour would tint the whole group.</span>
+            <span class="hint">Every undecided message carries it; its colour would tint everything.</span>
         </span>
     </label>
 
@@ -149,7 +149,7 @@
         <input type="checkbox" id="sidebarSeparators">
         <span>
             <span class="title">Separate folders from labels</span>
-            <span class="hint">A line where the system folders end and your labels begin.</span>
+            <span class="hint">A line between the system folders and your labels.</span>
         </span>
     </label>
 
@@ -157,7 +157,7 @@
         <input type="checkbox" id="hideLoneExpando">
         <span>
             <span class="title">Hide the Labels collapse arrow</span>
-            <span class="hint">Until a second account actually shows sidebar sources.</span>
+            <span class="hint">Hidden while only one account is shown.</span>
         </span>
     </label>
 
@@ -165,15 +165,15 @@
         <input type="checkbox" id="dragAdditive">
         <span>
             <span class="title">Dragging adds a label</span>
-            <span class="hint">A drop files the message and leaves it in the Inbox; Option moves.</span>
+            <span class="hint">A drop files the message and keeps it in the Inbox. Option moves it.</span>
         </span>
     </label>
 
     <label>
         <input type="checkbox" id="hideInboxLabel">
         <span>
-            <span class="title">Hide the Inbox chip</span>
-            <span class="hint">Wherever every row is in the Inbox anyway.</span>
+            <span class="title">Hide the Inbox tag</span>
+            <span class="hint">Hidden where every message is in the Inbox anyway.</span>
         </span>
     </label>
 
@@ -181,22 +181,22 @@
         <input type="checkbox" id="stripLabelPrefix">
         <span>
             <span class="title">Show only the label&rsquo;s own name</span>
-            <span class="hint">&ldquo;Work&rdquo;, not &ldquo;Projects/Work&rdquo;; hover for the full path.</span>
+            <span class="hint">&ldquo;Work&rdquo; instead of &ldquo;Projects/Work&rdquo;. Hover for the full path.</span>
         </span>
     </label>
 
     <label>
         <input type="checkbox" id="labelsShortcut">
         <span>
-            <span class="title">V keeps a message</span>
-            <span class="hint">Takes Triage off a filed message; an unfiled one gets the picker, narrowed to your projects. Shift-V refiles, Option-V is stock Move&nbsp;to.</span>
+            <span class="title">File instead of move</span>
+            <span class="hint">Files under a project label and keeps the message in the Inbox; one already filed just loses its triage label. Shift-V refiles, Option-V moves.</span>
         </span>
     </label>
 
     <label class="sub" data-parent="labelsShortcut">
         <input type="checkbox" id="labelsSidebarOnly">
         <span>
-            <span class="title">Only labels that are inboxes</span>
+            <span class="title">Only labels in the sidebar</span>
             <span class="hint">The picker hides Trash, Spam and plain tags; typing still finds any label.</span>
         </span>
     </label>
@@ -204,15 +204,15 @@
     <label class="sub" data-parent="labelsShortcut">
         <input type="checkbox" id="labelsAutoSave">
         <span>
-            <span class="title">Auto-save the last label standing</span>
-            <span class="hint">One match left applies itself and closes the menu.</span>
+            <span class="title">Apply the only match automatically</span>
+            <span class="hint">A single remaining match is applied and the picker closes.</span>
         </span>
     </label>
 
     <label class="text">
         <span>
-            <span class="title">The triage label</span>
-            <span class="hint">Put on every incoming message by a rule; taken off by keeping or filing. Archive strips it too.</span>
+            <span class="title">Triage label</span>
+            <span class="hint">Added to every incoming message by your rule; removed by keeping, filing or archiving.</span>
             <input type="text" id="triageLabel" spellcheck="false" autocapitalize="off" placeholder="Triage">
         </span>
     </label>
@@ -220,23 +220,23 @@
     <label class="text">
         <span>
             <span class="title">Labels that are never projects</span>
-            <span class="hint">Shown in the sidebar but worked as piles, not queues: never filed into, never stripped by archive. Comma-separated paths.</span>
+            <span class="hint">In the sidebar but not projects: never filed into, untouched by archive. Comma-separated paths.</span>
             <input type="text" id="excludedLabels" spellcheck="false" autocapitalize="off" placeholder="Later">
         </span>
     </label>
 
     <label class="text">
         <span>
-            <span class="title">Labels that add the sender to the contacts group</span>
-            <span class="hint">Adding one &mdash; from any menu, by typing, or by drag &mdash; adds the sender to the contact group of the same name, making it if new. Comma-separated paths.</span>
+            <span class="title">Labels that add the sender to a contact group</span>
+            <span class="hint">Applying one adds the sender to the contact group of the same name, creating it if needed. Comma-separated paths.</span>
             <input type="text" id="contactGroupLabels" spellcheck="false" autocapitalize="off" placeholder="none">
         </span>
     </label>
 
     <label class="text">
         <span>
-            <span class="title">Urgent key</span>
-            <span class="hint">Toggles the pin on the selection.</span>
+            <span class="title">Pin key</span>
+            <span class="hint">Pins or unpins the selection.</span>
             <input type="text" id="urgentKey" spellcheck="false" autocapitalize="off" placeholder="s">
         </span>
     </label>
@@ -244,15 +244,15 @@
     <label class="text">
         <span>
             <span class="title">Snooze key</span>
-            <span class="hint">Opens the snooze dialog filled in for the default period.</span>
+            <span class="hint">Opens the snooze dialog with the default period filled in.</span>
             <input type="text" id="snoozeKey" spellcheck="false" autocapitalize="off" placeholder="w">
         </span>
     </label>
 
     <label class="text">
         <span>
-            <span class="title">Default snooze</span>
-            <span class="hint">How far ahead the dialog proposes: a number and d, w or m &mdash; days, weeks, months.</span>
+            <span class="title">Default snooze period</span>
+            <span class="hint">A number and d, w or m for days, weeks or months, such as 2w.</span>
             <input type="text" id="snoozeDefault" spellcheck="false" autocapitalize="off" placeholder="2w">
         </span>
     </label>
@@ -260,15 +260,15 @@
     <label class="text">
         <span>
             <span class="title">Snooze time of day</span>
-            <span class="hint">When on that day, as HH:MM.</span>
+            <span class="hint">When a snoozed message returns, as HH:MM.</span>
             <input type="text" id="snoozeTime" spellcheck="false" autocapitalize="off" placeholder="08:00">
         </span>
     </label>
 
     <label class="text">
         <span>
-            <span class="title">Bottom bar verbs</span>
-            <span class="hint">One ordered list over the seven slots; what fits on screen shows, the rest wait in More.</span>
+            <span class="title">Bottom bar actions</span>
+            <span class="hint">In order; what fits on screen shows, the rest go under More.</span>
             <input type="text" id="bottomBarSlots" spellcheck="false" autocapitalize="off" placeholder="Snooze, Pin, Archive, Labels, File, Delete, Move">
         </span>
     </label>
@@ -276,7 +276,7 @@
     <label class="text">
         <span>
             <span class="title">App badge label</span>
-            <span class="hint">The app icon&rsquo;s badge, for the shell apps: this label&rsquo;s total. Empty hands the shell its own fallback.</span>
+            <span class="hint">The shell apps&rsquo; icon shows how many messages carry this label. Empty uses the Inbox count.</span>
             <input type="text" id="appBadgeLabel" spellcheck="false" autocapitalize="off" placeholder="Triage">
         </span>
     </label>
@@ -285,7 +285,7 @@
         <input type="checkbox" id="swapArchiveExpand">
         <span>
             <span class="title">Swap E and Y</span>
-            <span class="hint">E archives and Y expands, the other way round from Fastmail. H still archives.</span>
+            <span class="hint">E archives and Y expands, the reverse of Fastmail&rsquo;s default. H still archives.</span>
         </span>
     </label>
 
