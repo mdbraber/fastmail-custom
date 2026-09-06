@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      3.4
+// @version      3.5
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -14,9 +14,16 @@
 /*
 Fastmail Inbox mode
 Maarten den Braber <m@mdbraber.com>
-version 3.4 - 2026-09-06
+version 3.5 - 2026-09-06
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
+
+3.5 — a decision takes an excluded label off. Later holds mail that has not
+been decided, so deciding removes it: filing a message by any route — key,
+menu, drag or swipe — now strips any label named in settings.excludedLabels
+along with Triage and the other projects, and keeping (v on a filed thread)
+strips it along with Triage. Archive still leaves them alone, so Inbox +
+Triage + Later archives to just Later.
 
 3.4 — archiving moves the view on the same way filing does: to the next
 conversation still waiting for triage, stepping over any already filed, and
@@ -50,8 +57,10 @@ Snoozed is any of these that Fastmail has taken out of the Inbox for a
 while; it comes back as it was. A project label implies the Inbox; a
 message has at most one project label; Triage and a project coexist only
 when rules put both there. Helper labels — hidden from the sidebar, or named
-in settings.excludedLabels — are never added, removed, counted or offered
-by anything here.
+in settings.excludedLabels — are never added, counted or offered by anything
+here, and archive leaves them alone. The one removal: a project label
+landing takes an excluded label off, since Later holds undecided mail and
+filing is the decision.
 
 The Inbox's groups (Fastmail's own, a setting on the mailbox) are the
 working surface: `in:Triage OR is:unread` first, then Pinned, then one per
@@ -63,7 +72,8 @@ rule. The script never writes them.
 All work on the selection and the whole conversation; each is one undo
 checkpoint under one toast, and `z` reverts it whole.
 
-* `v`       keep — with a project on the thread: Triage off, nothing else.
+* `v`       keep — with a project on the thread: Triage and any excluded
+            label off, nothing else.
             Without one: the picker, narrowed to projects; the pick is an
             ordinary add.
 * `Shift-V` refile — always the picker.
@@ -84,8 +94,9 @@ controller — add, remove, addremove, copy, move — and the model is enforced
 there, so a key, a menu, a drag and a swipe do the same thing:
 
 1. Archive strips: Inbox, Triage, every project label, the pin.
-2. A project label replaces: adding one takes Triage and every other
-   project off in the same checkpoint. The Inbox is not touched.
+2. A project label replaces: adding one takes Triage, every other project
+   and any label named in settings.excludedLabels off in the same
+   checkpoint. The Inbox is not touched.
 3. A label named in settings.contactGroupLabels files the sender into the
    contact group of that name, from any route.
 
@@ -2964,16 +2975,20 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     let applyingLabelRules = false;
 
     // Rule 2 — a project label replaces. What comes off the selected threads
-    // when `adds` lands on them: Triage and every other project. The Inbox
-    // is not touched — an add leaves it on, a move took it off on purpose —
-    // and a helper label triggers nothing.
+    // when `adds` lands on them: Triage, every other project, and any label
+    // named in settings.excludedLabels — Later holds mail that has not been
+    // decided, and filing is the decision. The Inbox is not touched — an add
+    // leaves it on, a move took it off on purpose — and adding a helper label
+    // on its own triggers nothing.
     const replacedBy = (storeKeys, adds) => {
         if (!adds.some(isProject)) return [];
 
         const removes = [];
         mailboxesAmong(storeKeys).forEach((mailbox) => {
             if (adds.indexOf(mailbox) !== -1) return;
-            if (isTriage(mailbox) || isProject(mailbox)) removes.push(mailbox);
+            if (isTriage(mailbox) || isProject(mailbox) || isExcludedLabel(mailbox)) {
+                removes.push(mailbox);
+            }
         });
         return removes;
     };
@@ -3095,6 +3110,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     const triageAmong = (storeKeys) =>
         Array.from(mailboxesAmong(storeKeys)).filter(isTriage);
+
+    // The excluded labels the selection carries — Later and its kind — which
+    // come off with Triage when a conversation is kept
+    const excludedAmong = (storeKeys) =>
+        Array.from(mailboxesAmong(storeKeys)).filter(isExcludedLabel);
 
     // The keep rule's question: does every selected conversation carry a
     // project? Those that do not are asked where they go.
@@ -3689,13 +3709,15 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // keep — `v`. A thread that already carries a project is kept by taking
-    // Triage off it and nothing else. One that carries none is asked where it
-    // goes, and the pick is an ordinary add that rule 2 finishes.
+    // Triage off it, and any excluded label with it: keeping is a decision
+    // too, and Later holds only undecided mail. One that carries none is
+    // asked where it goes, and the pick is an ordinary add that rule 2
+    // finishes.
     const runKeep = (actions, keys) => {
-        const triage = triageAmong(keys);
-        if (!triage.length) return;
+        const removes = triageAmong(keys).concat(excludedAmong(keys));
+        if (!removes.length) return;
         const from = messagesFrom(keys)[0];
-        actions.addremove(keys, [], triage);
+        actions.addremove(keys, [], removes);
         // Kept in place; the view moves on to the next conversation waiting
         // for triage, or back to the list when none is left.
         advanceToNextTriage(from);
