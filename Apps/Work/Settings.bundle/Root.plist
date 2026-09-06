@@ -10,7 +10,7 @@
 			<key>Title</key>
 			<string>General</string>
 			<key>FooterText</key>
-			<string>Beta is Fastmail's test server. It is a separate sign-in with its own settings, so switching reloads the page and asks you to log in again.</string>
+			<string>Beta is Fastmail's test server, with its own sign-in and settings. Switching reloads the page and asks you to log in again.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -36,13 +36,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>The full address to open, for example https://app.fastmail.com/mail/Archive. Must be a Fastmail address; the backend above decides which server it opens on. Leave empty for the default view. Takes effect next time the app starts.</string>
+			<string>The path to open, such as /mail/Inbox. Empty opens the default view. Takes effect on the next launch.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Start URL</string>
+			<string>Start page</string>
 			<key>Key</key>
 			<string>startView</string>
 			<key>DefaultValue</key>
@@ -60,7 +60,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>The app icon’s badge: this label’s total. Empty hands the shell its own fallback.</string>
+			<string>The app icon shows how many messages carry this label. Empty uses the Inbox count.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -100,13 +100,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Plain filing tags stay unpainted.</string>
+			<string>Plain tags stay uncoloured.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Only labels that are inboxes</string>
+			<string>Only labels in the sidebar</string>
 			<key>Key</key>
 			<string>inboxMode.labelColoursSidebarOnly</string>
 			<key>DefaultValue</key>
@@ -116,7 +116,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Everything undecided carries it; its colour would tint the whole group.</string>
+			<string>Every undecided message carries it; its colour would tint everything.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -132,7 +132,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>A line where the system folders end and your labels begin.</string>
+			<string>A line between the system folders and your labels.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -148,7 +148,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Until a second account actually shows sidebar sources.</string>
+			<string>Hidden while only one account is shown.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -164,13 +164,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Wherever every row is in the Inbox anyway.</string>
+			<string>Hidden where every message is in the Inbox anyway.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Hide the Inbox chip</string>
+			<string>Hide the Inbox tag</string>
 			<key>Key</key>
 			<string>inboxMode.hideInboxLabel</string>
 			<key>DefaultValue</key>
@@ -180,7 +180,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>“Work”, not “Projects/Work”; hover for the full path.</string>
+			<string>“Work” instead of “Projects/Work”. Hover for the full path.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -196,7 +196,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Put on every incoming message by a rule; taken off by keeping or filing. Archive strips it too.</string>
+			<string>Added to every incoming message by your rule; removed by keeping, filing or archiving.</string>
 			<key>Title</key>
 			<string>Labels &amp; filing</string>
 		</dict>
@@ -204,7 +204,7 @@
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>The triage label</string>
+			<string>Triage label</string>
 			<key>Key</key>
 			<string>inboxMode.triageLabel</string>
 			<key>DefaultValue</key>
@@ -220,7 +220,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Shown in the sidebar but worked as piles, not queues: never filed into, never stripped by archive. Comma-separated paths.</string>
+			<string>In the sidebar but not projects: never filed into, untouched by archive. Comma-separated paths.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -242,13 +242,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Adding one — from any menu, by typing, or by drag — adds the sender to the contact group of the same name, making it if new. Comma-separated paths.</string>
+			<string>Applying one adds the sender to the contact group of the same name, creating it if needed. Comma-separated paths.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Labels that add the sender to the contacts group</string>
+			<string>Labels that add the sender to a contact group</string>
 			<key>Key</key>
 			<string>inboxMode.contactGroupLabels</string>
 			<key>DefaultValue</key>
@@ -264,7 +264,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>A drop files the message and leaves it in the Inbox; Option moves.</string>
+			<string>A drop files the message and keeps it in the Inbox. Option moves it.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -280,13 +280,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Takes Triage off a filed message; an unfiled one gets the picker, narrowed to your projects. Shift-V refiles, Option-V is stock Move to.</string>
+			<string>Files under a project label and keeps the message in the Inbox; one already filed just loses its triage label. Shift-V refiles, Option-V moves.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>V keeps a message</string>
+			<string>File instead of move</string>
 			<key>Key</key>
 			<string>inboxMode.labelsShortcut</string>
 			<key>DefaultValue</key>
@@ -302,7 +302,7 @@
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Only labels that are inboxes</string>
+			<string>Only labels in the sidebar</string>
 			<key>Key</key>
 			<string>inboxMode.labelsSidebarOnly</string>
 			<key>DefaultValue</key>
@@ -312,13 +312,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>One match left applies itself and closes the menu.</string>
+			<string>A single remaining match is applied and the picker closes.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Auto-save the last label standing</string>
+			<string>Apply the only match automatically</string>
 			<key>Key</key>
 			<string>inboxMode.labelsAutoSave</string>
 			<key>DefaultValue</key>
@@ -328,7 +328,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Opens the snooze dialog filled in for the default period.</string>
+			<string>Opens the snooze dialog with the default period filled in.</string>
 			<key>Title</key>
 			<string>Snooze</string>
 		</dict>
@@ -352,13 +352,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>How far ahead the dialog proposes: a number and d, w or m — days, weeks, months.</string>
+			<string>A number and d, w or m for days, weeks or months, such as 2w.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Default snooze</string>
+			<string>Default snooze period</string>
 			<key>Key</key>
 			<string>inboxMode.snoozeDefault</string>
 			<key>DefaultValue</key>
@@ -374,7 +374,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>When on that day, as HH:MM.</string>
+			<string>When a snoozed message returns, as HH:MM.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -396,7 +396,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Toggles the pin on the selection.</string>
+			<string>Pins or unpins the selection.</string>
 			<key>Title</key>
 			<string>Keyboard</string>
 		</dict>
@@ -404,7 +404,7 @@
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Urgent key</string>
+			<string>Pin key</string>
 			<key>Key</key>
 			<string>inboxMode.urgentKey</string>
 			<key>DefaultValue</key>
@@ -420,7 +420,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>E archives and Y expands, the other way round from Fastmail. H still archives.</string>
+			<string>E archives and Y expands, the reverse of Fastmail’s default. H still archives.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -436,7 +436,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>One ordered list over the seven slots; what fits on screen shows, the rest wait in More.</string>
+			<string>In order; what fits on screen shows, the rest go under More.</string>
 			<key>Title</key>
 			<string>Bottom bar</string>
 		</dict>
@@ -444,7 +444,7 @@
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Bottom bar verbs</string>
+			<string>Bottom bar actions</string>
 			<key>Key</key>
 			<string>inboxMode.bottomBarSlots</string>
 			<key>DefaultValue</key>

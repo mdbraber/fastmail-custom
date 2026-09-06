@@ -126,7 +126,7 @@ public enum InboxModeSettings {
             group: .general,
             clearable: true,
             title: "App badge label",
-            hint: "The app icon’s badge: this label’s total. Empty hands the shell its own fallback.",
+            hint: "The app icon shows how many messages carry this label. Empty uses the Inbox count.",
             default: .text("Triage")
         ),
 
@@ -142,8 +142,8 @@ public enum InboxModeSettings {
             "labelColoursSidebarOnly",
             group: .appearance,
             parent: "labelColours",
-            title: "Only labels that are inboxes",
-            hint: "Plain filing tags stay unpainted.",
+            title: "Only labels in the sidebar",
+            hint: "Plain tags stay uncoloured.",
             default: .toggle(true)
         ),
         Option(
@@ -151,35 +151,35 @@ public enum InboxModeSettings {
             group: .appearance,
             parent: "labelColours",
             title: "Ignore the triage label",
-            hint: "Everything undecided carries it; its colour would tint the whole group.",
+            hint: "Every undecided message carries it; its colour would tint everything.",
             default: .toggle(true)
         ),
         Option(
             "sidebarSeparators",
             group: .appearance,
             title: "Separate folders from labels",
-            hint: "A line where the system folders end and your labels begin.",
+            hint: "A line between the system folders and your labels.",
             default: .toggle(true)
         ),
         Option(
             "hideLoneExpando",
             group: .appearance,
             title: "Hide the Labels collapse arrow",
-            hint: "Until a second account actually shows sidebar sources.",
+            hint: "Hidden while only one account is shown.",
             default: .toggle(true)
         ),
         Option(
             "hideInboxLabel",
             group: .appearance,
-            title: "Hide the Inbox chip",
-            hint: "Wherever every row is in the Inbox anyway.",
+            title: "Hide the Inbox tag",
+            hint: "Hidden where every message is in the Inbox anyway.",
             default: .toggle(true)
         ),
         Option(
             "stripLabelPrefix",
             group: .appearance,
             title: "Show only the label’s own name",
-            hint: "“Work”, not “Projects/Work”; hover for the full path.",
+            hint: "“Work” instead of “Projects/Work”. Hover for the full path.",
             default: .toggle(true)
         ),
 
@@ -187,8 +187,8 @@ public enum InboxModeSettings {
         Option(
             "triageLabel",
             group: .labelsFiling,
-            title: "The triage label",
-            hint: "Put on every incoming message by a rule; taken off by keeping or filing. Archive strips it too.",
+            title: "Triage label",
+            hint: "Added to every incoming message by your rule; removed by keeping, filing or archiving.",
             default: .text("Triage")
         ),
         Option(
@@ -196,36 +196,36 @@ public enum InboxModeSettings {
             group: .labelsFiling,
             clearable: true,
             title: "Labels that are never projects",
-            hint: "Shown in the sidebar but worked as piles, not queues: never filed into, never stripped by archive. Comma-separated paths.",
+            hint: "In the sidebar but not projects: never filed into, untouched by archive. Comma-separated paths.",
             default: .text("Later")
         ),
         Option(
             "contactGroupLabels",
             group: .labelsFiling,
             clearable: true,
-            title: "Labels that add the sender to the contacts group",
-            hint: "Adding one — from any menu, by typing, or by drag — adds the sender to the contact group of the same name, making it if new. Comma-separated paths.",
+            title: "Labels that add the sender to a contact group",
+            hint: "Applying one adds the sender to the contact group of the same name, creating it if needed. Comma-separated paths.",
             default: .text("")
         ),
         Option(
             "dragAdditive",
             group: .labelsFiling,
             title: "Dragging adds a label",
-            hint: "A drop files the message and leaves it in the Inbox; Option moves.",
+            hint: "A drop files the message and keeps it in the Inbox. Option moves it.",
             default: .toggle(true)
         ),
         Option(
             "labelsShortcut",
             group: .labelsFiling,
-            title: "V keeps a message",
-            hint: "Takes Triage off a filed message; an unfiled one gets the picker, narrowed to your projects. Shift-V refiles, Option-V is stock Move to.",
+            title: "File instead of move",
+            hint: "Files under a project label and keeps the message in the Inbox; one already filed just loses its triage label. Shift-V refiles, Option-V moves.",
             default: .toggle(true)
         ),
         Option(
             "labelsSidebarOnly",
             group: .labelsFiling,
             parent: "labelsShortcut",
-            title: "Only labels that are inboxes",
+            title: "Only labels in the sidebar",
             hint: "The picker hides Trash, Spam and plain tags; typing still finds any label.",
             default: .toggle(true)
         ),
@@ -233,31 +233,31 @@ public enum InboxModeSettings {
             "labelsAutoSave",
             group: .labelsFiling,
             parent: "labelsShortcut",
-            title: "Auto-save the last label standing",
-            hint: "One match left applies itself and closes the menu.",
+            title: "Apply the only match automatically",
+            hint: "A single remaining match is applied and the picker closes.",
             default: .toggle(true)
         ),
 
-        // Snooze — the snooze verb and its defaults, kept together.
+        // Snooze — the snooze action and its defaults, kept together.
         Option(
             "snoozeKey",
             group: .snooze,
             title: "Snooze key",
-            hint: "Opens the snooze dialog filled in for the default period.",
+            hint: "Opens the snooze dialog with the default period filled in.",
             default: .text("w")
         ),
         Option(
             "snoozeDefault",
             group: .snooze,
-            title: "Default snooze",
-            hint: "How far ahead the dialog proposes: a number and d, w or m — days, weeks, months.",
+            title: "Default snooze period",
+            hint: "A number and d, w or m for days, weeks or months, such as 2w.",
             default: .text("2w")
         ),
         Option(
             "snoozeTime",
             group: .snooze,
             title: "Snooze time of day",
-            hint: "When on that day, as HH:MM.",
+            hint: "When a snoozed message returns, as HH:MM.",
             default: .text("08:00")
         ),
 
@@ -265,24 +265,24 @@ public enum InboxModeSettings {
         Option(
             "urgentKey",
             group: .keyboard,
-            title: "Urgent key",
-            hint: "Toggles the pin on the selection.",
+            title: "Pin key",
+            hint: "Pins or unpins the selection.",
             default: .text("s")
         ),
         Option(
             "swapArchiveExpand",
             group: .keyboard,
             title: "Swap E and Y",
-            hint: "E archives and Y expands, the other way round from Fastmail. H still archives.",
+            hint: "E archives and Y expands, the reverse of Fastmail’s default. H still archives.",
             default: .toggle(true)
         ),
 
-        // Bottom bar — the action bar's ordered verbs.
+        // Bottom bar — the action bar's ordered actions.
         Option(
             "bottomBarSlots",
             group: .bottomBar,
-            title: "Bottom bar verbs",
-            hint: "One ordered list over the seven slots; what fits on screen shows, the rest wait in More.",
+            title: "Bottom bar actions",
+            hint: "In order; what fits on screen shows, the rest go under More.",
             default: .text("Snooze, Pin, Archive, Labels, File, Delete, Move")
         )
     ]

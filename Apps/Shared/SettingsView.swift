@@ -35,7 +35,7 @@ private struct GeneralSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Beta is Fastmail's test server. It is a separate sign-in with its own settings, so switching reloads the page and asks you to log in again.")
+                Text("Beta is Fastmail's test server, with its own sign-in and settings. Switching reloads the page and asks you to log in again.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -50,7 +50,7 @@ private struct GeneralSettingsView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             } footer: {
-                Text("A path on the selected server, such as /mail/Inbox. The backend above decides which server it opens on. Leave empty for the default view. Takes effect in new windows.")
+                Text("The path to open, such as /mail/Inbox. Empty opens the default view. Takes effect in new windows.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -68,7 +68,7 @@ private struct GeneralSettingsView: View {
                     }
                 }
                 Toggle("Auto-open safe attachments", isOn: $autoOpen)
-                Text("When on, a finished download whose content is a document or image opens in its default app instead of previewing. Archives, installers and executables always preview, whatever their name says.")
+                Text("Downloaded documents and images open in their default app. Archives, installers and executables always preview.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

@@ -112,7 +112,7 @@ public struct MobileSettingsSheet: View {
                 } header: {
                     Text("General")
                 } footer: {
-                    Text("Beta is Fastmail's test server. It is a separate sign-in with its own settings, so switching reloads the page and asks you to log in again.")
+                    Text("Beta is Fastmail's test server, with its own sign-in and settings. Switching reloads the page and asks you to log in again.")
                 }
 
                 Section {
@@ -131,7 +131,7 @@ public struct MobileSettingsSheet: View {
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 } footer: {
-                    Text("A path on the selected server, such as /mail/Inbox. The backend decides which server it opens on. Empty for the default view. Takes effect on the next launch.")
+                    Text("The path to open, such as /mail/Inbox. Empty opens the default view. Takes effect on the next launch.")
                 }
 
                 // The app badge lives with the General settings; the rest of

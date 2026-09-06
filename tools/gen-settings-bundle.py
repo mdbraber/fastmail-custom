@@ -78,9 +78,9 @@ def specifiers(catalog):
         {
             "Type": "PSGroupSpecifier",
             "Title": GROUP_TITLE["general"],
-            "FooterText": "Beta is Fastmail's test server. It is a separate "
-            "sign-in with its own settings, so switching reloads the page and "
-            "asks you to log in again.",
+            "FooterText": "Beta is Fastmail's test server, with its own "
+            "sign-in and settings. Switching reloads the page and asks you "
+            "to log in again.",
         },
         {
             "Type": "PSMultiValueSpecifier",
@@ -92,15 +92,12 @@ def specifiers(catalog):
         },
         {
             "Type": "PSGroupSpecifier",
-            "FooterText": "The full address to open, for example "
-            "https://app.fastmail.com/mail/Archive. Must be a Fastmail "
-            "address; the backend above decides which server it opens on. "
-            "Leave empty for the default view. Takes effect next time the "
-            "app starts.",
+            "FooterText": "The path to open, such as /mail/Inbox. Empty opens "
+            "the default view. Takes effect on the next launch.",
         },
         {
             "Type": "PSTextFieldSpecifier",
-            "Title": "Start URL",
+            "Title": "Start page",
             "Key": "startView",
             "DefaultValue": "",
             "IsSecure": False,
