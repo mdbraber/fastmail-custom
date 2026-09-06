@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      3.0
+// @version      3.1
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -14,9 +14,13 @@
 /*
 Fastmail Inbox mode
 Maarten den Braber <m@mdbraber.com>
-version 3.0 - 2026-09-04
+version 3.1 - 2026-09-06
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
+
+3.1 — filing advances to the next unfiled message, the way archive does:
+the direct keep inline, and the picker path once the pick lands. Gated to
+the filtered slices, where the next row is the next unfiled message.
 
 # The model
 
@@ -3008,17 +3012,22 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                         // untouched: null means the focused conversation to
                         // Fastmail, and resolving it here would move the focus
                         // afterwards. The resolved keys served the rule only.
-                        return original.call(this, storeKeys, adds, merged);
+                        const invoke = () => original.call(this, storeKeys, adds, merged);
+                        // A File verb waiting on this pick walks the view on to
+                        // the next unfiled message once it lands.
+                        return consumeFileAdvance() ? filingAdvances(this, invoke) : invoke();
                     }
 
                     // The removals go first and silenced, so the add's own
                     // didAction is the one that cuts the checkpoint — and
                     // everything queued before it joins that checkpoint
                     const self = this;
+                    const args = arguments;
                     silencingDidAction(this, () => {
                         self.addremove(keys, [], removes);
                     });
-                    return original.apply(this, arguments);
+                    const invoke = () => original.apply(self, args);
+                    return consumeFileAdvance() ? filingAdvances(self, invoke) : invoke();
                 } finally {
                     applyingLabelRules = false;
                 }
@@ -3212,6 +3221,50 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const inFilteredView = () => {
         if (!modeIsOn || !LABEL_FILTERS) return false;
         return ownKind(controller().get('mailboxFilter'));
+    };
+
+    // Filing advances to the next unfiled message the way archive does. The
+    // direct keep does it inline, but the picker path finishes a tick later —
+    // after the pick — so the File verb arms a one-shot flag that the filing
+    // add consumes when it cuts its checkpoint. Armed only by the File verb
+    // opening the picker, cleared the moment it is used, and timed out so a
+    // picker dismissed without a pick cannot hand the advance to some later,
+    // unrelated label add.
+    let pendingFileAdvance = false;
+    let pendingFileAdvanceTimer = null;
+
+    const clearFileAdvanceTimer = () => {
+        if (!pendingFileAdvanceTimer) return;
+        clearTimeout(pendingFileAdvanceTimer);
+        pendingFileAdvanceTimer = null;
+    };
+
+    const armFileAdvance = () => {
+        pendingFileAdvance = true;
+        clearFileAdvanceTimer();
+        pendingFileAdvanceTimer = setTimeout(() => {
+            pendingFileAdvance = false;
+            pendingFileAdvanceTimer = null;
+        }, 12000);
+    };
+
+    const consumeFileAdvance = () => {
+        if (!pendingFileAdvance) return false;
+        pendingFileAdvance = false;
+        clearFileAdvanceTimer();
+        return true;
+    };
+
+    // Run the filing call so that, in a filtered slice, its checkpoint-cutting
+    // didAction walks the view to the next row — which there is the next
+    // unfiled message. Outside a filtered slice it runs untouched.
+    const filingAdvances = (actions, invoke) => {
+        if (inFilteredView()) {
+            let result;
+            withDidAction(actions, navigateAfter, () => { result = invoke(); });
+            return result;
+        }
+        return invoke();
     };
 
     /*
@@ -3478,6 +3531,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // is what a multi-selection needs. Either will do when the preferred one
     // is not on screen.
     const openProjectPicker = (keys) => {
+        // The pick lands a tick later, through the label-rule patch; arm the
+        // advance now so that add, when it files, walks on to the next unfiled
+        // message. A picker that opens nothing leaves the flag to time out.
+        armFileAdvance();
         const single = keys.length === 1;
         const order = single
             ? [moveButton, labelsButton]
@@ -3541,7 +3598,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const runKeep = (actions, keys) => {
         const triage = triageAmong(keys);
         if (!triage.length) return;
-        actions.addremove(keys, [], triage);
+        // A filed conversation is kept in place; in a filtered slice the view
+        // follows to the next unfiled message, as archive does.
+        filingAdvances(actions, () => actions.addremove(keys, [], triage));
     };
 
     // pin — `s`. A toggle over the selection: all pinned, unpin; else pin.
