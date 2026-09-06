@@ -92,10 +92,8 @@ public final class BadgeController {
         // current() is a singleton; call it fresh at each use rather than
         // capturing it across closures, which Swift 6 flags as a data race.
         UNUserNotificationCenter.current().getNotificationSettings { settings in
-            NSLog("FMBadge: prime status=\(settings.authorizationStatus.rawValue) badge=\(settings.badgeSetting.rawValue)")
             if settings.authorizationStatus == .notDetermined {
                 UNUserNotificationCenter.current().requestAuthorization(options: [.badge]) { granted, _ in
-                    NSLog("FMBadge: request granted=\(granted)")
                     guard granted else { return }
                     Task { @MainActor in BadgeController.shared.reapply() }
                 }
@@ -121,7 +119,6 @@ public final class BadgeController {
             }
 
             let decision = Self.move(authorization: authorization, count: value)
-            NSLog("FMBadge: set count=\(value) auth=\(authorization) -> \(decision)")
             switch decision {
             case .skip:
                 return
