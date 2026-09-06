@@ -12,7 +12,30 @@ cd "${0:a:h}/.." || exit 1
 
 TRIES=${FASTMAIL_DEPLOY_TRIES:-60}
 
-echo "=== macOS build+install ==="
+# Build BOTH platforms before touching anything. A relaunched macOS shell or
+# an "OK" line printed before the iOS build ran once masked an iOS build
+# failure as a successful deploy — the phone kept the old build while the
+# output read like everything shipped. So both builds must succeed here, and
+# only then does anything get installed or relaunched.
+echo "=== build macOS ==="
+make build-macos || { echo "MACOS BUILD FAILED"; exit 1; }
+
+echo "=== build iOS ==="
+make build-ios || { echo "IOS BUILD FAILED"; exit 1; }
+
+products () {
+  xcodebuild -project FastmailShell.xcodeproj -scheme "$1" \
+    -destination 'generic/platform=iOS' -configuration Release \
+    -showBuildSettings 2>/dev/null | awk '/ BUILT_PRODUCTS_DIR/ {print $3; exit}'
+}
+P_APP="$(products Personal)/mdbraber.com.app"
+W_APP="$(products Work)/nexthealth.nl.app"
+
+for app in "$P_APP" "$W_APP"; do
+  [ -d "$app" ] || { echo "IOS BUILD FAILED (no $app)"; exit 1; }
+done
+
+echo "=== install macOS ==="
 make install-macos || { echo "MACOS INSTALL FAILED"; exit 1; }
 
 # A build re-registers the DerivedData copies with LaunchServices, which then
@@ -33,21 +56,6 @@ for app in mdbraber.com nexthealth.nl; do
     pkill -x "$app" && sleep 2 && open -a "/Applications/$app.app"
     echo "relaunched $app"
   fi
-done
-
-echo "=== iOS build ==="
-make build-ios || { echo "IOS BUILD FAILED"; exit 1; }
-
-products () {
-  xcodebuild -project FastmailShell.xcodeproj -scheme "$1" \
-    -destination 'generic/platform=iOS' -configuration Release \
-    -showBuildSettings 2>/dev/null | awk '/ BUILT_PRODUCTS_DIR/ {print $3; exit}'
-}
-P_APP="$(products Personal)/mdbraber.com.app"
-W_APP="$(products Work)/nexthealth.nl.app"
-
-for app in "$P_APP" "$W_APP"; do
-  [ -d "$app" ] || { echo "IOS BUILD FAILED (no $app)"; exit 1; }
 done
 
 # Every paired device, or the ones named in the environment. Read from the
