@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      3.5
+// @version      3.6
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -14,9 +14,18 @@
 /*
 Fastmail Inbox mode
 Maarten den Braber <m@mdbraber.com>
-version 3.5 - 2026-09-06
+version 3.6 - 2026-09-06
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
+
+3.6 — Later is somewhere to file. A label named in settings.excludedLabels
+is a hold, not a queue: the File picker offers it beside the projects, and
+filing to it — by File, refile or drag — replaces like a project, taking
+Triage and every other destination off, so refiling works in every
+direction and a message is in one place at a time. A held message counts
+as filed: v keeps it, Triage off, Later on. Carrying a project and Later
+both, keep lets the project win. Archive still leaves a hold label on. The
+L-key Labels menu is unchanged: a hold label picked there is merely added.
 
 3.5 — a decision takes an excluded label off. Later holds mail that has not
 been decided, so deciding removes it: filing a message by any route — key,
@@ -51,16 +60,17 @@ A project label is the live state and nothing else. History is search.
 | Triage    | Inbox + Triage                        | the catch-all rule          |
 | Pre-filed | Inbox + Triage + one project label    | that rule and a sender rule |
 | Filed     | Inbox + exactly one project label     | you                         |
-| Done      | neither; helper labels untouched      | you                         |
+| Held      | Inbox + one hold label (Later)        | you                         |
+| Done      | neither; hold labels untouched        | you                         |
 
 Snoozed is any of these that Fastmail has taken out of the Inbox for a
 while; it comes back as it was. A project label implies the Inbox; a
 message has at most one project label; Triage and a project coexist only
-when rules put both there. Helper labels — hidden from the sidebar, or named
-in settings.excludedLabels — are never added, counted or offered by anything
-here, and archive leaves them alone. The one removal: a project label
-landing takes an excluded label off, since Later holds undecided mail and
-filing is the decision.
+when rules put both there. A label named in settings.excludedLabels — Later
+— is a hold, not a queue: a filing destination like a project, so a message
+is in one place at a time, but archive leaves it on where it strips a
+project. Helper labels hidden from the sidebar are never added, removed,
+counted or offered by anything here.
 
 The Inbox's groups (Fastmail's own, a setting on the mailbox) are the
 working surface: `in:Triage OR is:unread` first, then Pinned, then one per
@@ -72,10 +82,10 @@ rule. The script never writes them.
 All work on the selection and the whole conversation; each is one undo
 checkpoint under one toast, and `z` reverts it whole.
 
-* `v`       keep — with a project on the thread: Triage and any excluded
-            label off, nothing else.
-            Without one: the picker, narrowed to projects; the pick is an
-            ordinary add.
+* `v`       keep — with a destination on the thread: Triage off. Carrying a
+            project and Later both, the project wins and Later comes off too.
+            Without one: the picker, narrowed to projects and hold labels;
+            the pick is an ordinary add.
 * `Shift-V` refile — always the picker.
 * `e`       done — Inbox, Triage, every project label and the pin come off.
             The same from every list; never asks first.
@@ -84,8 +94,10 @@ checkpoint under one toast, and `z` reverts it whole.
             for settings.snoozeDefault at settings.snoozeTime. Enter confirms.
 * `l`       Fastmail's tristate Labels menu, its own full list — every
             label, helpers included. A project commits and closes; a helper
-            stays open for the next one.
-* drag      adds the label; Option-drag is Fastmail's move.
+            stays open for the next one. A hold label is a helper here: it
+            is added, and files nothing.
+* drag      files to the label — a destination replaces; Option-drag is
+            Fastmail's move.
 
 # The rules under every menu
 
@@ -94,9 +106,10 @@ controller — add, remove, addremove, copy, move — and the model is enforced
 there, so a key, a menu, a drag and a swipe do the same thing:
 
 1. Archive strips: Inbox, Triage, every project label, the pin.
-2. A project label replaces: adding one takes Triage, every other project
-   and any label named in settings.excludedLabels off in the same
-   checkpoint. The Inbox is not touched.
+2. A destination replaces: a project landing by any route, or a hold label
+   landing by File, refile or drag, takes Triage and every other destination
+   off in the same checkpoint. The Inbox is not touched. From the L-key
+   Labels menu a hold label is merely added.
 3. A label named in settings.contactGroupLabels files the sender into the
    contact group of that name, from any route.
 
@@ -461,6 +474,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // hidden labels tags history, it does not queue work.
     const isProject = (mailbox) => isUserLabel(mailbox) &&
         isSidebarLabel(mailbox) && !isExcludedLabel(mailbox) && !isTriage(mailbox);
+
+    // Where a message can be filed: a project, or a hold label named in
+    // settings.excludedLabels — one at a time, and a hold label survives
+    // archive where a project does not
+    const isDestination = (mailbox) => isProject(mailbox) || isExcludedLabel(mailbox);
 
     /*
      * ----------------------------------------------------------------
@@ -2336,16 +2354,17 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 const actions = controller().actions;
                 const optionHeld = !!(drag.get('dropEffect') & DRAG_EFFECT_COPY);
 
+                // A drop files: a destination replaces by rule 2 — a hold
+                // label included — and a named one files the sender by rule 3.
+                armDestinationFiling();
                 if (optionHeld) {
                     // Fastmail's move: Inbox off, label on. Asked for with a
                     // modifier, so left exactly as asked — rule 2 still takes
-                    // Triage and any other project off underneath.
+                    // Triage and every other destination off underneath.
                     actions.move(storeKeys, mailbox);
                 } else if (!FastMail.preferences.get('inLabelsMode')) {
                     actions.copy(storeKeys, mailbox);
                 } else {
-                    // An add. A project replaces by rule 2; a helper is just
-                    // added; a named one files the sender by rule 3.
                     actions.add(storeKeys, mailbox);
                 }
             });
@@ -2369,6 +2388,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // True only while the menu about to open is ours. Read as the menu enters
     // the document, then cleared, so every other way in gets the stock one.
     let wantOurMove = false;
+    // True while the File verb is opening the tristate Labels menu — a
+    // multi-selection's picker — so that menu files rather than merely labels
+    let wantOurFile = false;
 
     // The options list is an OptionsProxy, which reports a length and answers
     // getObjectAt but whose map() yields nothing and whose get('[]') is null.
@@ -2469,8 +2491,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
             // The Labels menu is Fastmail's own — the full list, helpers and
             // all — so it is left as it comes. Only the File picker
-            // (customOurs) is narrowed to the projects you file under, and
-            // even there typing still reaches anything.
+            // (customOurs) is narrowed to where you file — the projects and
+            // the hold labels — and even there typing still reaches anything.
             if (!this.customOurs) return options;
 
             // Typing is asking for something by name
@@ -2481,7 +2503,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 // is an option in this list too
                 if (!(option instanceof FastMail.classes.Mailbox)) return true;
 
-                return !settings.labelsSidebarOnly || isProject(option);
+                return !settings.labelsSidebarOnly || isDestination(option);
             });
         };
     };
@@ -2523,7 +2545,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
             if (!this.customLabels) return result;
             if (!(option instanceof FastMail.classes.Mailbox)) return result;
-            if (!isProject(option)) return result;
+            // A hold label is a placing decision only when the File verb
+            // opened this menu; from the L key it is a helper and stays open
+            const places = isProject(option) ||
+                (this.customFiling && isExcludedLabel(option));
+            if (!places) return result;
 
             if (typeof menu.done === 'function') menu.done();
 
@@ -2542,6 +2568,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         menuController.customMenu = menu;
         menuController.customLabels = modeIsOn;
+        // Opened by the File verb for a multi-selection, this menu files: a
+        // hold label commits like a project. Opened from the L key it does not.
+        menuController.customFiling = wantOurFile;
+        wantOurFile = false;
 
         if (typeof menuController.setOptions === 'function') menuController.setOptions();
     };
@@ -2774,8 +2804,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         menu.didSelect = function (mailbox) {
             if (!this.customOurs) return originalDidSelect.apply(this, arguments);
 
-            // A pick is an add. Rule 2 takes Triage and any other project off
-            // underneath, rule 3 files the sender; nothing is decided here.
+            // A pick is an add. Rule 2 takes Triage and every other destination
+            // off underneath, rule 3 files the sender; nothing is decided here.
+            // This is the File picker, so a hold label files too.
+            armDestinationFiling();
             const actions = controller().actions;
             if (FastMail.preferences.get('inLabelsMode')) {
                 actions.add(null, mailbox);
@@ -2974,21 +3006,21 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // not read that call as one more request to apply the rules to
     let applyingLabelRules = false;
 
-    // Rule 2 — a project label replaces. What comes off the selected threads
-    // when `adds` lands on them: Triage, every other project, and any label
-    // named in settings.excludedLabels — Later holds mail that has not been
-    // decided, and filing is the decision. The Inbox is not touched — an add
-    // leaves it on, a move took it off on purpose — and adding a helper label
-    // on its own triggers nothing.
-    const replacedBy = (storeKeys, adds) => {
-        if (!adds.some(isProject)) return [];
+    // Rule 2 — a destination replaces. What comes off the selected threads
+    // when `adds` lands on them: Triage and every other destination, project
+    // or hold label alike, so a message is in one place at a time. A project
+    // landing counts from any route; a hold label counts only when `filing`
+    // — the File verb's picker or a drop — since from the L-key Labels menu
+    // it is a helper and merely added. The Inbox is not touched — an add
+    // leaves it on, a move took it off on purpose.
+    const replacedBy = (storeKeys, adds, filing) => {
+        const landed = adds.some(m => isProject(m) || (filing && isExcludedLabel(m)));
+        if (!landed) return [];
 
         const removes = [];
         mailboxesAmong(storeKeys).forEach((mailbox) => {
             if (adds.indexOf(mailbox) !== -1) return;
-            if (isTriage(mailbox) || isProject(mailbox) || isExcludedLabel(mailbox)) {
-                removes.push(mailbox);
-            }
+            if (isTriage(mailbox) || isDestination(mailbox)) removes.push(mailbox);
         });
         return removes;
     };
@@ -3017,7 +3049,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 // Rule 3 — a named label files the sender, from any route
                 adds.forEach(mailbox => fileSendersIntoGroup(mailbox, keys));
 
-                const removes = replacedBy(keys, adds);
+                // One-shot: the File verb's picker or a drop armed it for this add
+                const filing = takeDestinationFiling();
+                const removes = replacedBy(keys, adds, filing);
                 if (!removes.length) return original.apply(this, arguments);
 
                 applyingLabelRules = true;
@@ -3117,8 +3151,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         Array.from(mailboxesAmong(storeKeys)).filter(isExcludedLabel);
 
     // The keep rule's question: does every selected conversation carry a
-    // project? Those that do not are asked where they go.
+    // destination — a project or a hold label? Those that do not are asked
+    // where they go.
     const unfiledAmong = (storeKeys) => messagesFrom(storeKeys)
+        .filter(message => !threadOf(message).some(other =>
+            toArray(other.get('mailboxes')).some(isDestination)));
+
+    // Those with no project at all — held under Later, or filed nowhere — for
+    // the keep rule's tie-break: a hold label comes off with Triage only where
+    // every conversation also carries a project, which then wins.
+    const withoutProject = (storeKeys) => messagesFrom(storeKeys)
         .filter(message => !threadOf(message).some(other =>
             toArray(other.get('mailboxes')).some(isProject)));
 
@@ -3372,6 +3414,33 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         pendingFileFrom = null;
         clearFileAdvanceTimer();
         return { from: from };
+    };
+
+    // Whether the label add about to land is a filing — the File verb's
+    // picker or a drop — which is what lets a hold label replace like a
+    // project. Armed by those routes, taken once by the add, and timed out
+    // like the advance above, so a picker dismissed without a pick cannot
+    // hand it to some later, unrelated add.
+    let pendingFiling = false;
+    let pendingFilingTimer = null;
+
+    const armDestinationFiling = () => {
+        pendingFiling = true;
+        if (pendingFilingTimer) clearTimeout(pendingFilingTimer);
+        pendingFilingTimer = setTimeout(() => {
+            pendingFiling = false;
+            pendingFilingTimer = null;
+        }, 12000);
+    };
+
+    const takeDestinationFiling = () => {
+        if (!pendingFiling) return false;
+        pendingFiling = false;
+        if (pendingFilingTimer) {
+            clearTimeout(pendingFilingTimer);
+            pendingFilingTimer = null;
+        }
+        return true;
     };
 
     /*
@@ -3632,17 +3701,19 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // Open the project picker for these conversations. Nothing waits on the
-    // pick: it is an add like any other, and the rules underneath finish it.
-    // Move to is the quick one and suits a single conversation; the tristate
-    // is what a multi-selection needs. Either will do when the preferred one
-    // is not on screen.
+    // Open the filing picker for these conversations — the projects and the
+    // hold labels. Nothing waits on the pick: it is an add like any other,
+    // and the rules underneath finish it. Move to is the quick one and suits
+    // a single conversation; the tristate is what a multi-selection needs.
+    // Either will do when the preferred one is not on screen.
     const openProjectPicker = (keys) => {
         // The pick lands a tick later, through the label-rule patch; arm the
         // advance now — with the conversation being filed — so the add, when it
-        // files, moves on to the next one waiting for triage. A picker that
-        // opens nothing leaves the flag to time out.
+        // files, moves on to the next one waiting for triage, and mark the add
+        // a filing so a hold label replaces like a project. A picker that
+        // opens nothing leaves both flags to time out.
         armFileAdvance(messagesFrom(keys)[0]);
+        armDestinationFiling();
         const single = keys.length === 1;
         const order = single
             ? [moveButton, labelsButton]
@@ -3651,7 +3722,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         if (captured) {
             if (captured === moveButton) wantOurMove = true;
+            if (captured === labelsButton) wantOurFile = true;
             if (pressCaptured(captured)) return;
+            wantOurFile = false;
         }
 
         // The phone's path, and a desktop that has never drawn Move to
@@ -3708,13 +3781,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // keep — `v`. A thread that already carries a project is kept by taking
-    // Triage off it, and any excluded label with it: keeping is a decision
-    // too, and Later holds only undecided mail. One that carries none is
+    // keep — `v`. A thread that already has a destination is kept by taking
+    // Triage off it. Held under Later, that is all: the hold is its filing.
+    // Carrying a project as well — rules can put both there — the project
+    // wins and Later comes off with Triage. One that carries neither is
     // asked where it goes, and the pick is an ordinary add that rule 2
     // finishes.
     const runKeep = (actions, keys) => {
-        const removes = triageAmong(keys).concat(excludedAmong(keys));
+        const projectWins = !withoutProject(keys).length;
+        const removes = triageAmong(keys)
+            .concat(projectWins ? excludedAmong(keys) : []);
         if (!removes.length) return;
         const from = messagesFrom(keys)[0];
         actions.addremove(keys, [], removes);
