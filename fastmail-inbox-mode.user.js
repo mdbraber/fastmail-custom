@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      3.1
+// @version      3.3
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -14,13 +14,21 @@
 /*
 Fastmail Inbox mode
 Maarten den Braber <m@mdbraber.com>
-version 3.1 - 2026-09-06
+version 3.3 - 2026-09-06
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
 
-3.1 — filing advances to the next unfiled message, the way archive does:
-the direct keep inline, and the picker path once the pick lands. Gated to
-the filtered slices, where the next row is the next unfiled message.
+3.3 — filing moves the view on to the next conversation still waiting for
+triage. Filing keeps the message in the Inbox, so nothing leaves the list on
+its own; the walk is explicit — down the list to the next one carrying
+Triage, stepping over any already filed, and back to the list when none is
+left. Only in the Inbox with the mode on. (The 3.1 attempt was gated to the
+retired filtered views and never fired.)
+
+3.2 — Labels is Fastmail's own full picker again: File stays narrowed to the
+projects you file under, while Labels shows every label, helpers included.
+The placing shortcut stays — a project commits and closes, a helper stays
+open — and the filing rules are unchanged.
 
 # The model
 
@@ -59,8 +67,9 @@ checkpoint under one toast, and `z` reverts it whole.
 * `s`       pin — a toggle.
 * `w`       snooze — Fastmail's own dialog, on its custom picker, filled in
             for settings.snoozeDefault at settings.snoozeTime. Enter confirms.
-* `l`       Fastmail's tristate Labels menu, narrowed to projects; typing
-            reaches anything, which is how a helper label is ticked.
+* `l`       Fastmail's tristate Labels menu, its own full list — every
+            label, helpers included. A project commits and closes; a helper
+            stays open for the next one.
 * drag      adds the label; Option-drag is Fastmail's move.
 
 # The rules under every menu
@@ -2442,8 +2451,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         menuController.filterOptions = function () {
             const options = originalFilterOptions.apply(this, arguments);
 
-            if (this.customLabels) return labelsMenuOptions(this, options);
-
+            // The Labels menu is Fastmail's own — the full list, helpers and
+            // all — so it is left as it comes. Only the File picker
+            // (customOurs) is narrowed to the projects you file under, and
+            // even there typing still reaches anything.
             if (!this.customOurs) return options;
 
             // Typing is asking for something by name
@@ -2504,25 +2515,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         };
     };
 
-    // Narrowed to the projects you can file under. Typing still reaches
-    // anything, as in the other menu: being handed a shorter list is not the
-    // same as being told a label does not exist — which is how a helper
-    // label like `c` or Later is ticked from here.
-    const labelsMenuOptions = (menuController, options) => {
-        if (menuController.get('search')) return options;
-
-        return options.filter((option) => {
-            if (!(option instanceof FastMail.classes.Mailbox)) return true;
-            if (option.get('role')) return false;
-            return isProject(option);
-        });
-    };
-
     const applyLabelsMode = (menu) => {
         const menuController = menu.get('controller');
         if (!menuController) return;
 
-        narrowLabelOptions(menuController);
+        // The list is left stock — Labels is Fastmail's full picker. Only the
+        // placing behaviour is kept: a project commits and closes, a helper
+        // stays open for the next one.
         submitAfterPlacing(menuController, menu);
 
         menuController.customMenu = menu;
@@ -3012,10 +3011,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                         // untouched: null means the focused conversation to
                         // Fastmail, and resolving it here would move the focus
                         // afterwards. The resolved keys served the rule only.
-                        const invoke = () => original.call(this, storeKeys, adds, merged);
-                        // A File verb waiting on this pick walks the view on to
-                        // the next unfiled message once it lands.
-                        return consumeFileAdvance() ? filingAdvances(this, invoke) : invoke();
+                        const advance = takeFileAdvance();
+                        const result = original.call(this, storeKeys, adds, merged);
+                        // A File verb waiting on this pick moves the view on to
+                        // the next conversation still waiting for triage.
+                        if (advance) advanceAfterFiling(advance.from);
+                        return result;
                     }
 
                     // The removals go first and silenced, so the add's own
@@ -3026,8 +3027,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     silencingDidAction(this, () => {
                         self.addremove(keys, [], removes);
                     });
-                    const invoke = () => original.apply(self, args);
-                    return consumeFileAdvance() ? filingAdvances(self, invoke) : invoke();
+                    const advance = takeFileAdvance();
+                    const result = original.apply(self, args);
+                    if (advance) advanceAfterFiling(advance.from);
+                    return result;
                 } finally {
                     applyingLabelRules = false;
                 }
@@ -3223,14 +3226,103 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return ownKind(controller().get('mailboxFilter'));
     };
 
-    // Filing advances to the next unfiled message the way archive does. The
-    // direct keep does it inline, but the picker path finishes a tick later —
-    // after the pick — so the File verb arms a one-shot flag that the filing
-    // add consumes when it cuts its checkpoint. Armed only by the File verb
-    // opening the picker, cleared the moment it is used, and timed out so a
+    /*
+     * Filing moves the view on to the next conversation still waiting for
+     * triage. Filing keeps the message in the Inbox — Filed is Inbox plus one
+     * project — so nothing leaves the list and Fastmail has no reason to move;
+     * the walk is explicit. It steps over conversations already filed and, when
+     * none is left below, drops back to the list rather than opening a filed
+     * one. Only in the Inbox with the mode on, which is the triage surface.
+     */
+
+    // A conversation still waiting to be triaged carries the Triage label.
+    const carriesTriage = (message) =>
+        !!message && threadOf(message).some(other =>
+            toArray(other.get('mailboxes')).some(isTriage));
+
+    // The same conversation however the two records were reached: the list
+    // holds a thread's top message, the verb may hold another of its messages.
+    const sameConversation = (a, b) => {
+        if (!a || !b) return false;
+        if (a === b) return true;
+        const ta = a.get && a.get('thread');
+        const tb = b.get && b.get('thread');
+        return !!ta && ta === tb;
+    };
+
+    const inInboxTriage = () => {
+        if (!modeIsOn) return false;
+        const mailbox = controller().get('mailbox');
+        return !!mailbox && mailbox.get('role') === 'inbox' &&
+            !controller().get('search');
+    };
+
+    // The next conversation below `from` that still carries Triage. Only the
+    // rows the list has actually fetched are walked, so a match far past the
+    // loaded window reads as none — which sends the view to the list rather
+    // than to a wrong row. With no `from` found, the walk is from the top.
+    const nextTriageBelow = (from) => {
+        const list = controller().get('mailboxMessageList');
+        if (!list || typeof list.getObjectAt !== 'function') return null;
+        const length = list.get('length') || 0;
+
+        let start = 0;
+        if (from) {
+            for (let i = 0; i < length; i += 1) {
+                const row = list.getObjectAt(i);
+                if (!row) break;
+                if (sameConversation(row, from)) { start = i + 1; break; }
+            }
+        }
+        for (let i = start; i < length; i += 1) {
+            const row = list.getObjectAt(i);
+            if (!row) break;
+            if (carriesTriage(row)) return row;
+        }
+        return null;
+    };
+
+    // The current mailbox's list URL, built from a message in it — Fastmail
+    // has no getUrlForMailbox — by dropping the message id off the end.
+    const listURLFrom = (message) => {
+        const url = urlForMessage(message);
+        if (!url) return null;
+        try {
+            const u = new URL(url, location.href);
+            u.pathname = u.pathname.replace(/[^/]+\/?$/, '');
+            return String(u);
+        } catch (error) {
+            return null;
+        }
+    };
+
+    // Run a tick after the file, so the store has taken Triage off the one
+    // just filed and it is not itself the answer.
+    const advanceAfterFiling = (from) => {
+        if (!inInboxTriage()) return;
+        setTimeout(() => {
+            if (!inInboxTriage()) return;
+            const next = nextTriageBelow(from);
+            if (next) {
+                const url = urlForMessage(next);
+                if (url) { goToUrl(url); return; }
+            }
+            const list = controller().get('mailboxMessageList');
+            const anchor = from ||
+                (list && typeof list.getObjectAt === 'function' && list.getObjectAt(0));
+            const listUrl = listURLFrom(anchor);
+            if (listUrl) goToUrl(listUrl);
+        }, 0);
+    };
+
+    // The picker path finishes a tick later, after the pick, so the File verb
+    // arms a one-shot flag — carrying the conversation it acted on — that the
+    // filing add takes when it cuts its checkpoint. Armed only by the File
+    // verb opening the picker, taken the moment it is used, and timed out so a
     // picker dismissed without a pick cannot hand the advance to some later,
     // unrelated label add.
     let pendingFileAdvance = false;
+    let pendingFileFrom = null;
     let pendingFileAdvanceTimer = null;
 
     const clearFileAdvanceTimer = () => {
@@ -3239,32 +3331,26 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         pendingFileAdvanceTimer = null;
     };
 
-    const armFileAdvance = () => {
+    const armFileAdvance = (from) => {
         pendingFileAdvance = true;
+        pendingFileFrom = from || null;
         clearFileAdvanceTimer();
         pendingFileAdvanceTimer = setTimeout(() => {
             pendingFileAdvance = false;
+            pendingFileFrom = null;
             pendingFileAdvanceTimer = null;
         }, 12000);
     };
 
-    const consumeFileAdvance = () => {
-        if (!pendingFileAdvance) return false;
+    // The remembered conversation wrapped in an object when a File verb is
+    // waiting on this pick, or null when nothing is. One-shot.
+    const takeFileAdvance = () => {
+        if (!pendingFileAdvance) return null;
+        const from = pendingFileFrom;
         pendingFileAdvance = false;
+        pendingFileFrom = null;
         clearFileAdvanceTimer();
-        return true;
-    };
-
-    // Run the filing call so that, in a filtered slice, its checkpoint-cutting
-    // didAction walks the view to the next row — which there is the next
-    // unfiled message. Outside a filtered slice it runs untouched.
-    const filingAdvances = (actions, invoke) => {
-        if (inFilteredView()) {
-            let result;
-            withDidAction(actions, navigateAfter, () => { result = invoke(); });
-            return result;
-        }
-        return invoke();
+        return { from: from };
     };
 
     /*
@@ -3532,9 +3618,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // is not on screen.
     const openProjectPicker = (keys) => {
         // The pick lands a tick later, through the label-rule patch; arm the
-        // advance now so that add, when it files, walks on to the next unfiled
-        // message. A picker that opens nothing leaves the flag to time out.
-        armFileAdvance();
+        // advance now — with the conversation being filed — so the add, when it
+        // files, moves on to the next one waiting for triage. A picker that
+        // opens nothing leaves the flag to time out.
+        armFileAdvance(messagesFrom(keys)[0]);
         const single = keys.length === 1;
         const order = single
             ? [moveButton, labelsButton]
@@ -3598,9 +3685,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const runKeep = (actions, keys) => {
         const triage = triageAmong(keys);
         if (!triage.length) return;
-        // A filed conversation is kept in place; in a filtered slice the view
-        // follows to the next unfiled message, as archive does.
-        filingAdvances(actions, () => actions.addremove(keys, [], triage));
+        const from = messagesFrom(keys)[0];
+        actions.addremove(keys, [], triage);
+        // Kept in place; the view moves on to the next conversation waiting
+        // for triage, or back to the list when none is left.
+        advanceAfterFiling(from);
     };
 
     // pin — `s`. A toggle over the selection: all pinned, unpin; else pin.
