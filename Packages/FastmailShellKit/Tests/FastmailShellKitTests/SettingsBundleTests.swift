@@ -46,6 +46,19 @@ private func specifiers(for app: String) throws -> [[String: Any]] {
     }
 }
 
+// The generator writes the group headers from its own title map; this ties
+// that map to the catalog's Group titles so the two cannot drift.
+@Test func settingsBundleShowsEveryGroupHeader() throws {
+    for app in apps {
+        let titles = try specifiers(for: app)
+            .filter { $0["Type"] as? String == "PSGroupSpecifier" }
+            .compactMap { $0["Title"] as? String }
+        for group in InboxModeSettings.Group.allCases {
+            #expect(titles.contains(group.title), "\(app) is missing the \(group.title) header")
+        }
+    }
+}
+
 // The iOS Settings screen and the injected settings share the catalog's keys
 // and defaults; a drifted plist would write values nothing reads.
 @Test func settingsBundleCarriesEveryInboxModeOption() throws {

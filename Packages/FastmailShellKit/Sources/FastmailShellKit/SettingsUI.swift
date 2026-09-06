@@ -6,11 +6,14 @@ import SwiftUI
 // there and applies them to any open window live.
 public struct InboxModeSettingsForm: View {
     @StateObject private var model = InboxModeSettingsModel()
+    private let group: InboxModeSettings.Group
 
-    public init() {}
+    public init(group: InboxModeSettings.Group) {
+        self.group = group
+    }
 
     public var body: some View {
-        ForEach(InboxModeSettings.options) { option in
+        ForEach(InboxModeSettings.options(in: group)) { option in
             if option.key == "bottomBarSlots" {
                 barOrderRows(for: option)
             } else {
@@ -131,8 +134,16 @@ public struct MobileSettingsSheet: View {
                     Text("A path on the selected server, such as /mail/Inbox. The backend decides which server it opens on. Empty for the default view. Takes effect on the next launch.")
                 }
 
-                Section("Inbox mode") {
-                    InboxModeSettingsForm()
+                // The app badge lives with the General settings; the rest of
+                // the catalog follows, one headed section per group.
+                Section {
+                    InboxModeSettingsForm(group: .general)
+                }
+
+                ForEach(InboxModeSettings.Group.inboxGroups, id: \.self) { group in
+                    Section(group.title) {
+                        InboxModeSettingsForm(group: group)
+                    }
                 }
             }
             .navigationTitle("Settings")

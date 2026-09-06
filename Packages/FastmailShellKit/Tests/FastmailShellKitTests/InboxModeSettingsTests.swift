@@ -143,3 +143,46 @@ private func freshDefaults(_ name: String) -> UserDefaults {
         }
     }
 }
+
+// A sub-option renders indented under its parent within one group; a parent in
+// a different tab would strand it, so they must share a group.
+@Test func subOptionsShareTheirParentsGroup() {
+    for option in InboxModeSettings.options {
+        guard let parentKey = option.parent,
+              let parent = InboxModeSettings.options.first(where: { $0.key == parentKey })
+        else { continue }
+        #expect(option.group == parent.group,
+                "\(option.key) is in \(option.group) but its parent \(parentKey) is in \(parent.group)")
+    }
+}
+
+// options(in:) partitions the catalog — every option lands in exactly one
+// group, and no group is empty, so no tab or section comes up blank.
+@Test func everyOptionBelongsToExactlyOneNonEmptyGroup() {
+    let regrouped = InboxModeSettings.Group.allCases.flatMap { InboxModeSettings.options(in: $0) }
+    #expect(regrouped.count == InboxModeSettings.options.count)
+    #expect(Set(regrouped.map(\.key)) == Set(InboxModeSettings.options.map(\.key)))
+    for group in InboxModeSettings.Group.allCases {
+        #expect(!InboxModeSettings.options(in: group).isEmpty, "\(group) has no options")
+    }
+}
+
+// The anchor settings sit where the grouping proposal placed them.
+@Test func theAnchorSettingsAreInTheExpectedGroups() {
+    func group(of key: String) -> InboxModeSettings.Group? {
+        InboxModeSettings.options.first { $0.key == key }?.group
+    }
+    #expect(group(of: "appBadgeLabel") == .general)
+    #expect(group(of: "labelColours") == .appearance)
+    #expect(group(of: "triageLabel") == .labelsFiling)
+    #expect(group(of: "snoozeKey") == .snooze)
+    #expect(group(of: "urgentKey") == .keyboard)
+    #expect(group(of: "bottomBarSlots") == .bottomBar)
+}
+
+// The inbox-mode groups are every group but the app-level General one, which
+// the shell builds itself.
+@Test func inboxGroupsAreEveryGroupButGeneral() {
+    #expect(!InboxModeSettings.Group.inboxGroups.contains(.general))
+    #expect(Set(InboxModeSettings.Group.inboxGroups) == Set(InboxModeSettings.Group.allCases).subtracting([.general]))
+}

@@ -7,6 +7,8 @@
 		<dict>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
+			<key>Title</key>
+			<string>General</string>
 			<key>FooterText</key>
 			<string>Beta is Fastmail's test server. It is a separate sign-in with its own settings, so switching reloads the page and asks you to log in again.</string>
 		</dict>
@@ -58,9 +60,31 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
+			<string>The app icon’s badge: this label’s total. Empty hands the shell its own fallback.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>App badge label</string>
+			<key>Key</key>
+			<string>inboxMode.appBadgeLabel</string>
+			<key>DefaultValue</key>
+			<string>Triage</string>
+			<key>IsSecure</key>
+			<false/>
+			<key>AutocapitalizationType</key>
+			<string>None</string>
+			<key>AutocorrectionType</key>
+			<string>No</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
 			<string>Rows take the colour of a label they carry.</string>
 			<key>Title</key>
-			<string>Inbox mode</string>
+			<string>Appearance</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -140,22 +164,6 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>A drop files the message and leaves it in the Inbox; Option moves.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSToggleSwitchSpecifier</string>
-			<key>Title</key>
-			<string>Dragging adds a label</string>
-			<key>Key</key>
-			<string>inboxMode.dragAdditive</string>
-			<key>DefaultValue</key>
-			<true/>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
 			<string>Wherever every row is in the Inbox anyway.</string>
 		</dict>
 		<dict>
@@ -188,55 +196,9 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Takes Triage off a filed message; an unfiled one gets the picker, narrowed to your projects. Shift-V refiles, Option-V is stock Move to.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSToggleSwitchSpecifier</string>
-			<key>Title</key>
-			<string>V keeps a message</string>
-			<key>Key</key>
-			<string>inboxMode.labelsShortcut</string>
-			<key>DefaultValue</key>
-			<true/>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
-			<string>The picker hides Trash, Spam and plain tags; typing still finds any label.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSToggleSwitchSpecifier</string>
-			<key>Title</key>
-			<string>Only labels that are inboxes</string>
-			<key>Key</key>
-			<string>inboxMode.labelsSidebarOnly</string>
-			<key>DefaultValue</key>
-			<true/>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
-			<string>One match left applies itself and closes the menu.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSToggleSwitchSpecifier</string>
-			<key>Title</key>
-			<string>Auto-save the last label standing</string>
-			<key>Key</key>
-			<string>inboxMode.labelsAutoSave</string>
-			<key>DefaultValue</key>
-			<true/>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
 			<string>Put on every incoming message by a rule; taken off by keeping or filing. Archive strips it too.</string>
+			<key>Title</key>
+			<string>Labels &amp; filing</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -302,29 +264,73 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Toggles the pin on the selection.</string>
+			<string>A drop files the message and leaves it in the Inbox; Option moves.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
+			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Urgent key</string>
+			<string>Dragging adds a label</string>
 			<key>Key</key>
-			<string>inboxMode.urgentKey</string>
+			<string>inboxMode.dragAdditive</string>
 			<key>DefaultValue</key>
-			<string>s</string>
-			<key>IsSecure</key>
-			<false/>
-			<key>AutocapitalizationType</key>
-			<string>None</string>
-			<key>AutocorrectionType</key>
-			<string>No</string>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
+			<string>Takes Triage off a filed message; an unfiled one gets the picker, narrowed to your projects. Shift-V refiles, Option-V is stock Move to.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>V keeps a message</string>
+			<key>Key</key>
+			<string>inboxMode.labelsShortcut</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
+			<string>The picker hides Trash, Spam and plain tags; typing still finds any label.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Only labels that are inboxes</string>
+			<key>Key</key>
+			<string>inboxMode.labelsSidebarOnly</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
+			<string>One match left applies itself and closes the menu.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Auto-save the last label standing</string>
+			<key>Key</key>
+			<string>inboxMode.labelsAutoSave</string>
+			<key>DefaultValue</key>
+			<true/>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
 			<string>Opens the snooze dialog filled in for the default period.</string>
+			<key>Title</key>
+			<string>Snooze</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -390,39 +396,19 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>One ordered list over the seven slots; what fits on screen shows, the rest wait in More.</string>
+			<string>Toggles the pin on the selection.</string>
+			<key>Title</key>
+			<string>Keyboard</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Bottom bar verbs</string>
+			<string>Urgent key</string>
 			<key>Key</key>
-			<string>inboxMode.bottomBarSlots</string>
+			<string>inboxMode.urgentKey</string>
 			<key>DefaultValue</key>
-			<string>Snooze, Pin, Archive, Labels, File, Delete, Move</string>
-			<key>IsSecure</key>
-			<false/>
-			<key>AutocapitalizationType</key>
-			<string>None</string>
-			<key>AutocorrectionType</key>
-			<string>No</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
-			<string>The app icon’s badge: this label’s total. Empty hands the shell its own fallback.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>App badge label</string>
-			<key>Key</key>
-			<string>inboxMode.appBadgeLabel</string>
-			<key>DefaultValue</key>
-			<string>Triage</string>
+			<string>s</string>
 			<key>IsSecure</key>
 			<false/>
 			<key>AutocapitalizationType</key>
@@ -445,6 +431,30 @@
 			<string>inboxMode.swapArchiveExpand</string>
 			<key>DefaultValue</key>
 			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
+			<string>One ordered list over the seven slots; what fits on screen shows, the rest wait in More.</string>
+			<key>Title</key>
+			<string>Bottom bar</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>Bottom bar verbs</string>
+			<key>Key</key>
+			<string>inboxMode.bottomBarSlots</string>
+			<key>DefaultValue</key>
+			<string>Snooze, Pin, Archive, Labels, File, Delete, Move</string>
+			<key>IsSecure</key>
+			<false/>
+			<key>AutocapitalizationType</key>
+			<string>None</string>
+			<key>AutocorrectionType</key>
+			<string>No</string>
 		</dict>
 	</array>
 </dict>

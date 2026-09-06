@@ -7,9 +7,13 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettingsView(profile: profile)
-                .tabItem { Label("General", systemImage: "gearshape") }
-            InboxModeSettingsView()
-                .tabItem { Label("Inbox mode", systemImage: "tray") }
+                .tabItem { Label(InboxModeSettings.Group.general.title, systemImage: InboxModeSettings.Group.general.systemImage) }
+            // One tab per inbox-mode group, driven by the same catalog the
+            // form and the page injection read.
+            ForEach(InboxModeSettings.Group.inboxGroups, id: \.self) { group in
+                InboxModeGroupView(group: group)
+                    .tabItem { Label(group.title, systemImage: group.systemImage) }
+            }
         }
         .frame(width: 500, height: 560)
     }
@@ -71,6 +75,11 @@ private struct GeneralSettingsView: View {
                 Text("Downloads")
             }
             #endif
+            // The app badge is a catalog setting but belongs with the
+            // app-level General controls rather than in an inbox-mode tab.
+            Section {
+                InboxModeSettingsForm(group: .general)
+            }
         }
         .formStyle(.grouped)
     }
@@ -97,11 +106,13 @@ private struct GeneralSettingsView: View {
 }
 
 // The form itself lives in FastmailShellKit (SettingsUI.swift), shared with
-// the phone's in-app sheet; this file only gives it the macOS tab frame.
-private struct InboxModeSettingsView: View {
+// the phone's in-app sheet; this file only gives one group the macOS tab frame.
+private struct InboxModeGroupView: View {
+    let group: InboxModeSettings.Group
+
     var body: some View {
         Form {
-            InboxModeSettingsForm()
+            InboxModeSettingsForm(group: group)
         }
         .formStyle(.grouped)
     }

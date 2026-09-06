@@ -28,6 +28,7 @@ APPS = ("Personal", "Work")
 OPTION = re.compile(
     r'Option\(\s*'
     r'"(?P<key>\w+)",\s*'
+    r'group:\s*\.(?P<group>\w+),\s*'
     r'(?:parent:\s*"\w+",\s*)?'
     r'(?:clearable:\s*(?:true|false),\s*)?'
     r'title:\s*"(?P<title>[^"]*)",\s*'
@@ -37,6 +38,19 @@ OPTION = re.compile(
     re.S,
 )
 
+# The section header each group shows, mirroring InboxModeSettings.Group.title.
+# `settingsBundleShowsEveryGroupHeader` fails if these drift. `general` is the
+# shell's own section (backend, start page), so its header sits on the first
+# hardcoded row and its one catalog option continues under it without a new one.
+GROUP_TITLE = {
+    "general": "General",
+    "appearance": "Appearance",
+    "labelsFiling": "Labels & filing",
+    "snooze": "Snooze",
+    "keyboard": "Keyboard",
+    "bottomBar": "Bottom bar",
+}
+
 
 def options():
     source = CATALOG.read_text(encoding="utf-8")
@@ -45,7 +59,8 @@ def options():
     for match in OPTION.finditer(source):
         default = (match["toggle"] == "true" if match["toggle"]
                    else match["text"])
-        found.append((match["key"], default, match["title"], match["hint"]))
+        found.append((match["key"], match["group"], default,
+                      match["title"], match["hint"]))
 
     # A catalog that stopped parsing would otherwise write a plist with the
     # options silently missing, and the guard test is the only thing that
@@ -62,6 +77,7 @@ def specifiers(catalog):
     rows = [
         {
             "Type": "PSGroupSpecifier",
+            "Title": GROUP_TITLE["general"],
             "FooterText": "Beta is Fastmail's test server. It is a separate "
             "sign-in with its own settings, so switching reloads the page and "
             "asks you to log in again.",
@@ -94,10 +110,15 @@ def specifiers(catalog):
         },
     ]
 
-    for index, (key, default, title, hint) in enumerate(catalog):
+    # The General header is already on the backend row above, and start page
+    # and the app badge continue under it, so the first header we add is for
+    # the group after general.
+    last_group = "general"
+    for key, group_key, default, title, hint in catalog:
         group = {"Type": "PSGroupSpecifier", "FooterText": hint}
-        if index == 0:
-            group["Title"] = "Inbox mode"
+        if group_key != last_group:
+            group["Title"] = GROUP_TITLE[group_key]
+            last_group = group_key
         rows.append(group)
 
         if isinstance(default, bool):
