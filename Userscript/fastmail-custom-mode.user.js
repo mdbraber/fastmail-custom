@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Custom mode
 // @namespace    custom
-// @version      3.8
+// @version      3.9
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -14,9 +14,21 @@
 /*
 Fastmail Custom mode
 Maarten den Braber <m@mdbraber.com>
-version 3.8 - 2026-09-07
+version 3.9 - 2026-09-07
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
+
+3.9 — e archives everywhere, and archiving keeps a hold label. With E and Y
+swapped, e used to inherit whatever Fastmail had bound to y, which is one
+contextual toolbar button: it reads Archive while the list is the Inbox and
+Remove from this label anywhere else, and it registers its keys once, on the
+way into the document, never again when its meaning changes. So in a label
+view e ran Remove — it archived nothing and took off the label of the view
+you were standing in, a hold label such as Later included. The mode now
+claims e and calls the archive verb itself, so it means the same thing in
+every list: Inbox, Triage, project label or hold label. Fastmail's own y
+handlers still move to e and sit underneath, which is what answers with the
+mode off.
 
 3.8 — a decision moves on to the next message, and the Triage label is a
 triage surface of its own. Filing and archiving now go to the next message
@@ -3901,33 +3913,21 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // unlearn, so the two trade places.
     const SWAPPED_KEYS = { e: 'y', y: 'e' };
 
-    // Fastmail hangs two buttons off y. Archive is "y h"; the Remove label
-    // button that shares its toolbar slot is "y", and both register whichever of
-    // them is drawn. getHandlerForKey takes the last registration, and measured,
-    // Remove label is last every time — which is how e came to take the triage
-    // label off instead of archiving, toast and all.
+    // The key that archives once the two have traded places. The mode claims
+    // it outright rather than inheriting whatever Fastmail bound to y, because
+    // y's toolbar slot holds one contextual button: it reads Archive while the
+    // list is the Inbox and Remove from this label anywhere else. That button
+    // registers its keys once, as it enters the document, and never registers
+    // them again when its meaning changes — so a key bound to the button
+    // follows the toolbar rather than the verb. That is what was reported: in
+    // a label view e stripped the label of the view you were standing in,
+    // Later included, and archived nothing.
     //
-    // So only the archiving one is carried across. Identified by its keys rather
-    // than its label, which is translated: h is the one key Archive does not
-    // share with the button it takes turns with.
-    const ARCHIVE_ONLY_KEY = 'h';
-
-    const isArchiveHandler = (target) => {
-        if (!target || typeof target.get !== 'function') return false;
-
-        try {
-            return String(target.get('shortcut')).trim().split(/\s+/)
-                .indexOf(ARCHIVE_ONLY_KEY) !== -1;
-        } catch (error) {
-            return false;
-        }
-    };
-
-    // Only y has a rival to settle; e expands a thread and holds nothing else.
-    // Remove label's y is dropped rather than moved, because e is meant to
-    // archive and y now expands, so there is nowhere left to put it — [ and ]
-    // still call it.
-    const movesToSwappedKey = (key, target) => key !== 'y' || isArchiveHandler(target);
+    // Claiming the key ends the guesswork. The verb is called directly, so e
+    // archives the same way in every list, and no reading of the button's
+    // shortcut string decides anything. Fastmail's own y handlers still move
+    // here and sit underneath, which is what answers with the mode off.
+    const ARCHIVE_KEY = 'e';
 
     // Registrations made before the patch below was installed keep the stock
     // binding, so move those across once. Appending is enough, since
@@ -3937,13 +3937,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         const moves = Object.keys(SWAPPED_KEYS)
             .map((key) => {
                 const list = kb._shortcuts[key] || [];
-
-                // The last that belongs on the other key, which under y is the
-                // last archiving one rather than the last of any kind
-                const handler = list
-                    .filter(entry => movesToSwappedKey(key, entry[0]))
-                    .pop();
-
+                const handler = list[list.length - 1];
                 return handler ? [SWAPPED_KEYS[key], handler] : null;
             })
             .filter(Boolean);
@@ -3975,6 +3969,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         const wanted = {
             'Shift-V': () => openLabelPicker()
         };
+
+        // Only while the two have traded places; without the swap e is
+        // Fastmail's own thread expander and stays that way. null is the
+        // caller's selection untouched — the focused conversation to
+        // Fastmail — and the wrapper in patchArchive turns it into the verb.
+        if (settings.swapArchiveExpand) {
+            wanted[ARCHIVE_KEY] = () => controller().actions.archive(null);
+        }
 
         wanted[sanitizedKey(settings.urgentKey, 's')] = () => runVerb('urgent', null);
         wanted[sanitizedKey(settings.snoozeKey, 'w')] = () => openSnoozeDialog();
@@ -4033,14 +4035,17 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             // because the key itself is what dispatches. Turning the setting
             // off takes hold as views re-register, or on the next reload.
             if (settings.swapArchiveExpand && SWAPPED_KEYS[key]) {
-                // Dropped rather than left where it was: y expands now, and a
-                // Remove label registration landing there last would take that
-                // over the same way it took e over.
-                if (!movesToSwappedKey(key, target)) return this;
-
-                return originalRegister.call(
-                    this, SWAPPED_KEYS[key], target, method, priority
+                const moved = SWAPPED_KEYS[key];
+                const swapped = originalRegister.call(
+                    this, moved, target, method, priority
                 );
+
+                // Ours goes back on top afterwards. The registry answers to
+                // whichever registered last, and the toolbar registers again
+                // every time it enters the document, so without this the
+                // button would shadow the claimed key a redraw later.
+                liftClaimed(moved);
+                return swapped;
             }
 
             // The tristate picker is opened programmatically for a
@@ -4081,14 +4086,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // whichever registered last, a pile of stale ones is not just untidy —
         // it is the toolbar as it stood several redraws ago still deciding.
         //
-        // The same reading as registering, so the two stay in step: a Remove
-        // label y was never registered anywhere, and deregistering the key it
-        // was refused under finds nothing, which Overture treats as a no-op.
+        // The same rule as registering, so the two stay in step: everything
+        // that moved comes off where it moved to.
         const originalDeregister = kb.deregister;
 
         kb.deregister = function (key, target, method) {
-            if (settings.swapArchiveExpand && SWAPPED_KEYS[key] &&
-                    movesToSwappedKey(key, target)) {
+            if (settings.swapArchiveExpand && SWAPPED_KEYS[key]) {
                 return originalDeregister.call(
                     this, SWAPPED_KEYS[key], target, method
                 );
