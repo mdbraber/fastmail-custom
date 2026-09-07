@@ -169,7 +169,7 @@ It also handles the two cases WebKit does nothing about by default:
 
 ## Script source
 
-The script to run is an existing one: `~/src/fastmail-customized/fastmail-inbox-mode.user.js`, which adds a sticky Inbox filter on labels and Inbox-only sidebar badge counts. The repository stays canonical and versioned; the app never becomes the place the script lives.
+The script to run is an existing one: `Userscript/fastmail-inbox-mode.user.js`, which adds a sticky Inbox filter on labels and Inbox-only sidebar badge counts. (It lived in a repository of its own when this was written; on 2026-09-07 that repository was merged into this one, history and all, so the script and the app that carries it now version together.)
 
 The script is copied into the app bundle at build time and read from there at runtime. Nothing is watched, synced, or fetched. **Changing the script means rebuilding the app.**
 

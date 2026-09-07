@@ -1,6 +1,5 @@
 DEVELOPMENT_TEAM = ABCDE12345
 PERSONAL_ACCOUNT_ID = replace-me
 WORK_ACCOUNT_ID = replace-me
-USERSCRIPT_PATH = /Users/you/src/fastmail-customized/fastmail-inbox-mode.user.js
 PUSH_SERVER_HOST = push.example.net
 PUSH_DEVICE_SECRET = replace-me

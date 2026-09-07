@@ -56,7 +56,7 @@ Safari extensions must be delivered inside an app, so this needs converting once
 xcrun safari-web-extension-converter \
     --app-name "Fastmail Inbox mode" \
     --copy-resources \
-    /Users/mdbraber/src/fastmail-customized/safari-extension
+    Userscript/safari-extension
 ```
 
 The app project's `Resources` are symlinks back here, so there is nothing to
