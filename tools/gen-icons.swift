@@ -30,9 +30,10 @@ struct Palette {
     let brandMarkLight: NSColor
     let brandMarkDark: NSColor
     // Tinted is grayscale and iOS colours every icon the same, so two apps
-    // sharing the mark would be twins; one of them inverts — dark disc,
-    // light mark — to stay telling apart.
-    let tintedInverted: Bool
+    // sharing the mark would be twins. Both stay light on transparency — a
+    // dark fill all but vanishes on iOS's dark background — and one draws
+    // its disc as a ring rather than a fill, to stay telling apart.
+    let tintedRing: Bool
 }
 
 func hex(_ s: String) -> NSColor {
@@ -49,11 +50,14 @@ let apps: [(name: String, target: String, palette: Palette)] = [
     ("mdbraber.com", "Personal", Palette(
         fieldDark: hex("#88AA56"), fieldLight: hex("#B7D097"),
         markLight: hex("#AFCA88"), markDark: hex("#506632"),
-        brandMarkLight: .white, brandMarkDark: hex("#3F5327"), tintedInverted: false)),
+        brandMarkLight: .white, brandMarkDark: hex("#3F5327"), tintedRing: false)),
+    // All blue: the mark's small triangle takes the lighter field blue on the
+    // white disc; on the dark variant's blue disc the mark goes white over a
+    // deeper blue, the same arrangement as the green icon.
     ("nexthealth.nl", "Work", Palette(
         fieldDark: hex("#377BC4"), fieldLight: hex("#79BFEB"),
-        markLight: hex("#F7C951"), markDark: hex("#424F59"),
-        brandMarkLight: hex("#F7C951"), brandMarkDark: .white, tintedInverted: true)),
+        markLight: hex("#79BFEB"), markDark: hex("#424F59"),
+        brandMarkLight: .white, brandMarkDark: hex("#1B3D66"), tintedRing: true)),
 ]
 
 // Geometry, in unit coordinates with y down, measured off the old rasters.
@@ -85,8 +89,9 @@ func draw(into rep: NSBitmapImageRep, _ body: (CGFloat) -> Void) {
 }
 
 /// One icon. `field` nil leaves the background transparent; with a field
-/// the icon is opaque and rendered without an alpha channel.
-func icon(size: Int, field: (NSColor, NSColor)?, disc: NSColor, markLight: NSColor, markDark: NSColor) -> NSBitmapImageRep {
+/// the icon is opaque and rendered without an alpha channel. `ring` draws
+/// the disc as an outline rather than a fill.
+func icon(size: Int, field: (NSColor, NSColor)?, disc: NSColor, markLight: NSColor, markDark: NSColor, ring: Bool = false) -> NSBitmapImageRep {
     let rep = bitmap(size, alpha: field == nil)
     draw(into: rep) { s in
         // Unit coords, y down → AppKit
@@ -115,8 +120,15 @@ func icon(size: Int, field: (NSColor, NSColor)?, disc: NSColor, markLight: NSCol
         }
 
         let r = s * discRadius
-        disc.setFill()
-        NSBezierPath(ovalIn: NSRect(x: s / 2 - r, y: s / 2 - r, width: 2 * r, height: 2 * r)).fill()
+        let circle = NSBezierPath(ovalIn: NSRect(x: s / 2 - r, y: s / 2 - r, width: 2 * r, height: 2 * r))
+        if ring {
+            circle.lineWidth = s * 0.055
+            disc.setStroke()
+            circle.stroke()
+        } else {
+            disc.setFill()
+            circle.fill()
+        }
 
         // The mark: a light triangle on the left, its apex on the centre,
         // and a dark triangle whose hypotenuse runs corner to corner
@@ -155,11 +167,11 @@ func render(_ variant: Variant, _ pal: Palette, size: Int = 1024) -> NSBitmapIma
         return icon(size: size, field: nil, disc: pal.fieldDark,
                     markLight: pal.brandMarkLight, markDark: pal.brandMarkDark)
     case .tinted:
-        // Grayscale for iOS to colour. Inverted, the disc goes dark and the
-        // mark's heavy triangle white — the shape its dark icon has.
-        return pal.tintedInverted
-            ? icon(size: size, field: nil, disc: hex("#4A4A4A"),
-                   markLight: hex("#BDBDBD"), markDark: .white)
+        // Grayscale for iOS to colour, light on transparency. A filled white
+        // disc carries the mark in grays; a ring carries it in light tones.
+        return pal.tintedRing
+            ? icon(size: size, field: nil, disc: .white,
+                   markLight: hex("#BDBDBD"), markDark: .white, ring: true)
             : icon(size: size, field: nil, disc: .white,
                    markLight: hex("#BDBDBD"), markDark: hex("#4A4A4A"))
     }
