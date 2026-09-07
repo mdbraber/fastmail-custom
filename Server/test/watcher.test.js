@@ -6,6 +6,7 @@ import path from 'node:path';
 import { AccountWatcher, BACKLOG_CAP, COALESCE_MS } from '../src/watcher.js';
 import { emptyState, loadState } from '../src/state.js';
 import { JMAPError } from '../src/jmap.js';
+import { encrypt, keysFromSubscription } from './helpers/webpush-encrypt.js';
 
 const silent = { warn() {}, info() {}, error() {} };
 const account = { name: 'personal', token: 't', topic: 'com.mdbraber.fastmail.personal' };
@@ -39,8 +40,8 @@ function fakeJMAP({ emails = [], created = [], counts = { badge: 4 }, refusePush
         emails: async (ids) => emails.filter((e) => ids.includes(e.id)),
         pushSubscriptions: async () => [{ id: 'old', deviceClientId: 'fastmail-push-personal' }],
         destroyPushSubscription: async (id) => { calls.push(['destroy', id]); },
-        createPushSubscription: async ({ url }) => {
-            calls.push(['subscribe', url]);
+        createPushSubscription: async ({ url, keys }) => {
+            calls.push(['subscribe', url, keys]);
             await fake.onCreate?.();
             if (fake.refusePush) throw new JMAPError('PushSubscription/set: forbidden', { type: 'forbidden' });
             return { id: 'sub1', expires: new Date(Date.now() + 3600 * 1000).toISOString() };
@@ -199,6 +200,38 @@ test('the subscription is renewed before it expires, on a fresh secret', async (
     assert.match(urls[1], /^https:\/\/push\.example\.net\/jmap\/personal\/[0-9a-f]{32}$/);
     assert.notEqual(urls[0], urls[1]);
     assert.equal(t.watcher.notices, 'push');
+});
+
+test('the subscription carries Web Push keys, and a callback sealed to them is read', async () => {
+    const t = await build();
+    assert.equal(t.watcher.decrypt(Buffer.from('early')), null, 'nothing decrypts before there is a subscription');
+    await t.watcher.start();
+
+    const sent = t.jmap.calls.find((c) => c[0] === 'subscribe')[2];
+    assert.deepEqual(Object.keys(sent), ['p256dh', 'auth']);
+    const keys = keysFromSubscription(sent);
+    assert.equal(keys.publicKey.length, 65);
+    assert.equal(keys.auth.length, 16);
+
+    const notice = { '@type': 'StateChange', changed: { acc1: { Email: 's1' } } };
+    assert.deepEqual(t.watcher.decrypt(encrypt(JSON.stringify(notice), keys)), notice);
+    assert.equal(t.watcher.decrypt(encrypt('not json', keys)), null);
+    assert.equal(t.watcher.decrypt(Buffer.from('garbage that is long enough to look at'.repeat(3))), null);
+});
+
+test('a renewal seals to fresh keys; the old ones are no longer accepted', async () => {
+    const t = await setUp();
+    const before = keysFromSubscription(t.jmap.calls.find((c) => c[0] === 'subscribe')[2]);
+    await t.timers.run(Infinity);
+    const subscribes = t.jmap.calls.filter((c) => c[0] === 'subscribe');
+    assert.equal(subscribes.length, 2);
+    const after = keysFromSubscription(subscribes[1][2]);
+    assert.notDeepEqual(after.publicKey, before.publicKey);
+    assert.notDeepEqual(after.auth, before.auth);
+
+    const body = JSON.stringify({ '@type': 'PushVerification', pushSubscriptionId: 'sub1', verificationCode: 'x' });
+    assert.equal(t.watcher.decrypt(encrypt(body, before)), null);
+    assert.deepEqual(t.watcher.decrypt(encrypt(body, after)), JSON.parse(body));
 });
 
 test('a renewal Fastmail refuses hands the account to the event source', async () => {

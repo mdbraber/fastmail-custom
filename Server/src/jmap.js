@@ -122,9 +122,10 @@ export class JMAPClient {
         return (await this.call('PushSubscription/get', { ids: null }, [CORE])).list;
     }
 
-    async createPushSubscription({ deviceClientId, url, types, expires }) {
+    async createPushSubscription({ deviceClientId, url, types, expires, keys }) {
+        // Fastmail refuses a subscription without Web Push keys (RFC 8291)
         const result = await this.call('PushSubscription/set', {
-            create: { sub: { deviceClientId, url, types, expires } },
+            create: { sub: { deviceClientId, url, types, expires, ...(keys ? { keys } : {}) } },
         }, [CORE]);
         const created = result.created?.sub;
         if (created) return { id: created.id, expires: created.expires ?? expires };

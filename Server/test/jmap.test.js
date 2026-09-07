@@ -118,10 +118,15 @@ test('a push subscription is created without an account id, verified, or refused
         }
         return ['PushSubscription/set', { notCreated: { sub: { type: 'forbidden', description: 'no push for tokens' } } }];
     });
-    const created = await client.createPushSubscription({ deviceClientId: 'd', url: 'https://x/y', types: ['Email'], expires: '2026-09-14T00:00:00Z' });
+    const keys = { p256dh: 'BCVx', auth: 'BTBZ' };
+    const created = await client.createPushSubscription({ deviceClientId: 'd', url: 'https://x/y', types: ['Email'], expires: '2026-09-14T00:00:00Z', keys });
     assert.deepEqual(created, { id: 'ps1', expires: '2026-09-08T00:00:00Z' });
     assert.deepEqual(calls.at(-1).body.using, ['urn:ietf:params:jmap:core']);
     assert.equal('accountId' in calls.at(-1).body.methodCalls[0][1], false);
+    // Fastmail insists on the Web Push keys: without them the create is refused
+    assert.deepEqual(calls.at(-1).body.methodCalls[0][1].create.sub, {
+        deviceClientId: 'd', url: 'https://x/y', types: ['Email'], expires: '2026-09-14T00:00:00Z', keys,
+    });
 
     await client.verifyPushSubscription('ps1', 'code');
     assert.deepEqual(calls.at(-1).body.methodCalls[0][1], { update: { ps1: { verificationCode: 'code' } } });
@@ -131,6 +136,7 @@ test('a push subscription is created without an account id, verified, or refused
         client.createPushSubscription({ deviceClientId: 'd', url: 'https://x/z', types: ['Email'], expires: null }),
         /forbidden.*no push for tokens/,
     );
+    assert.equal('keys' in calls.at(-1).body.methodCalls[0][1].create.sub, false);
 });
 
 test('the event source url takes the three parameters either way', () => {

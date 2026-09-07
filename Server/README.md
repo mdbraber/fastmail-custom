@@ -39,4 +39,4 @@ and reinstall the app.
 
 ## Running the tests
 
-`node --test` in this directory, or `make test` at the repo root.
+`npm test` in this directory, or `make test` at the repo root.

@@ -3,6 +3,7 @@ import { alertPayload, badgePayload, selectNotifiable } from './notify.js';
 import { rememberNotified, saveState } from './state.js';
 import { deviceOutcome } from './apns.js';
 import { eventSourceURL, runEventSource } from './jmap.js';
+import { decrypt, generateKeys, subscriptionKeys } from './webpush.js';
 
 export const COALESCE_MS = 2000;
 export const POLL_MS = 5 * 60 * 1000;
@@ -102,6 +103,8 @@ export class AccountWatcher {
             if (sub.deviceClientId === this.deviceClientId) await this.jmap.destroyPushSubscription(sub.id);
         }
         this.callbackSecret = randomBytes(16).toString('hex');
+        // Fastmail seals every callback to these (RFC 8291); they live as long as the subscription
+        this.pushKeys = generateKeys();
         this.verified = false;
         // Anything held from the last subscription belongs to one just destroyed
         this.pendingVerification = null;
@@ -110,6 +113,7 @@ export class AccountWatcher {
             url: `${this.config.publicUrl}/jmap/${this.name}/${this.callbackSecret}`,
             types: TYPES,
             expires: new Date(Date.now() + SUBSCRIPTION_TTL_MS).toISOString(),
+            keys: subscriptionKeys(this.pushKeys),
         });
         this.pushSubscriptionId = id;
         if (this.pendingVerification?.id === id) {
@@ -144,6 +148,20 @@ export class AccountWatcher {
     // to someone else's account is ignored. A verification can arrive before
     // `PushSubscription/set` has told us the id it names, so one we do not
     // recognise is kept rather than dropped: `subscribePush` looks for it.
+    // A sealed callback body → the notice inside it, or null when it is not
+    // for the current subscription's keys (an old subscription's straggler,
+    // or noise on the callback path) or holds no JSON object.
+    decrypt(raw) {
+        if (!this.pushKeys) return null;
+        try {
+            const body = JSON.parse(decrypt(raw, this.pushKeys).toString('utf8'));
+            return body && typeof body === 'object' ? body : null;
+        } catch (error) {
+            this.log.warn(`[${this.name}] a callback that would not open (${error.message})`);
+            return null;
+        }
+    }
+
     async receive(body) {
         if (body?.['@type'] === 'PushVerification') {
             if (body.pushSubscriptionId !== this.pushSubscriptionId) {

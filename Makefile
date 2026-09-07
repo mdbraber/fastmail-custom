@@ -14,7 +14,7 @@ settings-bundle:
 test: generate
 	cd Packages/FastmailShellKit && swift test
 	xcodebuild -project $(PROJECT) -scheme IntegrationTests -destination 'platform=macOS' test
-	cd Server && node --test
+	cd Server && npm test
 
 build-macos: generate
 	xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release build

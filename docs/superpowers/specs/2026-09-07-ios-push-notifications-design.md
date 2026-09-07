@@ -18,7 +18,7 @@ Notifications on macOS (the page hands its own to `NotificationPresenter` there,
 1. **A `WKWebView` cannot receive web push**, and the page only runs while the app is in front. Only APNs can wake a backgrounded iOS app with a banner, and only something outside the phone can send an APNs push.
 2. **The signing team can use APNs.** The apps are signed by the team in `Config/Local.xcconfig` with a one-year wildcard provisioning profile, which only a paid Developer Program membership issues. Push needs an explicit App ID with the Push Notifications capability; Xcode's automatic signing creates both when it sees the `aps-environment` entitlement. The one manual step is creating an APNs authentication key in the developer portal.
 3. **The builds are development-signed** (`get-task-allow` is true), so their `aps-environment` is `development` and pushes must go to `api.sandbox.push.apple.com`.
-4. **Fastmail's JMAP** is at `https://api.fastmail.com/jmap/session` with a bearer API token created under Settings → Privacy & Security → Manage API tokens; a token scoped to `urn:ietf:params:jmap:mail` read-only suffices. Change notices come either through a push subscription (`PushSubscription/set`, RFC 8620 §7.2, Fastmail calling a URL of ours) or through the session's `eventSourceUrl`. Whether Fastmail grants push subscriptions to API tokens is not documented; the first implementation task settles it, and the server supports both.
+4. **Fastmail's JMAP** is at `https://api.fastmail.com/jmap/session` with a bearer API token created under Settings → Privacy & Security → Manage API tokens; a token scoped to `urn:ietf:params:jmap:mail` read-only suffices. Change notices come either through a push subscription (`PushSubscription/set`, RFC 8620 §7.2, Fastmail calling a URL of ours) or through the session's `eventSourceUrl`. Fastmail grants push subscriptions to API tokens, but only ones that carry Web Push keys ("keys must be present — Web Push delivery is always encrypted"); the server supports both routes and prefers the subscription.
 5. **A thread's address** in the web app is `https://app.fastmail.com/mail/Inbox/<threadId>`, with the JMAP `threadId` used as is; each app is logged into one account, and Fastmail adds its own `u=` on arrival. `AppShell.handle(url)` already loads such an address into the web view through `LinkRouter`.
 6. **The badge** the apps show is the number of conversations carrying the badge label (`Triage` by default) — that label's mailbox `totalThreads` in JMAP. The page's own badge counts the same way, and a count of messages would jump every time the app came to the front.
 7. **A tapped push is rehosted** to the selected backend before it is routed: the payload names `app.fastmail.com`, and the web view, the bridge and the injected scripts are all keyed to the server the setting chose.
@@ -60,7 +60,9 @@ Server/
     devices.js            the device registry on disk
     state.js              per-account state on disk (Email state, notified ids, last badge)
     http.js               /devices, /jmap/<account>/<secret>, /healthz
-  test/                   node --test files, one per pure module, with fixtures
+    webpush.js            RFC 8291 keys for a subscription, and unsealing what Fastmail sends to it
+  test/                   node --test files, one per pure module, with fixtures; helpers/ holds
+                          the test-side Web Push encryptor
 ```
 
 The app side stays in its places: `Apps/*/iOS.entitlements`, `project.yml`, `Config/*.xcconfig`, `Apps/*/Info.plist`, and one new file in the package, `PushRegistrar.swift`.
@@ -90,7 +92,7 @@ Bundle identifiers are fixed in code: `com.mdbraber.fastmail.personal` and `com.
 2. `Mailbox/get` → the Inbox (role `inbox`) and the badge label (name equals `BADGE_LABEL`; missing means badge pushes are skipped, logged once).
 3. Load `/data/state-<account>.json`: `{ emailState, notified: [emailId…], badge }`. Absent or unusable state means a resync: take the current `Email` state and treat everything already there as seen, so a fresh start never notifies for old mail.
 4. Subscribe to change notices, types `Email` and `Mailbox`:
-   - **Push subscription** (preferred): `PushSubscription/set` creating `{ deviceClientId, url: PUBLIC_URL + "/jmap/<account>/<secret>", types, expires }`. Fastmail then POSTs `{ "@type": "PushVerification", "pushSubscriptionId", "verificationCode" }` to the URL; the server answers with `PushSubscription/set` updating `verificationCode`. That POST can arrive before the create has returned the id it names, so a verification for an unknown id is held and used as soon as the id is known. Subscriptions are renewed before `expires`, and recreated on startup if the stored id is gone.
+   - **Push subscription** (preferred): `PushSubscription/set` creating `{ deviceClientId, url: PUBLIC_URL + "/jmap/<account>/<secret>", types, expires, keys }`. Fastmail grants this to API tokens only with `keys` (a P-256 public key and a 16-byte auth secret, RFC 8620 §7.2), and from then on seals every callback body with Web Push encryption (RFC 8291 over the aes128gcm content coding of RFC 8188); the server generates a fresh key pair per subscription, keeps it in memory beside the callback secret, and unseals each body before reading it. Fastmail then POSTs `{ "@type": "PushVerification", "pushSubscriptionId", "verificationCode" }` to the URL; the server answers with `PushSubscription/set` updating `verificationCode`. That POST can arrive before the create has returned the id it names, so a verification for an unknown id is held and used as soon as the id is known. Subscriptions are renewed before `expires`, and recreated on startup if the stored id is gone.
    - **Event source** (fallback, chosen automatically when the create is refused, or forced by `NOTICES=eventsource`): a long-lived `GET eventSourceUrl?types=Email,Mailbox&closeafter=no&ping=300`, reconnecting with backoff.
    - Either way, a poll every 5 minutes runs the same handler, so a missed notice costs at most 5 minutes.
 
@@ -137,7 +139,7 @@ One HTTP/2 session per host, reconnected on close. Requests carry `authorization
 | Route | Purpose |
 | --- | --- |
 | `POST /devices` | device token registration, bearer-protected |
-| `POST /jmap/<account>/<secret>` | Fastmail's verification and state-change notices; wrong secret → `204` and ignored |
+| `POST /jmap/<account>/<secret>` | Fastmail's verification and state-change notices, sealed (`Content-Encoding: aes128gcm`) when the subscription has keys; wrong secret, or a body that will not open → `204` and ignored |
 | `GET /healthz` | `200` with `{ accounts: { personal: { notices: "push" \| "eventsource", lastNotice, devices } … } }` |
 
 Everything else is `404`. TLS is the reverse proxy's job.

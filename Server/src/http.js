@@ -39,8 +39,13 @@ async function route({ config, watchers, devices }, request, response) {
         const watcher = watchers[parts[1]];
         // A wrong secret is not worth telling anyone about
         if (!watcher?.callbackSecret || !safeEqual(parts[2], watcher.callbackSecret)) return reply(response, 204);
-        const body = await readJSON(request);
-        if (body) await watcher.receive(body);
+        const raw = await readBody(request);
+        if (!raw) return reply(response, 204);
+        // With keys on the subscription Fastmail seals every callback (RFC 8291)
+        const sealed = String(request.headers['content-encoding'] ?? '').toLowerCase() === 'aes128gcm';
+        const body = sealed ? watcher.decrypt(raw) : parseJSON(raw);
+        if (!body) return reply(response, 204);
+        await watcher.receive(body);
         return reply(response, 200, { ok: true });
     }
 
@@ -58,22 +63,38 @@ function safeEqual(a, b) {
     return left.length === right.length && timingSafeEqual(left, right);
 }
 
-function readJSON(request) {
+// The body as bytes, or null when there is none or it is over the cap
+function readBody(request) {
     return new Promise((resolve) => {
-        let body = '';
-        request.setEncoding('utf8');
+        const chunks = [];
+        let size = 0;
         request.on('data', (chunk) => {
-            body += chunk;
-            if (body.length > BODY_LIMIT) {
+            size += chunk.length;
+            if (size > BODY_LIMIT) {
                 request.destroy();
                 resolve(null);
+                return;
             }
+            chunks.push(chunk);
         });
-        request.on('end', () => {
-            try { resolve(body ? JSON.parse(body) : null); } catch { resolve(null); }
-        });
+        request.on('end', () => resolve(size ? Buffer.concat(chunks) : null));
         request.on('error', () => resolve(null));
     });
+}
+
+// A JSON object (or array) from the bytes, or null
+function parseJSON(raw) {
+    try {
+        const body = JSON.parse(raw.toString('utf8'));
+        return body && typeof body === 'object' ? body : null;
+    } catch {
+        return null;
+    }
+}
+
+async function readJSON(request) {
+    const raw = await readBody(request);
+    return raw ? parseJSON(raw) : null;
 }
 
 function reply(response, status, body) {

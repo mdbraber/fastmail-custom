@@ -4,6 +4,7 @@ import { createServer } from '../src/http.js';
 
 const silent = { warn() {}, info() {}, error() {} };
 const token = 'c'.repeat(64);
+const sealedNotice = { '@type': 'StateChange', changed: { acc1: { Email: 's7' } } };
 
 async function running() {
     const received = [];
@@ -13,6 +14,8 @@ async function running() {
             callbackSecret: 'abc123',
             status: () => ({ notices: 'push', verified: true, lastNotice: null, devices: 1 }),
             receive: async (body) => { received.push(body); },
+            // The real one unseals RFC 8291; here "sealed" is the only body that opens
+            decrypt: (raw) => (raw.equals(Buffer.from('sealed')) ? sealedNotice : null),
         },
     };
     const devices = { register: async (account, value) => { registered.push([account, value]); } };
@@ -58,6 +61,23 @@ test('Fastmail notices reach the watcher only with the right secret', async () =
     assert.equal((await post('/jmap/personal/abc123')).status, 200);
     assert.deepEqual(s.received, [notice]);
     await s.close();
+});
+
+test('an encrypted callback is unsealed by its watcher; one that will not open is dropped quietly', async () => {
+    const s = await running();
+    const post = (body, headers = {}) => fetch(`${s.base}/jmap/personal/abc123`, { method: 'POST', headers, body });
+    try {
+        assert.equal((await post('sealed', { 'content-encoding': 'aes128gcm' })).status, 200);
+        assert.deepEqual(s.received, [sealedNotice]);
+        assert.equal((await post('junk', { 'content-encoding': 'aes128gcm' })).status, 204);
+        assert.equal((await post('sealed', { 'content-encoding': 'AES128GCM' })).status, 200);
+        assert.equal(s.received.length, 2);
+        // Without the encoding header a body is JSON: this one is not, so nothing is read
+        assert.equal((await post('sealed')).status, 204);
+        assert.equal(s.received.length, 2);
+    } finally {
+        await s.close();
+    }
 });
 
 test('anything else is not found, and a broken body is a bad request', async () => {
