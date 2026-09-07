@@ -28,7 +28,12 @@ you were standing in, a hold label such as Later included. The mode now
 claims e and calls the archive verb itself, so it means the same thing in
 every list: Inbox, Triage, project label or hold label. Fastmail's own y
 handlers still move to e and sit underneath, which is what answers with the
-mode off.
+mode off. h is claimed the same way and either way, swap or no swap: it was
+bound to that same button, so it archived in the Inbox and did nothing in a
+label view — the desktop had no archive there at all, where the phone's bar
+had been swapping the slot for one since 3.0. Both keys now run the verb,
+which is what carries the rule that archive strips Triage, every project
+label and the pin while a hold label such as Later stays on.
 
 3.8 — a decision moves on to the next message, and the Triage label is a
 triage surface of its own. Filing and archiving now go to the next message
@@ -116,8 +121,11 @@ checkpoint under one toast, and `z` reverts it whole.
             Without one: the picker, narrowed to projects and hold labels;
             the pick is an ordinary add.
 * `Shift-V` refile — always the picker.
-* `e`       done — Inbox, Triage, every project label and the pin come off.
-            The same from every list; never asks first.
+* `e` `h`   done — Inbox, Triage, every project label and the pin come off;
+            a hold label such as Later stays on. The same from every list —
+            Inbox, Triage, a project label, Later itself — and it never asks
+            first. `e` only while settings.swapArchiveExpand is on, since
+            without it `e` is Fastmail's thread expander.
 * `s`       pin — a toggle.
 * `w`       snooze — Fastmail's own dialog, on its custom picker, filled in
             for settings.snoozeDefault at settings.snoozeTime. Enter confirms.
@@ -3929,6 +3937,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // here and sit underneath, which is what answers with the mode off.
     const ARCHIVE_KEY = 'e';
 
+    // Fastmail's own archive key, claimed for the same reason and whether or
+    // not the two have traded places. It is bound to that same contextual
+    // button, so it archives in the Inbox and — the slot now reading Remove
+    // label — does nothing in a label view, where the phone's bar already
+    // replaces the slot with an Archive running the full verb. Claiming it
+    // gives the desktop the same thing: h archives everywhere, which is what
+    // the setting has always promised, and a hold label such as Later comes
+    // through it because the verb is what decides, not the toolbar.
+    const ARCHIVE_ALT_KEY = 'h';
+
     // Registrations made before the patch below was installed keep the stock
     // binding, so move those across once. Appending is enough, since
     // getHandlerForKey takes the last registration — but both have to be read
@@ -3970,13 +3988,18 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             'Shift-V': () => openLabelPicker()
         };
 
-        // Only while the two have traded places; without the swap e is
-        // Fastmail's own thread expander and stays that way. null is the
-        // caller's selection untouched — the focused conversation to
-        // Fastmail — and the wrapper in patchArchive turns it into the verb.
-        if (settings.swapArchiveExpand) {
-            wanted[ARCHIVE_KEY] = () => controller().actions.archive(null);
-        }
+        // null is the caller's selection untouched — the focused conversation
+        // to Fastmail — and the wrapper in patchArchive turns it into the
+        // verb: Triage, every project label and the pin come off, a hold
+        // label such as Later stays, and that holds in every list because
+        // nothing here asks the toolbar what it currently means.
+        const archive = () => controller().actions.archive(null);
+
+        // h is Fastmail's own archive key and is claimed either way; e only
+        // while the two have traded places, since without the swap it is
+        // Fastmail's thread expander and stays that way.
+        wanted[ARCHIVE_ALT_KEY] = archive;
+        if (settings.swapArchiveExpand) wanted[ARCHIVE_KEY] = archive;
 
         wanted[sanitizedKey(settings.urgentKey, 's')] = () => runVerb('urgent', null);
         wanted[sanitizedKey(settings.snoozeKey, 'w')] = () => openSnoozeDialog();
