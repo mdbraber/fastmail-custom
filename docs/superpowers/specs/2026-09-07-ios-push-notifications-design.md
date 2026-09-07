@@ -16,10 +16,10 @@ Notifications on macOS (the page hands its own to `NotificationPresenter` there,
 ## Facts the design rests on
 
 1. **A `WKWebView` cannot receive web push**, and the page only runs while the app is in front. Only APNs can wake a backgrounded iOS app with a banner, and only something outside the phone can send an APNs push.
-2. **The signing team can use APNs.** The apps are signed by team `D3S5M885YQ` with a one-year wildcard provisioning profile, which only a paid Developer Program membership issues. Push needs an explicit App ID with the Push Notifications capability; Xcode's automatic signing creates both when it sees the `aps-environment` entitlement. The one manual step is creating an APNs authentication key in the developer portal.
+2. **The signing team can use APNs.** The apps are signed by the team in `Config/Local.xcconfig` with a one-year wildcard provisioning profile, which only a paid Developer Program membership issues. Push needs an explicit App ID with the Push Notifications capability; Xcode's automatic signing creates both when it sees the `aps-environment` entitlement. The one manual step is creating an APNs authentication key in the developer portal.
 3. **The builds are development-signed** (`get-task-allow` is true), so their `aps-environment` is `development` and pushes must go to `api.sandbox.push.apple.com`.
 4. **Fastmail's JMAP** is at `https://api.fastmail.com/jmap/session` with a bearer API token created under Settings → Privacy & Security → Manage API tokens; a token scoped to `urn:ietf:params:jmap:mail` read-only suffices. Change notices come either through a push subscription (`PushSubscription/set`, RFC 8620 §7.2, Fastmail calling a URL of ours) or through the session's `eventSourceUrl`. Whether Fastmail grants push subscriptions to API tokens is not documented; the first implementation task settles it, and the server supports both.
-5. **A thread's address** in the web app is `https://app.fastmail.com/mail/Inbox/<threadId>?u=<accountId>`, with the JMAP `threadId` used as is. `AppShell.handle(url)` already loads such an address into the web view through `LinkRouter`.
+5. **A thread's address** in the web app is `https://app.fastmail.com/mail/Inbox/<threadId>`, with the JMAP `threadId` used as is; each app is logged into one account, and Fastmail adds its own `u=` on arrival. `AppShell.handle(url)` already loads such an address into the web view through `LinkRouter`.
 6. **The badge** the apps show is the number of messages carrying the badge label (`Triage` by default), which is that label's mailbox `totalEmails` in JMAP.
 
 ## Architecture
@@ -72,7 +72,7 @@ The app side stays in its places: `Apps/*/iOS.entitlements`, `project.yml`, `Con
 | --- | --- |
 | `FASTMAIL_TOKEN_PERSONAL`, `FASTMAIL_TOKEN_WORK` | API tokens. An account whose token is empty is skipped. |
 | `APNS_KEY_FILE` | path to the `.p8` key inside the container (mounted from `./secrets`) |
-| `APNS_KEY_ID`, `APNS_TEAM_ID` | from the developer portal; the team is `D3S5M885YQ` |
+| `APNS_KEY_ID`, `APNS_TEAM_ID` | from the developer portal; the team is the `DEVELOPMENT_TEAM` in `Config/Local.xcconfig` |
 | `APNS_SANDBOX` | `1` (default) for development-signed builds, `0` for production |
 | `PUBLIC_URL` | the `https://` address the reverse proxy exposes, for the push subscription callback |
 | `DEVICE_SECRET` | bearer secret the apps present when registering a device token |
@@ -116,7 +116,7 @@ A `cannotCalculateChanges` error triggers the resync of step 3 above, silently.
     "badge": 3,
     "thread-id": "<threadId>"
   },
-  "url": "https://app.fastmail.com/mail/Inbox/<threadId>?u=<accountId>",
+  "url": "https://app.fastmail.com/mail/Inbox/<threadId>",
   "emailId": "<emailId>"
 }
 ```
@@ -147,15 +147,15 @@ Everything else is `404`. TLS is the reverse proxy's job.
 
 - `Apps/Personal/iOS.entitlements` and `Apps/Work/iOS.entitlements`: `aps-environment` = `development`.
 - `project.yml`: per target, `"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": Apps/Personal/iOS.entitlements` (and `Apps/Work/iOS.entitlements`), so macOS builds carry no entitlement and keep signing as they do now.
-- `Config/Shared.xcconfig` gains empty `PUSH_SERVER_URL` and `PUSH_DEVICE_SECRET`; `Config/Local.xcconfig` (git-ignored) holds the real values; `Config/Local.xcconfig.example` documents them.
-- `Apps/*/Info.plist` gain `FMPushServer` = `$(PUSH_SERVER_URL)` and `FMPushSecret` = `$(PUSH_DEVICE_SECRET)`. Empty or unsubstituted values mean push is off, exactly as `FMAccountID` degrades today.
+- `Config/Shared.xcconfig` gains empty `PUSH_SERVER_HOST` and `PUSH_DEVICE_SECRET`; `Config/Local.xcconfig` (git-ignored) holds the real values; `Config/Local.xcconfig.example` documents them. A host rather than a URL because `//` starts a comment in an xcconfig; the app puts `https://` in front (a path after the host is allowed).
+- `Apps/*/Info.plist` gain `FMPushHost` = `$(PUSH_SERVER_HOST)` and `FMPushSecret` = `$(PUSH_DEVICE_SECRET)`. Empty or unsubstituted values mean push is off, exactly as `FMAccountID` degrades today.
 
 ### `PushRegistrar` (iOS only, in FastmailShellKit)
 
 Installed from each `App` struct through `@UIApplicationDelegateAdaptor`; on macOS the adaptor is compiled out and nothing changes.
 
 - **Permission**: asks once for `[.alert, .sound, .badge]`. On iOS all asking moves here; `BadgeController` only reads the status and applies the badge as before. iOS does not re-prompt for options added after the first answer, so a device that already answered the badge-only prompt needs Alerts switched on under Settings → Notifications → the app, or the app deleted and reinstalled.
-- **Token**: after permission, `registerForRemoteNotifications()`; `didRegisterForRemoteNotificationsWithDeviceToken` hex-encodes the token and `POST`s `{ account, token }` to `FMPushServer/devices` with the bearer secret. Sent at every launch and on every activation where the last attempt failed; a failure is logged, never shown.
+- **Token**: after permission, `registerForRemoteNotifications()`; `didRegisterForRemoteNotificationsWithDeviceToken` hex-encodes the token and `POST`s `{ account, token }` to `https://<FMPushHost>/devices` with the bearer secret. Sent at every launch and on every activation where the last attempt failed; a failure is logged, never shown.
 - **Presentation**: as `UNUserNotificationCenterDelegate`, `willPresent` (which iOS only calls while the app is in front, where the page is on screen) returns `[.badge]`: the badge applies, no banner or sound. On becoming active, `removeAllDeliveredNotifications()`.
 - **Tap**: `didReceive` reads `url` from `userInfo`, and hands it to `AppShell` through a small `@MainActor` observable, `PendingLinks.shared`, which `AppShell` observes and routes through the same `handle(url)` that `onOpenURL` uses. Only `https://app.fastmail.com` URLs pass `LinkRouter`, so a bad payload can at most show the "Only Fastmail links can be opened" banner.
 - **No config**: with `FMPushServer` empty, the registrar asks for permission and applies badges but registers nothing.
@@ -165,7 +165,7 @@ Installed from each `App` struct through `@UIApplicationDelegateAdaptor`; on mac
 1. Developer portal → Keys → new key with Apple Push Notifications service enabled → download the `.p8`, note the Key ID.
 2. Fastmail, both accounts → Settings → Privacy & Security → Manage API tokens → new token, mail read-only.
 3. On the host: `Server/.env` from `.env.example`, the `.p8` in `Server/secrets/`, `docker compose up -d`; the reverse proxy forwards `PUBLIC_URL` to port 8080. `GET /healthz` reports both accounts.
-4. `Config/Local.xcconfig`: `PUSH_SERVER_URL` and `PUSH_DEVICE_SECRET` (the same value as the server's `DEVICE_SECRET`).
+4. `Config/Local.xcconfig`: `PUSH_SERVER_HOST` and `PUSH_DEVICE_SECRET` (the same value as the server's `DEVICE_SECRET`).
 5. `make deploy`. The first build with the entitlement makes Xcode register the App IDs and the capability.
 
 ## Failure handling
@@ -186,7 +186,7 @@ Installed from each `App` struct through `@UIApplicationDelegateAdaptor`; on mac
 
 - **Server** (`node --test`, fixtures in `test/fixtures/`): `notify.js` — which created emails notify (Inbox, unseen, not draft, not already notified) and the exact payload for one; `apns.js` — the JWT's header and claims, its signature verified with the key's public half, and the error-to-prune mapping; `devices.js` and `state.js` — round trips and the notified-ids cap; `http.js` — the three routes against an in-process server, including the wrong-secret and wrong-bearer cases; `watcher.js` — one notice against a fake JMAP producing one alert push and one badge push, and the coalescing.
 - **Apps** (Swift Testing): `PendingLinks` delivering a URL once; the URL extraction from `userInfo` including the missing case; the presentation decision by scene activity; the config-absent case of the registrar.
-- **Build**: `make test` (macOS package tests) and `make build-ios`, as today.
+- **Build**: `make test` (the package tests, the integration tests, and now `node --test` in `Server/`) and `make build-ios`, as today.
 - **End to end**, by hand: app closed, mail sent to the account → banner within seconds; archive it on the Mac → the badge drops; tap a banner → the thread opens; the iPad, once unlocked, gets the same banner.
 
 ## Rollout order
