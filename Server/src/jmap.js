@@ -147,11 +147,10 @@ export class EventStreamParser {
         this.buffer += text;
         const events = [];
         let newline;
-        let processedAny = false;
         while ((newline = this.buffer.search(/\r\n|\n|\r/)) !== -1) {
-            // A bare CR at the very end may be the first half of a CRLF: wait for what follows (but only on the first iteration)
-            if (!processedAny && this.buffer[newline] === '\r' && newline === this.buffer.length - 1) break;
             const line = this.buffer.slice(0, newline);
+            // A bare CR at the very end may be the first half of a CRLF: wait for what follows (but not for empty lines)
+            if (this.buffer[newline] === '\r' && newline === this.buffer.length - 1 && line !== '') break;
             const width = this.buffer[newline] === '\r' && this.buffer[newline + 1] === '\n' ? 2 : 1;
             this.buffer = this.buffer.slice(newline + width);
             if (line === '') {
@@ -166,7 +165,6 @@ export class EventStreamParser {
                 if (field === 'event') this.event = value;
                 else if (field === 'data') this.data.push(value);
             }
-            processedAny = true;
         }
         return events;
     }
