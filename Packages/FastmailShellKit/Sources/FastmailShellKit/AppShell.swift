@@ -82,6 +82,7 @@ public struct AppShell: View {
             // while the app slept gets corrected.
             if scenePhase == .active {
                 BadgeController.shared.reapply()
+                PushRegistrar.current?.becameActive()
             }
         }
         .onChange(of: pendingLinks.url) {
