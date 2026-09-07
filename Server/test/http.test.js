@@ -38,6 +38,8 @@ test('device registration needs the bearer, a known account and a real token', a
     assert.equal((await post({ authorization: 'Bearer wrong' }, { account: 'personal', token })).status, 401);
     assert.equal((await post({ authorization: 'Bearer s3cret' }, { account: 'work', token })).status, 400);
     assert.equal((await post({ authorization: 'Bearer s3cret' }, { account: 'personal', token: 'nope' })).status, 400);
+    assert.equal((await post({ authorization: 'Bearer s3cret' }, { account: '__proto__', token })).status, 400);
+    assert.equal((await post({ authorization: 'Bearer s3cret' }, { account: 'constructor', token })).status, 400);
     const ok = await post({ authorization: 'Bearer s3cret' }, { account: 'personal', token });
     assert.equal(ok.status, 200);
     assert.deepEqual(s.registered, [['personal', token]]);
