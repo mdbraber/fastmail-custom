@@ -30,6 +30,9 @@ time a badge asks and dropped when the setting or the mode goes off. Both
 are settings: stickyInboxFilter and filteredLabelCounts, on by default,
 and both are about project labels alone. A hold label such as Later is
 left as it was, since a held message is meant to sit outside the queue.
+The bar stops offering Archive twice with the filter on: the contextual
+slot becomes an Archive of Fastmail's own whenever the list is filtered to
+the Inbox, so ours stands down rather than sitting beside it.
 
 3.9 — e archives everywhere, and archiving keeps a hold label. With E and Y
 swapped, e used to inherit whatever Fastmail had bound to y, which is one
@@ -1906,35 +1909,54 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             const wantArchiveSlot = modeIsOn && !!currentLabel() &&
                 slotNames.indexOf('archive') !== -1;
             const barArchive = onBar(view => view.customArchive);
-            const hasRemoveIcon = (view) => {
+            const drawsIcon = (name) => (view) => {
                 try {
                     const layer = view.get('layer');
-                    return !!(layer && layer.querySelector('svg.i-removelabel'));
+                    return !!(layer && layer.querySelector('svg.' + name));
                 } catch (error) {
                     return false;
                 }
             };
+            const hasRemoveIcon = drawsIcon('i-removelabel');
 
-            if (wantArchiveSlot) {
+            // Fastmail's own Archive, however it got there. The contextual
+            // slot becomes one whenever the list it is looking at is filtered
+            // to the Inbox — which, with the Inbox filter on, a project
+            // label's list now always is. Read by its glyph as well as its
+            // action, because the slot is one view wearing either meaning and
+            // only the drawing changes reliably with it.
+            const stockArchive = () => onBar(view => !view.customArchive &&
+                (actionOf(view) === ARCHIVE_ACTION || drawsIcon('i-archive')(view)));
+
+            if (wantArchiveSlot && stockArchive()) {
+                // Nothing to stand in for: adding ours here is the same
+                // button twice, which is exactly what the Inbox filter
+                // started doing. Take ours away if a previous pass, made
+                // before the filter went on, had already put it there.
+                if (barArchive) toolbar.removeView(barArchive);
+                toolbar.customStockRemove = null;
+            } else if (wantArchiveSlot) {
                 const stockRemove = onBar(hasRemoveIcon);
                 if (stockRemove) {
                     toolbar.customStockRemove = stockRemove;
                     toolbar.removeView(stockRemove);
                 }
 
-                // Only where no archive of any kind sits already — under a
-                // filter Fastmail recognizes the stock slot is one, and a
-                // second would just be the first twice
-                if (!barArchive &&
-                    !onBar(view => actionOf(view) === ARCHIVE_ACTION)) {
+                if (!barArchive) {
                     const archive = archiveOption();
                     archive.customArchive = true;
                     toolbar.insertView(archive, overflow, 'before');
                 }
             } else if (barArchive) {
                 toolbar.removeView(barArchive);
-                if (toolbar.customStockRemove) {
-                    toolbar.insertView(toolbar.customStockRemove, overflow, 'before');
+                // Only if it is not already back: Fastmail rebuilds this bar
+                // freely, and putting a view back that it has already redrawn
+                // is the same duplicate from the other direction.
+                const held = toolbar.customStockRemove;
+                if (held) {
+                    if (!onBar(view => view === held)) {
+                        toolbar.insertView(held, overflow, 'before');
+                    }
                     toolbar.customStockRemove = null;
                 }
             }
