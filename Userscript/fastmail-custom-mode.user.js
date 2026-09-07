@@ -41,7 +41,11 @@ message rather than the first: the row it moves on from is noted before
 the decision, not after. Archiving takes the row out of the list, and so
 does filing in the triage label's own view, so an index read afterwards
 found nothing — which was read as the top of the list, sending every
-archive to whatever sat there.
+archive to whatever sat there. And v opens the narrowed picker on a
+narrow action bar too: a bar too small to draw every action puts the rest
+under More, and the More menu registers each of their keys against
+itself, burying the stand-in v goes in under. Ours is lifted back on top
+afterwards, the same way the claimed keys are.
 
 3.8 — a decision moves on to the next message, and the Triage label is a
 triage surface of its own. Filing and archiving now go to the next message
@@ -4088,6 +4092,32 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             originalRegister.call(kb, key, handler, 'go');
         };
 
+        // The same for v, which is not claimed but substituted: our stand-in
+        // goes in where the Move button registers, and anything registering
+        // the key afterwards buries it, because the registry answers to
+        // whichever went in last.
+        //
+        // The one that does is the More menu. A toolbar too narrow to draw
+        // every action puts the rest in there, and OverflowMenuView registers
+        // each of their keys against itself — so on a bar where Move has
+        // overflowed, v reaches Fastmail's own activate and opens the full
+        // menu. That is the iPad's action bar, which is narrow and puts Move
+        // under More; a desktop toolbar wide enough to draw it never does.
+        // Clicking Move to still went through the button, and so still came
+        // up narrowed, which is exactly how the two disagreed.
+        const liftMove = (key) => {
+            if (key !== MOVE_SHORTCUT || !moveButton) return;
+
+            const handler = moveHandlers.get(moveButton.target);
+            if (!handler) return;
+
+            const list = kb._shortcuts[MOVE_SHORTCUT] || [];
+            if (list.length && list[list.length - 1][0] === handler) return;
+
+            originalDeregister.call(kb, MOVE_SHORTCUT, handler, 'openMove');
+            originalRegister.call(kb, MOVE_SHORTCUT, handler, 'openMove');
+        };
+
         kb.register = function (key, target, method, priority) {
             // Decided as the registration goes in rather than at the keypress,
             // because the key itself is what dispatches. Turning the setting
@@ -4125,6 +4155,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             if (key !== MOVE_SHORTCUT || !isMoveButton(target)) {
                 const result = originalRegister.apply(this, arguments);
                 liftClaimed(key);
+                liftMove(key);
                 return result;
             }
 
