@@ -4,7 +4,7 @@
 
 **Goal:** The two native capabilities the shell exists to provide — the system share sheet and a link to the open message — plus the unread app-icon badge. All three read Fastmail's state through its own object layer, never its markup, and fall back to markup only where no state surface exists.
 
-**Architecture:** `harness.js` grows `currentLink()`, `share()`, `addMenuItem()`, and `setBadge()`. The subject and URL of the open message come from the mail controller (`FastMail.router.getAppController('mail')`), the same surface the userscript patches. The Share menu item is added by wrapping the message-actions menu's `menuView` computed property and pushing a `FastMail.classes.ButtonView` into its options — the identical pattern the userscript uses for the filter menu and verb pickers — never by observing the DOM for menu nodes. The badge count comes from `window.customInboxMode`'s exact server-computed counts when the userscript is running, with a sidebar-badge read as the only fallback. Native side: a `share` bridge action publishes a request on `ShellModel` and `AppShell` presents it (the existing banner pattern); `BadgeController` applies counts per platform.
+**Architecture:** `harness.js` grows `currentLink()`, `share()`, `addMenuItem()`, and `setBadge()`. The subject and URL of the open message come from the mail controller (`FastMail.router.getAppController('mail')`), the same surface the userscript patches. The Share menu item is added by wrapping the message-actions menu's `menuView` computed property and pushing a `FastMail.classes.ButtonView` into its options — the identical pattern the userscript uses for the filter menu and verb pickers — never by observing the DOM for menu nodes. The badge count comes from `window.customMode`'s exact server-computed counts when the userscript is running, with a sidebar-badge read as the only fallback. Native side: a `share` bridge action publishes a request on `ShellModel` and `AppShell` presents it (the existing banner pattern); `BadgeController` applies counts per platform.
 
 **Tech Stack:** Swift 6, SwiftUI, WebKit (`WKScriptMessageHandlerWithReply`), `UNUserNotificationCenter` (iOS badge), `NSDockTile` (macOS badge), `UIActivityViewController` / `NSSharingServicePicker`, Swift Testing + XCTest integration tests.
 
@@ -28,7 +28,7 @@ Read-only probes against a logged-in session in Safari (desktop layout) and the 
 
 - [ ] **Step 1:** Pin the open-message surface: from `FastMail.router.getAppController('mail')`, the property path that yields the open thread/message record and its subject, on both layouts, and confirm `controller.getUrlForMessage(message)` yields the canonical URL with `u=` preserved.
 - [ ] **Step 2:** Pin the message-actions menu: which view owns it (`getViewFromNode` on the ⋯ button), whether `menuView` is a computed property (check `isProperty` / `isVolatile`), and a behavioural identifier for its options (actions or shortcuts carried by Reply/Forward options, not their labels).
-- [ ] **Step 3:** Pin the badge sources: `window.customInboxMode.countFor` for the Inbox mailbox record, and the `.v-MailboxSource` badge node shape for the fallback.
+- [ ] **Step 3:** Pin the badge sources: `window.customMode.countFor` for the Inbox mailbox record, and the `.v-MailboxSource` badge node shape for the fallback.
 - [ ] **Step 4:** iOS offline spike, since the phone build is now daily-driven: load the mailbox, Airplane Mode, relaunch; record whether `navigator.serviceWorker.controller` is live and the mailbox renders. No code change either way — this bounds what the badge and share can assume offline.
 
 ### Task 1: `currentLink()` in the harness
@@ -92,7 +92,7 @@ Read-only probes against a logged-in session in Safari (desktop layout) and the 
 **Interfaces:**
 - Produces: `native.setBadge(count)`; `native.badgeResolver` (assignable); `BadgeController.apply(_ count: Int?)`.
 
-- [ ] **Step 1:** Default resolver: when `window.customInboxMode` is present and on, use its exact Inbox count (`countFor` on the Inbox record — server-computed, always agrees with the sidebar); otherwise read the Inbox `.v-MailboxSource` badge text. `badgeResolver` overrides both.
+- [ ] **Step 1:** Default resolver: when `window.customMode` is present and on, use its exact Inbox count (`countFor` on the Inbox record — server-computed, always agrees with the sidebar); otherwise read the Inbox `.v-MailboxSource` badge text. `badgeResolver` overrides both.
 - [ ] **Step 2:** Push on `onRoute` and on a debounced tick; native additionally pulls a fresh count on foregrounding via `callAsyncJavaScript` rather than trusting the last push.
 - [ ] **Step 3:** `BadgeController`: iOS `UNUserNotificationCenter.setBadgeCount`, `.badge` authorization requested on the first non-zero count, declined authorization silences future asks; macOS `dockTile.badgeLabel`, no authorization. Zero clears; `nil` (no count found) leaves the badge unchanged — absence is not zero.
 - [ ] **Step 4:** Unit tests: zero clears rather than shows `0`, nil leaves unchanged, declined auth not re-requested.

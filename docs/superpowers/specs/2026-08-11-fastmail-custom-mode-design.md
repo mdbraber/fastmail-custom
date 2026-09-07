@@ -1,7 +1,7 @@
-# Fastmail: Inbox mode
+# Fastmail: Custom mode
 
 Date: 2026-08-11
-Status: implemented in `fastmail-inbox-mode.user.js`
+Status: implemented in `fastmail-custom-mode.user.js`
 
 ## Problem
 
@@ -10,7 +10,7 @@ label from the sidebar shows everything ever filed there, not the part that is
 still awaiting triage. The sidebar badge compounds this: it counts unread, which
 says nothing about how much of that label is still sitting in the Inbox.
 
-Inbox mode makes labels behave as per-label inboxes. While it is on, opening a
+Custom mode makes labels behave as per-label inboxes. While it is on, opening a
 label applies Fastmail's built-in `inbox` filter, and each label's badge counts
 the conversations that carry the label and are still in the Inbox.
 
@@ -864,7 +864,7 @@ is an accurate indicator obtained for free.
 
 ## Structure
 
-A single file, `fastmail-inbox-mode.user.js`, with a `==UserScript==` header
+A single file, `fastmail-custom-mode.user.js`, with a `==UserScript==` header
 matching `app.fastmail.com`. Configuration — the shortcut and the `localStorage`
 key — sits in constants at the top.
 
@@ -1077,7 +1077,7 @@ was established.
 | The query's row | Inbox icon, and the Inbox's unread count |
 | Toggle while on the query | Whole mode off; per-label settings kept |
 | Account with no query under Inbox | Inbox behaves as Fastmail ships it |
-| Turn Inbox mode off | Inbox row goes back to the plain Inbox |
+| Turn Custom mode off | Inbox row goes back to the plain Inbox |
 | Open `/mail/Inbox/` directly | The plain Inbox, as an escape hatch |
 | Sidebar on a fresh load | No Inbox row, query at the top, unindented, no gap |
 | `v` in the Inbox | Narrowed list, no title, nested labels kept |
@@ -1097,7 +1097,7 @@ was established.
 
 - Any change to `fastmail.js`, `fastmail-tweaks.js` or the backup file —
   including repairing their dead `activeViews` boot guard and `getViewsByClass`
-  helper. Merging Inbox mode into them is a later decision.
+  helper. Merging Custom mode into them is a later decision.
 - Roll-up counts for parent labels.
 - Grouping or sorting the message list by label. Fastmail's JMAP rejects it:
   `Email/query` with a sort property of `mailboxIds`, `mailbox`, `label` or
@@ -1144,7 +1144,7 @@ the script never writes it.
   cases. The row then leaves the view through Fastmail's own delta update.
 - **Nothing leaves the Inbox.** Labels are additive; a message stays in the Inbox
   until it is actually dealt with.
-- **Inbox Zero** is `Untriaged`'s badge reaching zero. Inbox mode already
+- **Inbox Zero** is `Untriaged`'s badge reaching zero. Custom mode already
   rewrites a label's badge to count the Inbox messages carrying it, so that badge
   is the progress meter with no new code.
 - **Per-label Inbox views** are what the mode already does.

@@ -1,6 +1,6 @@
 SWIFT_VERSION = 6.0
 CODE_SIGN_STYLE = Automatic
-USERSCRIPT_PATH = $(SRCROOT)/Userscript/fastmail-inbox-mode.user.js
+USERSCRIPT_PATH = $(SRCROOT)/Userscript/fastmail-custom-mode.user.js
 PERSONAL_ACCOUNT_ID =
 WORK_ACCOUNT_ID =
 DEVELOPMENT_TEAM =

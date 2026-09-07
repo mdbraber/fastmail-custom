@@ -111,9 +111,9 @@ public struct WebContainer {
         )
 
         // Settings go in ahead of every other script: the userscript reads
-        // window.__customInboxModeSettings the moment it starts.
+        // window.__customModeSettings the moment it starts.
         configuration.userContentController.addUserScript(
-            InboxModeSettings.bootstrapScript()
+            CustomModeSettings.bootstrapScript()
         )
 
         do {
@@ -141,7 +141,7 @@ public struct WebContainer {
         webView.isInspectable = true
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
-        coordinator.settingsPusher = InboxModeSettingsPusher(webView: webView)
+        coordinator.settingsPusher = CustomModeSettingsPusher(webView: webView)
         coordinator.sharePresenter = SharePresenter(model: model, webView: webView)
         coordinator.linkLoader = LinkLoader(model: model, webView: webView)
         #if !canImport(UIKit)
@@ -299,13 +299,13 @@ final class BadgePuller {
     }
 }
 
-/// Pushes changed Inbox mode settings into a running page, the way the Safari
+/// Pushes changed Custom mode settings into a running page, the way the Safari
 /// extension's storage listener does for its tabs. Any writer counts — the
 /// macOS Settings window, the iOS Settings app — because both land in
 /// UserDefaults. Coming back from the iOS Settings app is covered separately:
 /// the defaults change while the app is suspended, so foregrounding pushes too.
 @MainActor
-final class InboxModeSettingsPusher {
+final class CustomModeSettingsPusher {
     private weak var webView: WKWebView?
     // Written once in init, read again only from deinit — never concurrently
     private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
@@ -347,7 +347,7 @@ final class InboxModeSettingsPusher {
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled else { return }
             self?.webView?.evaluateJavaScript(
-                InboxModeSettings.applyScriptSource(),
+                CustomModeSettings.applyScriptSource(),
                 completionHandler: nil
             )
         }

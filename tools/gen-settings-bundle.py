@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Regenerate each app's Settings.bundle/Root.plist from the option catalog.
 
-The catalog is InboxModeSettings.options, the same one the macOS Settings
+The catalog is CustomModeSettings.options, the same one the macOS Settings
 form and the page injection read, so it is parsed here rather than copied:
 a second table would be one more thing to keep in step, and the whole point
 of the catalog is that there is only one. Run this after changing it —
-`settingsBundleCarriesEveryInboxModeOption` fails if you forget.
+`settingsBundleCarriesEveryCustomModeOption` fails if you forget.
 
 Settings.bundle cannot grey a sub-option out with its parent, so the parent
 relationship the form uses is dropped here; the hint carries the meaning.
@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CATALOG = (ROOT / "Packages/FastmailShellKit/Sources/FastmailShellKit"
-                  "/InboxModeSettings.swift")
+                  "/CustomModeSettings.swift")
 APPS = ("Personal", "Work")
 
 # One Option(...) entry. `parent:` and `clearable:` are optional and
@@ -38,7 +38,7 @@ OPTION = re.compile(
     re.S,
 )
 
-# The section header each group shows, mirroring InboxModeSettings.Group.title.
+# The section header each group shows, mirroring CustomModeSettings.Group.title.
 # `settingsBundleShowsEveryGroupHeader` fails if these drift. `general` is the
 # shell's own section (backend, start page), so its header sits on the first
 # hardcoded row and its one catalog option continues under it without a new one.
@@ -143,14 +143,14 @@ def specifiers(catalog):
             rows.append({
                 "Type": "PSToggleSwitchSpecifier",
                 "Title": title,
-                "Key": f"inboxMode.{key}",
+                "Key": f"customMode.{key}",
                 "DefaultValue": default,
             })
         else:
             rows.append({
                 "Type": "PSTextFieldSpecifier",
                 "Title": title,
-                "Key": f"inboxMode.{key}",
+                "Key": f"customMode.{key}",
                 "DefaultValue": default,
                 "IsSecure": False,
                 "AutocapitalizationType": "None",

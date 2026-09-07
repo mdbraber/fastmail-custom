@@ -1,19 +1,19 @@
 import SwiftUI
 
-// The Inbox mode form is generated from InboxModeSettings.options, the same
+// The Custom mode form is generated from CustomModeSettings.options, the same
 // catalog the page injection reads, so the screen and the userscript cannot
 // drift apart. Changes land in UserDefaults; the pusher picks them up from
 // there and applies them to any open window live.
-public struct InboxModeSettingsForm: View {
-    @StateObject private var model = InboxModeSettingsModel()
-    private let group: InboxModeSettings.Group
+public struct CustomModeSettingsForm: View {
+    @StateObject private var model = CustomModeSettingsModel()
+    private let group: CustomModeSettings.Group
 
-    public init(group: InboxModeSettings.Group) {
+    public init(group: CustomModeSettings.Group) {
         self.group = group
     }
 
     public var body: some View {
-        ForEach(InboxModeSettings.options(in: group)) { option in
+        ForEach(CustomModeSettings.options(in: group)) { option in
             if option.key == "bottomBarSlots" {
                 barOrderRows(for: option)
             } else {
@@ -27,7 +27,7 @@ public struct InboxModeSettingsForm: View {
     // reads. The embedded list stays in edit mode permanently on iOS, so
     // the grips are simply always there — no mode to toggle.
     @ViewBuilder
-    private func barOrderRows(for option: InboxModeSettings.Option) -> some View {
+    private func barOrderRows(for option: CustomModeSettings.Option) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(option.title)
             Text(option.hint)
@@ -52,7 +52,7 @@ public struct InboxModeSettingsForm: View {
     }
 
     @ViewBuilder
-    private func row(for option: InboxModeSettings.Option) -> some View {
+    private func row(for option: CustomModeSettings.Option) -> some View {
         let enabled = model.parentIsOn(of: option)
         VStack(alignment: .leading, spacing: 3) {
             switch option.defaultValue {
@@ -137,16 +137,16 @@ public struct MobileSettingsSheet: View {
                 // The app badge lives with the General settings; the rest of
                 // the catalog follows, one headed section per group.
                 Section {
-                    InboxModeSettingsForm(group: .general)
+                    CustomModeSettingsForm(group: .general)
                 }
 
                 // Notifications are not here: on the phone they belong to
                 // Settings → the app, beside iOS's own alert controls, and
                 // the Settings bundle carries the same switch.
 
-                ForEach(InboxModeSettings.Group.inboxGroups, id: \.self) { group in
+                ForEach(CustomModeSettings.Group.inboxGroups, id: \.self) { group in
                     Section(group.title) {
-                        InboxModeSettingsForm(group: group)
+                        CustomModeSettingsForm(group: group)
                     }
                 }
             }
@@ -172,7 +172,7 @@ public struct MobileSettingsSheet: View {
 }
 
 @MainActor
-final class InboxModeSettingsModel: ObservableObject {
+final class CustomModeSettingsModel: ObservableObject {
     private let defaults = UserDefaults.standard
 
     // The verbs the reorder list offers, in the catalog's own order. Drawn
@@ -182,7 +182,7 @@ final class InboxModeSettingsModel: ObservableObject {
     // retired them and renamed the state verb to File.
     static let barSlotNames: [String] = {
         guard
-            let option = InboxModeSettings.options.first(where: { $0.key == "bottomBarSlots" }),
+            let option = CustomModeSettings.options.first(where: { $0.key == "bottomBarSlots" }),
             case .text(let value) = option.defaultValue
         else { return [] }
         return value
@@ -198,9 +198,9 @@ final class InboxModeSettingsModel: ObservableObject {
     }
 
     private static var barSlotsKey: String {
-        InboxModeSettings.options
+        CustomModeSettings.options
             .first(where: { $0.key == "bottomBarSlots" })?
-            .defaultsKey ?? "inboxMode.bottomBarSlots"
+            .defaultsKey ?? "customMode.bottomBarSlots"
     }
 
     // Stored order first, then whatever it does not name, so a value saved
@@ -227,16 +227,16 @@ final class InboxModeSettingsModel: ObservableObject {
     // A suboption only means anything while the option above it is on, so it
     // follows its parent rather than sitting there looking available — the
     // same rule the extension popup applies.
-    func parentIsOn(of option: InboxModeSettings.Option) -> Bool {
+    func parentIsOn(of option: CustomModeSettings.Option) -> Bool {
         guard
             let parentKey = option.parent,
-            let parent = InboxModeSettings.options.first(where: { $0.key == parentKey }),
+            let parent = CustomModeSettings.options.first(where: { $0.key == parentKey }),
             case .toggle(let fallback) = parent.defaultValue
         else { return true }
         return defaults.object(forKey: parent.defaultsKey) as? Bool ?? fallback
     }
 
-    func toggleBinding(for option: InboxModeSettings.Option) -> Binding<Bool> {
+    func toggleBinding(for option: CustomModeSettings.Option) -> Binding<Bool> {
         let fallback: Bool
         if case .toggle(let value) = option.defaultValue { fallback = value } else { fallback = false }
         return Binding(
@@ -250,7 +250,7 @@ final class InboxModeSettingsModel: ObservableObject {
         )
     }
 
-    func textBinding(for option: InboxModeSettings.Option) -> Binding<String> {
+    func textBinding(for option: CustomModeSettings.Option) -> Binding<String> {
         var fallback = ""
         if option.clearable, case .text(let value) = option.defaultValue {
             fallback = value

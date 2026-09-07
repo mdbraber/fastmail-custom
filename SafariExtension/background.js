@@ -1,9 +1,9 @@
 /*
-Fastmail Inbox mode injector
+Fastmail Custom mode injector
 
 Fastmail serves `script-src 'self' …` with no 'unsafe-inline'. A userscript
 manager runs page-world code by adding an inline <script> to the page, which
-that policy refuses — so Inbox mode never starts.
+that policy refuses — so Custom mode never starts.
 
 scripting.executeScript() does not go through the DOM, so it is not the page's
 script to refuse. Injecting with world "MAIN" therefore lands in the same
@@ -26,7 +26,7 @@ const api = globalThis.browser || globalThis.chrome;
 // fastmail.com along with them.
 const TARGETS = ['https://app.fastmail.com/*', 'https://app.beta.fastmail.com/*'];
 const TARGET_PATTERN = /^https:\/\/app\.(beta\.)?fastmail\.com\//;
-const PAYLOAD = 'fastmail-inbox-mode.js';
+const PAYLOAD = 'fastmail-custom-mode.js';
 
 // Kept in step with the userscript's DEFAULT_SETTINGS and settings.js
 const DEFAULT_SETTINGS = {
@@ -86,7 +86,7 @@ const migrateSettings = async () => {
 };
 
 migrateSettings().catch((error) => {
-    console.error('Inbox mode: could not migrate settings', error);
+    console.error('Custom mode: could not migrate settings', error);
 });
 
 const inject = async (tabId) => {
@@ -96,7 +96,7 @@ const inject = async (tabId) => {
     await api.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
-        func: (value) => { window.__customInboxModeSettings = value; },
+        func: (value) => { window.__customModeSettings = value; },
         args: [settings]
     });
 
@@ -113,7 +113,7 @@ api.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (!tab || !tab.url || !TARGET_PATTERN.test(tab.url)) return;
 
     inject(tabId).catch((error) => {
-        console.error('Inbox mode: injection failed', error);
+        console.error('Custom mode: injection failed', error);
     });
 });
 
@@ -127,8 +127,8 @@ api.storage.onChanged.addListener(async () => {
             target: { tabId: tab.id },
             world: 'MAIN',
             func: (value) => {
-                window.__customInboxModeSettings = value;
-                if (window.customInboxMode) window.customInboxMode.applySettings(value);
+                window.__customModeSettings = value;
+                if (window.customMode) window.customMode.applySettings(value);
             },
             args: [settings]
         }).catch(() => { /* tab may not have the payload yet */ });

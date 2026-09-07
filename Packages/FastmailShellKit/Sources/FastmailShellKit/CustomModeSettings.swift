@@ -1,18 +1,18 @@
 import Foundation
 import WebKit
 
-/// The Inbox mode userscript's settings, mirrored natively.
+/// The Custom mode userscript's settings, mirrored natively.
 ///
 /// One catalog drives everything: the macOS Settings form, the keys the iOS
 /// Settings.bundle uses, and the object pushed into the page. Kept in step
 /// with the userscript's DEFAULT_SETTINGS (and the Safari extension's
 /// settings.js/settings.html, which carry the same options and copy).
 ///
-/// The userscript reads `window.__customInboxModeSettings` once at startup
+/// The userscript reads `window.__customModeSettings` once at startup
 /// and merges it over its own defaults; a running copy accepts changes
-/// through `window.customInboxMode.applySettings(...)`. Both entry points
+/// through `window.customMode.applySettings(...)`. Both entry points
 /// are fed from here.
-public enum InboxModeSettings {
+public enum CustomModeSettings {
     /// The section a setting belongs to. One list of settings, shown as a tab
     /// per group on macOS and a headed section per group on the phone, so the
     /// grouping is decided here once rather than in each screen. `.general`
@@ -49,7 +49,7 @@ public enum InboxModeSettings {
             }
         }
 
-        /// The inbox-mode groups, in display order — everything except the
+        /// The custom-mode groups, in display order — everything except the
         /// app-level General tab, which the shell builds itself and only
         /// borrows `.general` catalog options for.
         public static var inboxGroups: [Group] {
@@ -88,7 +88,7 @@ public enum InboxModeSettings {
 
         /// Where the setting lives in UserDefaults. Prefixed so the shell's
         /// own keys (startView, …) and the page's cannot collide with it.
-        public var defaultsKey: String { "inboxMode.\(key)" }
+        public var defaultsKey: String { "customMode.\(key)" }
 
         init(
             _ key: String,
@@ -306,7 +306,24 @@ public enum InboxModeSettings {
     /// Never set and set-to-empty are told apart by the presence of the key,
     /// not by the value, so a field nobody has touched still gets the
     /// default even where empty would have been honoured.
+    /// Until the mode was renamed on 2026-09-07 these lived under an
+    /// `inboxMode.` prefix. Each is carried over once, so nothing anybody
+    /// chose is lost; a value already written under the new name wins, and
+    /// the old key is dropped so this happens exactly once. Cheap enough to
+    /// run at every read: after the first pass there is nothing left to find.
+    static func migrateLegacyKeys(in defaults: UserDefaults) {
+        for option in options {
+            let legacy = "inboxMode.\(option.key)"
+            guard let value = defaults.object(forKey: legacy) else { continue }
+            if defaults.object(forKey: option.defaultsKey) == nil {
+                defaults.set(value, forKey: option.defaultsKey)
+            }
+            defaults.removeObject(forKey: legacy)
+        }
+    }
+
     public static func current(from defaults: UserDefaults = .standard) -> [String: Any] {
+        migrateLegacyKeys(in: defaults)
         var settings: [String: Any] = [:]
         for option in options {
             switch option.defaultValue {
@@ -346,7 +363,7 @@ public enum InboxModeSettings {
     @MainActor
     public static func bootstrapScript(from defaults: UserDefaults = .standard) -> WKUserScript {
         WKUserScript(
-            source: "window.__customInboxModeSettings = \(json(from: defaults));",
+            source: "window.__customModeSettings = \(json(from: defaults));",
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         )
@@ -356,8 +373,8 @@ public enum InboxModeSettings {
     /// refreshed as well so a payload injected later still reads the latest.
     public static func applyScriptSource(from defaults: UserDefaults = .standard) -> String {
         """
-        window.__customInboxModeSettings = \(json(from: defaults));
-        if (window.customInboxMode) window.customInboxMode.applySettings(window.__customInboxModeSettings);
+        window.__customModeSettings = \(json(from: defaults));
+        if (window.customMode) window.customMode.applySettings(window.__customModeSettings);
         """
     }
 }

@@ -1,5 +1,5 @@
 /*
-Fastmail Inbox mode — head start
+Fastmail Custom mode — head start
 
 The payload runs in the page world, which means waiting for the document to be
 complete and then for Fastmail itself to be ready. Fastmail paints its first
@@ -17,9 +17,12 @@ in another tab — is corrected by the payload a moment later. The worst case is
 the flash this exists to remove, which is where we started.
 */
 
-const EARLY_KEY = 'custom-inbox-mode-early';
-const MODE_KEY = 'custom-inbox-mode';
-const STYLE_ID = 'custom-inboxMode-style';
+const EARLY_KEY = 'custom-mode-early';
+const MODE_KEY = 'custom-mode';
+// What it was called before the rename; the page script migrates it, but this
+// runs first and would otherwise read nothing on the load that migrates it
+const LEGACY_MODE_KEY = 'custom-inbox-mode';
+const STYLE_ID = 'custom-mode-style';
 const HIDE_CLASS = 'custom-hideInboxLabel';
 
 // Must match earlyUrlKey in the payload exactly, or nothing is ever found
@@ -59,7 +62,9 @@ if (early.css) {
 
 // The chip rules only bite while the class is set, and the class only belongs
 // there with the mode on
-const shouldHide = read(MODE_KEY) !== '0' &&
+const storedMode = () => { const v = read(MODE_KEY); return v === null ? read(LEGACY_MODE_KEY) : v; };
+
+const shouldHide = storedMode() !== '0' &&
     !!early.hide && early.hide[urlKey()] === true;
 
 // On <html>, which also means there is nothing to wait for: at document_start

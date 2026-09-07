@@ -169,14 +169,14 @@ It also handles the two cases WebKit does nothing about by default:
 
 ## Script source
 
-The script to run is an existing one: `Userscript/fastmail-inbox-mode.user.js`, which adds a sticky Inbox filter on labels and Inbox-only sidebar badge counts. (It lived in a repository of its own when this was written; on 2026-09-07 that repository was merged into this one, history and all, so the script and the app that carries it now version together.)
+The script to run is an existing one: `Userscript/fastmail-custom-mode.user.js`, which adds a sticky Inbox filter on labels and Inbox-only sidebar badge counts. (It lived in a repository of its own when this was written; on 2026-09-07 that repository was merged into this one, history and all, so the script and the app that carries it now version together.)
 
 The script is copied into the app bundle at build time and read from there at runtime. Nothing is watched, synced, or fetched. **Changing the script means rebuilding the app.**
 
 **Build-phase copy.** A `Copy User Script` run-script phase copies the repository file into the app bundle's resources on every build of every target. The source path comes from a `USERSCRIPT_PATH` build setting in an xcconfig rather than being hardcoded in the phase. The phase declares its input and output files so incremental builds behave, and it fails the build when the source is missing — an app silently shipping no script is the failure worth preventing.
 
 ```
-repo/fastmail-inbox-mode.user.js
+repo/fastmail-custom-mode.user.js
   → build phase copies into each app bundle
   → read from Bundle at launch
   → parse metadata block
@@ -436,11 +436,11 @@ The Mac build is a real Mac app rather than a single fixed window: multiple wind
 
 The scene is a `WindowGroup`, so each window owns its own `WKWebView` starting at the profile's start URL and sharing the profile's `WKWebsiteDataStore`. Native window tabbing is left enabled, so windows group into tabs according to the system preference, with the standard ⌘T, ⌃⇥, and Move Tab to New Window behaviour coming free.
 
-The user script runs independently in each tab, which is correct — each is a separate page with its own JavaScript context — and the script's own `window.mdbraberInboxMode` guard already covers double-injection within a context.
+The user script runs independently in each tab, which is correct — each is a separate page with its own JavaScript context — and the script's own `window.mdbraberCustomMode` guard already covers double-injection within a context.
 
 **The standard Edit menu must be kept.** SwiftUI's `WindowGroup` supplies Cut, Copy, and Paste with their key equivalents, and a `WKWebView` depends on them: an app with no menu bar cannot route ⌘V into the page at all, as the Milestone 0 spike demonstrated by accident. The chromeless treatment applies to iOS only; on macOS the menu bar stays.
 
-**Tab selection is bound to ⌥1–⌥9, not ⌘1–⌘9.** The Inbox mode script binds `Meta-1` through `Meta-9` to jump to sources, and a menu key equivalent wins over a web view key handler, so the conventional Mac binding would silently break shortcuts you use constantly. The web view keeps the ⌘ range; the menu takes the ⌥ range.
+**Tab selection is bound to ⌥1–⌥9, not ⌘1–⌘9.** The Custom mode script binds `Meta-1` through `Meta-9` to jump to sources, and a menu key equivalent wins over a web view key handler, so the conventional Mac binding would silently break shortcuts you use constantly. The web view keeps the ⌘ range; the menu takes the ⌥ range.
 
 The cost is that ⌥ plus a digit no longer types its typographic character while composing. That is the lesser loss, and it is the first thing to revisit if it grates.
 
@@ -509,7 +509,7 @@ The lifecycle is the part worth stating: a used compose view is spent. When a co
 
 The compose URL is the same template pinned in Milestone 0 for `mailto:` handling, with the profile's account parameter appended.
 
-The same injection applies to compose views as to any other, and no special-casing is needed: the Inbox mode script's `isReady()` gate requires a drawn `.v-MailboxSource` sidebar, so in a compose window it simply waits and stays inert.
+The same injection applies to compose views as to any other, and no special-casing is needed: the Custom mode script's `isReady()` gate requires a drawn `.v-MailboxSource` sidebar, so in a compose window it simply waits and stays inert.
 
 iOS has neither command, since it has one full-screen web view and no menu bar. Compose there is reached through Fastmail's own UI.
 
@@ -616,7 +616,7 @@ The count is only as fresh as the last time the app ran. On iOS it therefore fre
 
 **Source.** The harness resolves the count from Fastmail's own sidebar rather than inventing its own query, so the badge always agrees with what the app shows. The default resolver reads the Inbox source's badge from `.v-MailboxSource`, and is overridable with `native.badgeResolver = fn` on the same pattern as `subjectResolver`.
 
-Overriding matters here more than elsewhere: the Inbox mode script already computes its own per-label Inbox counts and patches Fastmail's badge rendering, so it is better placed than the harness to say what the number should be. The harness supplies the primitive and the script decides the policy.
+Overriding matters here more than elsewhere: the Custom mode script already computes its own per-label Inbox counts and patches Fastmail's badge rendering, so it is better placed than the harness to say what the number should be. The harness supplies the primitive and the script decides the policy.
 
 **When it updates.** On route change, on a debounced `MutationObserver` tick, and when the app returns to the foreground, where native asks the page for a fresh count via `callAsyncJavaScript` rather than trusting the last pushed value.
 
@@ -676,7 +676,7 @@ Manual verification uses `isInspectable` and Safari Web Inspector.
 
 - **M0 — Spike.** Bare `WKWebView` loading `app.fastmail.com`: confirm login with password and TOTP completes, confirm script injection runs, observe whether missing service workers degrade the app, re-verify the subject selector chain inside `WKWebView` (it was verified in Safari, and Fastmail may serve different markup to a non-Safari user agent), and capture the message actions menu: which container it renders into, that `Show details` identifies it, and whether an `i-share` icon exists in the sprite. `window.FastMail` is already confirmed present under a `WKWebView` user agent and is not re-checked. Decision gate before further work.
 - **M1** — Package plus two multiplatform targets, profiles, navigation policy, persistent sessions. Both destinations build and run, and `make install` puts all four in place. The Makefile comes this early because every later milestone depends on rebuilding often.
-- **M2** — Build phase, `ScriptStore`, `ScriptInjector`, metadata parsing. Ends with the Inbox mode script running unmodified on both platforms.
+- **M2** — Build phase, `ScriptStore`, `ScriptInjector`, metadata parsing. Ends with the Custom mode script running unmodified on both platforms.
 - **M3** — `harness.js`: route hooks, subject resolution, menu injection, error reporting.
 - **M4** — `NativeBridge`, `SharePresenter`, `BadgeController`, and the web view shims.
 - **M5** — App Intents, the AppleScript dictionary, link handling, share extensions, and the macOS compose and tab behaviour.
@@ -692,5 +692,5 @@ Within each milestone the macOS build is brought up first where the work is plat
 3. Fastmail ships UI changes that break selectors. Inherent to the approach; mitigated by keeping scripts defensive and reloadable without a rebuild.
 4. Fastmail serves different markup or a different layout to the macOS user agent, so one selector chain does not cover both platforms. Checked in M0 on both; if it holds, the chain moves into the per-profile overlay rather than the shared script.
 5. Developing primarily on macOS hides an iOS-only failure. Mitigated by closing each milestone on both platforms rather than at the end.
-6. Retired. `window.FastMail` was confirmed present under a `WKWebView` user agent on 2026-08-11, so the Inbox mode script's central dependency holds.
+6. Retired. `window.FastMail` was confirmed present under a `WKWebView` user agent on 2026-08-11, so the Custom mode script's central dependency holds.
 7. Retired. The build-phase copy means a build always carries the current script, so a stale script on iOS is bounded by install time rather than by whether the Mac app has run.

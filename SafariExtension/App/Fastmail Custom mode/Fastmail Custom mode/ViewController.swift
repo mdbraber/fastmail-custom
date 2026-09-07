@@ -1,6 +1,6 @@
 //
 //  ViewController.swift
-//  Fastmail Inbox mode
+//  Fastmail Custom mode
 //
 //  Created by Maarten den Braber on 2026-08-11.
 //

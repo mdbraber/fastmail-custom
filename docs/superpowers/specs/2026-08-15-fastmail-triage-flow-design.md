@@ -292,7 +292,7 @@ neither needs to know about the other.
 | `Process` | kept mail you can act on now |
 | the Inbox | the queue, deferred hidden |
 
-**`actionable` is what Inbox mode makes sticky.** Navigating to any label
+**`actionable` is what Custom mode makes sticky.** Navigating to any label
 applies it, so a label opens on the mail you can act on now — untriaged and
 kept together, deferred hidden. `DEFAULT_FILTER` becomes `actionable`; there is
 no per-label-kind split and `Process` needs no exemption.
@@ -725,7 +725,7 @@ labels remain** — steps 2 and 3 are already done and stay only for the record.
 | Document | Fate |
 |---|---|
 | `2026-08-11-fastmail-archive-inbox-labels-design.md` | superseded entirely — no nested labels left to swap |
-| `2026-08-11-fastmail-inbox-mode-design.md`, Move to menu | `v` gains `Process` and the topic rule |
+| `2026-08-11-fastmail-custom-mode-design.md`, Move to menu | `v` gains `Process` and the topic rule |
 | same, stand-in query | replaced by the Inbox itself |
 
 The undo-sequence mechanism from the archive spec survives and is reused.

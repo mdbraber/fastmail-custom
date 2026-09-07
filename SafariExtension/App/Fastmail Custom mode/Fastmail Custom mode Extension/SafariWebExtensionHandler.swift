@@ -1,6 +1,6 @@
 //
 //  SafariWebExtensionHandler.swift
-//  Fastmail Inbox mode Extension
+//  Fastmail Custom mode Extension
 //
 //  Created by Maarten den Braber on 2026-08-11.
 //

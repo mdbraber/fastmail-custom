@@ -556,7 +556,7 @@
     }
 
     function badgeFromScript() {
-        var api = window.customInboxMode;
+        var api = window.customMode;
         var fm = window.FastMail;
         if (!api || typeof api.isOn !== 'function' || !api.isOn() ||
             typeof api.countFor !== 'function') return null;

@@ -68,7 +68,7 @@ private let nonMatchingHeader = """
     #expect(webView.configuration.userContentController.userScripts.count == 3)
     #expect(model.banner == nil)
     let first = webView.configuration.userContentController.userScripts[0]
-    #expect(first.source.hasPrefix("window.__customInboxModeSettings = {"))
+    #expect(first.source.hasPrefix("window.__customModeSettings = {"))
 }
 
 @Test @MainActor func loadURLDefaultsToTheProfileStartURL() {

@@ -68,7 +68,7 @@
 			<key>Title</key>
 			<string>Badge label</string>
 			<key>Key</key>
-			<string>inboxMode.appBadgeLabel</string>
+			<string>customMode.appBadgeLabel</string>
 			<key>DefaultValue</key>
 			<string>Triage</string>
 			<key>IsSecure</key>
@@ -110,7 +110,7 @@
 			<key>Title</key>
 			<string>Colour rows by label</string>
 			<key>Key</key>
-			<string>inboxMode.labelColours</string>
+			<string>customMode.labelColours</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -126,7 +126,7 @@
 			<key>Title</key>
 			<string>Only labels in the sidebar</string>
 			<key>Key</key>
-			<string>inboxMode.labelColoursSidebarOnly</string>
+			<string>customMode.labelColoursSidebarOnly</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -142,7 +142,7 @@
 			<key>Title</key>
 			<string>Ignore the triage label</string>
 			<key>Key</key>
-			<string>inboxMode.labelColoursSkipTriage</string>
+			<string>customMode.labelColoursSkipTriage</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -158,7 +158,7 @@
 			<key>Title</key>
 			<string>Separate folders from labels</string>
 			<key>Key</key>
-			<string>inboxMode.sidebarSeparators</string>
+			<string>customMode.sidebarSeparators</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -174,7 +174,7 @@
 			<key>Title</key>
 			<string>Hide the Labels collapse arrow</string>
 			<key>Key</key>
-			<string>inboxMode.hideLoneExpando</string>
+			<string>customMode.hideLoneExpando</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -190,7 +190,7 @@
 			<key>Title</key>
 			<string>Hide the Inbox tag</string>
 			<key>Key</key>
-			<string>inboxMode.hideInboxLabel</string>
+			<string>customMode.hideInboxLabel</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -206,7 +206,7 @@
 			<key>Title</key>
 			<string>Show only the label’s own name</string>
 			<key>Key</key>
-			<string>inboxMode.stripLabelPrefix</string>
+			<string>customMode.stripLabelPrefix</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -224,7 +224,7 @@
 			<key>Title</key>
 			<string>Triage label</string>
 			<key>Key</key>
-			<string>inboxMode.triageLabel</string>
+			<string>customMode.triageLabel</string>
 			<key>DefaultValue</key>
 			<string>Triage</string>
 			<key>IsSecure</key>
@@ -246,7 +246,7 @@
 			<key>Title</key>
 			<string>Labels that are never projects</string>
 			<key>Key</key>
-			<string>inboxMode.excludedLabels</string>
+			<string>customMode.excludedLabels</string>
 			<key>DefaultValue</key>
 			<string>Later</string>
 			<key>IsSecure</key>
@@ -268,7 +268,7 @@
 			<key>Title</key>
 			<string>Labels that add the sender to a contact group</string>
 			<key>Key</key>
-			<string>inboxMode.contactGroupLabels</string>
+			<string>customMode.contactGroupLabels</string>
 			<key>DefaultValue</key>
 			<string></string>
 			<key>IsSecure</key>
@@ -290,7 +290,7 @@
 			<key>Title</key>
 			<string>Dragging adds a label</string>
 			<key>Key</key>
-			<string>inboxMode.dragAdditive</string>
+			<string>customMode.dragAdditive</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -306,7 +306,7 @@
 			<key>Title</key>
 			<string>File instead of move</string>
 			<key>Key</key>
-			<string>inboxMode.labelsShortcut</string>
+			<string>customMode.labelsShortcut</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -322,7 +322,7 @@
 			<key>Title</key>
 			<string>Only labels in the sidebar</string>
 			<key>Key</key>
-			<string>inboxMode.labelsSidebarOnly</string>
+			<string>customMode.labelsSidebarOnly</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -338,7 +338,7 @@
 			<key>Title</key>
 			<string>Apply the only match automatically</string>
 			<key>Key</key>
-			<string>inboxMode.labelsAutoSave</string>
+			<string>customMode.labelsAutoSave</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -354,7 +354,7 @@
 			<key>Title</key>
 			<string>Back to the list when the next is triaged</string>
 			<key>Key</key>
-			<string>inboxMode.backToListWhenTriaged</string>
+			<string>customMode.backToListWhenTriaged</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -372,7 +372,7 @@
 			<key>Title</key>
 			<string>Snooze key</string>
 			<key>Key</key>
-			<string>inboxMode.snoozeKey</string>
+			<string>customMode.snoozeKey</string>
 			<key>DefaultValue</key>
 			<string>w</string>
 			<key>IsSecure</key>
@@ -394,7 +394,7 @@
 			<key>Title</key>
 			<string>Default snooze period</string>
 			<key>Key</key>
-			<string>inboxMode.snoozeDefault</string>
+			<string>customMode.snoozeDefault</string>
 			<key>DefaultValue</key>
 			<string>2w</string>
 			<key>IsSecure</key>
@@ -416,7 +416,7 @@
 			<key>Title</key>
 			<string>Snooze time of day</string>
 			<key>Key</key>
-			<string>inboxMode.snoozeTime</string>
+			<string>customMode.snoozeTime</string>
 			<key>DefaultValue</key>
 			<string>08:00</string>
 			<key>IsSecure</key>
@@ -440,7 +440,7 @@
 			<key>Title</key>
 			<string>Pin key</string>
 			<key>Key</key>
-			<string>inboxMode.urgentKey</string>
+			<string>customMode.urgentKey</string>
 			<key>DefaultValue</key>
 			<string>s</string>
 			<key>IsSecure</key>
@@ -462,7 +462,7 @@
 			<key>Title</key>
 			<string>Swap E and Y</string>
 			<key>Key</key>
-			<string>inboxMode.swapArchiveExpand</string>
+			<string>customMode.swapArchiveExpand</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
@@ -480,7 +480,7 @@
 			<key>Title</key>
 			<string>Bottom bar actions</string>
 			<key>Key</key>
-			<string>inboxMode.bottomBarSlots</string>
+			<string>customMode.bottomBarSlots</string>
 			<key>DefaultValue</key>
 			<string>Snooze, Pin, Archive, Labels, File, Delete, Move</string>
 			<key>IsSecure</key>

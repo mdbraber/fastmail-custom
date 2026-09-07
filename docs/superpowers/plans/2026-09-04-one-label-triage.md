@@ -4,7 +4,7 @@
 
 **Goal:** Make a project label the live state and nothing else — a message is Triage, filed under one project, or done — with archive meaning the same thing from every list, `w` opening Fastmail's snooze dialog prefilled, and the model enforced underneath every menu and gesture rather than inside the script's picker.
 
-**Architecture:** The userscript (`fastmail-inbox-mode.user.js`, one 6,100-line IIFE) patches Fastmail's mail controller `actions` object. Three rules are added at that level — archive strips, a project label replaces, a named label files the sender — by wrapping `add`/`copy`/`addremove`/`move` the way `archive`/`remove` are already wrapped. The verbs shrink to keep, pin, snooze and archive. The per-label filter system stays in the file behind one constant, off. The settings catalog is mirrored in the Safari extension and the shell apps and changes with it.
+**Architecture:** The userscript (`fastmail-custom-mode.user.js`, one 6,100-line IIFE) patches Fastmail's mail controller `actions` object. Three rules are added at that level — archive strips, a project label replaces, a named label files the sender — by wrapping `add`/`copy`/`addremove`/`move` the way `archive`/`remove` are already wrapped. The verbs shrink to keep, pin, snooze and archive. The per-label filter system stays in the file behind one constant, off. The settings catalog is mirrored in the Safari extension and the shell apps and changes with it.
 
 **Tech Stack:** Vanilla JS userscript running in Fastmail's page world (Overture views, `FastMail.store`, `controller().actions`); a Safari web extension (MV3, `scripting.executeScript` world MAIN); Swift/SwiftUI shell apps built with XcodeGen; `node --check` for syntax; manual verification on `app.beta.fastmail.com` driven from the terminal via `osascript`.
 
@@ -15,11 +15,11 @@
 - Nothing writes to a store record outside a verb, and no verb writes a mailbox setting. The script never writes `Mailbox.splits` and never adds `Triage`.
 - Counts come from `Mailbox.totalThreads`, never from a scan of loaded messages.
 - Each verb is one undo checkpoint under one toast; `z` reverts it whole. Preparatory moves go through `silencingDidAction(actions, fn)`; exactly one `didAction` is left unswallowed.
-- The payload guards against running twice (`if (window.customInboxMode) return;` at the top). Keep it.
+- The payload guards against running twice (`if (window.customMode) return;` at the top). Keep it.
 - All three rules live at Fastmail's action level so a swipe, a tap and a key do the same thing.
-- The settings catalog lives in three places and changes together: the userscript's `DEFAULT_SETTINGS`; `safari-extension/background.js` + `settings.js` + `settings.html`; `fastmail-app/Packages/FastmailShellKit/Sources/FastmailShellKit/InboxModeSettings.swift` + the generated `Apps/*/Settings.bundle/Root.plist`.
+- The settings catalog lives in three places and changes together: the userscript's `DEFAULT_SETTINGS`; `safari-extension/background.js` + `settings.js` + `settings.html`; `fastmail-app/Packages/FastmailShellKit/Sources/FastmailShellKit/CustomModeSettings.swift` + the generated `Apps/*/Settings.bundle/Root.plist`.
 - The filter system is retired, not removed: kept verbatim behind `LABEL_FILTERS = false`, parsing at all times.
-- The script must parse (`node --check`) and run (the beta tab loads with `Inbox mode ready` in the console) after every task.
+- The script must parse (`node --check`) and run (the beta tab loads with `Custom mode ready` in the console) after every task.
 - Version becomes `3.0`; commit subjects follow the repo's style: `feat: … (v3.0)` in lowercase prose.
 
 ---
@@ -30,19 +30,19 @@ There is no automated test for the userscript. Every task verifies the same way;
 
 **Syntax:**
 ```bash
-node --check fastmail-inbox-mode.user.js && echo "parses"
+node --check fastmail-custom-mode.user.js && echo "parses"
 ```
 
 **Rebuild the Safari extension so the beta tab runs the edited payload** (Xcode resolves the symlinked resources at build time, so an edit is invisible until this runs; the app must be quit first or `open` is a no-op):
 ```bash
-osascript -e 'tell application "Fastmail Inbox mode" to quit' 2>/dev/null
-cd "/Users/mdbraber/src/fastmail-custom/safari-extension-app/Fastmail Inbox mode" && \
-xcodebuild -project "Fastmail Inbox mode.xcodeproj" -scheme "Fastmail Inbox mode" \
+osascript -e 'tell application "Fastmail Custom mode" to quit' 2>/dev/null
+cd "/Users/mdbraber/src/fastmail-custom/safari-extension-app/Fastmail Custom mode" && \
+xcodebuild -project "Fastmail Custom mode.xcodeproj" -scheme "Fastmail Custom mode" \
   -configuration Debug -derivedDataPath build build 2>&1 | grep -E "BUILD (SUCCEEDED|FAILED)" && \
-open "build/Build/Products/Debug/Fastmail Inbox mode.app"
+open "build/Build/Products/Debug/Fastmail Custom mode.app"
 cd /Users/mdbraber/src/fastmail-custom
 ```
-Then reload the `app.beta.fastmail.com` tab in Safari. The extension must be enabled for that site once (Safari → Settings → Extensions); the console logs `Inbox mode ready (Shift-I to toggle)` when the payload runs.
+Then reload the `app.beta.fastmail.com` tab in Safari. The extension must be enabled for that site once (Safari → Settings → Extensions); the console logs `Custom mode ready (Shift-I to toggle)` when the payload runs.
 
 **Run read-only JavaScript in the beta tab from the terminal** (Safari → Develop → Allow JavaScript from Apple Events must be on; it already is):
 ```bash
@@ -60,10 +60,10 @@ osascript probe-run.applescript probe-labels.js
 
 | File | Responsibility | Change |
 |---|---|---|
-| `fastmail-inbox-mode.user.js` | the payload | most of the work; sections named per task |
+| `fastmail-custom-mode.user.js` | the payload | most of the work; sections named per task |
 | `probe-run.applescript`, `probe-labels.js` | read-only verification from the terminal | created (Task 0) |
 | `safari-extension/background.js`, `settings.js`, `settings.html` | settings catalog mirror #1 | Task 11 |
-| `fastmail-app/.../InboxModeSettings.swift`, `Apps/*/Settings.bundle/Root.plist`, `Tests/.../InboxModeSettingsTests.swift` | settings catalog mirror #2 | Task 12 |
+| `fastmail-app/.../CustomModeSettings.swift`, `Apps/*/Settings.bundle/Root.plist`, `Tests/.../CustomModeSettingsTests.swift` | settings catalog mirror #2 | Task 12 |
 | `fastmail-app/.../ComposePool.swift` | the compose window's URL | Task 13 |
 | `fastmail-app/.../harness.js`, `NativeBridge.swift`, `WebContainer.swift`, `AppShell.swift`, new `MailNotification.swift`, `NotificationPresenter.swift` | macOS notifications via Fastmail's desktop-app hook | Task 14 |
 
@@ -126,7 +126,7 @@ end run
         // Invariant over what is loaded: project label ⇒ Inbox
         const visible = S.getAll(C.Mailbox).filter(m => !m.get('role') && !(Number(m.get('hidden')) & 1))
             .map(m => m.get('name'));
-        const settings = (window.customInboxMode && window.customInboxMode.settings()) || {};
+        const settings = (window.customMode && window.customMode.settings()) || {};
         const excluded = String(settings.excludedLabels || 'Later').split(',').map(s => s.trim().toLowerCase());
         const triage = String(settings.triageLabel || 'Triage').toLowerCase();
         const projects = visible.filter(n => excluded.indexOf(n.toLowerCase()) === -1 && n.toLowerCase() !== triage);
@@ -162,7 +162,7 @@ git commit -m "chore: a read-only probe for labels and the inbox invariant"
 Adds the new helpers and settings next to the old ones. Nothing is removed yet, so the script keeps running on the old model while later tasks move each consumer across.
 
 **Files:**
-- Modify: `fastmail-inbox-mode.user.js` — the `Configuration` section (`DEFAULT_SETTINGS`), and the `The state mailboxes` section (`stateLabels` … `isFiled`).
+- Modify: `fastmail-custom-mode.user.js` — the `Configuration` section (`DEFAULT_SETTINGS`), and the `The state mailboxes` section (`stateLabels` … `isFiled`).
 
 **Interfaces:**
 - Produces:
@@ -257,19 +257,19 @@ Directly after the `carriesMailbox` definition in the `The verbs` section (the l
 
 - [ ] **Step 6: Parse, rebuild, load**
 
-Run: `node --check fastmail-inbox-mode.user.js && echo parses`
+Run: `node --check fastmail-custom-mode.user.js && echo parses`
 Expected: `parses`
 
 Rebuild and reload per *Verification harness*. In the beta tab's console:
 ```javascript
-window.customInboxMode.settings().triageLabel
+window.customMode.settings().triageLabel
 ```
 Expected: `"Triage"`.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add fastmail-inbox-mode.user.js
+git add fastmail-custom-mode.user.js
 git commit -m "feat: the label vocabulary of the one-label model, beside the old (v3.0 wip)"
 ```
 
@@ -280,7 +280,7 @@ git commit -m "feat: the label vocabulary of the one-label model, beside the old
 Wraps `add`, `copy`, `addremove` and `move` on the mail controller's `actions` so that a project label added from any route replaces Triage and any other project, and a label named in `contactGroupLabels` files the sender from any route. Moves sender filing out of the picker.
 
 **Files:**
-- Modify: `fastmail-inbox-mode.user.js` — new section placed directly before the `* The verbs` banner; `addInsteadOfMoving` in `The Labels menu`; `start()`.
+- Modify: `fastmail-custom-mode.user.js` — new section placed directly before the `* The verbs` banner; `addInsteadOfMoving` in `The Labels menu`; `start()`.
 
 **Interfaces:**
 - Consumes: `isProject`, `isTriage`, `mailboxesAmong`, `resolveKeys`, `silencingDidAction(actions, fn)`, `fileSendersIntoGroup(mailbox, keys)`, `toArray`, `controller()`, `modeIsOn`.
@@ -399,7 +399,7 @@ In `start()`, directly after the line `patchArchive();` add:
 
 - [ ] **Step 4: Parse, rebuild, load, verify rule 2 from the stock menu**
 
-Run: `node --check fastmail-inbox-mode.user.js && echo parses` → `parses`. Rebuild and reload.
+Run: `node --check fastmail-custom-mode.user.js && echo parses` → `parses`. Rebuild and reload.
 
 In the beta tab: select a conversation that carries `Personal`. Press `l` (Fastmail's Labels menu), tick `Kerk`, press Enter. Run `osascript probe-run.applescript probe-labels.js`.
 Expected: every message of the thread shows `Kerk` and `Inbox`, and no longer `Personal`. Press `z`: both back as they were, in one undo.
@@ -408,7 +408,7 @@ Expected: every message of the thread shows `Kerk` and `Inbox`, and no longer `P
 
 In the beta tab's console, set the setting for this session only:
 ```javascript
-window.customInboxMode.applySettings(Object.assign({}, window.customInboxMode.settings(), { contactGroupLabels: 'Later' }))
+window.customMode.applySettings(Object.assign({}, window.customMode.settings(), { contactGroupLabels: 'Later' }))
 ```
 Select a conversation, press `l`, type `Lat`, tick `Later`, Enter.
 Expected: Fastmail's toast area shows `<sender> added to Later` (or `… added to contacts and Later`); the message carries `Later` in addition to what it had (Later is a helper: nothing was removed). Press `z` to undo the label; the contact-group add has its own undo in the script (`undoGroupAdds`) and is left in place — that is existing behaviour.
@@ -416,7 +416,7 @@ Expected: Fastmail's toast area shows `<sender> added to Later` (or `… added t
 - [ ] **Step 6: Commit**
 
 ```bash
-git add fastmail-inbox-mode.user.js
+git add fastmail-custom-mode.user.js
 git commit -m "feat: a project label replaces, and a named label files the sender, from every route (v3.0 wip)"
 ```
 
@@ -427,7 +427,7 @@ git commit -m "feat: a project label replaces, and a named label files the sende
 `v` takes Triage off a thread that already carries a project, and opens the picker for one that does not. The picker becomes a plain menu: a pick is an ordinary add. Everything that let a verb wait on a pick goes.
 
 **Files:**
-- Modify: `fastmail-inbox-mode.user.js` — `runKeep`, `runUrgent`, `runDefer`, `runVerb` in `The verbs proper`; `openTopicPicker`, `armPicker`, `askBare`, `PICKER_DEADLINE_MS`, `pendingVerb`, `abortPendingVerb` in `The topic picker`; `addInsteadOfMoving`; `wrapApplyForVerb`; `patchMailboxMenu`; `labelsMenuOptions`; `wantedClaims`; `keepLeavesThisView`.
+- Modify: `fastmail-custom-mode.user.js` — `runKeep`, `runUrgent`, `runDefer`, `runVerb` in `The verbs proper`; `openTopicPicker`, `armPicker`, `askBare`, `PICKER_DEADLINE_MS`, `pendingVerb`, `abortPendingVerb` in `The topic picker`; `addInsteadOfMoving`; `wrapApplyForVerb`; `patchMailboxMenu`; `labelsMenuOptions`; `wantedClaims`; `keepLeavesThisView`.
 
 **Interfaces:**
 - Consumes: `triageAmong`, `unfiledAmong`, `allFlagged`, `resolveKeys`, `moveButton`, `labelsButton`, `capturedIsLive`, `pressCaptured`, `drawnPickerView`, `pressButtonView`, `buildPicker`, `wantOurMove`, `openLabelPicker`.
@@ -500,7 +500,7 @@ Delete `let pendingVerb = null;`, `abortPendingVerb`, `askBare`, `PICKER_DEADLIN
         // No button anywhere: ask Fastmail for the menu itself
         if (buildPicker(keys)) return;
 
-        console.warn('Inbox mode: no label menu to open');
+        console.warn('Custom mode: no label menu to open');
     };
 ```
 
@@ -615,7 +615,7 @@ Delete the `keepLeavesThisView` function and the comment block above it (from `/
 
 - [ ] **Step 9: Parse, rebuild, load, verify**
 
-Run: `node --check fastmail-inbox-mode.user.js && echo parses` → `parses`. Then `grep -n "pendingVerb\|openTopicPicker\|runDefer\|wrapApplyForVerb\|keepLeavesThisView" fastmail-inbox-mode.user.js` → expected: only mentions inside the `dressToolbar` state-verb code (`stateVerbOption` still calls `runVerb('waiting'…)` — fixed in Task 7) and none elsewhere. If `stateVerbOption` is the only hit, that is fine for now; `runVerb` ignores unknown kinds by treating them as keep — acceptable until Task 7 removes the buttons.
+Run: `node --check fastmail-custom-mode.user.js && echo parses` → `parses`. Then `grep -n "pendingVerb\|openTopicPicker\|runDefer\|wrapApplyForVerb\|keepLeavesThisView" fastmail-custom-mode.user.js` → expected: only mentions inside the `dressToolbar` state-verb code (`stateVerbOption` still calls `runVerb('waiting'…)` — fixed in Task 7) and none elsewhere. If `stateVerbOption` is the only hit, that is fine for now; `runVerb` ignores unknown kinds by treating them as keep — acceptable until Task 7 removes the buttons.
 
 Rebuild and reload. In the beta tab:
 1. Select a conversation in a project group (it carries, say, `Kerk`, no `Triage`). Press `v`. Expected: nothing happens (no Triage to take off), no picker.
@@ -627,7 +627,7 @@ Rebuild and reload. In the beta tab:
 - [ ] **Step 10: Commit**
 
 ```bash
-git add fastmail-inbox-mode.user.js
+git add fastmail-custom-mode.user.js
 git commit -m "feat: v keeps, Shift-V refiles, s pins; the picker is a menu, not a verb (v3.0 wip)"
 ```
 
@@ -638,7 +638,7 @@ git commit -m "feat: v keeps, Shift-V refiles, s pins; the picker is a menu, not
 Archive strips the Inbox, Triage, every project label and the pin, from any route, and the picker-before-archive, `Shift-E` and the long-press are removed.
 
 **Files:**
-- Modify: `fastmail-inbox-mode.user.js` — `runDone`; `patchArchive`; `suppressPicker`, `escapeVerb`; the `Long-press to archive bare` section (`LONG_PRESS_MS` … `installLongPressArchive`); `start()`.
+- Modify: `fastmail-custom-mode.user.js` — `runDone`; `patchArchive`; `suppressPicker`, `escapeVerb`; the `Long-press to archive bare` section (`LONG_PRESS_MS` … `installLongPressArchive`); `start()`.
 
 **Interfaces:**
 - Consumes: `isTriage`, `isProject`, `mailboxesAmong`, `anyFlagged`, `silencingDidAction`, `inFilteredView`, `withDidAction`, `navigateAfter`, `urlForMessage`, `pendingUndoReturn`, `refreshListAfter`, `inboxMailbox`, `messagesFrom`, `resolveKeys`.
@@ -699,12 +699,12 @@ Inside `patchArchive`, in the `actions[verb] = function (storeKeys, goTo) { … 
 
 Delete `let suppressPicker = false;` with its comment, the `escapeVerb` function, and the whole long-press section: the banner comment starting `* Long-press to archive bare — the touch Shift-E.`, `LONG_PRESS_MS`, `LONG_PRESS_SLOP`, `longPressFired`, `swallowUntil`, `consumeGhostArchive`, `archiveButtonViewFromNode`, `pressBare`, and `installLongPressArchive`. In `start()`, delete the line `installLongPressArchive();`.
 
-Run: `grep -n "suppressPicker\|escapeVerb\|installLongPressArchive\|consumeGhostArchive\|untopicedAmong" fastmail-inbox-mode.user.js`
+Run: `grep -n "suppressPicker\|escapeVerb\|installLongPressArchive\|consumeGhostArchive\|untopicedAmong" fastmail-custom-mode.user.js`
 Expected: only the `untopicedAmong` definition remains (deleted in Task 10). Anything else is a missed reference — fix it.
 
 - [ ] **Step 4: Parse, rebuild, load, verify**
 
-Run: `node --check fastmail-inbox-mode.user.js && echo parses` → `parses`. Rebuild and reload.
+Run: `node --check fastmail-custom-mode.user.js && echo parses` → `parses`. Rebuild and reload.
 
 In the beta tab:
 1. Select a conversation carrying `Kerk` + `Inbox`, pinned. Press `e`. Expected: it leaves the Inbox; the probe (select it again from the Kerk label or search) shows neither `Inbox`, `Kerk` nor the pin. One toast. `z` restores all three.
@@ -715,7 +715,7 @@ In the beta tab:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add fastmail-inbox-mode.user.js
+git add fastmail-custom-mode.user.js
 git commit -m "feat: archive strips every project label and never asks first (v3.0 wip)"
 ```
 
@@ -724,7 +724,7 @@ git commit -m "feat: archive strips every project label and never asks first (v3
 ### Task 5: `w` opens the snooze dialog filled in
 
 **Files:**
-- Modify: `fastmail-inbox-mode.user.js` — new section directly before the `* The rules under every menu` banner; `wantedClaims`; `patchSnooze` and its `start()` call.
+- Modify: `fastmail-custom-mode.user.js` — new section directly before the `* The rules under every menu` banner; `wantedClaims`; `patchSnooze` and its `start()` call.
 
 **Interfaces:**
 - Consumes: `registeredToolbarView(name)`, `toolbarsOnScreen()`, `hasShortcut(view, key)`, `SNOOZE_SHORTCUT`, `pressButtonView(view)`, `isViewOfClass(view, name)`, `settings.snoozeDefault`, `settings.snoozeTime`, `settings.snoozeKey`, `sanitizedKey`.
@@ -808,7 +808,7 @@ Directly before the `* The rules under every menu` banner, insert:
     const openSnoozeDialog = () => {
         const button = snoozeButtonView();
         if (!button || typeof button.get !== 'function') {
-            console.warn('Inbox mode: no Snooze button to open');
+            console.warn('Custom mode: no Snooze button to open');
             return;
         }
 
@@ -855,20 +855,20 @@ Delete the `patchSnooze` function and its comment (`// Snooze means "gone now, q
 
 - [ ] **Step 4: Parse, rebuild, load, verify**
 
-Run: `node --check fastmail-inbox-mode.user.js && echo parses` → `parses`. Rebuild and reload.
+Run: `node --check fastmail-custom-mode.user.js && echo parses` → `parses`. Rebuild and reload.
 
 In the beta tab, open a conversation and press `w`. Expected: Fastmail's snooze popover appears already on the custom picker, showing a date two weeks from today, time 08:00, and a preview line reading "in 2 weeks" (or Fastmail's wording). Press Escape: nothing snoozed. Press `w` again, then Enter: the thread is snoozed; Fastmail's own toast shows; `z` undoes. Check the label afterwards with the probe: the project label is still on the message.
 
 Check the date maths in the console:
 ```javascript
-(() => { const s = window.customInboxMode.settings(); const now = new Date(2026, 8, 4, 15, 30); const t = new Date(now); t.setHours(8,0,0,0); t.setDate(t.getDate()+14); return t.toString(); })()
+(() => { const s = window.customMode.settings(); const now = new Date(2026, 8, 4, 15, 30); const t = new Date(now); t.setHours(8,0,0,0); t.setDate(t.getDate()+14); return t.toString(); })()
 ```
 Expected: `Fri Sep 18 2026 08:00:00 …` — the same day the dialog proposes when run on 4 September.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add fastmail-inbox-mode.user.js
+git add fastmail-custom-mode.user.js
 git commit -m "feat: w opens the snooze dialog filled in for the default period (v3.0 wip)"
 ```
 
@@ -877,7 +877,7 @@ git commit -m "feat: w opens the snooze dialog filled in for the default period 
 ### Task 6: Drag adds; Option-drag moves
 
 **Files:**
-- Modify: `fastmail-inbox-mode.user.js` — `patchDrop` in the `Drag and drop` section.
+- Modify: `fastmail-custom-mode.user.js` — `patchDrop` in the `Drag and drop` section.
 
 **Interfaces:**
 - Consumes: `controller().actions.add/copy/move`, `settings.dragAdditive`, `modeIsOn`.
@@ -911,14 +911,14 @@ Replace the comment above `patchDrop` with:
 
 - [ ] **Step 2: Parse, rebuild, load, verify**
 
-Run: `node --check fastmail-inbox-mode.user.js && echo parses` → `parses`. Rebuild and reload.
+Run: `node --check fastmail-custom-mode.user.js && echo parses` → `parses`. Rebuild and reload.
 
 In the beta tab: drag a conversation from the Personal group onto `Kerk` in the sidebar. Expected (probe): `Kerk` + `Inbox`, no `Personal`. `z`. Option-drag the same onto `Kerk`. Expected: `Kerk`, no `Inbox`, no `Personal` — and `orphansLoaded` in the probe goes up by one, which is the deliberate exception. `z`.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add fastmail-inbox-mode.user.js
+git add fastmail-custom-mode.user.js
 git commit -m "feat: drag adds and the rules finish it; Option-drag is Fastmail's move (v3.0 wip)"
 ```
 
@@ -929,7 +929,7 @@ git commit -m "feat: drag adds and the rules finish it; Option-drag is Fastmail'
 Keep becomes File, Waiting and Someday go, and More gets "Snooze 2 weeks".
 
 **Files:**
-- Modify: `fastmail-inbox-mode.user.js` — `STATE_VERB_SHAPES`, `stateVerbOption`, the `SLOT_KINDS` table and the `[['Keep', 'keep'], …]` loop inside `dressToolbar`; `DEFAULT_SETTINGS.bottomBarSlots`.
+- Modify: `fastmail-custom-mode.user.js` — `STATE_VERB_SHAPES`, `stateVerbOption`, the `SLOT_KINDS` table and the `[['Keep', 'keep'], …]` loop inside `dressToolbar`; `DEFAULT_SETTINGS.bottomBarSlots`.
 
 **Interfaces:**
 - Consumes: `runVerb('keep', null)`, `openSnoozeDialog()`, `snoozePeriodLabel(text)`, `standardIcon(name, shapes)`, `settings.snoozeDefault`.
@@ -1013,14 +1013,14 @@ In `DEFAULT_SETTINGS`, change `bottomBarSlots` to `'Snooze, Pin, Archive, Labels
 
 - [ ] **Step 6: Parse, rebuild, load, verify on the phone layout**
 
-Run: `node --check fastmail-inbox-mode.user.js && echo parses` → `parses`. `grep -n "'waiting'\|'someday'\|runVerb('keep'" fastmail-inbox-mode.user.js` → expected: no `'waiting'`/`'someday'` string literals remain; `runVerb('keep'` appears in `openMove` and `stateVerbOption` only.
+Run: `node --check fastmail-custom-mode.user.js && echo parses` → `parses`. `grep -n "'waiting'\|'someday'\|runVerb('keep'" fastmail-custom-mode.user.js` → expected: no `'waiting'`/`'someday'` string literals remain; `runVerb('keep'` appears in `openMove` and `stateVerbOption` only.
 
 Rebuild and reload. Narrow the Safari window to under 500px so Fastmail switches to the phone bar (or use the iPhone shell app after Task 12's deploy). Open a conversation. Expected bar: Snooze, Pin, Archive, Labels, then More. In More: File, Snooze 2 weeks, and Fastmail's own entries. Tap File on an unfiled conversation: the Labels sheet, narrowed to projects. Tap Snooze 2 weeks: the snooze sheet on the custom picker, two weeks out.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add fastmail-inbox-mode.user.js
+git add fastmail-custom-mode.user.js
 git commit -m "feat: the phone bar files and snoozes for a while; keep, waiting and someday go (v3.0 wip)"
 ```
 
@@ -1031,7 +1031,7 @@ git commit -m "feat: the phone bar files and snoozes for a while; keep, waiting 
 Badges show totals; the app badge is the Triage count; colours skip Triage; the toolbar indicator is the global switch.
 
 **Files:**
-- Modify: `fastmail-inbox-mode.user.js` — `countFor`, `unreadFor`, `headerUnreadFor`, `appBadgeCount`, `APP_BADGE_KINDS` in `Counting`; `labelColourRules`; `currentLabel`, `indicatorIsActive`, `toggleCurrent` in `Toolbar indicator`.
+- Modify: `fastmail-custom-mode.user.js` — `countFor`, `unreadFor`, `headerUnreadFor`, `appBadgeCount`, `APP_BADGE_KINDS` in `Counting`; `labelColourRules`; `currentLabel`, `indicatorIsActive`, `toggleCurrent` in `Toolbar indicator`.
 
 **Interfaces:**
 - Consumes: `LABEL_FILTERS`, `isTriage`, `isSidebarLabel`, `settings.labelColoursSkipTriage`, `settings.appBadgeLabel`, `mailboxPath`, `modeIsOn`, `toggleMode`.
@@ -1119,14 +1119,14 @@ In `toggleCurrent`, change the first two lines to:
 
 - [ ] **Step 5: Parse, rebuild, load, verify**
 
-Run: `node --check fastmail-inbox-mode.user.js && echo parses` → `parses`. Rebuild and reload.
+Run: `node --check fastmail-custom-mode.user.js && echo parses` → `parses`. Rebuild and reload.
 
 Expected in the beta tab: sidebar badges on `Personal`, `Kerk`, `Admin`, `Fiddle` show their thread totals (matching the group counts in the Inbox); `Triage` (if shown) shows its total; rows in the Inbox keep their project colours; a row carrying only `Triage` is uncoloured. Clicking the toolbar's Inbox-mode indicator toggles the whole mode (the console reports `isOn()` flipping), whichever label is open. In a shell app the icon badge is the Triage total (deploy comes with Task 12).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add fastmail-inbox-mode.user.js
+git add fastmail-custom-mode.user.js
 git commit -m "feat: badges are totals, the app badge is Triage, colours skip Triage (v3.0 wip)"
 ```
 
@@ -1137,7 +1137,7 @@ git commit -m "feat: badges are totals, the app badge is Triage, colours skip Tr
 Every hook the filter system has is guarded; its code stays verbatim; the settings it reads become an internal block beside it.
 
 **Files:**
-- Modify: `fastmail-inbox-mode.user.js` — `start()`, `updateIndicator`, `addObservers`, `setMode`, `inFilteredView`; the top of the `Sticky filter` section; `whereFor`; the `showFilteredCounts`/`showHeaderCounts` reads in `countFor`, `unreadFor`, `headerUnreadFor` and `patchTitleAndCount`.
+- Modify: `fastmail-custom-mode.user.js` — `start()`, `updateIndicator`, `addObservers`, `setMode`, `inFilteredView`; the top of the `Sticky filter` section; `whereFor`; the `showFilteredCounts`/`showHeaderCounts` reads in `countFor`, `unreadFor`, `headerUnreadFor` and `patchTitleAndCount`.
 
 **Interfaces:**
 - Produces: `RETIRED_SETTINGS` (object), `retiredStateLabels(accountId)`.
@@ -1234,21 +1234,21 @@ In `whereFor`, change `const { inbox, process, deferred, nonInbox } = stateLabel
 Then, everywhere in the file that still reads them, replace `settings.showFilteredCounts` → `RETIRED_SETTINGS.showFilteredCounts`, `settings.showHeaderCounts` → `RETIRED_SETTINGS.showHeaderCounts`:
 
 ```bash
-sed -i '' 's/settings\.showFilteredCounts/RETIRED_SETTINGS.showFilteredCounts/g; s/settings\.showHeaderCounts/RETIRED_SETTINGS.showHeaderCounts/g' fastmail-inbox-mode.user.js
-grep -n "RETIRED_SETTINGS\.\(showFilteredCounts\|showHeaderCounts\)" fastmail-inbox-mode.user.js
+sed -i '' 's/settings\.showFilteredCounts/RETIRED_SETTINGS.showFilteredCounts/g; s/settings\.showHeaderCounts/RETIRED_SETTINGS.showHeaderCounts/g' fastmail-custom-mode.user.js
+grep -n "RETIRED_SETTINGS\.\(showFilteredCounts\|showHeaderCounts\)" fastmail-custom-mode.user.js
 ```
 Expected: hits in `countFor`, `unreadFor`, `headerUnreadFor`, `patchTitleAndCount` — all below the `if (!LABEL_FILTERS)` guards or inside guarded installers. Delete `showFilteredCounts: true,` and `showHeaderCounts: true,` (with their comments) from `DEFAULT_SETTINGS`.
 
 - [ ] **Step 5: Parse, rebuild, load, verify the filters are gone**
 
-Run: `node --check fastmail-inbox-mode.user.js && echo parses` → `parses`. `grep -c "LABEL_FILTERS" fastmail-inbox-mode.user.js` → expected: 12 or more.
+Run: `node --check fastmail-custom-mode.user.js && echo parses` → `parses`. `grep -c "LABEL_FILTERS" fastmail-custom-mode.user.js` → expected: 12 or more.
 
-Rebuild and reload. In the beta tab: Fastmail's filter menu (the funnel beside the list heading) shows only its own entries — no Next / Triage / Deferred. Open `https://app.beta.fastmail.com/mail/Personal/?filter=next&u=f5e940af`: the label opens unfiltered. In the console, `window.customInboxMode.listQueries().size` → `0`.
+Rebuild and reload. In the beta tab: Fastmail's filter menu (the funnel beside the list heading) shows only its own entries — no Next / Triage / Deferred. Open `https://app.beta.fastmail.com/mail/Personal/?filter=next&u=f5e940af`: the label opens unfiltered. In the console, `window.customMode.listQueries().size` → `0`.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add fastmail-inbox-mode.user.js
+git add fastmail-custom-mode.user.js
 git commit -m "feat: the filter system is retired behind one constant, off (v3.0 wip)"
 ```
 
@@ -1259,7 +1259,7 @@ git commit -m "feat: the filter system is retired behind one constant, off (v3.0
 The marker, qualifiers, the deferred states and non-inbox labels leave the live code and the settings; the file's header describes the new model; the version becomes 3.0.
 
 **Files:**
-- Modify: `fastmail-inbox-mode.user.js` — `DEFAULT_SETTINGS`; `stateLabels` and the accessors after it; `isTopic`, `isFiled`, `untopicedAmong`, `carriedDispositions`; `qualifierCache`/`qualifierPaths`/`qualifierRank`; every remaining `isProcess`/`isDeferred`/`isNonInbox` use; the header comment (lines 1–107 today); `applySettings`.
+- Modify: `fastmail-custom-mode.user.js` — `DEFAULT_SETTINGS`; `stateLabels` and the accessors after it; `isTopic`, `isFiled`, `untopicedAmong`, `carriedDispositions`; `qualifierCache`/`qualifierPaths`/`qualifierRank`; every remaining `isProcess`/`isDeferred`/`isNonInbox` use; the header comment (lines 1–107 today); `applySettings`.
 
 - [ ] **Step 1: Remove the settings**
 
@@ -1284,7 +1284,7 @@ Delete `qualifierCache`, `qualifierPaths`, `qualifierRank` (the block from `let 
 - [ ] **Step 4: Find and fix every remaining reference**
 
 ```bash
-grep -n "isProcess\|isDeferred\|isNonInbox\|isTopic\|isFiled\|qualifierRank\|carriedDispositions\|untopicedAmong\|processMailbox\|waitingMailbox\|somedayMailbox\|deferredMailboxes\|nonInboxMailboxes\|settings\.processLabel\|settings\.qualifierLabels\|settings\.deferredLabels\|settings\.waitingLabel\|settings\.somedayLabel\|settings\.nonInboxLabels\|settings\.waitingKey\|settings\.somedayKey\|labelColoursSkipProcess" fastmail-inbox-mode.user.js
+grep -n "isProcess\|isDeferred\|isNonInbox\|isTopic\|isFiled\|qualifierRank\|carriedDispositions\|untopicedAmong\|processMailbox\|waitingMailbox\|somedayMailbox\|deferredMailboxes\|nonInboxMailboxes\|settings\.processLabel\|settings\.qualifierLabels\|settings\.deferredLabels\|settings\.waitingLabel\|settings\.somedayLabel\|settings\.nonInboxLabels\|settings\.waitingKey\|settings\.somedayKey\|labelColoursSkipProcess" fastmail-custom-mode.user.js
 ```
 
 For each hit, apply the rule that fits:
@@ -1300,7 +1300,7 @@ Replace everything between the `==/UserScript==` line and the `(function () {` l
 
 ```javascript
 /*
-Fastmail Inbox mode
+Fastmail Custom mode
 Maarten den Braber <m@mdbraber.com>
 version 3.0 - 2026-09-04
 
@@ -1380,14 +1380,14 @@ In `applySettings` inside `start()`, replace the comment `// The label names and
 
 - [ ] **Step 7: Parse, rebuild, load, run every scenario once**
 
-Run: `node --check fastmail-inbox-mode.user.js && echo parses` → `parses`. Rebuild and reload; the console must show `Inbox mode ready`.
+Run: `node --check fastmail-custom-mode.user.js && echo parses` → `parses`. Rebuild and reload; the console must show `Custom mode ready`.
 
 Walk the spec's scenarios 1–12 on the beta tab, using the probe after each; in particular: 1 (new mail, `v`, picker), 3 (`e` on a filed message strips both), 4 (`Shift-V` refiles), 5 (`s` pin toggle), 6 (`w` dialog), 8 (drag and Option-drag), 9a (Later files the sender from `l` and from drag — set `contactGroupLabels` to `Later` via `applySettings` first), 9b (a Triage + Kerk message: `v` takes Triage off only), 11 (multi-select mixed: `v` → Kerk gives all three Kerk only; `e` strips everything, one toast). After the walk, `orphansLoaded` in the probe is what it was before, or higher only by your Option-drags.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add fastmail-inbox-mode.user.js
+git add fastmail-custom-mode.user.js
 git commit -m "feat: one label is the live state, and archive means one thing everywhere (v3.0)"
 ```
 
@@ -1434,7 +1434,7 @@ const DEFAULT_SETTINGS = {
 Check it matches the userscript:
 ```bash
 node -e '
-const src = require("fs").readFileSync("fastmail-inbox-mode.user.js","utf8");
+const src = require("fs").readFileSync("fastmail-custom-mode.user.js","utf8");
 const m = /const DEFAULT_SETTINGS = (\{[\s\S]*?\n    \});/.exec(src);
 const a = Object.keys(eval("(" + m[1] + ")")).sort();
 const b = Object.keys(eval("(" + /const DEFAULT_SETTINGS = (\{[\s\S]*?\n\});/.exec(require("fs").readFileSync("safari-extension/settings.js","utf8"))[1] + ")")).sort();
@@ -1528,8 +1528,8 @@ git commit -m "feat: the extension's settings follow the one-label model (v3.0)"
 ### Task 12: The shell apps' copy of the catalog
 
 **Files:**
-- Modify: `/Users/mdbraber/src/fastmail-app/Packages/FastmailShellKit/Sources/FastmailShellKit/InboxModeSettings.swift` (the `options` array)
-- Modify: `/Users/mdbraber/src/fastmail-app/Packages/FastmailShellKit/Tests/FastmailShellKitTests/InboxModeSettingsTests.swift`
+- Modify: `/Users/mdbraber/src/fastmail-app/Packages/FastmailShellKit/Sources/FastmailShellKit/CustomModeSettings.swift` (the `options` array)
+- Modify: `/Users/mdbraber/src/fastmail-app/Packages/FastmailShellKit/Tests/FastmailShellKitTests/CustomModeSettingsTests.swift`
 - Regenerate: `/Users/mdbraber/src/fastmail-app/Apps/Personal/Settings.bundle/Root.plist`, `/Users/mdbraber/src/fastmail-app/Apps/Work/Settings.bundle/Root.plist`
 
 **Interfaces:**
@@ -1537,22 +1537,22 @@ git commit -m "feat: the extension's settings follow the one-label model (v3.0)"
 
 - [ ] **Step 1: Update the tests first**
 
-In `InboxModeSettingsTests.swift`, every reference to `processLabel` becomes `triageLabel`, every `"Next"` default becomes `"Triage"`, and every `"Keep"` override value becomes `"Todo"`:
+In `CustomModeSettingsTests.swift`, every reference to `processLabel` becomes `triageLabel`, every `"Next"` default becomes `"Triage"`, and every `"Keep"` override value becomes `"Todo"`:
 ```bash
 cd /Users/mdbraber/src/fastmail-app
-sed -i '' 's/processLabel/triageLabel/g; s/"Next"/"Triage"/g; s/"  Keep  "/"  Todo  "/g; s/"Keep"/"Todo"/g' Packages/FastmailShellKit/Tests/FastmailShellKitTests/InboxModeSettingsTests.swift
-grep -n "triageLabel\|Triage\|Todo" Packages/FastmailShellKit/Tests/FastmailShellKitTests/InboxModeSettingsTests.swift
+sed -i '' 's/processLabel/triageLabel/g; s/"Next"/"Triage"/g; s/"  Keep  "/"  Todo  "/g; s/"Keep"/"Todo"/g' Packages/FastmailShellKit/Tests/FastmailShellKitTests/CustomModeSettingsTests.swift
+grep -n "triageLabel\|Triage\|Todo" Packages/FastmailShellKit/Tests/FastmailShellKitTests/CustomModeSettingsTests.swift
 ```
 Expected: the same assertions, now about `triageLabel`.
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `cd /Users/mdbraber/src/fastmail-app/Packages/FastmailShellKit && swift test --filter InboxModeSettings 2>&1 | grep -E "passed|failed|error" | tail -5`
+Run: `cd /Users/mdbraber/src/fastmail-app/Packages/FastmailShellKit && swift test --filter CustomModeSettings 2>&1 | grep -E "passed|failed|error" | tail -5`
 Expected: failures mentioning `triageLabel` (the catalog has no such option yet).
 
 - [ ] **Step 3: The catalog**
 
-In `InboxModeSettings.swift`'s `options` array:
+In `CustomModeSettings.swift`'s `options` array:
 
 Replace the `labelColoursSkipProcess` entry with:
 ```swift
@@ -1605,7 +1605,7 @@ Check the keys against the extension's copy:
 ```bash
 cd /Users/mdbraber/src/fastmail-app && python3 - <<'PY'
 import re, json
-swift = open('Packages/FastmailShellKit/Sources/FastmailShellKit/InboxModeSettings.swift').read()
+swift = open('Packages/FastmailShellKit/Sources/FastmailShellKit/CustomModeSettings.swift').read()
 keys = sorted(re.findall(r'Option\(\s*"(\w+)"', swift))
 js = open('/Users/mdbraber/src/fastmail-custom/safari-extension/settings.js').read()
 block = re.search(r'const DEFAULT_SETTINGS = \{(.*?)\n\};', js, re.S).group(1)
@@ -1620,7 +1620,7 @@ Expected: `keys match`.
 ```bash
 cd /Users/mdbraber/src/fastmail-app && python3 tools/gen-settings-bundle.py && make test 2>&1 | grep -E "Test run with|Executed .* tests|TEST (SUCCEEDED|FAILED)|error:" | tail -6
 ```
-Expected: `wrote Apps/Personal/Settings.bundle/Root.plist`, `wrote Apps/Work/Settings.bundle/Root.plist`, `21 options from InboxModeSettings.swift`, all package tests pass, `TEST SUCCEEDED`. If `settingsBundleCarriesEveryInboxModeOption` fails, the generator was not run after the catalog change.
+Expected: `wrote Apps/Personal/Settings.bundle/Root.plist`, `wrote Apps/Work/Settings.bundle/Root.plist`, `21 options from CustomModeSettings.swift`, all package tests pass, `TEST SUCCEEDED`. If `settingsBundleCarriesEveryCustomModeOption` fails, the generator was not run after the catalog change.
 
 - [ ] **Step 5: Build both platforms**
 

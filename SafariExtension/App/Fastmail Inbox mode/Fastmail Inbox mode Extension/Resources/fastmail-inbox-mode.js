@@ -1,1 +1,0 @@
-../../../../../Userscript/fastmail-inbox-mode.user.js

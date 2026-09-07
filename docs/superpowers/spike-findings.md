@@ -156,7 +156,7 @@ the live session. `FastMail.classes` exposes `MenuView`,
 
 ## Badge sources
 
-- Userscript path: `window.customInboxMode` confirmed exposing `countFor`,
+- Userscript path: `window.customMode` confirmed exposing `countFor`,
   `badgeQueries`, `isOn` (v2.3).
 - DOM fallback: the Inbox sidebar row is structurally marked
   `.v-MailboxSource--inbox`; its count is the text of the child

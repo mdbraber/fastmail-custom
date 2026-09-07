@@ -7,7 +7,7 @@ generate:
 	xcodegen generate
 
 # Root.plist is generated and checked in; regenerate whenever the
-# InboxModeSettings catalog changes, or `make test` fails on the parity guard
+# CustomModeSettings catalog changes, or `make test` fails on the parity guard
 settings-bundle:
 	python3 tools/gen-settings-bundle.py
 
@@ -15,7 +15,7 @@ test: generate
 	cd Packages/FastmailShellKit && swift test
 	xcodebuild -project $(PROJECT) -scheme IntegrationTests -destination 'platform=macOS' test
 	cd Server && npm test
-	node --check Userscript/fastmail-inbox-mode.user.js
+	node --check Userscript/fastmail-custom-mode.user.js
 	for f in SafariExtension/*.js; do node --check "$$f" || exit 1; done
 
 build-macos: generate

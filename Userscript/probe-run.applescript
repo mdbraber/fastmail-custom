@@ -28,7 +28,7 @@ on run argv
     repeat with t in candidates
       if target is missing value then
         try
-          if (do JavaScript "!!window.customInboxMode" in t) is true then set target to t
+          if (do JavaScript "!!window.customMode" in t) is true then set target to t
         end try
       end if
     end repeat

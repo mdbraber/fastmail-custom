@@ -13,7 +13,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
     private var lastURL: URL
     private let openExternally: @MainActor (URL) -> Void
     // Keeps the settings observer alive exactly as long as the view exists
-    var settingsPusher: InboxModeSettingsPusher?
+    var settingsPusher: CustomModeSettingsPusher?
     var sharePresenter: SharePresenter?
     var badgePuller: BadgePuller?
     var linkLoader: LinkLoader?

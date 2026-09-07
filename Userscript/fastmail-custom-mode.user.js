@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Fastmail Inbox mode
+// @name         Fastmail Custom mode
 // @namespace    custom
 // @version      3.8
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
@@ -12,7 +12,7 @@
 // ==/UserScript==
 
 /*
-Fastmail Inbox mode
+Fastmail Custom mode
 Maarten den Braber <m@mdbraber.com>
 version 3.8 - 2026-09-07
 
@@ -144,8 +144,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // Injection can happen more than once — an injector racing a reload, or a
     // manual load on top of an existing copy. Patching twice would double-wrap
     // every method it touches, so stop if we are already here.
-    if (window.customInboxMode) {
-        console.log('Inbox mode: already loaded');
+    if (window.customMode) {
+        console.log('Custom mode: already loaded');
         return;
     }
 
@@ -155,7 +155,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * ----------------------------------------------------------------
      */
 
-    // Keystroke that toggles Inbox mode
+    // Keystroke that toggles Custom mode
     const SHORTCUT = 'Shift-I';
     // 1 … 9 and 0 go to the sources listed above the Labels heading.
     //
@@ -180,9 +180,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     ];
 
     // Where the on/off state is remembered across reloads
-    const STORAGE_KEY = 'custom-inbox-mode';
+    const STORAGE_KEY = 'custom-mode';
+    // What it was called before the mode was renamed, read once so a mode
+    // switched off stays off. Both this and the early cache's old key are
+    // dropped on the way past.
+    const LEGACY_STORAGE_KEY = 'custom-inbox-mode';
     // Marks our toolbar button so it can be found again after a redraw
-    const INDICATOR_CLASS = 'custom-inboxModeButton';
+    const INDICATOR_CLASS = 'custom-modeButton';
     // Set on <body> while the Inbox chip should be hidden on message rows
     const HIDE_INBOX_LABEL_CLASS = 'custom-hideInboxLabel';
     // Goes on the sidebar row that opens a run of a different kind, so the line
@@ -196,10 +200,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const MOVE_SHORTCUT = 'v';
     const STOCK_MOVE_CODE = 'KeyV';
     // Id of our stylesheet
-    const STYLE_ID = 'custom-inboxMode-style';
+    const STYLE_ID = 'custom-mode-style';
     // What the extension's document_start script replays on the next load, so
     // Fastmail's first paint is already styled. Read by early.js as well.
-    const EARLY_KEY = 'custom-inbox-mode-early';
+    const EARLY_KEY = 'custom-mode-early';
     // Views worth remembering an answer for; older ones are dropped
     const EARLY_PATH_LIMIT = 40;
     // Bumped when remembered answers become untrustworthy, to drop them once
@@ -258,8 +262,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         hideLoneExpando: true
     };
 
-    let settings = Object.assign({}, DEFAULT_SETTINGS, window.__customInboxModeSettings || {});
-    // Id prefix for the per-account queries that pull each Inbox into the store
+    let settings = Object.assign({}, DEFAULT_SETTINGS, window.__customModeSettings || {});
 
     /*
      * ----------------------------------------------------------------
@@ -441,7 +444,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         if (settings.triageLabel && !cached.triage && warnedNoTriage !== settings.triageLabel) {
             warnedNoTriage = settings.triageLabel;
-            console.warn('Inbox mode: no label named "' + settings.triageLabel +
+            console.warn('Custom mode: no label named "' + settings.triageLabel +
                 '" — v takes nothing off and archive strips no Triage until it exists');
         }
 
@@ -632,7 +635,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             try {
                 view.redrawBadgeCount();
             } catch (error) {
-                console.warn('Inbox mode: could not repaint a badge', error);
+                console.warn('Custom mode: could not repaint a badge', error);
             }
         });
     };
@@ -1229,15 +1232,15 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                   ' v-Button--iconOnly v-Button--tooltipLabel'),
             isActive: indicatorIsActive(),
             icon: inboxIcon(),
-            label: 'Inbox mode',
-            target: { toggleInboxMode: () => toggleCurrent() },
-            method: 'toggleInboxMode'
+            label: 'Custom mode',
+            target: { toggleCustomMode: () => toggleCurrent() },
+            method: 'toggleCustomMode'
         });
 
         try {
             home.parent.insertView(indicatorView, home.anchor, home.side);
         } catch (error) {
-            console.warn('Inbox mode: could not add the toolbar indicator', error);
+            console.warn('Custom mode: could not add the toolbar indicator', error);
             indicatorView = null;
         }
     };
@@ -1816,7 +1819,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 menu.set('options', current.concat([option]));
             }
         } catch (error) {
-            console.warn('Inbox mode: could not rearrange the toolbar', error);
+            console.warn('Custom mode: could not rearrange the toolbar', error);
         }
     };
 
@@ -1865,7 +1868,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             try {
                 toolbar.removeView(indicatorView);
             } catch (error) {
-                console.warn('Inbox mode: could not remove the toolbar indicator', error);
+                console.warn('Custom mode: could not remove the toolbar indicator', error);
             }
         }
 
@@ -2346,7 +2349,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             try {
                 group.removeContact(contact);
             } catch (error) {
-                console.warn('Inbox mode: could not take the contact back out', error);
+                console.warn('Custom mode: could not take the contact back out', error);
             }
         });
     };
@@ -2367,7 +2370,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 makeContactGroup(accountId, leaf);
 
             if (!group) {
-                console.warn('Inbox mode: could not find or make a contact' +
+                console.warn('Custom mode: could not find or make a contact' +
                     ' group named ' + mailboxPath(mailbox));
                 return;
             }
@@ -2424,7 +2427,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     : who + ' added to ' + group.get('name'));
             }
         } catch (error) {
-            console.warn('Inbox mode: could not file the sender', error);
+            console.warn('Custom mode: could not file the sender', error);
         }
     };
 
@@ -2591,7 +2594,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const openSnoozeDialog = () => {
         const button = snoozeButtonView();
         if (!button || typeof button.get !== 'function') {
-            console.warn('Inbox mode: no Snooze button to open');
+            console.warn('Custom mode: no Snooze button to open');
             return;
         }
 
@@ -3175,7 +3178,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 return true;
             }
         } catch (error) {
-            console.warn('Inbox mode: could not press the button', error);
+            console.warn('Custom mode: could not press the button', error);
         }
         return false;
     };
@@ -3205,7 +3208,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             entry.target[entry.method]();
             return true;
         } catch (error) {
-            console.warn('Inbox mode: could not open the project picker', error);
+            console.warn('Custom mode: could not open the project picker', error);
             return false;
         }
     };
@@ -3367,7 +3370,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             return true;
         } catch (error) {
             wantOurMove = false;
-            console.warn('Inbox mode: could not open the project picker', error);
+            console.warn('Custom mode: could not open the project picker', error);
             return false;
         }
     };
@@ -3405,7 +3408,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // No button anywhere: ask Fastmail for the menu itself
         if (buildPicker(keys)) return;
 
-        console.warn('Inbox mode: no label menu to open');
+        console.warn('Custom mode: no label menu to open');
     };
 
     /*
@@ -3539,7 +3542,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
             router.restoreEncodedState(state, target.searchParams);
         } catch (error) {
-            console.warn('Inbox mode: could not walk back to the message', error);
+            console.warn('Custom mode: could not walk back to the message', error);
         }
     };
 
@@ -3710,7 +3713,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 patchUndo();
                 if (!undoTarget && lastUndoReturn && !warnedNoUndo) {
                     warnedNoUndo = true;
-                    console.warn('Inbox mode: no undo manager found to wrap;' +
+                    console.warn('Custom mode: no undo manager found to wrap;' +
                         ' undo will not walk back to the message');
                 }
             }
@@ -4591,7 +4594,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         try {
             localStorage.setItem(STORAGE_KEY, modeIsOn ? '1' : '0');
         } catch (error) {
-            console.warn('Inbox mode: could not persist the mode', error);
+            console.warn('Custom mode: could not persist the mode', error);
         }
 
         // The colour rules are only emitted while the mode is on
@@ -4605,7 +4608,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // there for the times you want out of it
     const storedMode = () => {
         try {
-            const stored = localStorage.getItem(STORAGE_KEY);
+            let stored = localStorage.getItem(STORAGE_KEY);
+            if (stored === null) {
+                stored = localStorage.getItem(LEGACY_STORAGE_KEY);
+                if (stored !== null) localStorage.setItem(STORAGE_KEY, stored);
+            }
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
+            localStorage.removeItem(LEGACY_STORAGE_KEY + '-early');
             return stored === null ? true : stored === '1';
         } catch (error) {
             return true;
@@ -4884,7 +4893,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     options.unshift(copyLinkOption(), null);
                 }
             } catch (error) {
-                console.warn('Inbox mode: could not add Copy link', error);
+                console.warn('Custom mode: could not add Copy link', error);
             }
 
             return originalDraw.apply(this, arguments);
@@ -4926,7 +4935,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         setMode(storedMode());
 
         // Handy from the console, and how the counts can be checked by hand
-        window.customInboxMode = {
+        window.customMode = {
             isOn: () => modeIsOn,
             setMode,
             toggleMode,
@@ -4955,7 +4964,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             }
         };
 
-        console.log(`Inbox mode ready (${SHORTCUT} to toggle), currently ${modeIsOn ? 'on' : 'off'}`);
+        console.log(`Custom mode ready (${SHORTCUT} to toggle), currently ${modeIsOn ? 'on' : 'off'}`);
     };
 
     const mainObserver = new MutationObserver(() => {

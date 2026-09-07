@@ -66,7 +66,7 @@ private func specifiers(for app: String) throws -> [[String: Any]] {
         let titles = try specifiers(for: app)
             .filter { $0["Type"] as? String == "PSGroupSpecifier" }
             .compactMap { $0["Title"] as? String }
-        for group in InboxModeSettings.Group.allCases {
+        for group in CustomModeSettings.Group.allCases {
             #expect(titles.contains(group.title), "\(app) is missing the \(group.title) header")
         }
     }
@@ -74,13 +74,13 @@ private func specifiers(for app: String) throws -> [[String: Any]] {
 
 // The iOS Settings screen and the injected settings share the catalog's keys
 // and defaults; a drifted plist would write values nothing reads.
-@Test func settingsBundleCarriesEveryInboxModeOption() throws {
+@Test func settingsBundleCarriesEveryCustomModeOption() throws {
     for app in apps {
         let byKey = Dictionary(
             try specifiers(for: app).compactMap { row in (row["Key"] as? String).map { ($0, row) } },
             uniquingKeysWith: { first, _ in first }
         )
-        for option in InboxModeSettings.options {
+        for option in CustomModeSettings.options {
             let row = try #require(byKey[option.defaultsKey], "\(app) is missing \(option.defaultsKey)")
             switch option.defaultValue {
             case .toggle(let value):

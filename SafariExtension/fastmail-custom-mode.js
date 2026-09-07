@@ -1,0 +1,1 @@
+../Userscript/fastmail-custom-mode.user.js

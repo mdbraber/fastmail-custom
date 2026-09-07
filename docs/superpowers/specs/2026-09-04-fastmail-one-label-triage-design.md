@@ -386,10 +386,10 @@ Two things to know before turning it back on:
 
 The settings catalog lives in three places and they change together: the
 userscript's `DEFAULT_SETTINGS`; the Safari extension's `background.js` and
-`settings.html`/`settings.js`; and the shell apps' `InboxModeSettings.swift`
+`settings.html`/`settings.js`; and the shell apps' `CustomModeSettings.swift`
 with the generated `Settings.bundle/Root.plist` for both apps
 (`tools/gen-settings-bundle.py`, guarded by
-`settingsBundleCarriesEveryInboxModeOption`).
+`settingsBundleCarriesEveryCustomModeOption`).
 
 ## Setup (once, by the user)
 

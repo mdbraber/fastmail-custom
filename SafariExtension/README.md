@@ -1,7 +1,7 @@
-# Fastmail Inbox mode injector
+# Fastmail Custom mode injector
 
 A minimal Safari web extension whose only job is to start
-`fastmail-inbox-mode.user.js` on `app.fastmail.com` and `app.beta.fastmail.com`.
+`fastmail-custom-mode.user.js` on `app.fastmail.com` and `app.beta.fastmail.com`.
 
 The two hosts are named outright rather than matched with a subdomain wildcard,
 which would take in the marketing site and everything else on `fastmail.com`
@@ -44,7 +44,7 @@ userscripts have no `browser.scripting`. See
 | `background.js` | Injects the payload with `world: "MAIN"` on page load |
 | `early.js` | Content script at `document_start`, replaying last load's styles |
 | `settings.html` / `settings.js` | The options popup |
-| `fastmail-inbox-mode.js` | Symlink to the userscript, which is the payload |
+| `fastmail-custom-mode.js` | Symlink to the userscript, which is the payload |
 
 The payload guards against running twice, so a duplicate injection is harmless.
 
@@ -54,7 +54,7 @@ Safari extensions must be delivered inside an app, so this needs converting once
 
 ```sh
 xcrun safari-web-extension-converter \
-    --app-name "Fastmail Inbox mode" \
+    --app-name "Fastmail Custom mode" \
     --copy-resources \
     SafariExtension
 ```
@@ -64,11 +64,11 @@ copy by hand — but **Xcode resolves them into real files when it builds**, so
 every edit needs a rebuild before Safari sees it:
 
 ```sh
-cd "SafariExtension/App/Fastmail Inbox mode"
-xcodebuild -project "Fastmail Inbox mode.xcodeproj" \
-    -scheme "Fastmail Inbox mode" -configuration Debug \
+cd "SafariExtension/App/Fastmail Custom mode"
+xcodebuild -project "Fastmail Custom mode.xcodeproj" \
+    -scheme "Fastmail Custom mode" -configuration Debug \
     -derivedDataPath build build
-open "build/Build/Products/Debug/Fastmail Inbox mode.app"
+open "build/Build/Products/Debug/Fastmail Custom mode.app"
 ```
 
 Reloading the tab without rebuilding silently runs the previous payload:
@@ -80,7 +80,7 @@ underneath a running app is what makes the extension vanish from Safari's list
 altogether.
 
 ```sh
-osascript -e 'tell application "Fastmail Inbox mode" to quit'
+osascript -e 'tell application "Fastmail Custom mode" to quit'
 ```
 
 ### Signing
@@ -96,7 +96,7 @@ with the Apple Development certificate and the identity stays put across
 rebuilds. Check it with:
 
 ```sh
-codesign -dv "build/Build/Products/Debug/Fastmail Inbox mode.app" 2>&1 |
+codesign -dv "build/Build/Products/Debug/Fastmail Custom mode.app" 2>&1 |
     grep TeamIdentifier
 ```
 
@@ -111,9 +111,9 @@ Extensions. Each Fastmail web app (`mdbraber.com.app` and friends) keeps its
 With a Fastmail tab open:
 
 ```js
-window.customInboxMode.isOn()
+window.customMode.isOn()
 ```
 
-The console also logs `Inbox mode ready (Shift-I to toggle)` on load. If the CSP
+The console also logs `Custom mode ready (Shift-I to toggle)` on load. If the CSP
 error still appears, that is the Userscripts copy of the script failing — disable
 it there, since this extension now delivers it.
