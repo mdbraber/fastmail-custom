@@ -45,7 +45,12 @@ archive to whatever sat there. And v opens the narrowed picker on a
 narrow action bar too: a bar too small to draw every action puts the rest
 under More, and the More menu registers each of their keys against
 itself, burying the stand-in v goes in under. Ours is lifted back on top
-afterwards, the same way the claimed keys are.
+afterwards, the same way the claimed keys are. The bar the verbs are added
+to is now found by asking which one carries the actions, rather than by
+looking for the phone's bottom bar: an iPad loads the same build and then
+calls itself a tablet, hiding that bar and drawing the same actions in the
+page header. Back to the list when the next is triaged is phone-only for
+the same reason — a tablet has the list beside the message already.
 
 3.8 — a decision moves on to the next message, and the Triage label is a
 triage surface of its own. Filing and archiving now go to the next message
@@ -937,11 +942,15 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // theme variables Fastmail's own list rule paints a pinned row's pin
     // with, so the two read as one state in either theme. The colour sits on
     // the icon alone; the word under it stays the toolbar's own.
+    //
+    // Keyed on the class this puts there rather than on the bar it sits in: a
+    // tablet draws the same actions in the page header instead of at the
+    // bottom, and a rule naming the bottom bar simply missed them there.
     const PIN_STATE_RULES = [
-        '.v-BottomToolbar .v-Button.custom-pinned svg.v-Icon {' +
+        '.v-Button.custom-pinned svg.v-Icon {' +
         ' color: var(--ui-icon-pin-color-stroke);' +
         ' fill: var(--ui-icon-pin-color-fill); }',
-        '.v-BottomToolbar .v-Button.custom-pinned svg.v-Icon * { fill: inherit; }'
+        '.v-Button.custom-pinned svg.v-Icon * { fill: inherit; }'
     ];
 
     // The badge's unread half: heavier than the total beside it, so the
@@ -1364,10 +1373,48 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // popover with `alignWithView: this`, so it lines up wherever it is put; and
     // being the same view the v shortcut already identifies, tapping it opens
     // the narrowed additive menu rather than the stock one, exactly as v does.
-    const messageToolbar = () => {
+    // A tablet is the same build as the phone and not the same layout. The
+    // bottom toolbar is built either way, but a tablet leaves it hidden —
+    // measured in the app's own layout, which computes isToolbarVisible from
+    // "not a tablet" — and draws the same actions in the page header instead.
+    // The node is still in the document, so looking for it by name alone
+    // found a bar that is not on screen, dressed it, and left the buttons the
+    // iPad actually shows exactly as Fastmail drew them.
+    //
+    // So the bottom bar is taken only while it is really visible, and
+    // otherwise the bar that answers to the action names is the one to dress.
+    // That is the registry again, which is how every other button here is
+    // found, and it names whichever bar the actions are on without this
+    // having to know which layout drew it.
+    const bottomToolbar = () => {
         const bar = document.querySelector('.v-BottomToolbar .v-Toolbar');
         return bar ? FastMail.getViewFromNode(bar) : null;
     };
+
+    // Phone or tablet, decided by width — 768 and up is a tablet — and kept
+    // on the root view, which recomputes it as the window changes. Not the
+    // same question as FastMail.isMobile, which names the build: the mobile
+    // build is what an iPad loads, and it then calls itself a tablet.
+    const isTabletLayout = () => {
+        try {
+            return !!(FastMail.root && FastMail.root.get('isTablet'));
+        } catch (error) {
+            return false;
+        }
+    };
+
+    // The phone proper: the build that has a bottom bar, drawn narrow enough
+    // that the message is the whole screen. What "on the phone" has always
+    // meant here, now that the two halves of the question are told apart.
+    const isPhoneLayout = () => !!FastMail.isMobile && !isTabletLayout();
+
+    // The phone's bottom bar is the one to dress; a tablet's actions are in
+    // the header, so ask the registry there and leave the bottom bar alone.
+    // Each still falls back to the other, so a layout that draws only one of
+    // them is answered either way.
+    const messageToolbar = () => (isTabletLayout()
+        ? actionBar() || bottomToolbar()
+        : bottomToolbar() || actionBar());
 
     /*
      * A button's real name.
@@ -1431,6 +1478,24 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     const isRegisteredAs = (target, name) =>
         !!target && registeredToolbarView(name) === target;
+
+    // The bar the message actions are on, whichever layout drew it. Asked by
+    // name for the same reason everything else here is: the names are the
+    // same on every platform, while the bar's place on screen is not.
+    //
+    // Three names rather than one so a bar that happens not to carry the
+    // first still answers. Move and Labels are the ones this dresses around;
+    // archive is there because a bar without either still has it.
+    const ACTION_BAR_NAMES = ['move', 'labels', 'archive'];
+
+    const actionBar = () => {
+        for (const name of ACTION_BAR_NAMES) {
+            if (registeredToolbarView(name) && registryBars[name]) {
+                return registryBars[name];
+            }
+        }
+        return null;
+    };
 
     // The More button. ToolbarView registers its own under "overflow" in
     // init, before any caller adds a thing, so the name is there on every
@@ -3062,7 +3127,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             if (!onTriageSurface()) return;
             const next = nextBelow(from, at);
 
-            if (FastMail.isMobile && settings.backToListWhenTriaged &&
+            // The phone, and only the phone. FastMail.isMobile names the
+            // build, which an iPad loads too — and an iPad shows the list
+            // beside the message, so ending the run there would throw away a
+            // reading pane that never went anywhere.
+            if (isPhoneLayout() && settings.backToListWhenTriaged &&
                 (!next || !carriesTriage(next))) {
                 const list = controller().get('mailboxMessageList');
                 const anchor = from ||
