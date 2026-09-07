@@ -1,0 +1,11 @@
+services:
+  fastmail-push:
+    build: .
+    container_name: fastmail-push
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./data:/data
+      - ./secrets:/secrets:ro
