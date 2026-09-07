@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      3.7
+// @version      3.8
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -14,9 +14,21 @@
 /*
 Fastmail Inbox mode
 Maarten den Braber <m@mdbraber.com>
-version 3.7 - 2026-09-06
+version 3.8 - 2026-09-07
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
+
+3.8 — a decision moves on to the next message, and the Triage label is a
+triage surface of its own. Filing and archiving now go to the next message
+whatever it carries, which is what Fastmail does everywhere else; nothing
+is skipped. On the phone, where the message is the whole screen, landing on
+one already triaged ends the run and the view goes back to the list —
+settings.backToListWhenTriaged, on by default. Both apply in the Triage
+label as well as the Inbox, which hold the same mail. The Triage row in the
+sidebar wears the funnel, the same glyph as the switch above the list. The
+retired v2 filter system is gone rather than dormant: about a thousand
+lines that named a model — Process, qualifiers, the deferred labels — this
+script no longer has.
 
 3.7 — back on the list, the first row takes the focus. When filing or
 archiving finds nothing left to triage and walks back to the list, the
@@ -122,10 +134,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
 * Nothing here writes to a store record outside a verb, and no verb writes
   a mailbox setting. Badge counts come from Mailbox.totalThreads.
-* The per-label filter system of v2 (next, triage, deferred, noninbox and
-  the ?filter= parameter) is retired, not removed: it sits behind
-  LABEL_FILTERS, off, with the settings it read kept beside it. It is
-  written against the v2 model and would need re-basing before use.
 * On the phone the message bar is Snooze / Pin / Archive / Labels / More,
   with File and "Snooze 2 weeks" in More.
 */
@@ -149,11 +157,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // Keystroke that toggles Inbox mode
     const SHORTCUT = 'Shift-I';
-    // The per-label filter system — next, triage, deferred, noninbox — is
-    // retired but kept: Fastmail's groups do its job on the server now.
-    // Off, nothing of it installs. Every hook it had is guarded by this
-    // one name, so a search for LABEL_FILTERS finds all of it.
-    const LABEL_FILTERS = false;
     // 1 … 9 and 0 go to the sources listed above the Labels heading.
     //
     // Cmd is the one to reach for, but Safari keeps Cmd-1 … Cmd-9 for its tabs
@@ -178,25 +181,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // Where the on/off state is remembered across reloads
     const STORAGE_KEY = 'custom-inbox-mode';
-    // Where each label's own filter choice is remembered, by mailbox id
-    const FILTERS_KEY = 'custom-inbox-mode-filters';
-    // What a label gets until you choose otherwise. `next` is ours: in the
-    // Inbox or in Process, minus the deferred labels. It was spelled
-    // `actionable` until v2.35 — loadFilters rewrites that where it was
-    // remembered, so a filter chosen under the old name survives.
-    const DEFAULT_FILTER = 'next';
-    // The complement: only the deferred labels
-    const DEFERRED_FILTER = 'deferred';
-    // The undecided slice: in the Inbox with no verb given yet — not kept
-    // (Process), not deferred. Empty is triage zero.
-    const TRIAGE_FILTER = 'triage';
-    // What is filed under a non-inbox label: kept, but worked from the label
-    // rather than from the Inbox. Its own slice, so the mail that has left
-    // the front door can be picked out from the mail that has not.
-    const NONINBOX_FILTER = 'noninbox';
-    // The spellings these two went by before, rewritten wherever a stored
-    // value or a setting still uses them
-    const FILTER_ALIASES = { actionable: 'next', reference: 'noninbox' };
     // Marks our toolbar button so it can be found again after a redraw
     const INDICATOR_CLASS = 'custom-inboxModeButton';
     // Set on <body> while the Inbox chip should be hidden on message rows
@@ -236,6 +220,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         labelsShortcut: true,
         labelsSidebarOnly: true,
         labelsAutoSave: true,
+        // A decision always moves on to the next message. On the phone, where
+        // the message is the whole screen, landing on one already triaged
+        // means the run is over: with this on the view goes back to the list
+        // instead. Off opens the next message wherever you are.
+        backToListWhenTriaged: true,
         // The label a rule puts on everything incoming. Taken off by keeping
         // or filing; the script never adds it.
         triageLabel: 'Triage',
@@ -279,8 +268,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      */
 
     let modeIsOn = false;
-    // mailbox id -> the filter you last chose for that label
-    let rememberedFilters = {};
 
     /*
      * ----------------------------------------------------------------
@@ -381,12 +368,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return false;
     };
 
-    // The mode is global, but a label can be taken out of it on its own: its
-    // remembered filter is what says so, which is the same thing that decides
-    // how the label opens. One source of truth, already persisted.
-    const modeForLabel = (mailbox) =>
-        modeIsOn && isUserLabel(mailbox) && filterFor(mailbox) === DEFAULT_FILTER;
-
     // Labels struck from the project set by name — Later holds mail, it does
     // not file it — a rule of yours, so it is named rather than worked out.
     // Memoized, for the same callers that ask it on every option and every
@@ -435,9 +416,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const mailboxesOf = (accountId) => FastMail.store.getAll(FastMail.classes.Mailbox)
         .filter(m => !accountId || m.get('accountId') === accountId);
 
-    // Matched on the full path, case-insensitively, among every mailbox of the
-    // account: the deferred set names Snoozed, which carries a role and so is
-    // not a user label.
+    // Matched on the full path, case-insensitively, among every mailbox of
+    // the account — folders as well as labels, since a setting may name
+    // either.
     const findByPath = (accountId, path) => {
         const wanted = String(path || '').toLowerCase();
         if (!wanted) return null;
@@ -491,279 +472,17 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * ----------------------------------------------------------------
      */
 
-    // No scan of loaded messages drives any count here. The state mailboxes —
-    // the Inbox, Process, the deferred labels — read Mailbox.totalThreads,
-    // which the server maintains, push updates, and Fastmail adjusts
-    // optimistically before the server confirms. A topic's Next count is
-    // an intersection no record holds, so it comes from a registered query
-    // whose total the server computes: see the primer below.
+    // No scan of loaded messages drives any count here: a badge is its
+    // mailbox's own Mailbox.totalThreads, which the server maintains, push
+    // updates, and Fastmail adjusts optimistically before the server
+    // confirms. A project label implies the Inbox, so a label's total is
+    // its queue and nothing has to be intersected to find it.
 
-    // The JMAP connection carrying the Email, Thread and Mailbox types
-    const mailSource = () => {
-        const source = FastMail.store.source;
-        const list = source && source.sources;
-        return (list && list.filter(s => s.id === 'mail')[0]) || source;
-    };
-
-    // Status flag values, as Overture defines them. Only read, never written.
-    const STATUS_LOADING = 16;
-    const STATUS_OBSOLETE = 256;
-
-    // The where for `next` on a mailbox: in it, and in the Inbox or in
-    // Process, and in none of the deferred labels. Snoozed mail is already
-    // outside (Inbox or Process) — naming it again in NOT is insurance.
-    // For `deferred`: in it, and in one of the deferred labels.
-    //
-    // JMAP's NOT is a FilterOperator requiring all its conditions false, so
-    // one node covers the whole deferred set.
-    const whereFor = (mailbox, kind) => {
-        const accountId = mailbox.get('accountId');
-        const { inbox, process, deferred, nonInbox } = retiredStateLabels(accountId);
-        if (!inbox) return null;
-
-        const conditions = [{ inMailbox: mailbox.get('id') }];
-
-        // Kept, but filed away from the front door: carries the marker like
-        // any other kept mail, so Next holds it too — this slice is what
-        // tells the two apart.
-        if (kind === NONINBOX_FILTER) {
-            if (!nonInbox.length) return null;
-            conditions.push({
-                operator: 'OR',
-                conditions: nonInbox.map(m => ({ inMailbox: m.get('id') }))
-            });
-            return { operator: 'AND', conditions };
-        }
-
-        if (kind === DEFERRED_FILTER) {
-            if (!deferred.length) return null;
-            conditions.push({
-                operator: 'OR',
-                conditions: deferred.map(m => ({ inMailbox: m.get('id') }))
-            });
-            return { operator: 'AND', conditions };
-        }
-
-        if (kind === TRIAGE_FILTER) {
-            // Undecided: still in the Inbox, and carrying no verdict — the
-            // decided are the kept (Process) and the deferred
-            if (mailbox.get('id') !== inbox.get('id')) {
-                conditions.push({ inMailbox: inbox.get('id') });
-            }
-
-            const decided = deferred.map(m => ({ inMailbox: m.get('id') }));
-            if (process) decided.unshift({ inMailbox: process.get('id') });
-            if (decided.length) {
-                conditions.push({ operator: 'NOT', conditions: decided });
-            }
-
-            return { operator: 'AND', conditions };
-        }
-
-        const active = [{ inMailbox: inbox.get('id') }];
-        if (process) active.push({ inMailbox: process.get('id') });
-        conditions.push({ operator: 'OR', conditions: active });
-
-        if (deferred.length) {
-            conditions.push({
-                operator: 'NOT',
-                conditions: deferred.map(m => ({ inMailbox: m.get('id') }))
-            });
-        }
-
-        return { operator: 'AND', conditions };
-    };
-
-    // A hand-made query must be registered under the id
-    // Message.getQueryId(params) computes: the source resolves a response back
-    // to its query by recomputing the id from the request arguments, so a
-    // query filed under any other id never resolves. Measured.
-    const registerQuery = (params) => {
-        const id = FastMail.classes.Message.getQueryId(params);
-        return FastMail.store.getQuery(id, FastMail.classes.MessageList, params);
-    };
-
-    // The primer. The stock client only asks the server to count when the
-    // filter carries a top-level inMailbox, which an AND[…] never does — but
-    // the server counts any filter when asked, even at limit 0 or 1, both
-    // measured. One raw call with the query's own arguments plus
-    // calculateTotal routes back to it by recomputed id and flips it exact:
-    // hasTotal true, length the server's total. From then on every refresh
-    // re-sends calculateTotal and the number stays exact for free.
-    //
-    // The filter and sort are passed as the query's own objects, so they
-    // serialize byte-identical and the id matches.
-    const primeQuery = (query, params) => {
-        if (query.customPrimed) return;
-        query.customPrimed = true;
-
-        try {
-            mailSource().callMethod('Email/query', {
-                accountId: params.accountId,
-                filter: params.where,
-                sort: params.sort,
-                collapseThreads: params.collapseThreads,
-                position: 0,
-                limit: 1,
-                calculateTotal: true
-            });
-        } catch (error) {
-            query.customPrimed = false;
-            console.warn('Inbox mode: could not prime a query', error);
-        }
-    };
-
-    // An unbound query does not refetch itself when a change marks it
-    // obsolete — the view's own list has a controller observer doing that, so
-    // ours get one too. fetch(true) takes the refresh path, which re-sends
-    // calculateTotal for a query that has a total.
-    const refetchWhenObsolete = (query) => {
-        const status = query.get('status');
-        if ((status & STATUS_OBSOLETE) && !(status & STATUS_LOADING)) {
-            query.fetch(true);
-        }
-    };
-
-    /*
-     * Badge queries: one per label and filter — and one more for the
-     * unread slice — built lazily when a badge first asks, kept for the
-     * session. Cheap by construction — windowSize 10, one observed row —
-     * and self-maintaining: any local move marks them obsolete through
-     * Fastmail's own query-update pass, and the observer above refetches
-     * with the total.
-     */
-    const badgeQueries = new Map();
-
-    // The filtered slice's unread threads: the slice's own conditions plus
-    // the standard keyword test, collapsed like the slice itself, so the
-    // number is the server's — never a scan of loaded messages
-    const unreadWhereFor = (mailbox, kind) => {
-        const where = whereFor(mailbox, kind);
-        if (!where) return null;
-
-        // whereFor builds a fresh object per call, so the append is ours
-        where.conditions.push({ notKeyword: '$seen' });
-        return where;
-    };
-
-    const badgeQueryFor = (mailbox, kind, unread) => {
-        const key = mailbox.get('id') + '|' + kind + (unread ? '|unread' : '');
-        const existing = badgeQueries.get(key);
-        if (existing) return existing.query;
-
-        const where = unread
-            ? unreadWhereFor(mailbox, kind)
-            : whereFor(mailbox, kind);
-        if (!where) return null;
-
-        const params = {
-            accountId: mailbox.get('accountId'),
-            where,
-            // A plain sort of its own: a count does not care about order, and
-            // borrowing the view's sort would couple the badge to whichever
-            // label is open
-            sort: [{ property: 'receivedAt', isAscending: false }],
-            collapseThreads: !!FastMail.preferences.get('enableConversations'),
-            windowSize: 10
-        };
-
-        const query = registerQuery(params);
-        if (!query.prefetch) query.prefetch = 5;
-
-        const entry = {
-            query,
-            observer: { rangeDidChange() {} },
-            watcher: {
-                lengthDidChange: () => scheduleBadgeRepaint(),
-                statusDidChange: () => refetchWhenObsolete(query)
-            }
-        };
-
-        // A WindowedQuery fetches nothing until something observes a range
-        query.addObserverForRange({ start: 0, end: 1 }, entry.observer, 'rangeDidChange');
-        query.addObserverForKey('length', entry.watcher, 'lengthDidChange');
-        query.addObserverForKey('status', entry.watcher, 'statusDidChange');
-        query.getObjectAt(0);
-
-        primeQuery(query, params);
-        badgeQueries.set(key, entry);
-
-        return query;
-    };
-
-    const dropBadgeQueries = () => {
-        badgeQueries.forEach(({ query, observer, watcher }) => {
-            try {
-                query.removeObserverForRange({ start: 0, end: 1 }, observer, 'rangeDidChange');
-                query.removeObserverForKey('length', watcher, 'lengthDidChange');
-                query.removeObserverForKey('status', watcher, 'statusDidChange');
-                query.destroy();
-            } catch (error) {
-                // A query the store already dropped is already gone
-            }
-        });
-        badgeQueries.clear();
-    };
-
-    // Exact or nothing: length is a paging estimate until hasTotal, and an
-    // estimate on a badge is worse than no badge
-    const exactLength = (query) =>
-        query && query.get('hasTotal') ? query.get('length') : null;
-
-    // What a row's badge should read while the mode is on: the total of
-    // the slice the label opens on — its own remembered filter — so the
-    // number over the name is the number the click will show. A label
-    // that opens unfiltered reads the Mailbox record, canonical and free.
-    // With showFilteredCounts off, the old economy: state mailboxes show
-    // plain totals, topics stay bare.
-    const ownKind = (kind) => kind === DEFAULT_FILTER ||
-        kind === TRIAGE_FILTER || kind === DEFERRED_FILTER ||
-        kind === NONINBOX_FILTER;
-
-    const countFor = (mailbox) => {
-        // Without the filters a badge is the label's own total: a project
-        // label implies the Inbox, so its total is its queue
-        if (!LABEL_FILTERS) return mailbox.get('totalThreads') || 0;
-
-        if (!RETIRED_SETTINGS.showFilteredCounts) {
-            const retired = retiredStateLabels(mailbox.get('accountId'));
-            if (mailbox.get('role') === 'inbox' ||
-                    mailbox === retired.process ||
-                    retired.deferred.indexOf(mailbox) !== -1) {
-                return mailbox.get('totalThreads') || 0;
-            }
-            return 0;
-        }
-
-        // Only the mode's own slices have a query to ask; a remembered
-        // stock filter gets the plain total rather than a borrowed one
-        const kind = filterFor(mailbox);
-        if (!ownKind(kind)) return mailbox.get('totalThreads') || 0;
-
-        return exactLength(badgeQueryFor(mailbox, kind, false)) || 0;
-    };
-
-    // The unread half of the badge — only where it is the shown slice's
-    // own number. A pair whose halves come from different views would
-    // read as one badge fighting itself, so anything else goes without.
-    const unreadFor = (mailbox) => {
-        if (!LABEL_FILTERS) return 0;
-        if (!RETIRED_SETTINGS.showFilteredCounts) return 0;
-
-        const kind = filterFor(mailbox);
-        if (!ownKind(kind)) return 0;
-
-        return exactLength(badgeQueryFor(mailbox, kind, true)) || 0;
-    };
-
-    // The heading's unread half: only the mode's own slices have an unread
-    // query to ask; stock filters go without rather than guessing
-    const headerUnreadFor = (mailbox, kind) => {
-        if (!LABEL_FILTERS) return 0;
-        if (!ownKind(kind)) return null;
-
-        return exactLength(badgeQueryFor(mailbox, kind, true));
-    };
+    // What a row's badge reads: the label's own total. A project label
+    // implies the Inbox, so its total is its queue, and Triage's total is
+    // what is left to decide. Read off the Mailbox record — canonical, and
+    // free, since Fastmail keeps it up to date anyway.
+    const countFor = (mailbox) => mailbox.get('totalThreads') || 0;
 
     // Badge repaints arrive in bursts as query totals land
     let badgeTimer = null;
@@ -798,19 +517,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         const path = String(settings.appBadgeLabel || '').trim().toLowerCase();
         if (!path) return null;
 
-        // The label's total; the filtered variants belong to the retired
-        // filter system and are not offered
-        const kind = '';
-
         let total = 0;
         let found = false;
 
         FastMail.store.getAll(FastMail.classes.Mailbox).forEach((mailbox) => {
             if (mailboxPath(mailbox).toLowerCase() !== path) return;
             found = true;
-            total += kind
-                ? (exactLength(badgeQueryFor(mailbox, kind, false)) || 0)
-                : (mailbox.get('totalThreads') || 0);
+            total += mailbox.get('totalThreads') || 0;
         });
 
         return found ? total : null;
@@ -881,29 +594,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const managesBadge = (mailbox) => modeIsOn && !!mailbox &&
         (mailbox.get('role') === 'inbox' || isTriage(mailbox) || isProject(mailbox));
 
-    // The unread half, written over the drawn badge: "12 (3)", the parens
-    // in bold. Fastmail draws the total through the count swap above; the
-    // decoration replaces the text afterwards, so zero unread leaves the
-    // stock number exactly as drawn.
-    const decorateBadge = (view, mailbox) => {
-        const badge = view._badge;
-        const node = badge && badge.nodeType === 1
-            ? badge
-            : (badge && typeof badge.get === 'function' && badge.get('layer'));
-        if (!node) return;
-
-        const total = countFor(mailbox);
-        const unread = unreadFor(mailbox);
-        if (!total || !unread) return;
-
-        node.textContent = '';
-        node.appendChild(document.createTextNode(total + ' '));
-
-        const strong = document.createElement('b');
-        strong.textContent = '(' + unread + ')';
-        node.appendChild(strong);
-    };
-
     // Wrap the two places that read badgeCount when painting a row:
     // draw() for a row appearing for the first time, redrawBadgeCount() after that
     const patchBadgeRendering = () => {
@@ -918,9 +608,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             }
 
             const args = arguments;
-            const result = withInboxCount(mailbox, () => drawOriginal.apply(this, args));
-            decorateBadge(this, mailbox);
-            return result;
+            return withInboxCount(mailbox, () => drawOriginal.apply(this, args));
         };
 
         proto.redrawBadgeCount = function () {
@@ -930,9 +618,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             }
 
             const args = arguments;
-            const result = withInboxCount(mailbox, () => redrawOriginal.apply(this, args));
-            decorateBadge(this, mailbox);
-            return result;
+            return withInboxCount(mailbox, () => redrawOriginal.apply(this, args));
         };
     };
 
@@ -1229,6 +915,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         '.v-MailboxSource-badge b { font-weight: 800; }'
     ];
 
+    // The Triage row wears the funnel, the same glyph as the switch above the
+    // list: what it holds is everything still waiting, not a place mail lives.
+    // The stock label icon is hidden rather than removed, so turning this off —
+    // or renaming the triage label — puts the row back as Fastmail drew it.
+    const HIDDEN_SOURCE_ICON_CLASS = 'custom-hiddenSourceIcon';
+
+    const TRIAGE_ICON_RULES = [
+        '.' + HIDDEN_SOURCE_ICON_CLASS + ' { display: none !important; }'
+    ];
+
     // A pill for passive confirmations — the fallback only: showToast asks
     // Fastmail's own notification layer first and draws this by hand when
     // that container is not there to ask. Fixed above the bottom bar, dark
@@ -1370,6 +1066,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             .concat(LONE_SECTION_RULES)
             .concat(PIN_STATE_RULES)
             .concat(BADGE_UNREAD_RULES)
+            .concat(TRIAGE_ICON_RULES)
             .concat(TOAST_RULES)
             .join('\n');
         const existing = document.getElementById(STYLE_ID);
@@ -1396,21 +1093,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         // A project list is Inbox-only by the invariant — a project label
         // implies the Inbox — and so is Triage's, so the chip that says
-        // "Inbox" on every row there says nothing and is hidden. The retired
-        // filters' view names are still honoured, for the day the constant
-        // is flipped back on.
+        // "Inbox" on every row there says nothing and is hidden.
         //
         // Mail filed under a helper label is the exception — it may sit
         // outside the Inbox — and it needs no exception here, since a chip
         // it does carry is worth seeing.
         const mailbox = mailController.get('mailbox');
-        const filter = mailController.get('mailboxFilter');
         const inboxOnly = isInboxSearch() ||
-            (!!mailbox && (isTriage(mailbox) || isProject(mailbox))) ||
-            (LABEL_FILTERS &&
-                (filter === 'inbox' || filter === DEFAULT_FILTER ||
-                    filter === TRIAGE_FILTER) &&
-                isUserLabel(mailbox));
+            (!!mailbox && (isTriage(mailbox) || isProject(mailbox)));
 
         const hide = modeIsOn && settings.hideInboxLabel && inboxOnly;
 
@@ -1566,45 +1256,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return children.find(view => isViewOfClass(view, 'MenuButtonView')) || null;
     };
 
-    const filterButtonNode = () => {
-        const page = document.getElementById('mailbox');
-        const icon = page && page.querySelector('.v-Toolbar svg.i-filter');
-        return icon ? icon.closest('button') : null;
-    };
-
-    // Fastmail lights up the filter control for any filter at all, including
-    // the one the mode applies itself. Next to our button that reads as two
-    // active controls saying the same thing, so the Next filter is
-    // excluded here and shown on our button instead. Any other filter —
-    // including a hand-picked In Inbox — still lights it up; "All mail",
-    // which is no filter, does not.
-    //
-    // Fastmail rewrites the button's type — is-active and all — whenever the
-    // filter changes, so this has to run again after each such change.
-    const updateFilterButton = () => {
-        const node = filterButtonNode();
-        if (!node) return;
-
-        const filter = controller().get('mailboxFilter');
-        const shouldBeActive = !!filter && !(modeIsOn && filter === DEFAULT_FILTER);
-        const view = FastMail.getViewFromNode(node);
-
-        if (view) {
-            view.set('isActive', shouldBeActive);
-
-            const type = view.get('type');
-            if (typeof type === 'string') {
-                const base = type.replace(/\s*\bis-active\b/g, '');
-                view.set('type', shouldBeActive ? base + ' is-active' : base);
-            }
-        }
-
-        node.classList.toggle('is-active', shouldBeActive);
-    };
-
-    // The button acts on what you are looking at. On a label it is that label's
-    // switch and nothing else's; anywhere else there is no label for it to mean,
-    // so it is the global one — which is what Shift-I always is.
+    // The label in front of you, where there is one: the bar swaps a verb
+    // on a label view that it does not swap in the Inbox.
     const currentLabel = () => {
         const mailController = controller();
         if (mailController.get('search')) return null;
@@ -1613,10 +1266,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return isUserLabel(mailbox) ? mailbox : null;
     };
 
-    const indicatorIsActive = () => {
-        const label = currentLabel();
-        return LABEL_FILTERS && label ? modeForLabel(label) : modeIsOn;
-    };
+    const indicatorIsActive = () => modeIsOn;
 
     // Fastmail's is-active is a faint grey wash behind the icon — enough to
     // separate a pressed button from an unpressed one, not enough for a switch
@@ -2206,24 +1856,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         layer.classList.toggle('custom-pinned', openThreadIsPinned());
     };
 
-    const toggleCurrent = () => {
-        const label = currentLabel();
-        if (!LABEL_FILTERS || !label) return toggleMode();
-
-        const turningOn = !modeForLabel(label);
-
-        // Turning a label back on while the mode itself is off would change
-        // nothing you can see, so take it to mean both
-        if (turningOn && !modeIsOn) {
-            rememberFilter(label, DEFAULT_FILTER);
-            setMode(true);
-            return;
-        }
-
-        rememberFilter(label, turningOn ? DEFAULT_FILTER : '');
-        controller().set('mailboxFilter', turningOn ? DEFAULT_FILTER : '');
-        refresh();
-    };
+    const toggleCurrent = () => toggleMode();
 
     const removeIndicator = () => {
         const toolbar = mailToolbar();
@@ -2316,11 +1949,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             removeIndicator();
         }
 
-        if (LABEL_FILTERS) {
-            ensureFilterMenuPatched();
-            ensureMobileFilterMenuPatched();
-            updateFilterButton();
-        }
         updateInboxLabelVisibility();
     };
 
@@ -3072,9 +2700,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                         // afterwards. The resolved keys served the rule only.
                         const advance = takeFileAdvance();
                         const result = original.call(this, storeKeys, adds, merged);
-                        // A File verb waiting on this pick moves the view on to
-                        // the next conversation still waiting for triage.
-                        if (advance) advanceToNextTriage(advance.from);
+                        // A File verb waiting on this pick moves the view on
+                        // to the next message.
+                        if (advance) advanceAfterDecision(advance.from);
                         return result;
                     }
 
@@ -3088,7 +2716,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     });
                     const advance = takeFileAdvance();
                     const result = original.apply(self, args);
-                    if (advance) advanceToNextTriage(advance.from);
+                    if (advance) advanceAfterDecision(advance.from);
                     return result;
                 } finally {
                     applyingLabelRules = false;
@@ -3170,15 +2798,15 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             toArray(other.get('mailboxes')).some(isProject)));
 
     /*
-     * Keeping a filtered list honest after a change.
+     * Keeping the open list honest after a change.
      *
      * Fastmail keeps a list up to date after a local change by working out
      * which mailbox the list is filed under — the first inMailbox reachable
      * through AND nodes — and reading only the changes filed under that one.
-     * A Next list is filed under its topic, so removing Inbox, Process
-     * or a deferred label is filed elsewhere and goes unread; the row stays.
-     * The same pass falls back to setObsolete for a query whose filter has no
-     * such mailbox, which is why this matters only for filed-under queries.
+     * A verb here moves mail between labels, so a change filed under another
+     * mailbox goes unread and the row stays. The same pass falls back to
+     * setObsolete for a query whose filter has no such mailbox, which is why
+     * this matters only for filed-under lists.
      */
 
     // Where a filter is filed: first inMailbox by AND-descent, as Fastmail
@@ -3236,10 +2864,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         if (list && typeof list.setObsolete === 'function') {
             staleAfter(list, mailbox);
         }
-
-        // The badge queries share the blind spot: they are filed under their
-        // topic, and the verbs move mail between the state mailboxes
-        badgeQueries.forEach(({ query }) => staleAfter(query, mailbox));
     };
 
     // Run `work` with didAction replaced. The replacement is handed the real
@@ -3319,36 +2943,44 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return !!ta && ta === tb;
     };
 
-    const inInboxTriage = () => {
+    // The two lists a decision is made in: the Inbox and the triage label's
+    // own view. They hold the same mail — Triage implies the Inbox — so what
+    // works in one works in the other, the picker and this walk included.
+    const onTriageSurface = () => {
         if (!modeIsOn) return false;
         const mailbox = controller().get('mailbox');
-        return !!mailbox && mailbox.get('role') === 'inbox' &&
-            !controller().get('search');
+        return !!mailbox && !controller().get('search') &&
+            (mailbox.get('role') === 'inbox' || isTriage(mailbox));
     };
 
-    // The next conversation below `from` that still carries Triage. Only the
-    // rows the list has actually fetched are walked, so a match far past the
-    // loaded window reads as none — which sends the view to the list rather
-    // than to a wrong row. With no `from` found, the walk is from the top.
-    const nextTriageBelow = (from) => {
+    // Where a conversation sits in the list, read before the decision lands.
+    // Filing keeps the row and archiving takes it out, so the index is what
+    // tells the two apart afterwards. -1 when the list has not fetched it.
+    const rowIndexOf = (message) => {
         const list = controller().get('mailboxMessageList');
-        if (!list || typeof list.getObjectAt !== 'function') return null;
+        if (!message || !list || typeof list.getObjectAt !== 'function') return -1;
         const length = list.get('length') || 0;
 
-        let start = 0;
-        if (from) {
-            for (let i = 0; i < length; i += 1) {
-                const row = list.getObjectAt(i);
-                if (!row) break;
-                if (sameConversation(row, from)) { start = i + 1; break; }
-            }
-        }
-        for (let i = start; i < length; i += 1) {
+        for (let i = 0; i < length; i += 1) {
             const row = list.getObjectAt(i);
             if (!row) break;
-            if (carriesTriage(row)) return row;
+            if (sameConversation(row, message)) return i;
         }
-        return null;
+        return -1;
+    };
+
+    // The conversation the decision moves to: the row after `from` when
+    // filing has left it in place, or whatever has taken its slot when
+    // archiving has removed it. Null past the end of what the list has
+    // fetched, which sends the view back to the list rather than nowhere.
+    const nextBelow = (from, index) => {
+        const list = controller().get('mailboxMessageList');
+        if (!list || typeof list.getObjectAt !== 'function') return null;
+        const at = index < 0 ? 0 : index;
+        const here = list.getObjectAt(at);
+
+        if (here && sameConversation(here, from)) return list.getObjectAt(at + 1) || null;
+        return here || null;
     };
 
     // The current mailbox's list URL, built from a message in it — Fastmail
@@ -3365,25 +2997,42 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // Run a tick after the file, so the store has taken Triage off the one
-    // just filed and it is not itself the answer.
-    const advanceToNextTriage = (from) => {
-        if (!inInboxTriage()) return;
+    // A decision moves on to the next message, which is what Fastmail does
+    // everywhere else — filing here keeps the message in the Inbox, so the
+    // step has to be made rather than waited for. Nothing is skipped: the
+    // next message is the next message, triaged or not.
+    //
+    // The exception is the phone, where the reading pane is the whole screen:
+    // landing on one already triaged means the run is over, so the view goes
+    // back to the list instead of into mail that was already dealt with. Only
+    // in the Inbox and the triage label, and only with the setting on.
+    //
+    // Run a tick after the decision, so the store has taken Triage off the one
+    // just decided and the list has settled.
+    const advanceAfterDecision = (from) => {
+        if (!onTriageSurface()) return;
+        const index = rowIndexOf(from);
+
         setTimeout(() => {
-            if (!inInboxTriage()) return;
-            const next = nextTriageBelow(from);
-            if (next) {
-                const url = urlForMessage(next);
-                if (url) { goToUrl(url); return; }
+            if (!onTriageSurface()) return;
+            const next = nextBelow(from, index);
+
+            if (FastMail.isMobile && settings.backToListWhenTriaged &&
+                (!next || !carriesTriage(next))) {
+                const list = controller().get('mailboxMessageList');
+                const anchor = from ||
+                    (list && typeof list.getObjectAt === 'function' && list.getObjectAt(0));
+                const listUrl = listURLFrom(anchor);
+                if (listUrl) goToUrl(listUrl);
+                // Back on the list — or already there — the first row takes the
+                // focus rather than nothing. A tick later, so the route has landed.
+                setTimeout(focusFirstRow, 0);
+                return;
             }
-            const list = controller().get('mailboxMessageList');
-            const anchor = from ||
-                (list && typeof list.getObjectAt === 'function' && list.getObjectAt(0));
-            const listUrl = listURLFrom(anchor);
-            if (listUrl) goToUrl(listUrl);
-            // Back on the list — or already there — the first row takes the
-            // focus rather than nothing. A tick later, so the route has landed.
-            setTimeout(focusFirstRow, 0);
+
+            if (!next) return;
+            const url = urlForMessage(next);
+            if (url) goToUrl(url);
         }, 0);
     };
 
@@ -3795,9 +3444,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // In the Inbox with the mode on, hold that step and walk to the next
         // conversation waiting for triage instead, exactly as filing does;
         // elsewhere the stock archive advances as it always has.
-        if (inInboxTriage()) {
+        if (onTriageSurface()) {
             withDidAction(actions, stayHereAfter, finish);
-            advanceToNextTriage(from);
+            advanceAfterDecision(from);
         } else {
             finish();
         }
@@ -3819,7 +3468,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // Kept in place; the view moves on to the next conversation waiting
         // for triage, or back to the list — first row focused — when none is
         // left.
-        advanceToNextTriage(from);
+        advanceAfterDecision(from);
     };
 
     // pin — `s`. A toggle over the selection: all pinned, unpin; else pin.
@@ -4487,602 +4136,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     /*
      * ----------------------------------------------------------------
-     * Sticky filter
-     * ----------------------------------------------------------------
-     */
-
-    // The settings the retired code reads, kept here with their old defaults
-    // so nothing below references a setting the catalog no longer has.
-    // Written against the old model — Process, qualifiers, the deferred
-    // labels — and so would need re-basing on Triage before any of this
-    // said something true again.
-    const RETIRED_SETTINGS = {
-        processLabel: 'Next',
-        qualifierLabels: 'Admin, Waiting',
-        deferredLabels: 'Waiting, Snoozed',
-        waitingLabel: 'Waiting',
-        somedayLabel: 'Someday',
-        nonInboxLabels: '',
-        showFilteredCounts: true,
-        showHeaderCounts: true,
-        appBadgeFilter: 'next'
-    };
-
-    // The old state-label set, for the filter builder below
-    const retiredStateLabels = (accountId) => {
-        const deferredPaths = pathsFromSetting(RETIRED_SETTINGS.deferredLabels);
-        [RETIRED_SETTINGS.waitingLabel, RETIRED_SETTINGS.somedayLabel].forEach((path) => {
-            const trimmed = String(path || '').trim();
-            if (trimmed && !deferredPaths.some(other =>
-                other.toLowerCase() === trimmed.toLowerCase())) {
-                deferredPaths.push(trimmed);
-            }
-        });
-
-        return {
-            inbox: mailboxesOf(accountId).filter(m => m.get('role') === 'inbox')[0] || null,
-            process: findByPath(accountId, RETIRED_SETTINGS.processLabel),
-            deferred: deferredPaths.map(path => findByPath(accountId, path)).filter(Boolean),
-            nonInbox: pathsFromSetting(RETIRED_SETTINGS.nonInboxLabels)
-                .map(path => findByPath(accountId, path)).filter(Boolean)
-        };
-    };
-
-    // Each label — and the Inbox — keeps whichever filter you last chose for
-    // it, so one you set to All mail or Unread stays that way when you come
-    // back. Anything you have not chosen for gets the Next filter.
-    //
-    // Keyed by mailbox id rather than store key: store keys are handed out per
-    // session and would not survive a reload.
-    const loadFilters = () => {
-        try {
-            rememberedFilters = JSON.parse(localStorage.getItem(FILTERS_KEY)) || {};
-        } catch (error) {
-            rememberedFilters = {};
-        }
-
-        // A value stored under a slice's old name is still the choice you
-        // made, so it is rewritten rather than left to fall through as a
-        // filter nothing recognises — which would quietly hand the label
-        // back its plain unfiltered list.
-        let moved = false;
-        Object.keys(rememberedFilters).forEach((id) => {
-            const renamed = FILTER_ALIASES[rememberedFilters[id]];
-            if (!renamed) return;
-
-            rememberedFilters[id] = renamed;
-            moved = true;
-        });
-
-        // Written back once, so the rewrite is not redone on every load
-        if (moved) saveFilters();
-    };
-
-    const saveFilters = () => {
-        try {
-            localStorage.setItem(FILTERS_KEY, JSON.stringify(rememberedFilters));
-        } catch (error) {
-            console.warn('Inbox mode: could not persist the filter choices', error);
-        }
-    };
-
-    // The sources the sticky filter manages: every user label, and the Inbox
-    // itself — the queue opens on `next` too, which is what hides
-    // deferred mail from it
-    const modeManagesSource = (mailbox) => !!mailbox && typeof mailbox.get === 'function' &&
-        (isUserLabel(mailbox) || mailbox.get('role') === 'inbox');
-
-    const filterFor = (mailbox) => {
-        const id = mailbox && mailbox.get('id');
-
-        if (id && Object.prototype.hasOwnProperty.call(rememberedFilters, id)) {
-            return rememberedFilters[id];
-        }
-
-        // A deferred label under `next` would show nothing at all —
-        // it is the very set the filter hides — so those open unfiltered:
-        // the label already is the deferred list.
-        //
-        // A non-inbox label is not that case: its mail carries the marker
-        // like any other kept mail, so actionable is exactly the live half
-        // of it and the default stands.
-        return retiredStateLabels(mailbox.get('accountId')).deferred.indexOf(mailbox) !== -1
-            ? '' : DEFAULT_FILTER;
-    };
-
-    // Storing nothing for the default keeps the record to the labels you have
-    // actually changed, and makes going back to the default a deletion. The
-    // default is per label: a deferred label's is All mail.
-    const rememberFilter = (mailbox, filter) => {
-        const id = mailbox && mailbox.get('id');
-        if (!id) return;
-
-        const fallback = retiredStateLabels(mailbox.get('accountId')).deferred.indexOf(mailbox) !== -1
-            ? '' : DEFAULT_FILTER;
-
-        if (filter === fallback) delete rememberedFilters[id];
-        else rememberedFilters[id] = filter;
-
-        saveFilters();
-    };
-
-    // Fastmail's own filter menu writes mailboxFilter directly, so this is
-    // where a hand-picked filter gets recorded against the label you are on.
-    //
-    // Only filters *you* set are recorded. The mode sets one itself on every
-    // navigation and whenever it is switched on or off, and those must not be
-    // read back as choices — moving between labels changes the mailbox and the
-    // filter together in one batch, with the two briefly out of step. Traced:
-    // `filter -> "inbox" mailbox="Later"` while the URL still read
-    // /mail/Triage/, which files one label's filter under another's name.
-    //
-    // It went unnoticed while the label it happened to hit was Triage, which
-    // ignored the remembered value; now that Triage reads it like every other
-    // label, a stray "" there switches the Inbox filter off and snoozed mail
-    // comes back into the list.
-    //
-    // A flag rather than a guess about which pairs look consistent: the observer
-    // is measured to run inside the call that sets the filter — the trace reads
-    // `rememberCurrentFilter <- endPropertyChanges <- goSource` — so wrapping
-    // our own writes catches exactly them and nothing else.
-    let settingFilter = false;
-
-    const settingOurFilter = (work) => {
-        settingFilter = true;
-        try {
-            work();
-        } finally {
-            settingFilter = false;
-        }
-    };
-
-    const rememberCurrentFilter = () => {
-        if (!modeIsOn || settingFilter) return;
-
-        const mailController = controller();
-        if (mailController.get('search')) return;
-
-        const mailbox = mailController.get('mailbox');
-        if (!modeManagesSource(mailbox)) return;
-
-        const filter = mailController.get('mailboxFilter') || '';
-
-        // A ?filter= bookmarked before a slice was renamed still names the
-        // slice you meant. Corrected in place, so the view it opens is the
-        // one asked for rather than an unfiltered fallback — and so the old
-        // spelling is not then remembered against the label.
-        const renamed = FILTER_ALIASES[filter];
-        if (renamed) {
-            settingOurFilter(() => mailController.set('mailboxFilter', renamed));
-            rememberFilter(mailbox, renamed);
-            return;
-        }
-
-        rememberFilter(mailbox, filter);
-    };
-
-    // Sidebar clicks arrive here as goSource(mailbox) with no search and no
-    // filter, by way of SourcesController.select()
-    const patchGoSource = () => {
-        const mailController = controller();
-        const original = mailController.goSource;
-
-        mailController.goSource = function (mailbox, search, mailboxFilter) {
-            if (modeIsOn && !search && !mailboxFilter) {
-                // goSource falls back to the current mailbox when given none
-                const target = mailbox || this.get('mailbox');
-                if (modeManagesSource(target)) mailboxFilter = filterFor(target);
-            }
-
-            let result;
-            settingOurFilter(() => {
-                result = original.call(this, mailbox, search, mailboxFilter);
-            });
-
-            return result;
-        };
-    };
-
-    /*
-     * ----------------------------------------------------------------
-     * The Next filter
-     * ----------------------------------------------------------------
-     */
-
-    // Wrapping a computed property means carrying its metadata across —
-    // isProperty, dependencies and the rest all live as own properties on the
-    // function .property() returns
-    const wrapComputed = (original, wrapped) => {
-        Object.keys(original).forEach((key) => {
-            wrapped[key] = original[key];
-        });
-        return wrapped;
-    };
-
-    /*
-     * The substituted list. mailboxFilter carries our value for free — URL,
-     * history, goSource's third argument, rememberedFilters — and Fastmail's
-     * own builder degrades to an unfiltered view for a value it does not
-     * know. The wrapper supplies the real query: registered under the id
-     * Message.getQueryId computes, primed for an exact total, and handed to
-     * the view only once it has resolved — the stock list covers the gap and
-     * the range observer recomputes the property the moment ours is ready.
-     */
-    const listQueries = new Map();
-
-    const listQueryFor = (mailController, stock, kind) => {
-        const mailbox = mailController.get('mailbox');
-        if (!modeManagesSource(mailbox)) return null;
-
-        const where = whereFor(mailbox, kind);
-        if (!where) return null;
-
-        const params = {
-            accountId: stock.get('accountId'),
-            where,
-            // Sort and shape are borrowed wholesale from the stock query, so
-            // the rows come out in the order the stock view would show them
-            sort: stock.get('sort'),
-            collapseThreads: stock.get('collapseThreads'),
-            findAllInThread: stock.get('findAllInThread'),
-            findMatchingParts: stock.get('findMatchingParts')
-        };
-
-        const id = FastMail.classes.Message.getQueryId(params);
-        const existing = listQueries.get(id);
-        if (existing) return existing.query;
-
-        const query = registerQuery(params);
-        if (!query.prefetch) query.prefetch = 5;
-
-        const entry = {
-            query,
-            observer: {
-                rangeDidChange: () => {
-                    // The recompute is idempotent, so it needs no per-query
-                    // handover flag — a shared one is exactly the bug the
-                    // spec warns about
-                    if (query.get('length') !== null) {
-                        mailController.computedPropertyDidChange('mailboxMessageList');
-                    }
-                },
-                // The rows and the exact total arrive in separate responses,
-                // and the guard above holds the handover until both are in.
-                // When the rows land last the range event closes the gap;
-                // when the total lands last only this one does — without it
-                // the view sits on the stock list until the next toggle.
-                lengthDidChange: () => {
-                    if (query.get('length') !== null) {
-                        mailController.computedPropertyDidChange('mailboxMessageList');
-                    }
-                }
-            },
-            watcher: {
-                statusDidChange: () => refetchWhenObsolete(query)
-            }
-        };
-
-        query.addObserverForRange({ start: 0, end: 20 }, entry.observer, 'rangeDidChange');
-        query.addObserverForKey('length', entry.observer, 'lengthDidChange');
-        query.addObserverForKey('status', entry.watcher, 'statusDidChange');
-        query.getObjectAt(0);
-
-        primeQuery(query, params);
-        listQueries.set(id, entry);
-
-        return query;
-    };
-
-    const dropListQueries = () => {
-        listQueries.forEach(({ query, observer, watcher }) => {
-            try {
-                query.removeObserverForRange({ start: 0, end: 20 }, observer, 'rangeDidChange');
-                query.removeObserverForKey('length', observer, 'lengthDidChange');
-                query.removeObserverForKey('status', watcher, 'statusDidChange');
-                query.destroy();
-            } catch (error) {
-                // Already gone is already gone
-            }
-        });
-        listQueries.clear();
-    };
-
-    const patchMessageList = () => {
-        const mailController = controller();
-        if (mailController.customMessageList) return;
-        mailController.customMessageList = true;
-
-        const original = mailController.mailboxMessageList;
-
-        mailController.mailboxMessageList = wrapComputed(original, function () {
-            const stock = original.call(this);
-            if (!modeIsOn || !stock) return stock;
-
-            // A search builds its own query and ignores the filter; leave it
-            if (this.get('search')) return stock;
-
-            const kind = this.get('mailboxFilter');
-            if (!ownKind(kind)) return stock;
-
-            const query = listQueryFor(this, stock, kind);
-
-            // Hand over only a query that has already resolved: a list
-            // without data would blank the view, and one under a foreign id
-            // never resolves at all
-            if (!query || query.get('length') === null) return stock;
-
-            return query;
-        });
-
-        mailController.computedPropertyDidChange('mailboxMessageList');
-    };
-
-    /*
-     * The header. Fastmail's own switch shows a word for every filter it
-     * knows and would show a bare mailbox name for ours; the wrapper names
-     * ours, and — behind showFilteredCounts — restores the number Fastmail
-     * drops for every filtered view, exact or absent, never an estimate.
-     */
-    // The words the headings and the filter menu show. The values behind
-    // them stay in step with the values, which is why both are read from
-    // here rather than written out at each use.
-    const FILTER_WORDS = {
-        next: 'Next', deferred: 'Deferred',
-        triage: 'Triage', noninbox: 'Non-inbox'
-    };
-
-    // A stock filtered query never asks the server for its total — only a
-    // top-level inMailbox filter does — but the server answers for any filter
-    // when asked. One raw call with the query's own arguments routes back to
-    // it by recomputed id and makes its length exact from then on.
-    const primeListForCount = (query) => {
-        primeQuery(query, {
-            accountId: query.get('accountId'),
-            where: query.get('where'),
-            sort: query.get('sort'),
-            collapseThreads: query.get('collapseThreads')
-        });
-    };
-
-    const patchTitleAndCount = () => {
-        const mailController = controller();
-        if (mailController.customTitleAndCount) return;
-        mailController.customTitleAndCount = true;
-
-        const original = mailController.mailboxTitleAndCount;
-
-        mailController.mailboxTitleAndCount = wrapComputed(original, function () {
-            const title = original.call(this);
-            if (!modeIsOn || this.get('search')) return title;
-
-            const filter = this.get('mailboxFilter');
-            const word = FILTER_WORDS[filter];
-            if (!word) return title;
-
-            // Rebuilt from the bare name rather than suffixed onto the
-            // stock string: priming the list for an exact total makes the
-            // stock heading grow a number of its own, and "Inbox • 1 •
-            // Triage 2" reads as two headings fighting. Ours is the whole
-            // sentence — the place, its slice, the filtered total alone.
-            let rebuilt = (this.get('mailboxTitle') || title) + ' • ' + word;
-
-            if (RETIRED_SETTINGS.showHeaderCounts) {
-                const mailbox = this.get('mailbox');
-                const list = this.get('mailboxMessageList');
-
-                // An empty slice goes without a number: "Inbox • Triage"
-                // already says there is nothing, and a 0 after it only adds
-                // what the absence of a count says better — the same rule
-                // the sidebar badges follow.
-                if (list && list.get('hasTotal')) {
-                    const total = list.get('length');
-                    if (total) {
-                        let count = String(total);
-                        const unread = mailbox && headerUnreadFor(mailbox, filter);
-                        if (unread) count += ' (' + unread + ')';
-                        rebuilt = rebuilt + ' ' + count;
-                    }
-                } else if (list && !list.customPrimed && list.get('where')) {
-                    primeListForCount(list);
-                }
-            }
-
-            return rebuilt;
-        });
-
-        mailController.computedPropertyDidChange('mailboxTitleAndCount');
-
-        // None of the declared dependencies change when a count lands, so the
-        // recompute is wired by hand off the bound list's length
-        mailController.addObserverForKey('mailboxMessageList.length', {
-            go: () => mailController.computedPropertyDidChange('mailboxTitleAndCount')
-        }, 'go');
-    };
-
-    /*
-     * The filter menu. Two more rows in Fastmail's own menu, so `next`
-     * and `deferred` inherit the menu, the ?filter= encoding and the
-     * remembered filters unchanged. The menu view is rebuilt on every open,
-     * so the injection sees a fresh copy each time.
-     */
-    const TICK_POINTS = '7.13 13.19 10.26 16.25 16.88 7.75';
-
-    const filterOptionIcon = (selected) => {
-        const svg = document.createElementNS(SVG_NS, 'svg');
-        svg.setAttribute('viewBox', '0 0 24 24');
-        svg.setAttribute('role', 'presentation');
-        svg.setAttribute('class', 'v-Icon ' + (selected ? 'i-tick' : 'i-blank'));
-
-        if (selected) {
-            svg.setAttribute('fill', 'none');
-            svg.setAttribute('stroke', 'currentColor');
-            svg.setAttribute('stroke-linecap', 'round');
-            svg.setAttribute('stroke-linejoin', 'round');
-            svg.setAttribute('stroke-width', '1.5');
-
-            const shape = document.createElementNS(SVG_NS, 'polyline');
-            shape.setAttribute('points', TICK_POINTS);
-            svg.appendChild(shape);
-        }
-
-        return svg;
-    };
-
-    const customFilterOption = (label, value) => {
-        const mailController = controller();
-        const selected = mailController.get('mailboxFilter') === value;
-
-        const option = new FastMail.classes.ButtonView({
-            label: label,
-            icon: filterOptionIcon(selected),
-            isSelected: selected,
-            method: 'chooseItem',
-            chooseItem() {
-                mailController.set('mailboxFilter', value);
-            }
-        });
-
-        option.customFilterOption = true;
-        return option;
-    };
-
-    const injectFilterOptions = (menu) => {
-        const options = menu && typeof menu.get === 'function' && menu.get('options');
-        if (!options || typeof options.push !== 'function') return;
-        if (options.some(option => option && option.customFilterOption)) return;
-        if (!modeManagesSource(controller().get('mailbox'))) return;
-
-        const last = options[options.length - 1];
-        if (last && last.isLastOfSection) last.isLastOfSection = false;
-
-        // Named from the same map the heading reads, so a row and the title
-        // it produces are the same word by construction
-        const rows = [DEFAULT_FILTER, TRIAGE_FILTER, DEFERRED_FILTER]
-            .map(kind => customFilterOption(FILTER_WORDS[kind], kind));
-
-        // Only where there is non-inbox mail to show: a row that can only
-        // ever draw an empty list is a row in the way
-        if (retiredStateLabels(controller().get('accountId')).nonInbox.length) {
-            rows.push(customFilterOption(
-                FILTER_WORDS[NONINBOX_FILTER], NONINBOX_FILTER));
-        }
-
-        rows[rows.length - 1].isLastOfSection = true;
-        options.push(...rows);
-    };
-
-    // The filter control is rebuilt with the toolbar, so this is re-applied
-    // from the same place the indicator is
-    const ensureFilterMenuPatched = () => {
-        const view = filterButton();
-        if (!view || view.customFilterMenu) return;
-        if (typeof view.menuView !== 'function') return;
-        view.customFilterMenu = true;
-
-        const original = view.menuView;
-
-        view.menuView = wrapComputed(original, function () {
-            const menu = original.call(this);
-            try {
-                injectFilterOptions(menu);
-            } catch (error) {
-                console.warn('Inbox mode: could not extend the filter menu', error);
-            }
-            return menu;
-        });
-    };
-
-    /*
-     * The phone has no filter control of its own. Its filter rows live one
-     * level down: the header's Actions button builds a menu whose "View…"
-     * row shows a second menu holding them — built fresh on each open from
-     * an array we cannot reach, and pushed through the first menu's own
-     * showMenu. So the injection rides that call instead: showFilterMenu is
-     * wrapped to say the next showMenu carries the filter rows, and a
-     * structural check backs it up in case the event machinery calls the
-     * original handler rather than the wrapper.
-     */
-    const looksLikeFilterRows = (menu) => {
-        const rows = menu && typeof menu.get === 'function' && menu.get('options');
-        if (!rows || !rows.length) return false;
-
-        // Every filter row is a pick-one: a chooseItem of its own. The sort
-        // menu comes through the same showMenu and matches that too, but it
-        // carries two sections (fields, then pinned-first) where the filter
-        // list is one titled run.
-        if (!rows.every(row => row && typeof row.chooseItem === 'function' &&
-            typeof row.get === 'function')) return false;
-
-        return !!rows[0].get('sectionTitle') &&
-            rows.filter(row => row.get('isLastOfSection')).length === 1;
-    };
-
-    const patchMobileActionsMenu = (menu) => {
-        if (!menu || typeof menu.showMenu !== 'function' ||
-            typeof menu.showFilterMenu !== 'function') return;
-
-        let filterAsked = false;
-
-        const filterHandler = menu.showFilterMenu;
-        menu.showFilterMenu = function () {
-            filterAsked = true;
-            try {
-                return filterHandler.apply(this, arguments);
-            } finally {
-                filterAsked = false;
-            }
-        };
-
-        const show = menu.showMenu;
-        menu.showMenu = function (submenu) {
-            if (filterAsked || looksLikeFilterRows(submenu)) {
-                try {
-                    injectFilterOptions(submenu);
-                } catch (error) {
-                    console.warn('Inbox mode: could not extend the view menu', error);
-                }
-            }
-            return show.apply(this, arguments);
-        };
-    };
-
-    const ensureMobileFilterMenuPatched = () => {
-        if (!FastMail.isMobile) return;
-
-        // The ⋯ in the page header. Its icon is how it is told apart from
-        // the account switcher beside it, which is also a menu button.
-        //
-        // Two icons, not one: the app draws this glyph through
-        // drawIconPlatformOverflow, which picks i-morecircle — dots in a
-        // ring, the iOS shape — or i-morevertical, dots in a column, by
-        // platform. Matching only the first is a selector that quietly stops
-        // finding the button on the platform it was not written on, taking
-        // the filter options out of this menu with it.
-        const icon = document.querySelector(
-            '.v-PageHeader svg.i-morecircle, .v-PageHeader svg.i-morevertical');
-        const node = icon && icon.closest('button');
-        const view = node && FastMail.getViewFromNode(node);
-        if (!view || view.customFilterMenu) return;
-        if (typeof view.menuView !== 'function' || !view.menuView.isProperty) return;
-        view.customFilterMenu = true;
-
-        const original = view.menuView;
-
-        // The menu is volatile — rebuilt on every open — so each fresh copy
-        // comes through here and gets its showMenu dressed before it draws
-        view.menuView = wrapComputed(original, function () {
-            const menu = original.call(this);
-            try {
-                patchMobileActionsMenu(menu);
-            } catch (error) {
-                console.warn('Inbox mode: could not extend the actions menu', error);
-            }
-            return menu;
-        });
-    };
-
-    /*
-     * ----------------------------------------------------------------
      * Mode
      * ----------------------------------------------------------------
      */
@@ -5257,6 +4310,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             // the next
             if (sidebarDrawn) {
                 markSourceGroups();
+                dressTriageRows();
                 dressSourceSections();
             }
         });
@@ -5265,6 +4319,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         labelObserver = { root: app, observer: observer };
         stripLabelsIn(app);
         markSourceGroups();
+        dressTriageRows();
         dressSourceSections();
         if (FastMail.isMobile) {
             dressToolbar();
@@ -5310,6 +4365,40 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         svg.appendChild(shape);
 
         return svg;
+    };
+
+    // The Triage row wears the funnel too, so the sidebar and the switch above
+    // the list say the same thing about the same set. The row's own icon is
+    // hidden rather than replaced and the funnel put beside it, so a row that
+    // stops being Triage — the setting renamed, the label gone — goes back to
+    // what Fastmail drew without needing to know what that was.
+    //
+    // Run on every sidebar redraw: Fastmail rebuilds these rows freely, and a
+    // rebuilt one comes back with its stock icon.
+    // The row's own icon, told from anything else drawn in it by Fastmail's
+    // own naming: every one of its glyphs carries an i- class.
+    const sourceIcon = (el) => toArray(el.querySelectorAll('svg')).filter((svg) => {
+        const names = (svg.getAttribute('class') || '').split(/\s+/);
+        return names.indexOf(FILTER_ICON_CLASS) === -1 &&
+            names.some(name => name.indexOf('i-') === 0);
+    })[0] || null;
+
+    const dressTriageRows = () => {
+        sidebarRows().forEach(({ mailbox, el }) => {
+            const drawn = el.querySelector('svg.' + FILTER_ICON_CLASS);
+            const stock = sourceIcon(el);
+
+            if (!isTriage(mailbox)) {
+                if (drawn) drawn.remove();
+                if (stock) stock.classList.remove(HIDDEN_SOURCE_ICON_CLASS);
+                return;
+            }
+
+            if (drawn || !stock || !stock.parentNode) return;
+
+            stock.parentNode.insertBefore(filterGlyph(stock), stock);
+            stock.classList.add(HIDDEN_SOURCE_ICON_CLASS);
+        });
     };
 
     // The sidebar runs the system folders, the labels and the saved searches
@@ -5457,69 +4546,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         });
     };
 
-    // A new arrival never inserts itself into a filtered list: Fastmail's
-    // own pass only inserts into pure in-mailbox lists, and its push refresh
-    // passes our registered queries by — so a fresh message bumped the
-    // header count and never made the rows, and the topic badges sat on
-    // yesterday's number. So everything we registered refetches on arrival:
-    // the visible custom list and every badge query of the session, each
-    // cheap by construction.
-    //
-    // The arrival's signal is the Inbox Mailbox record, not the Message
-    // event: our own refetches commit Email records, which fed the Message
-    // event this first hung off — fetch, event, fetch, the refresh icon
-    // jittering forever. A mailbox's totals cannot echo that way: the server
-    // pushes them for an arrival and the verbs adjust them optimistically,
-    // but no query refetch ever moves them — so the totals changing is the
-    // one reading of "something arrived or left" that always converges.
-    const refreshCustomList = () => {
-        if (!modeIsOn) return;
-
-        const list = controller().get('mailboxMessageList');
-        if (list && list.customPrimed && typeof list.setObsolete === 'function') {
-            list.setObsolete();
-        }
-
-        badgeQueries.forEach(({ query }) => {
-            if (query && typeof query.setObsolete === 'function') {
-                query.setObsolete();
-            }
-        });
-    };
-
-    let inboxTotalsSeen = null;
-
-    const inboxTotalsSignature = () => {
-        try {
-            return toArray(FastMail.store.getAll(FastMail.classes.Mailbox))
-                .filter(mailbox => mailbox.get('role') === 'inbox')
-                .map(mailbox => [
-                    mailbox.get('id'),
-                    mailbox.get('totalEmails'),
-                    mailbox.get('unreadEmails'),
-                    mailbox.get('totalThreads'),
-                    mailbox.get('unreadThreads')
-                ].join(':'))
-                .join('|');
-        } catch (error) {
-            return inboxTotalsSeen;
-        }
-    };
-
-    const refreshCustomListOnArrival = () => {
-        const signature = inboxTotalsSignature();
-        if (signature === inboxTotalsSeen) return;
-
-        const primed = inboxTotalsSeen !== null;
-        inboxTotalsSeen = signature;
-        if (primed) refreshCustomList();
-    };
 
     const refresh = () => {
         repaintBadges();
         pushAppBadge();
         dropStaleChips();
         markSourceGroups();
+        dressTriageRows();
         dressSourceSections();
         watchLabels();
         stripLabelsIn(document);
@@ -5552,33 +4585,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }, 100);
     };
 
-    // Toggling only affects where you go next, because selecting the source you
-    // are already on short-circuits before reaching goSource. So apply the
-    // change to the label in front of you as well, or the toggle looks inert.
-    // An explicit toggle outranks a filter picked by hand earlier; turning the
-    // mode off only clears the filter it put there.
-    const applyModeToCurrentView = () => {
-        const mailController = controller();
-        if (mailController.get('search')) return;
-
-        const mailbox = mailController.get('mailbox');
-        if (!modeManagesSource(mailbox)) return;
-
-        // Wrapped for the same reason as goSource: the mode putting a filter on
-        // or taking it off is not you choosing one. Without this, switching the
-        // mode off recorded "" against whichever label you were looking at, and
-        // switching it back on left that one label unfiltered.
-        settingOurFilter(() => {
-            if (modeIsOn) {
-                mailController.set('mailboxFilter', filterFor(mailbox));
-            } else if (mailController.get('mailboxFilter') === filterFor(mailbox)) {
-                // Only clear the filter this mode put there
-                mailController.set('mailboxFilter', '');
-            }
-        });
-    };
-
-    const setMode = (on, applyToCurrentView = true) => {
+    const setMode = (on) => {
         modeIsOn = !!on;
 
         try {
@@ -5586,8 +4593,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         } catch (error) {
             console.warn('Inbox mode: could not persist the mode', error);
         }
-
-        if (applyToCurrentView && LABEL_FILTERS) applyModeToCurrentView();
 
         // The colour rules are only emitted while the mode is on
         updateStyles();
@@ -5669,7 +4674,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 forgetLabelCache();
                 scheduleStyles();
                 scheduleBadgeRepaint();
-                if (LABEL_FILTERS) refreshCustomListOnArrival();
             }
         }, 'go');
 
@@ -5696,10 +4700,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // Fastmail resets the filter button's active state on every filter
         // change, including ones made from its own menu
         controller().addObserverForKey('mailboxFilter', {
-            go: () => {
-                if (LABEL_FILTERS) rememberCurrentFilter();
-                refreshToolbar();
-            }
+            go: refreshToolbar
         }, 'go');
     };
 
@@ -5891,16 +4892,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     const start = () => {
-        if (LABEL_FILTERS) loadFilters();
         patchBadgeRendering();
-        if (LABEL_FILTERS) patchGoSource();
         patchDrop();
         patchMailboxMenu();
         patchArchive();
         patchLabelActions();
-        if (LABEL_FILTERS) patchMessageList();
         patchMessageMenu();
-        if (LABEL_FILTERS) patchTitleAndCount();
         patchShortcuts();
         updateStyles();
         installAppBadge();
@@ -5926,10 +4923,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         bindOptionShortcuts();
         addObservers();
 
-        // On a fresh load, apply the filter only if the mode is on: with it off
-        // we must not strip a ?filter= the URL itself asked for
-        const wasOn = storedMode();
-        setMode(wasOn, wasOn);
+        setMode(storedMode());
 
         // Handy from the console, and how the counts can be checked by hand
         window.customInboxMode = {
@@ -5938,12 +4932,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             toggleMode,
             refresh,
             countFor,
-            badgeQueries: () => badgeQueries,
-            listQueries: () => listQueries,
             sourcesAboveLabels,
             goToSourceAt,
-            filters: () => rememberedFilters,
-            forgetFilters: () => { rememberedFilters = {}; saveFilters(); },
             settings: () => settings,
             // Called by the extension when the settings change, so options take
             // effect without a reload
@@ -5952,11 +4942,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 // Turning the chip setting off makes every remembered "hide"
                 // wrong, not just this view's
                 forgetHide();
-                // The label names may have changed, and every registered
-                // query bakes them into its where
+                // The label names may have changed
                 forgetLabelCache();
-                dropBadgeQueries();
-                dropListQueries();
                 // The verb keys, the bar slots and the app badge are
                 // settings too
                 reclaimKeys();

@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
     labelsShortcut: true,
     labelsSidebarOnly: true,
     labelsAutoSave: true,
+    backToListWhenTriaged: true,
     triageLabel: 'Triage',
     snoozeKey: 'w',
     snoozeDefault: '2w',
