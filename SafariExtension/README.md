@@ -56,7 +56,7 @@ Safari extensions must be delivered inside an app, so this needs converting once
 xcrun safari-web-extension-converter \
     --app-name "Fastmail Inbox mode" \
     --copy-resources \
-    Userscript/safari-extension
+    SafariExtension
 ```
 
 The app project's `Resources` are symlinks back here, so there is nothing to
@@ -64,7 +64,7 @@ copy by hand — but **Xcode resolves them into real files when it builds**, so
 every edit needs a rebuild before Safari sees it:
 
 ```sh
-cd "safari-extension-app/Fastmail Inbox mode"
+cd "SafariExtension/App/Fastmail Inbox mode"
 xcodebuild -project "Fastmail Inbox mode.xcodeproj" \
     -scheme "Fastmail Inbox mode" -configuration Debug \
     -derivedDataPath build build

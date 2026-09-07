@@ -16,7 +16,7 @@ test: generate
 	xcodebuild -project $(PROJECT) -scheme IntegrationTests -destination 'platform=macOS' test
 	cd Server && npm test
 	node --check Userscript/fastmail-inbox-mode.user.js
-	for f in Userscript/safari-extension/*.js; do node --check "$$f" || exit 1; done
+	for f in SafariExtension/*.js; do node --check "$$f" || exit 1; done
 
 build-macos: generate
 	xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release build

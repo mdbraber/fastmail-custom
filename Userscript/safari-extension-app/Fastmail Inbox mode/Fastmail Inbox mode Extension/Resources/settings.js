@@ -1,1 +1,0 @@
-../../../../safari-extension/settings.js
