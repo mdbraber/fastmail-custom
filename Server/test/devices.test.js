@@ -30,8 +30,8 @@ test('registrations persist, per account, and can be removed', async () => {
     assert.deepEqual(again.tokens('work'), ['b'.repeat(64)]);
     assert.deepEqual(again.tokens('other'), []);
 
-    await again.remove('personal', token);
-    await again.remove('personal', token);
+    await again.remove('personal', token.toUpperCase());
+    await again.remove('personal', token.toUpperCase());
     assert.deepEqual(again.tokens('personal'), []);
 });
 

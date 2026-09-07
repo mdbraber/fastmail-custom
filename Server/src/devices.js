@@ -36,8 +36,9 @@ export class DeviceRegistry {
     }
 
     async remove(account, token) {
-        if (!this.devices[account]?.[token]) return;
-        delete this.devices[account][token];
+        const lower = token.toLowerCase();
+        if (!this.devices[account]?.[lower]) return;
+        delete this.devices[account][lower];
         await this.save();
     }
 
