@@ -1875,20 +1875,67 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return option;
     };
 
-    // How many verbs fit: the bar's own width over a thumb-sized slot,
-    // one always held back for More. Falls back to the viewport when the
-    // bar has not been measured yet.
+    /*
+     * How many verbs fit.
+     *
+     * The bar can measure its own buttons — it is how the wide layout decides
+     * what to show — and measuring is a request: measureViews draws them once
+     * off-screen and writes every width down. So the answer can be counted
+     * rather than estimated, one real width at a time against the real space,
+     * with room kept for More.
+     *
+     * A thumb-sized slot is the fallback, for before the measuring has
+     * happened or for a name that has no width on file. It is only ever an
+     * estimate: these buttons are not all one width, and none of them is this
+     * width — they measure 64 and 75 on the phone this was guessed for. Which
+     * is why it is the fallback and not the rule.
+     */
     const SLOT_WIDTH = 76;
 
-    const barCapacity = (toolbar) => {
-        let width = 0;
+    const barWidth = (toolbar) => {
         try {
             const layer = toolbar.get('layer');
-            width = (layer && layer.offsetWidth) || 0;
+            if (layer && layer.offsetWidth) return layer.offsetWidth;
         } catch (error) {
-            width = 0;
+            // Not drawn yet
         }
-        if (!width) width = window.innerWidth || 375;
+        return window.innerWidth || 375;
+    };
+
+    // Written down once per bar, and again if the buttons are redrawn at a
+    // different size. Cheap, and nothing else reads a layout while it runs.
+    const measureBar = (toolbar) => {
+        try {
+            if (typeof toolbar.measureViews === 'function') toolbar.measureViews();
+        } catch (error) {
+            console.warn('Custom mode: could not measure the bar', error);
+        }
+    };
+
+    const barCapacity = (toolbar, names) => {
+        const width = barWidth(toolbar);
+        const widths = toolbar && toolbar._widths;
+
+        if (names && widths && widths.overflow) {
+            let room = width - widths.overflow;
+            try {
+                room -= toolbar.get('minimumGap') || 0;
+            } catch (error) {
+                // The default is nothing
+            }
+
+            let fits = 0;
+            for (const name of names) {
+                const measured = widths[name];
+                // A width nobody has taken: stop counting rather than guess
+                // past it, since everything after it is unknown too
+                if (!measured || measured > room) break;
+                room -= measured;
+                fits += 1;
+            }
+
+            if (fits) return fits;
+        }
 
         return Math.max(1, Math.floor(width / SLOT_WIDTH) - 1);
     };
@@ -2095,7 +2142,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             if (pick && wanted.indexOf(pick) === -1) wanted.push(pick);
         });
 
-        const onBar = wanted.slice(0, barCapacity(toolbar));
+        const onBar = wanted.slice(0, barCapacity(toolbar, wanted));
         const underMore = wanted.slice(onBar.length)
             .concat(names.filter(name => wanted.indexOf(name) === -1))
             .concat(MODE_MENU_NAMES);
@@ -2157,6 +2204,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             // answer for is a hole in the drawn bar, and the redraw walks
             // straight into it.
             registerModeViews(toolbar);
+            // Measured before the list is first asked for, so the cut is
+            // counted from real widths rather than the fallback estimate
+            measureBar(toolbar);
             toolbar.actionsConfig = wrapped;
             toolbar.customOwnsConfig = true;
 
