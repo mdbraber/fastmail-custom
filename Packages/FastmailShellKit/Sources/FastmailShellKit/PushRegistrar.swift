@@ -20,6 +20,18 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     public override init() {
         super.init()
         Self.current = self
+        // The alerts switch, flipped in the sheet or in the Settings app,
+        // reaches the server through a fresh registration
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(defaultsChanged), name: UserDefaults.didChangeNotification, object: nil
+        )
+    }
+
+    @objc private func defaultsChanged() {
+        Task { @MainActor in
+            guard let registrar = PushRegistrar.current, registrar.deviceToken != nil, PushPreferences.registrationDue() else { return }
+            await registrar.register()
+        }
     }
 
     public func application(
@@ -64,7 +76,7 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
                 guard allowed else { return }
                 Task { @MainActor in PushRegistrar.current?.requestToken() }
             }
-        } else if registrationDue {
+        } else if registrationDue || PushPreferences.registrationDue() {
             Task { await register() }
         }
     }
@@ -83,11 +95,13 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     private func register() async {
         guard let config, let account, let deviceToken else { return }
         registrationDue = false
+        let alerts = PushPreferences.alertsEnabled()
         do {
-            let (_, response) = try await URLSession.shared.data(for: config.registration(account: account, deviceToken: deviceToken))
+            let request = config.registration(account: account, deviceToken: deviceToken, alerts: alerts)
+            let (_, response) = try await URLSession.shared.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             registrationDue = !(200..<300).contains(status)
-            if registrationDue { print("[push] the push server answered \(status)") }
+            if registrationDue { print("[push] the push server answered \(status)") } else { PushPreferences.acknowledge(alerts: alerts) }
         } catch {
             registrationDue = true
             print("[push] the push server was unreachable: \(error.localizedDescription)")

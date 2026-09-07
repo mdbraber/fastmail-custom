@@ -35,14 +35,16 @@ public struct PushConfig: Equatable, Sendable {
         return name == "personal" || name == "work" ? name : nil
     }
 
-    public func registration(account: String, deviceToken: Data) -> URLRequest {
+    /// Registering again is also how the device changes its mind about alerts.
+    public func registration(account: String, deviceToken: Data, alerts: Bool = true) -> URLRequest {
         var request = URLRequest(url: server.appendingPathComponent("devices"))
         request.httpMethod = "POST"
         request.timeoutInterval = 15
         request.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["account": account, "token": token])
+        let body: [String: Any] = ["account": account, "token": token, "alerts": alerts]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         return request
     }
 }

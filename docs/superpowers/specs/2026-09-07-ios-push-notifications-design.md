@@ -138,7 +138,7 @@ One HTTP/2 session per host, reconnected on close. Requests carry `authorization
 
 | Route | Purpose |
 | --- | --- |
-| `POST /devices` | device token registration, bearer-protected |
+| `POST /devices` | device token registration, bearer-protected; `{ account, token, alerts? }`, where `alerts: false` turns banners off for that device (absent means on), and registering again is how a device changes its mind |
 | `POST /jmap/<account>/<secret>` | Fastmail's verification and state-change notices, sealed (`Content-Encoding: aes128gcm`) when the subscription has keys; wrong secret, or a body that will not open → `204` and ignored |
 | `GET /healthz` | `200` with `{ accounts: { personal: { notices: "push" \| "eventsource", lastNotice, devices } … } }` |
 
@@ -159,6 +159,7 @@ Installed from each `App` struct through `@UIApplicationDelegateAdaptor`; on mac
 
 - **Permission**: asks once for `[.alert, .sound, .badge]`. On iOS all asking moves here; `BadgeController` only reads the status and applies the badge as before. iOS does not re-prompt for options added after the first answer, so a device that already answered the badge-only prompt needs Alerts switched on under Settings → Notifications → the app, or the app deleted and reinstalled.
 - **Token**: after permission, `registerForRemoteNotifications()`; `didRegisterForRemoteNotificationsWithDeviceToken` hex-encodes the token and `POST`s `{ account, token }` to `https://<FMPushHost>/devices` with the bearer secret. Sent at every launch and on every activation where the last attempt failed; a failure is logged, never shown.
+- **Alerts switch**: the in-app settings sheet and the Settings bundle share one boolean, `push.alerts` (`PushPreferences`), default on. It travels to the server as the registration's `alerts` field; the app remembers the value the server last acknowledged and registers again, on any defaults change and on activation, whenever the two differ. Off means no banners for this device only: the server still sends it a badge-only push on every count change, so the icon stays right, and other devices are untouched. Changing it needs the shared secret and the device's own token, so nobody can mute a device they do not hold.
 - **Presentation**: as `UNUserNotificationCenterDelegate`, `willPresent` (which iOS only calls while the app is in front, where the page is on screen) returns `[.badge]`: the badge applies, no banner or sound. On becoming active, `removeAllDeliveredNotifications()`.
 - **Tap**: `didReceive` reads `url` from `userInfo`, and hands it to `AppShell` through a small `@MainActor` observable, `PendingLinks.shared`, which `AppShell` observes and routes through the same `handle(url)` that `onOpenURL` uses. Only `https://app.fastmail.com` URLs pass `LinkRouter`, so a bad payload can at most show the "Only Fastmail links can be opened" banner.
 - **No config**: with `FMPushHost` empty, the registrar asks for permission and applies badges but registers nothing.

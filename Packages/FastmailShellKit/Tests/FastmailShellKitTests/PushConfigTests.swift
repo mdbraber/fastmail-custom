@@ -42,6 +42,18 @@ import Testing
     #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer s3cret")
     #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
     let body = try #require(request.httpBody)
-    let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: String])
-    #expect(json == ["account": "work", "token": "00abff"])
+    let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    #expect(json["account"] as? String == "work")
+    #expect(json["token"] as? String == "00abff")
+    #expect(json["alerts"] as? Bool == true, "alerts are on unless the app says otherwise")
+    #expect(json.count == 3)
+}
+
+@Test func theRegistrationCarriesTheAlertsSwitch() throws {
+    let config = try #require(PushConfig(host: "push.example.net", secret: "s3cret"))
+    let request = config.registration(account: "personal", deviceToken: Data([0x01]), alerts: false)
+    let body = try #require(request.httpBody)
+    let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    #expect(json["alerts"] as? Bool == false)
+    #expect(json["token"] as? String == "01")
 }

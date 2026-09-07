@@ -81,6 +81,24 @@
 		<dict>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
+			<key>Title</key>
+			<string>Notifications</string>
+			<key>FooterText</key>
+			<string>Off stops the banners for new mail on this device. The badge keeps counting, and other devices are not affected.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Notify for new mail</string>
+			<key>Key</key>
+			<string>push.alerts</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
 			<string>Rows take the colour of a label they carry.</string>
 			<key>Title</key>

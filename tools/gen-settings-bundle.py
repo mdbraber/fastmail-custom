@@ -107,6 +107,25 @@ def specifiers(catalog):
         },
     ]
 
+    # Read by PushRegistrar under PushPreferences.alertsKey; the badge is
+    # not part of the switch. Sits between General and the inbox groups,
+    # where the in-app sheet has it.
+    notifications = [
+        {
+            "Type": "PSGroupSpecifier",
+            "Title": "Notifications",
+            "FooterText": "Off stops the banners for new mail on this "
+            "device. The badge keeps counting, and other devices are not "
+            "affected.",
+        },
+        {
+            "Type": "PSToggleSwitchSpecifier",
+            "Title": "Notify for new mail",
+            "Key": "push.alerts",
+            "DefaultValue": True,
+        },
+    ]
+
     # The General header is already on the backend row above, and start page
     # and the app badge continue under it, so the first header we add is for
     # the group after general.
@@ -114,6 +133,8 @@ def specifiers(catalog):
     for key, group_key, default, title, hint in catalog:
         group = {"Type": "PSGroupSpecifier", "FooterText": hint}
         if group_key != last_group:
+            if last_group == "general":
+                rows.extend(notifications)
             group["Title"] = GROUP_TITLE[group_key]
             last_group = group_key
         rows.append(group)
