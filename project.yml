@@ -55,6 +55,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.personal
         PRODUCT_NAME: mdbraber.com
         INFOPLIST_FILE: Apps/Personal/Info.plist
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": Apps/Personal/iOS.entitlements
 
   Work:
     templates: [ShellApp]
@@ -70,6 +71,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.work
         PRODUCT_NAME: nexthealth.nl
         INFOPLIST_FILE: Apps/Work/Info.plist
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": Apps/Work/iOS.entitlements
 
   PersonalShare:
     type: app-extension

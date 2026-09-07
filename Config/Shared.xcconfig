@@ -4,5 +4,7 @@ USERSCRIPT_PATH = $(SRCROOT)/../fastmail-customized/fastmail-inbox-mode.user.js
 PERSONAL_ACCOUNT_ID =
 WORK_ACCOUNT_ID =
 DEVELOPMENT_TEAM =
+PUSH_SERVER_HOST =
+PUSH_DEVICE_SECRET =
 
 #include? "Local.xcconfig"
