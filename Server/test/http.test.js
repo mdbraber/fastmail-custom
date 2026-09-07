@@ -11,7 +11,7 @@ async function running() {
     const watchers = {
         personal: {
             callbackSecret: 'abc123',
-            status: () => ({ notices: 'push', verified: true, lastNotice: null, devices: 1, badge: 2 }),
+            status: () => ({ notices: 'push', verified: true, lastNotice: null, devices: 1 }),
             receive: async (body) => { received.push(body); },
         },
     };
@@ -26,7 +26,7 @@ test('healthz reports every account', async () => {
     const s = await running();
     const response = await fetch(`${s.base}/healthz`);
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { accounts: { personal: { notices: 'push', verified: true, lastNotice: null, devices: 1, badge: 2 } } });
+    assert.deepEqual(await response.json(), { accounts: { personal: { notices: 'push', verified: true, lastNotice: null, devices: 1 } } });
     await s.close();
 });
 
@@ -40,6 +40,7 @@ test('device registration needs the bearer, a known account and a real token', a
     assert.equal((await post({ authorization: 'Bearer s3cret' }, { account: 'personal', token: 'nope' })).status, 400);
     assert.equal((await post({ authorization: 'Bearer s3cret' }, { account: '__proto__', token })).status, 400);
     assert.equal((await post({ authorization: 'Bearer s3cret' }, { account: 'constructor', token })).status, 400);
+    assert.equal((await post({ authorization: 'Bearer s3cret' }, { account: ['personal'], token })).status, 400);
     const ok = await post({ authorization: 'Bearer s3cret' }, { account: 'personal', token });
     assert.equal(ok.status, 200);
     assert.deepEqual(s.registered, [['personal', token]]);

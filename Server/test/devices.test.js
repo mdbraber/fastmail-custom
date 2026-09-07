@@ -35,6 +35,19 @@ test('registrations persist, per account, and can be removed', async () => {
     assert.deepEqual(again.tokens('personal'), []);
 });
 
+// Two phones registering at once, or a registration racing a prune, would
+// otherwise write the same .tmp file and rename it out from under each other
+test('registrations that arrive together both survive', async () => {
+    const file = await scratch();
+    const registry = new DeviceRegistry(file, silent);
+    await registry.load();
+    await Promise.all([registry.register('personal', token), registry.register('personal', 'b'.repeat(64))]);
+
+    const again = new DeviceRegistry(file, silent);
+    await again.load();
+    assert.deepEqual(again.tokens('personal').sort(), [token, 'b'.repeat(64)].sort());
+});
+
 test('an unreadable registry starts empty', async () => {
     const file = await scratch();
     await writeFile(file, '[[[');

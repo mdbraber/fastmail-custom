@@ -14,6 +14,7 @@ export class DeviceRegistry {
         this.file = file;
         this.log = log;
         this.devices = {};
+        this.saving = Promise.resolve();
     }
 
     async load() {
@@ -42,7 +43,15 @@ export class DeviceRegistry {
         await this.save();
     }
 
-    async save() {
+    // One write at a time: a registration and a prune arriving together would
+    // otherwise share the one .tmp file, and the loser renames a file that is
+    // already gone. A save that failed does not stop the next one.
+    save() {
+        this.saving = this.saving.catch(() => {}).then(() => this.write());
+        return this.saving;
+    }
+
+    async write() {
         await mkdir(path.dirname(this.file), { recursive: true });
         await writeFile(`${this.file}.tmp`, JSON.stringify(this.devices, null, 2));
         await rename(`${this.file}.tmp`, this.file);

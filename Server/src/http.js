@@ -27,7 +27,8 @@ async function route({ config, watchers, devices }, request, response) {
             return reply(response, 401, { error: 'unauthorized' });
         }
         const body = await readJSON(request);
-        if (!body || !Object.hasOwn(watchers, body.account) || !isDeviceToken(body.token)) {
+        // An array of one name would pass hasOwn on its toString, so insist on a string
+        if (!body || typeof body.account !== 'string' || !Object.hasOwn(watchers, body.account) || !isDeviceToken(body.token)) {
             return reply(response, 400, { error: 'account and token required' });
         }
         await devices.register(body.account, body.token);

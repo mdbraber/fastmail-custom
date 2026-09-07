@@ -94,6 +94,33 @@ test('send posts the payload with topic and collapse id and reports the answer',
     await apns.close();
 });
 
+// An APNs that takes the request and never answers it.
+async function stalledAPNs() {
+    const sessions = [];
+    const server = http2.createServer();
+    server.on('session', (session) => sessions.push(session));
+    server.on('stream', () => {});
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    return {
+        host: `http://127.0.0.1:${server.address().port}`,
+        close: () => new Promise((resolve) => {
+            for (const session of sessions) session.destroy();
+            server.close(resolve);
+        }),
+    };
+}
+
+test('a push APNs never answers gives up rather than hanging the account', async () => {
+    const apns = await stalledAPNs();
+    const client = new APNsClient({ key: pem, keyId: 'K', teamId: 'T', host: apns.host, requestTimeoutMs: 200, log: silent });
+    await assert.rejects(
+        client.send('abc123', { aps: { badge: 1 } }, { topic: 'com.example.app' }),
+        /apns: timed out/,
+    );
+    client.close();
+    await apns.close();
+});
+
 test('an expired provider token is minted again and the push retried once', async () => {
     const apns = await fakeAPNs([{ status: 403, reason: 'ExpiredProviderToken' }, { status: 200 }]);
     const client = new APNsClient({ key: pem, keyId: 'K', teamId: 'T', host: apns.host, log: silent });

@@ -13,6 +13,8 @@ export const HOSTS = Object.freeze({
 // Apple wants the token younger than an hour and not minted more often
 // than every twenty minutes; fifty minutes sits between the two.
 export const TOKEN_LIFETIME_MS = 50 * 60 * 1000;
+export const REQUEST_TIMEOUT_MS = 15 * 1000;
+export const SESSION_TIMEOUT_MS = 60 * 1000;
 
 const base64url = (text) => Buffer.from(text).toString('base64url');
 
@@ -37,12 +39,13 @@ export function tokenOutcome(status, reason) {
 }
 
 export class APNsClient {
-    constructor({ key, keyId, teamId, sandbox = true, host, log = console }) {
+    constructor({ key, keyId, teamId, sandbox = true, host, log = console, requestTimeoutMs = REQUEST_TIMEOUT_MS }) {
         this.privateKey = createPrivateKey(key);
         this.keyId = keyId;
         this.teamId = teamId;
         this.host = host || (sandbox ? HOSTS.sandbox : HOSTS.production);
         this.log = log;
+        this.requestTimeoutMs = requestTimeoutMs;
         this.token = null;
         this.tokenAt = 0;
         this.session = null;
@@ -61,6 +64,9 @@ export class APNsClient {
         const session = http2.connect(this.host);
         session.on('error', (error) => this.log.warn(`apns session: ${error.message}`));
         session.on('close', () => { if (this.session === session) this.session = null; });
+        // Mail is bursty; a session idle this long is likelier stale than quiet,
+        // and the next push opens a new one
+        session.setTimeout(SESSION_TIMEOUT_MS, () => session.close());
         this.session = session;
         return session;
     }
@@ -74,6 +80,9 @@ export class APNsClient {
     // when the request never got one.
     request(deviceToken, payload, headers) {
         return new Promise((resolve, reject) => {
+            // A cancelled stream can still end or error afterwards: settle once
+            let done = false;
+            const settle = (finish, value) => { if (!done) { done = true; finish(value); } };
             const stream = this.connect().request({
                 ':method': 'POST',
                 ':path': `/3/device/${deviceToken}`,
@@ -84,14 +93,18 @@ export class APNsClient {
             let status = 0;
             let body = '';
             stream.setEncoding('utf8');
+            stream.setTimeout(this.requestTimeoutMs, () => {
+                stream.close(http2.constants.NGHTTP2_CANCEL);
+                settle(reject, new Error('apns: timed out'));
+            });
             stream.on('response', (responseHeaders) => { status = responseHeaders[':status']; });
             stream.on('data', (chunk) => { body += chunk; });
             stream.on('end', () => {
                 let reason = null;
                 try { reason = body ? (JSON.parse(body).reason ?? null) : null; } catch { reason = null; }
-                resolve({ status, reason });
+                settle(resolve, { status, reason });
             });
-            stream.on('error', reject);
+            stream.on('error', (error) => settle(reject, error));
             stream.end(JSON.stringify(payload));
         });
     }

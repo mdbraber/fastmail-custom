@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { AccountWatcher, COALESCE_MS } from '../src/watcher.js';
+import { AccountWatcher, BACKLOG_CAP, COALESCE_MS } from '../src/watcher.js';
 import { emptyState, loadState } from '../src/state.js';
 import { JMAPError } from '../src/jmap.js';
 
@@ -15,10 +15,13 @@ const arrival = (id, over = {}) => ({
     from: [{ name: 'Ada', email: 'ada@example.net' }], subject: `Subject ${id}`, ...over,
 });
 
+// `refusePush` and `onCreate` are properties rather than options only so a
+// test can change its mind after start(), which is where renewals happen.
 function fakeJMAP({ emails = [], created = [], counts = { badge: 4 }, refusePush = false, changesError = null } = {}) {
     const calls = [];
-    return {
-        calls, counts, accountId: 'acc1', eventSourceUrl: 'https://api.example.net/jmap/event/',
+    const fake = {
+        calls, counts, refusePush, onCreate: null,
+        accountId: 'acc1', eventSourceUrl: 'https://api.example.net/jmap/event/',
         fetch: async () => { throw new Error('no network in tests'); },
         headers: () => ({ authorization: 'Bearer t' }),
         connect: async () => {},
@@ -38,11 +41,13 @@ function fakeJMAP({ emails = [], created = [], counts = { badge: 4 }, refusePush
         destroyPushSubscription: async (id) => { calls.push(['destroy', id]); },
         createPushSubscription: async ({ url }) => {
             calls.push(['subscribe', url]);
-            if (refusePush) throw new JMAPError('PushSubscription/set: forbidden', { type: 'forbidden' });
+            await fake.onCreate?.();
+            if (fake.refusePush) throw new JMAPError('PushSubscription/set: forbidden', { type: 'forbidden' });
             return { id: 'sub1', expires: new Date(Date.now() + 3600 * 1000).toISOString() };
         },
         verifyPushSubscription: async (id, code) => { calls.push(['verify', id, code]); },
     };
+    return fake;
 }
 
 function fakeAPNs(answer = () => ({ status: 200, reason: null })) {
@@ -72,14 +77,19 @@ function manualTimers() {
     };
 }
 
-async function setUp(jmapOptions, { apns = fakeAPNs(), devices = fakeDevices(['tok1', 'tok2']), notices = 'auto' } = {}) {
+async function build(jmapOptions, { apns = fakeAPNs(), devices = fakeDevices(['tok1', 'tok2']), notices = 'auto' } = {}) {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'watcher-'));
     const config = { publicUrl: 'https://push.example.net', badgeLabel: 'Triage', notices, dataDir: dir };
     const jmap = fakeJMAP(jmapOptions);
     const timers = manualTimers();
     const watcher = new AccountWatcher({ account, config, jmap, apns, devices, state: emptyState(), log: silent, timers });
-    await watcher.start();
     return { dir, jmap, apns, devices, timers, watcher };
+}
+
+async function setUp(jmapOptions, options) {
+    const started = await build(jmapOptions, options);
+    await started.watcher.start();
+    return started;
 }
 
 async function settle({ timers, watcher }) {
@@ -128,7 +138,7 @@ test('a changed count with no new mail is a badge-only push, once per change', a
     await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Mailbox: 'm2' } } });
     await settle(t);
     assert.deepEqual(t.apns.sent.map((s) => s.payload), [{ aps: { badge: 3 } }, { aps: { badge: 3 } }]);
-    assert.equal(t.apns.sent[0].collapseId, null);
+    assert.equal(t.apns.sent[0].collapseId, 'badge');
 
     await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Mailbox: 'm3' } } });
     await settle(t);
@@ -162,6 +172,43 @@ test('a lost change log means a silent resync', async () => {
     assert.equal((await loadState(t.dir, 'personal', silent)).emailState, 's0');
 });
 
+test('a change log too long to announce is a silent resync', async () => {
+    const created = Array.from({ length: BACKLOG_CAP + 1 }, (_, index) => `M${index}`);
+    const t = await setUp({ created, emails: created.map((id) => arrival(id)) });
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(t);
+    assert.equal(t.apns.sent.length, 0);
+    assert.equal((await loadState(t.dir, 'personal', silent)).emailState, 's0');
+});
+
+test('a verification that beats the create is held until the id arrives', async () => {
+    const t = await build();
+    // Fastmail can call the callback URL back before PushSubscription/set answers
+    t.jmap.onCreate = () => t.watcher.receive({ '@type': 'PushVerification', pushSubscriptionId: 'sub1', verificationCode: 'early' });
+    await t.watcher.start();
+    assert.equal(t.watcher.verified, true);
+    assert.equal(t.watcher.pendingVerification, null);
+    assert.deepEqual(t.jmap.calls.find((c) => c[0] === 'verify'), ['verify', 'sub1', 'early']);
+});
+
+test('the subscription is renewed before it expires, on a fresh secret', async () => {
+    const t = await setUp();
+    await t.timers.run(Infinity);
+    const urls = t.jmap.calls.filter((c) => c[0] === 'subscribe').map((c) => c[1]);
+    assert.equal(urls.length, 2);
+    assert.match(urls[1], /^https:\/\/push\.example\.net\/jmap\/personal\/[0-9a-f]{32}$/);
+    assert.notEqual(urls[0], urls[1]);
+    assert.equal(t.watcher.notices, 'push');
+});
+
+test('a renewal Fastmail refuses hands the account to the event source', async () => {
+    const t = await setUp();
+    t.jmap.refusePush = true;
+    await t.timers.run(Infinity);
+    assert.equal(t.watcher.notices, 'eventsource');
+    t.watcher.stop();
+});
+
 test('when the push subscription is refused the event source takes over', async () => {
     const t = await setUp({ refusePush: true });
     assert.equal(t.watcher.notices, 'eventsource');
@@ -170,11 +217,8 @@ test('when the push subscription is refused the event source takes over', async 
 });
 
 test('NOTICES=push does not fall back', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'watcher-'));
-    const config = { publicUrl: 'https://push.example.net', badgeLabel: 'Triage', notices: 'push', dataDir: dir };
-    const timers = manualTimers();
-    const watcher = new AccountWatcher({ account, config, jmap: fakeJMAP({ refusePush: true }), apns: fakeAPNs(), devices: fakeDevices([]), state: emptyState(), log: silent, timers });
-    await watcher.start();
-    assert.equal(watcher.notices, null);
-    assert.equal(timers.queue.length, 1);
+    const t = await build({ refusePush: true }, { notices: 'push' });
+    await t.watcher.start();
+    assert.equal(t.watcher.notices, null);
+    assert.equal(t.timers.queue.length, 1);
 });

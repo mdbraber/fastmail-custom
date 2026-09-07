@@ -5,6 +5,9 @@ export const SESSION_URL = 'https://api.fastmail.com/jmap/session';
 export const CORE = 'urn:ietf:params:jmap:core';
 export const MAIL = 'urn:ietf:params:jmap:mail';
 export const EMAIL_PROPERTIES = ['id', 'threadId', 'mailboxIds', 'keywords', 'from', 'subject', 'receivedAt'];
+// Fastmail's `maxObjectsInGet` is 500; asking for more fails the whole call.
+export const GET_CHUNK = 500;
+export const TIMEOUT_MS = 30_000;
 
 export class JMAPError extends Error {
     constructor(message, { status = 0, type = null } = {}) {
@@ -16,10 +19,11 @@ export class JMAPError extends Error {
 }
 
 export class JMAPClient {
-    constructor({ token, fetch: fetchImpl = globalThis.fetch, sessionUrl = SESSION_URL }) {
+    constructor({ token, fetch: fetchImpl = globalThis.fetch, sessionUrl = SESSION_URL, timeoutMs = TIMEOUT_MS }) {
         this.token = token;
         this.fetch = fetchImpl;
         this.sessionUrl = sessionUrl;
+        this.timeoutMs = timeoutMs;
         this.session = null;
         this.accountId = null;
     }
@@ -31,8 +35,19 @@ export class JMAPClient {
     get apiUrl() { return this.session?.apiUrl; }
     get eventSourceUrl() { return this.session?.eventSourceUrl; }
 
+    // Every call is bounded. Looks at the change log never overlap, so one
+    // socket left hanging would hold up every notice after it.
+    async timed(what, url, init) {
+        try {
+            return await this.fetch(url, { ...init, signal: AbortSignal.timeout(this.timeoutMs) });
+        } catch (error) {
+            if (error?.name === 'TimeoutError') throw new JMAPError(`${what}: timed out`);
+            throw error;
+        }
+    }
+
     async connect() {
-        const response = await this.fetch(this.sessionUrl, { headers: this.headers() });
+        const response = await this.timed('session', this.sessionUrl, { headers: this.headers() });
         if (!response.ok) throw new JMAPError(`session: HTTP ${response.status}`, { status: response.status });
         this.session = await response.json();
         this.accountId = this.session.primaryAccounts?.[MAIL] ?? null;
@@ -41,7 +56,7 @@ export class JMAPClient {
     }
 
     async request(methodCalls, using = [CORE, MAIL]) {
-        const response = await this.fetch(this.apiUrl, {
+        const response = await this.timed('api', this.apiUrl, {
             method: 'POST',
             headers: this.headers(),
             body: JSON.stringify({ using, methodCalls }),
@@ -63,14 +78,16 @@ export class JMAPClient {
 
     async mailboxes() {
         const result = await this.call('Mailbox/get', {
-            accountId: this.accountId, ids: null, properties: ['id', 'name', 'role', 'totalEmails'],
+            accountId: this.accountId, ids: null, properties: ['id', 'name', 'role', 'totalThreads'],
         });
         return result.list;
     }
 
+    // Conversations, not messages: the badge the page sets is the label's
+    // thread count, and the two must agree or the badge jumps.
     async mailboxTotal(id) {
-        const result = await this.call('Mailbox/get', { accountId: this.accountId, ids: [id], properties: ['totalEmails'] });
-        return result.list[0]?.totalEmails ?? null;
+        const result = await this.call('Mailbox/get', { accountId: this.accountId, ids: [id], properties: ['totalThreads'] });
+        return result.list[0]?.totalThreads ?? null;
     }
 
     async emailState() {
@@ -91,9 +108,14 @@ export class JMAPClient {
     }
 
     async emails(ids) {
-        if (!ids.length) return [];
-        const result = await this.call('Email/get', { accountId: this.accountId, ids, properties: EMAIL_PROPERTIES });
-        return result.list;
+        const list = [];
+        for (let from = 0; from < ids.length; from += GET_CHUNK) {
+            const result = await this.call('Email/get', {
+                accountId: this.accountId, ids: ids.slice(from, from + GET_CHUNK), properties: EMAIL_PROPERTIES,
+            });
+            list.push(...result.list);
+        }
+        return list;
     }
 
     async pushSubscriptions() {
@@ -114,7 +136,9 @@ export class JMAPClient {
     async verifyPushSubscription(id, verificationCode) {
         const result = await this.call('PushSubscription/set', { update: { [id]: { verificationCode } } }, [CORE]);
         const problem = result.notUpdated?.[id];
-        if (problem) throw new JMAPError(`PushSubscription/set: ${problem.type}`, { type: problem.type });
+        if (!problem) return;
+        const detail = problem.description ? ` — ${problem.description}` : '';
+        throw new JMAPError(`PushSubscription/set: ${problem.type}${detail}`, { type: problem.type });
     }
 
     async destroyPushSubscription(id) {
@@ -171,22 +195,36 @@ export class EventStreamParser {
 }
 
 const delay = (ms, signal) => new Promise((resolve) => {
+    if (signal.aborted) return resolve();
     const timer = setTimeout(resolve, ms);
     signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
 });
 
 // Keeps one event source connection open until `signal` aborts, handing
-// every StateChange to `onStateChange`, reconnecting with backoff.
-export async function runEventSource({ url, headers, onStateChange, signal, fetch: fetchImpl = globalThis.fetch, log = console }) {
+// every StateChange to `onStateChange`, reconnecting with backoff. A
+// connection that stops saying even ping is dropped after two ping periods:
+// a socket the far end has forgotten looks exactly like a quiet mailbox.
+export async function runEventSource({ url, headers, onStateChange, signal, fetch: fetchImpl = globalThis.fetch, log = console, ping = 300 }) {
+    const idleMs = 2 * ping * 1000;
     let backoff = 1000;
     while (!signal.aborted) {
+        const attempt = new AbortController();
+        const relay = () => attempt.abort();
+        signal.addEventListener('abort', relay, { once: true });
+        let watchdog = null;
+        const wind = () => {
+            clearTimeout(watchdog);
+            watchdog = setTimeout(() => attempt.abort(new Error(`nothing for ${idleMs / 1000}s; reconnecting`)), idleMs);
+        };
         try {
-            const response = await fetchImpl(url, { headers: { ...headers, accept: 'text/event-stream' }, signal });
+            const response = await fetchImpl(url, { headers: { ...headers, accept: 'text/event-stream' }, signal: attempt.signal });
             if (!response.ok) throw new JMAPError(`event source: HTTP ${response.status}`, { status: response.status });
             backoff = 1000;
             const parser = new EventStreamParser();
             const decoder = new TextDecoder();
+            wind();
             for await (const chunk of response.body) {
+                wind();
                 for (const event of parser.feed(decoder.decode(chunk, { stream: true }))) {
                     if (event.event !== 'state') continue;
                     try {
@@ -202,6 +240,9 @@ export async function runEventSource({ url, headers, onStateChange, signal, fetc
             log.warn(`event source: ${error.message}; retrying in ${backoff / 1000}s`);
             await delay(backoff, signal);
             backoff = Math.min(backoff * 2, 5 * 60 * 1000);
+        } finally {
+            clearTimeout(watchdog);
+            signal.removeEventListener('abort', relay);
         }
     }
 }

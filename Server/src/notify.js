@@ -19,8 +19,8 @@ export function threadURL(email) {
     return `https://app.fastmail.com/mail/Inbox/${encodeURIComponent(email.threadId)}`;
 }
 
-// The APNs payload for one new message. `badge` is the count to show, or
-// null when there is no badge label to count.
+// The APNs payload for one new message. `badge` is the conversation count to
+// show, or null when there is no badge label to count.
 export function alertPayload(email, { badge }) {
     const aps = {
         alert: {

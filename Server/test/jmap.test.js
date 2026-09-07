@@ -74,9 +74,45 @@ test('emails asks for exactly the properties the payload needs, and nothing for 
     assert.deepEqual(calls.at(-1).body.methodCalls[0][1].properties, ['id', 'threadId', 'mailboxIds', 'keywords', 'from', 'subject', 'receivedAt']);
 });
 
+test('a backlog is fetched in helpings Fastmail will accept', async () => {
+    const { client, calls } = await connected((method, args) => ['Email/get', { list: args.ids.map((id) => ({ id })) }]);
+    const ids = Array.from({ length: 1200 }, (_, index) => `M${index}`);
+    const list = await client.emails(ids);
+    assert.deepEqual(list.map((email) => email.id), ids);
+    assert.deepEqual(calls.slice(1).map((call) => call.body.methodCalls[0][1].ids.length), [500, 500, 200]);
+});
+
+test('the badge count is conversations, not messages', async () => {
+    const { client, calls } = await connected((method, args) => ['Mailbox/get', {
+        list: args.ids
+            ? [{ id: 'triage', totalThreads: 7, totalEmails: 9 }]
+            : [{ id: 'inbox', name: 'Inbox', role: 'inbox', totalThreads: 2 }],
+    }]);
+    assert.equal(await client.mailboxTotal('triage'), 7);
+    assert.deepEqual(calls.at(-1).body.methodCalls[0][1].properties, ['totalThreads']);
+
+    assert.deepEqual(await client.mailboxes(), [{ id: 'inbox', name: 'Inbox', role: 'inbox', totalThreads: 2 }]);
+    assert.deepEqual(calls.at(-1).body.methodCalls[0][1].properties, ['id', 'name', 'role', 'totalThreads']);
+});
+
+test('a call that never comes back gives up rather than holding the account', async () => {
+    const client = new JMAPClient({
+        token: 'tok',
+        timeoutMs: 50,
+        fetch: (_url, init) => new Promise((_resolve, reject) => {
+            init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+        }),
+    });
+    await assert.rejects(client.connect(), (error) => error instanceof JMAPError && /session: timed out/.test(error.message));
+});
+
 test('a push subscription is created without an account id, verified, or refused with the reason', async () => {
     const { client, calls } = await connected((method, args) => {
-        if (args.update) return ['PushSubscription/set', { updated: { ps1: null } }];
+        if (args.update) {
+            return args.update.ps1.verificationCode === 'code'
+                ? ['PushSubscription/set', { updated: { ps1: null } }]
+                : ['PushSubscription/set', { notUpdated: { ps1: { type: 'invalidProperties', description: 'wrong code' } } }];
+        }
         if (args.create?.sub.url === 'https://x/y') {
             return ['PushSubscription/set', { created: { sub: { id: 'ps1', expires: '2026-09-08T00:00:00Z' } } }];
         }
@@ -89,6 +125,7 @@ test('a push subscription is created without an account id, verified, or refused
 
     await client.verifyPushSubscription('ps1', 'code');
     assert.deepEqual(calls.at(-1).body.methodCalls[0][1], { update: { ps1: { verificationCode: 'code' } } });
+    await assert.rejects(client.verifyPushSubscription('ps1', 'stale'), /invalidProperties — wrong code/);
 
     await assert.rejects(
         client.createPushSubscription({ deviceClientId: 'd', url: 'https://x/z', types: ['Email'], expires: null }),
@@ -152,4 +189,30 @@ test('runEventSource hands every state event over and stops when aborted', async
     });
     assert.equal(requests, 1);
     assert.deepEqual(received, [{ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } }]);
+});
+
+test('a stream that has gone quiet is dropped so the loop can reconnect', async () => {
+    const abort = new AbortController();
+    const warned = [];
+    let requests = 0;
+    await runEventSource({
+        url: 'https://api.example.net/jmap/event/?types=Email',
+        headers: {},
+        onStateChange: () => {},
+        signal: abort.signal,
+        // The watchdog waits two pings; 10ms of ping makes that 20ms here
+        ping: 0.01,
+        fetch: async (_url, init) => {
+            requests += 1;
+            const body = new ReadableStream({
+                start(controller) {
+                    init.signal.addEventListener('abort', () => controller.error(init.signal.reason), { once: true });
+                },
+            });
+            return { ok: true, status: 200, body };
+        },
+        log: { ...silent, warn: (message) => { warned.push(message); abort.abort(); } },
+    });
+    assert.equal(requests, 1);
+    assert.match(warned[0], /nothing for 0.02s/);
 });

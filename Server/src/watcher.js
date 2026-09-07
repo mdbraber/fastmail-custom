@@ -8,6 +8,9 @@ export const COALESCE_MS = 2000;
 export const POLL_MS = 5 * 60 * 1000;
 export const RETRY_MS = 10 * 60 * 1000;
 export const SUBSCRIPTION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// More created ids than this since the last look means the server was away
+// long enough that announcing them all would be noise, not news.
+export const BACKLOG_CAP = 500;
 const TYPES = ['Email', 'Mailbox'];
 
 const realTimers = { setTimeout, clearTimeout, setInterval, clearInterval };
@@ -30,6 +33,7 @@ export class AccountWatcher {
         this.notices = null;
         this.callbackSecret = null;
         this.pushSubscriptionId = null;
+        this.pendingVerification = null;
         this.verified = false;
         this.lastNoticeAt = null;
         this.pending = null;
@@ -99,6 +103,8 @@ export class AccountWatcher {
         }
         this.callbackSecret = randomBytes(16).toString('hex');
         this.verified = false;
+        // Anything held from the last subscription belongs to one just destroyed
+        this.pendingVerification = null;
         const { id, expires } = await this.jmap.createPushSubscription({
             deviceClientId: this.deviceClientId,
             url: `${this.config.publicUrl}/jmap/${this.name}/${this.callbackSecret}`,
@@ -106,16 +112,20 @@ export class AccountWatcher {
             expires: new Date(Date.now() + SUBSCRIPTION_TTL_MS).toISOString(),
         });
         this.pushSubscriptionId = id;
+        if (this.pendingVerification?.id === id) {
+            await this.jmap.verifyPushSubscription(id, this.pendingVerification.code);
+            this.verified = true;
+            this.pendingVerification = null;
+            this.log.info(`[${this.name}] push subscription verified`);
+        }
         // Renew well before Fastmail stops calling; it may have granted less than asked
         const lifetime = Math.max(new Date(expires).getTime() - Date.now(), 60 * 1000);
         this.timers.clearTimeout(this.renewTimer);
-        this.renewTimer = this.timers.setTimeout(() => {
-            this.subscribePush().catch((error) => {
-                this.log.warn(`[${this.name}] renewal failed (${error.message}); using the event source`);
-                this.startEventSource();
-                this.notices = 'eventsource';
-            });
-        }, lifetime * 0.8);
+        this.renewTimer = this.timers.setTimeout(() => this.subscribePush().catch((error) => {
+            this.log.warn(`[${this.name}] renewal failed (${error.message}); using the event source`);
+            this.startEventSource();
+            this.notices = 'eventsource';
+        }), lifetime * 0.8);
     }
 
     startEventSource() {
@@ -130,12 +140,16 @@ export class AccountWatcher {
         }).catch((error) => this.log.error(`[${this.name}] event source stopped: ${error.message}`));
     }
 
-    // What Fastmail sends: first a verification, then state changes. A
-    // verification for a subscription that is not ours, or a change to
-    // someone else's account, is ignored.
+    // What Fastmail sends: first a verification, then state changes. A change
+    // to someone else's account is ignored. A verification can arrive before
+    // `PushSubscription/set` has told us the id it names, so one we do not
+    // recognise is kept rather than dropped: `subscribePush` looks for it.
     async receive(body) {
         if (body?.['@type'] === 'PushVerification') {
-            if (body.pushSubscriptionId !== this.pushSubscriptionId) return;
+            if (body.pushSubscriptionId !== this.pushSubscriptionId) {
+                this.pendingVerification = { id: body.pushSubscriptionId, code: body.verificationCode };
+                return;
+            }
             await this.jmap.verifyPushSubscription(this.pushSubscriptionId, body.verificationCode);
             this.verified = true;
             this.log.info(`[${this.name}] push subscription verified`);
@@ -170,6 +184,11 @@ export class AccountWatcher {
             await this.resync();
             return;
         }
+        if (changes.created.length > BACKLOG_CAP) {
+            this.log.warn(`[${this.name}] ${changes.created.length} new ids since last look; too many to announce, resyncing`);
+            await this.resync();
+            return;
+        }
         const emails = await this.jmap.emails(changes.created);
         const fresh = selectNotifiable(emails, { inboxId: this.inboxId, notified: new Set(this.state.notified) });
         const badge = await this.badgeCount();
@@ -178,7 +197,8 @@ export class AccountWatcher {
             await this.broadcast(alertPayload(email, { badge }), { collapseId: email.id });
         }
         if (!fresh.length && badge !== null && badge !== this.state.badge) {
-            await this.broadcast(badgePayload(badge), { collapseId: null });
+            // One collapse id for all of them: only the newest count matters
+            await this.broadcast(badgePayload(badge), { collapseId: 'badge' });
         }
 
         this.state = rememberNotified(this.state, fresh.map((email) => email.id));
@@ -214,13 +234,14 @@ export class AccountWatcher {
         await saveState(this.config.dataDir, this.name, this.state);
     }
 
+    // /healthz is unauthenticated, so it says whether the machinery works and
+    // nothing about the mail itself.
     status() {
         return {
             notices: this.notices,
             verified: this.notices === 'push' ? this.verified : null,
             lastNotice: this.lastNoticeAt,
             devices: this.devices.tokens(this.name).length,
-            badge: this.state.badge,
         };
     }
 
