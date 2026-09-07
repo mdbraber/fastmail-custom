@@ -32,8 +32,11 @@ import Testing
 }
 
 @Test func aShortcutOpensItsPageOnFastmail() throws {
-    let url = try #require(HomeShortcuts.url(path: "/mail/Triage"))
+    let url = try #require(HomeShortcuts.url(path: "/mail/Triage", backend: .production))
     #expect(url.absoluteString == "https://app.fastmail.com/mail/Triage")
+    // The shortcut lands on the server the app is set to, like everything else
+    let onBeta = try #require(HomeShortcuts.url(path: "/mail/Triage", backend: .beta))
+    #expect(onBeta.absoluteString == "https://app.beta.fastmail.com/mail/Triage")
     // A path is all a shortcut carries; anything else is refused rather than opened
     #expect(HomeShortcuts.url(path: "https://example.net/mail/Inbox") == nil)
     #expect(HomeShortcuts.url(path: "mail/Inbox") == nil)

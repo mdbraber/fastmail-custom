@@ -13,7 +13,7 @@ public enum StartView {
     public static func resolve(
         _ raw: String?,
         default fallback: URL,
-        backend: Backend = .production
+        backend: Backend = .standard
     ) -> URL {
         let onBackend = backend.rehost(fallback)
         let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

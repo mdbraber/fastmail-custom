@@ -65,7 +65,8 @@ private final class FakeWindow {}
         startURL: URL(string: "https://app.fastmail.com/")!,
         overlayScriptName: nil,
         urlScheme: "fastmail-personal",
-        accountID: "f00dcafe"
+        accountID: "f00dcafe",
+        backend: .production
     )
     let without = Profile(
         id: "personal",
@@ -73,7 +74,8 @@ private final class FakeWindow {}
         startURL: URL(string: "https://app.fastmail.com/")!,
         overlayScriptName: nil,
         urlScheme: "fastmail-personal",
-        accountID: nil
+        accountID: nil,
+        backend: .production
     )
     #expect(ComposeURL.url(for: with).absoluteString == "https://app.fastmail.com/mail/Inbox/compose?u=f00dcafe&ui=minimal")
     #expect(ComposeURL.url(for: without).absoluteString == "https://app.fastmail.com/mail/Inbox/compose?ui=minimal")

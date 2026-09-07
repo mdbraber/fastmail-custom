@@ -53,7 +53,7 @@ private func specifiers(for app: String) throws -> [[String: Any]] {
             "\(app) is missing the backend row"
         )
         #expect(row["Type"] as? String == "PSMultiValueSpecifier")
-        #expect(row["DefaultValue"] as? String == Backend.production.rawValue)
+        #expect(row["DefaultValue"] as? String == Backend.standard.rawValue)
         #expect(row["Values"] as? [String] == Backend.allCases.map(\.rawValue))
         #expect(row["Titles"] as? [String] == Backend.allCases.map(\.title))
     }

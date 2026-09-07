@@ -22,7 +22,7 @@ public struct Profile: Equatable, Sendable {
         urlScheme: String,
         accountID: String?,
         handoffScheme: String? = nil,
-        backend: Backend = .production
+        backend: Backend = .standard
     ) {
         self.id = id
         self.displayName = displayName

@@ -45,7 +45,7 @@ public enum HomeShortcuts {
     /// else: anything that is not one is refused rather than opened, so a
     /// stale entry cannot name another host. The production host is used;
     /// the shell rehosts to the selected backend as it does for a push.
-    public static func url(path: String, backend: Backend = .production) -> URL? {
+    public static func url(path: String, backend: Backend = .standard) -> URL? {
         guard path.hasPrefix("/"), !path.hasPrefix("//"), !path.contains("://") else { return nil }
         var components = URLComponents()
         components.scheme = "https"

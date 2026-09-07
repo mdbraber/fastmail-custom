@@ -13,7 +13,8 @@ private func profile(
         overlayScriptName: nil,
         urlScheme: "fastmail-personal",
         accountID: accountID,
-        handoffScheme: handoffScheme
+        handoffScheme: handoffScheme,
+        backend: .production
     )
 }
 

@@ -12,7 +12,7 @@ public struct AppShell: View {
     @ObservedObject private var downloads = DownloadManager.shared
     @ObservedObject private var settings = SettingsPresenter.shared
     @ObservedObject private var pendingLinks = PendingLinks.shared
-    @AppStorage(Backend.defaultsKey) private var backendName = Backend.production.rawValue
+    @AppStorage(Backend.defaultsKey) private var backendName = Backend.standard.rawValue
     @Environment(\.scenePhase) private var scenePhase
 
     public init(profile: Profile) {

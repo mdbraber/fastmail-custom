@@ -20,7 +20,7 @@
 			<key>Key</key>
 			<string>backend</string>
 			<key>DefaultValue</key>
-			<string>production</string>
+			<string>beta</string>
 			<key>Titles</key>
 			<array>
 				<string>Production</string>

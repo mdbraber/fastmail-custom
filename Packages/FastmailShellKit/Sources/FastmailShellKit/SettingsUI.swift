@@ -93,7 +93,7 @@ public struct CustomModeSettingsForm: View {
 public struct MobileSettingsSheet: View {
     private let profile: Profile
     @AppStorage(StartView.defaultsKey) private var startView = ""
-    @AppStorage(Backend.defaultsKey) private var backendName = Backend.production.rawValue
+    @AppStorage(Backend.defaultsKey) private var backendName = Backend.standard.rawValue
     @Environment(\.dismiss) private var dismiss
 
     public init(profile: Profile) {

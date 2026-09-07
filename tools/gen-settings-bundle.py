@@ -86,7 +86,8 @@ def specifiers(catalog):
             "Type": "PSMultiValueSpecifier",
             "Title": "Backend",
             "Key": "backend",
-            "DefaultValue": "production",
+            # Backend.standard in the app; both shells run against beta
+            "DefaultValue": "beta",
             "Titles": ["Production", "Beta"],
             "Values": ["production", "beta"],
         },

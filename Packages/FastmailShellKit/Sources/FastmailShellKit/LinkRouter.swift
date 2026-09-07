@@ -98,7 +98,7 @@ public enum LinkRouter {
     static func composeURL(
         mailto: String,
         accountID: String?,
-        backend: Backend = .production
+        backend: Backend = .standard
     ) -> URL {
         let base = composeBase(for: backend)
         var query = "mailto=" + percentEncode(mailto)

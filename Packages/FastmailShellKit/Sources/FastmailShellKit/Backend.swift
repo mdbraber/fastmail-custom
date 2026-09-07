@@ -14,6 +14,14 @@ public enum Backend: String, CaseIterable, Sendable {
 
     public static let defaultsKey = "backend"
 
+    /// The server a profile talks to when nothing has been chosen. Both
+    /// shells run against beta, so an unset backend means beta and not
+    /// production. Everything that needs a default reads this one, so the
+    /// picker's initial selection, the iOS Settings row, the value an
+    /// unreadable name falls back to and the convenience defaults on the
+    /// address builders cannot drift apart.
+    public static let standard: Backend = .beta
+
     public var host: String {
         switch self {
         case .production: "app.fastmail.com"
@@ -37,15 +45,15 @@ public enum Backend: String, CaseIterable, Sendable {
     /// a worse answer than opening it.
     public static let knownHosts = allCases.map(\.host)
 
-    /// Anything unrecognised is production. The value arrives as a bare string
-    /// from the iOS Settings app, so it can be an older build's spelling or
-    /// something hand-edited, and the safe reading of a name we do not know is
-    /// the ordinary server rather than none at all.
+    /// Anything unrecognised is the standard backend. The value arrives as a
+    /// bare string from the iOS Settings app, so it can be an older build's
+    /// spelling or something hand-edited, and the safe reading of a name we do
+    /// not know is the usual server rather than none at all.
     public static func resolve(_ raw: String?) -> Backend {
         let trimmed = (raw ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-        return Backend(rawValue: trimmed) ?? .production
+        return Backend(rawValue: trimmed) ?? standard
     }
 
     public static func current(_ defaults: UserDefaults = .standard) -> Backend {
