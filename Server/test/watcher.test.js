@@ -56,9 +56,14 @@ function fakeAPNs(answer = () => ({ status: 200, reason: null })) {
     return { sent, send: async (token, payload, options) => { sent.push({ token, payload, ...options }); return answer(token); } };
 }
 
-function fakeDevices(tokens) {
+function fakeDevices(tokens, muted = []) {
     const removed = [];
-    return { removed, tokens: () => tokens.filter((t) => !removed.includes(t)), remove: async (_, t) => { removed.push(t); } };
+    const live = () => tokens.filter((t) => !removed.includes(t));
+    return {
+        removed,
+        tokens: (_, { alerts } = {}) => live().filter((t) => alerts === undefined || alerts !== muted.includes(t)),
+        remove: async (_, t) => { removed.push(t); },
+    };
 }
 
 // Timers under the test's control: only what is due within `upTo` runs.
@@ -121,6 +126,38 @@ test('one new Inbox message becomes one alert per device, carrying the badge, an
 
     const saved = await loadState(t.dir, 'personal', silent);
     assert.deepEqual(saved, { emailState: 's1', notified: ['M1'], badge: 4 });
+});
+
+test('a device with alerts off hears only the count, and the count still follows every change', async () => {
+    const created = ['M1'];
+    const emails = [arrival('M1')];
+    const t = await setUp({ created, emails }, { devices: fakeDevices(['tok1', 'tok2'], ['tok2']) });
+    assert.equal(t.watcher.status().devices, 2);
+    assert.equal(t.watcher.status().muted, 1);
+
+    // New mail and a changed count: the alert carries it to one, a bare count goes to the other
+    t.jmap.counts.badge = 5;
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(t);
+    assert.deepEqual(
+        t.apns.sent.map((s) => [s.token, s.collapseId, s.payload.aps.alert?.title ?? null, s.payload.aps.badge]),
+        [['tok1', 'M1', 'Ada', 5], ['tok2', 'badge', null, 5]],
+    );
+
+    // No new mail, a changed count: everyone hears it, once
+    t.apns.sent.length = 0;
+    t.jmap.counts.badge = 3;
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Mailbox: 'x' } } });
+    await settle(t);
+    assert.deepEqual(t.apns.sent.map((s) => [s.token, s.payload]), [['tok1', { aps: { badge: 3 } }], ['tok2', { aps: { badge: 3 } }]]);
+
+    // New mail with the count unchanged: the muted device hears nothing
+    t.apns.sent.length = 0;
+    created.push('M2');
+    emails.push(arrival('M2'));
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's2' } } });
+    await settle(t);
+    assert.deepEqual(t.apns.sent.map((s) => s.token), ['tok1']);
 });
 
 test('the same message never notifies twice', async () => {

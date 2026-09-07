@@ -35,6 +35,37 @@ test('registrations persist, per account, and can be removed', async () => {
     assert.deepEqual(again.tokens('personal'), []);
 });
 
+test('alerts can be turned off per device, survive a reload, and are on for records that predate the switch', async () => {
+    const file = await scratch();
+    const muted = 'b'.repeat(64);
+    const registry = new DeviceRegistry(file, silent);
+    await registry.load();
+    await registry.register('personal', token);
+    await registry.register('personal', muted.toUpperCase(), { alerts: false });
+
+    assert.deepEqual(registry.tokens('personal').sort(), [token, muted].sort());
+    assert.deepEqual(registry.tokens('personal', { alerts: true }), [token]);
+    assert.deepEqual(registry.tokens('personal', { alerts: false }), [muted]);
+    assert.deepEqual(registry.tokens('work', { alerts: false }), []);
+
+    const again = new DeviceRegistry(file, silent);
+    await again.load();
+    assert.deepEqual(again.tokens('personal', { alerts: false }), [muted]);
+
+    // The switch flips back with a plain re-registration
+    await again.register('personal', muted, { alerts: true });
+    assert.deepEqual(again.tokens('personal', { alerts: false }), []);
+    await again.register('personal', muted);
+    assert.deepEqual(again.tokens('personal', { alerts: true }).sort(), [token, muted].sort());
+
+    const legacy = await scratch();
+    await writeFile(legacy, JSON.stringify({ personal: { [token]: { registeredAt: '2026-09-01T00:00:00Z' } } }));
+    const old = new DeviceRegistry(legacy, silent);
+    await old.load();
+    assert.deepEqual(old.tokens('personal', { alerts: true }), [token]);
+    assert.deepEqual(old.tokens('personal', { alerts: false }), []);
+});
+
 // Two phones registering at once, or a registration racing a prune, would
 // otherwise write the same .tmp file and rename it out from under each other
 test('registrations that arrive together both survive', async () => {

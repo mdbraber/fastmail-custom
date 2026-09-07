@@ -18,7 +18,7 @@ async function running() {
             unseal: (raw) => (raw.equals(Buffer.from('sealed')) ? sealedNotice : null),
         },
     };
-    const devices = { register: async (account, value) => { registered.push([account, value]); } };
+    const devices = { register: async (account, value, options) => { registered.push([account, value, options]); } };
     const server = createServer({ config: { deviceSecret: 's3cret' }, watchers, devices, log: silent });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
@@ -46,8 +46,25 @@ test('device registration needs the bearer, a known account and a real token', a
     assert.equal((await post({ authorization: 'Bearer s3cret' }, { account: ['personal'], token })).status, 400);
     const ok = await post({ authorization: 'Bearer s3cret' }, { account: 'personal', token });
     assert.equal(ok.status, 200);
-    assert.deepEqual(s.registered, [['personal', token]]);
+    assert.deepEqual(await ok.json(), { ok: true, alerts: true });
+    assert.deepEqual(s.registered, [['personal', token, { alerts: true }]]);
     await s.close();
+});
+
+test('a registration can turn alerts off for that device, and only with a real boolean', async () => {
+    const s = await running();
+    const post = (body) => fetch(`${s.base}/devices`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer s3cret' }, body: JSON.stringify(body) });
+    try {
+        assert.equal((await post({ account: 'personal', token, alerts: 'no' })).status, 400);
+        assert.equal((await post({ account: 'personal', token, alerts: 0 })).status, 400);
+        assert.equal(s.registered.length, 0);
+        const off = await post({ account: 'personal', token, alerts: false });
+        assert.equal(off.status, 200);
+        assert.deepEqual(await off.json(), { ok: true, alerts: false });
+        assert.deepEqual(s.registered, [['personal', token, { alerts: false }]]);
+    } finally {
+        await s.close();
+    }
 });
 
 test('Fastmail notices reach the watcher only with the right secret', async () => {

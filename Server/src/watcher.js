@@ -212,11 +212,13 @@ export class AccountWatcher {
         const badge = await this.badgeCount();
 
         for (const email of fresh) {
-            await this.broadcast(alertPayload(email, { badge }), { collapseId: email.id });
+            await this.broadcast(alertPayload(email, { badge }), { collapseId: email.id, alerts: true });
         }
-        if (!fresh.length && badge !== null && badge !== this.state.badge) {
-            // One collapse id for all of them: only the newest count matters
-            await this.broadcast(badgePayload(badge), { collapseId: 'badge' });
+        if (badge !== null && badge !== this.state.badge) {
+            // Devices with alerts on already got the count on the alert; the
+            // others only ever hear the count. One collapse id for all of
+            // them: only the newest matters.
+            await this.broadcast(badgePayload(badge), { collapseId: 'badge', alerts: fresh.length ? false : undefined });
         }
 
         this.state = rememberNotified(this.state, fresh.map((email) => email.id));
@@ -230,8 +232,9 @@ export class AccountWatcher {
         return this.badgeMailboxId ? this.jmap.mailboxTotal(this.badgeMailboxId) : null;
     }
 
-    async broadcast(payload, { collapseId }) {
-        for (const token of this.devices.tokens(this.name)) {
+    // To every device, or only those with alerts on (true) or off (false)
+    async broadcast(payload, { collapseId, alerts }) {
+        for (const token of this.devices.tokens(this.name, { alerts })) {
             let result;
             try {
                 result = await this.apns.send(token, payload, { topic: this.account.topic, collapseId });
@@ -260,6 +263,7 @@ export class AccountWatcher {
             verified: this.notices === 'push' ? this.verified : null,
             lastNotice: this.lastNoticeAt,
             devices: this.devices.tokens(this.name).length,
+            muted: this.devices.tokens(this.name, { alerts: false }).length,
         };
     }
 

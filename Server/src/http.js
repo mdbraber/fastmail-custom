@@ -31,8 +31,11 @@ async function route({ config, watchers, devices }, request, response) {
         if (!body || typeof body.account !== 'string' || !Object.hasOwn(watchers, body.account) || !isDeviceToken(body.token)) {
             return reply(response, 400, { error: 'account and token required' });
         }
-        await devices.register(body.account, body.token);
-        return reply(response, 200, { ok: true });
+        // The device's own switch: absent means on
+        const alerts = body.alerts ?? true;
+        if (typeof alerts !== 'boolean') return reply(response, 400, { error: 'alerts must be true or false' });
+        await devices.register(body.account, body.token, { alerts });
+        return reply(response, 200, { ok: true, alerts });
     }
 
     if (request.method === 'POST' && parts.length === 3 && parts[0] === 'jmap') {

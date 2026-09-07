@@ -27,12 +27,16 @@ export class DeviceRegistry {
         }
     }
 
-    tokens(account) {
-        return Object.keys(this.devices[account] || {});
+    // Every token for the account, or only those with alerts on (true) or
+    // off (false). A record from before the switch existed has alerts on.
+    tokens(account, { alerts } = {}) {
+        const records = this.devices[account] || {};
+        return Object.keys(records).filter((token) => alerts === undefined || alerts === (records[token]?.alerts !== false));
     }
 
-    async register(account, token) {
-        (this.devices[account] ??= {})[token.toLowerCase()] = { registeredAt: new Date().toISOString() };
+    // Registering again is how a device changes its mind about alerts
+    async register(account, token, { alerts = true } = {}) {
+        (this.devices[account] ??= {})[token.toLowerCase()] = { registeredAt: new Date().toISOString(), alerts };
         await this.save();
     }
 
