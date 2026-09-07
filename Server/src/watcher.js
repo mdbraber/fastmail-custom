@@ -212,7 +212,10 @@ export class AccountWatcher {
         const badge = await this.badgeCount();
 
         for (const email of fresh) {
-            await this.broadcast(alertPayload(email, { badge }), { collapseId: email.id, alerts: true });
+            await this.broadcast(
+                alertPayload(email, { badge, context: this.badgeContext() }),
+                { collapseId: email.id, alerts: true },
+            );
         }
         if (badge !== null && badge !== this.state.badge) {
             // Devices with alerts on already got the count on the alert; the
@@ -226,6 +229,12 @@ export class AccountWatcher {
         this.state.badge = badge;
         await this.persist();
         if (fresh.length) this.log.info(`[${this.name}] ${fresh.length} new (${source})`);
+    }
+
+    // The badge label as a link context: a message still carrying it opens
+    // in that label rather than in the Inbox.
+    badgeContext() {
+        return this.badgeMailboxId ? { id: this.badgeMailboxId, label: this.config.badgeLabel } : null;
     }
 
     async badgeCount() {

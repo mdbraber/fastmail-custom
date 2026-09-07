@@ -62,3 +62,34 @@ test('a badge-only payload is just the number', () => {
 test('thread ids are url-encoded', () => {
     assert.equal(threadURL({ threadId: 'T a/b' }), 'https://app.fastmail.com/mail/Inbox/T%20a%2Fb');
 });
+
+// A message still carrying the badge label is opened where it is worked on,
+// so the triage list is the one behind it and the verbs act on that list
+test('a message in the badge label opens in that label rather than the Inbox', () => {
+    const triage = 'mbx-triage';
+    const waiting = email({ mailboxIds: { [inbox]: true, [triage]: true } });
+
+    assert.equal(
+        threadURL(waiting, { badge: { id: triage, label: 'Triage' } }),
+        'https://app.fastmail.com/mail/Triage/T1',
+    );
+    assert.equal(alertPayload(waiting, { badge: 2, context: { id: triage, label: 'Triage' } }).url,
+        'https://app.fastmail.com/mail/Triage/T1');
+
+    // Already triaged, or no badge label at all: the Inbox is the context
+    assert.equal(
+        threadURL(email(), { badge: { id: triage, label: 'Triage' } }),
+        'https://app.fastmail.com/mail/Inbox/T1',
+    );
+    assert.equal(threadURL(waiting), 'https://app.fastmail.com/mail/Inbox/T1');
+    assert.equal(threadURL(waiting, { badge: null }), 'https://app.fastmail.com/mail/Inbox/T1');
+});
+
+test('a label whose name needs encoding still makes one path segment', () => {
+    const held = 'mbx-held';
+    const waiting = email({ mailboxIds: { [inbox]: true, [held]: true } });
+    assert.equal(
+        threadURL(waiting, { badge: { id: held, label: 'To read/now' } }),
+        'https://app.fastmail.com/mail/To%20read%2Fnow/T1',
+    );
+});

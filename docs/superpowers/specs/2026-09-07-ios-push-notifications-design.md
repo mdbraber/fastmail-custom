@@ -19,7 +19,7 @@ Notifications on macOS (the page hands its own to `NotificationPresenter` there,
 2. **The signing team can use APNs.** The apps are signed by the team in `Config/Local.xcconfig` with a one-year wildcard provisioning profile, which only a paid Developer Program membership issues. Push needs an explicit App ID with the Push Notifications capability; Xcode's automatic signing creates both when it sees the `aps-environment` entitlement. The one manual step is creating an APNs authentication key in the developer portal.
 3. **The builds are development-signed** (`get-task-allow` is true), so their `aps-environment` is `development` and pushes must go to `api.sandbox.push.apple.com`.
 4. **Fastmail's JMAP** is at `https://api.fastmail.com/jmap/session` with a bearer API token created under Settings → Privacy & Security → Manage API tokens; a token scoped to `urn:ietf:params:jmap:mail` read-only suffices. Change notices come either through a push subscription (`PushSubscription/set`, RFC 8620 §7.2, Fastmail calling a URL of ours) or through the session's `eventSourceUrl`. Fastmail grants push subscriptions to API tokens, but only ones that carry Web Push keys ("keys must be present — Web Push delivery is always encrypted"); the server supports both routes and prefers the subscription.
-5. **A thread's address** in the web app is `https://app.fastmail.com/mail/Inbox/<threadId>`, with the JMAP `threadId` used as is; each app is logged into one account, and Fastmail adds its own `u=` on arrival. `AppShell.handle(url)` already loads such an address into the web view through `LinkRouter`.
+5. **A thread's address** in the web app is `https://app.fastmail.com/mail/<list>/<threadId>`, with the JMAP `threadId` used as is. The list is the one the message is worked from: a message still carrying the badge label opens in that label, so the triage list is behind it and the verbs act on that list; anything else opens in the Inbox. Each app is logged into one account, and Fastmail adds its own `u=` on arrival; each app is logged into one account, and Fastmail adds its own `u=` on arrival. `AppShell.handle(url)` already loads such an address into the web view through `LinkRouter`.
 6. **The badge** the apps show is the number of conversations carrying the badge label (`Triage` by default) — that label's mailbox `totalThreads` in JMAP. The page's own badge counts the same way, and a count of messages would jump every time the app came to the front.
 7. **A tapped push is rehosted** to the selected backend before it is routed: the payload names `app.fastmail.com`, and the web view, the bridge and the injected scripts are all keyed to the server the setting chose.
 
@@ -119,7 +119,7 @@ A `cannotCalculateChanges` error triggers the resync of step 3 above, silently.
     "badge": 3,
     "thread-id": "<threadId>"
   },
-  "url": "https://app.fastmail.com/mail/Inbox/<threadId>",
+  "url": "https://app.fastmail.com/mail/<Triage or Inbox>/<threadId>",
   "emailId": "<emailId>"
 }
 ```
