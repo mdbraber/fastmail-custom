@@ -1940,11 +1940,73 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
+    /*
+     * More is not a list you may add to and expect to keep.
+     *
+     * A ToolbarView draws itself from a config of *names* — the account's own
+     * action list — each looked up in the bar's registry. Whatever the width
+     * cannot take is the config's tail, and every time that tail changes the
+     * bar throws the whole menu away and builds a fresh one from those names
+     * alone:
+     *
+     *     if (t && !isEqual(this._oldOverflowConfig, t)) {
+     *         overflow.set('menuView', new MenuView({ options: t.map(...) }))
+     *     }
+     *
+     * A verb we moved there by hand is in no config, so it is not in the new
+     * menu; and the same pass took it off the bar. It now exists nowhere.
+     *
+     * That is what happened to Labels and Delete on the phone. The bar there
+     * fits four, so both fall past the cut, both were moved into More, and
+     * then reading the message flipped the config from "Mark read" to "Mark
+     * unread" — a changed tail, a new menu, and the two of them gone. Move
+     * survived only because Fastmail's own config already had it in the tail.
+     *
+     * The repair for it was already written: restoreLost puts back a verb
+     * that is in neither place. It had simply never been given the cue, since
+     * nothing else about the bar changes when the menu is swapped. So watch
+     * for the swap itself and dress the new menu.
+     */
+    const menuWatcher = {
+        pending: false,
+        menuViewDidChange() {
+            if (this.pending) return;
+            this.pending = true;
+            // After this turn, not during it: the menu is swapped partway
+            // through the bar's own redraw, and moving views around one
+            // mid-redraw is how a verb ends up drawn twice. A timer rather
+            // than a frame, so a swap while the app is in the background is
+            // still repaired rather than left pending until it is looked at.
+            window.setTimeout(() => {
+                this.pending = false;
+                try {
+                    dressToolbar();
+                } catch (error) {
+                    console.warn('Custom mode: could not dress the new menu', error);
+                }
+            });
+        }
+    };
+
+    const watchOverflowMenu = (overflow) => {
+        if (!overflow || overflow.customWatchesMenu) return;
+
+        try {
+            overflow.addObserverForKey('menuView', menuWatcher, 'menuViewDidChange');
+            overflow.customWatchesMenu = true;
+        } catch (error) {
+            // An older build without the observer; the bar still gets dressed
+            // on every other cue, it just cannot be repaired after a swap.
+        }
+    };
+
     const dressToolbar = () => {
         const toolbar = messageToolbar();
         if (!toolbar) return;
 
         const overflow = toolbarOverflowView(toolbar);
+        watchOverflowMenu(overflow);
+
         const menu = overflow && overflow.get('menuView');
         if (!menu) return;
 
