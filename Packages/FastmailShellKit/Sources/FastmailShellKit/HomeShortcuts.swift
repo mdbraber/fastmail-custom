@@ -28,7 +28,17 @@ public enum HomeShortcuts {
         let inbox = HomeShortcut(type: inboxType, title: inboxTitle, systemImage: "tray", path: inboxPath)
         let label = (badgeLabel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !label.isEmpty, label.lowercased() != inboxTitle.lowercased() else { return [inbox] }
-        let shortcut = HomeShortcut(type: labelType, title: label, systemImage: "tag", path: path(forLabel: label))
+        // The funnel, not a tag. Everywhere else this label is drawn — the
+        // sidebar row, and the switch above the list — it wears the filter
+        // glyph, because what it names is the mail still waiting rather than
+        // a label like any other. The long-press menu is one more place it is
+        // drawn, and it was the only one still showing a tag.
+        let shortcut = HomeShortcut(
+            type: labelType,
+            title: label,
+            systemImage: "line.3.horizontal.decrease",
+            path: path(forLabel: label)
+        )
         return [shortcut, inbox]
     }
 

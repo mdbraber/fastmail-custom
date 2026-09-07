@@ -8,7 +8,29 @@ import Testing
     #expect(shortcuts.map(\.path) == ["/mail/Triage", "/mail/Inbox"])
     #expect(shortcuts.map(\.type) == [HomeShortcuts.labelType, HomeShortcuts.inboxType])
     #expect(Set(shortcuts.map(\.systemImage)).count == 2, "the two are told apart at a glance")
+    // The funnel, the same thing the sidebar row and the switch above the
+    // list wear for this label, rather than the tag a label would otherwise
+    // get. A symbol iOS cannot resolve draws nothing at all, so the name is
+    // spelled out here and checked against the catalog below.
+    #expect(shortcuts.first?.systemImage == "line.3.horizontal.decrease")
 }
+
+// Both names have to be real: UIApplicationShortcutIcon draws a blank for a
+// symbol that does not exist, and nothing about that says which one was
+// wrong. The catalog is shared across platforms, so asking AppKit here
+// answers for the phone too.
+#if canImport(AppKit)
+import AppKit
+
+@Test @MainActor func theShortcutSymbolsAreRealOnes() {
+    for name in HomeShortcuts.shortcuts(badgeLabel: "Triage").map(\.systemImage) {
+        #expect(
+            NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
+            "\(name) is not a symbol iOS can draw"
+        )
+    }
+}
+#endif
 
 @Test func withoutABadgeLabelOnlyTheInboxIsOffered() {
     #expect(HomeShortcuts.shortcuts(badgeLabel: "").map(\.title) == ["Inbox"])
