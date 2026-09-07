@@ -97,12 +97,15 @@ extension Profile {
     }
 
     static func normalizedAccountID(_ raw: String?) -> String? {
+        configuredValue(raw)
+    }
+
+    /// A build setting that reached Info.plist: empty, an unsubstituted
+    /// `$(...)`, or the example placeholder all mean "not configured", so the
+    /// feature it belongs to stays off rather than pointing at nonsense.
+    static func configuredValue(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Empty, an unsubstituted build setting, or the example placeholder all
-        // mean "not configured". Treat them as absent so the compose URL omits
-        // u= and Fastmail opens the app's active account, rather than pointing
-        // at a bogus account and landing on the account picker.
         guard !trimmed.isEmpty,
               !trimmed.hasPrefix("$("),
               trimmed != "replace-me"

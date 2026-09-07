@@ -31,6 +31,19 @@ private func specifiers(for app: String) throws -> [[String: Any]] {
     }
 }
 
+// The alerts switch is read by the registrar under this key; the Settings
+// app must write the same one, with the same default, or the two disagree.
+@Test func settingsBundleCarriesTheAlertsSwitch() throws {
+    for app in apps {
+        let row = try #require(
+            try specifiers(for: app).first { $0["Key"] as? String == PushPreferences.alertsKey },
+            "\(app) is missing the alerts row"
+        )
+        #expect(row["Type"] as? String == "PSToggleSwitchSpecifier")
+        #expect(row["DefaultValue"] as? Bool == true)
+    }
+}
+
 // The plist names the backends in strings the generator writes by hand, so
 // this is what stops them drifting from the cases the app actually resolves
 @Test func settingsBundleOffersEveryBackend() throws {

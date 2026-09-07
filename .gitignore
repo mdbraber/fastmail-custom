@@ -6,3 +6,7 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 .build/
+Server/.env
+Server/secrets/
+Server/data/
+Server/node_modules/

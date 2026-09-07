@@ -16,6 +16,10 @@
     <string>nexthealth.nl</string>
     <key>FMAccountID</key>
     <string>$(WORK_ACCOUNT_ID)</string>
+    <key>FMPushHost</key>
+    <string>$(PUSH_SERVER_HOST)</string>
+    <key>FMPushSecret</key>
+    <string>$(PUSH_DEVICE_SECRET)</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0</string>
     <key>CFBundleVersion</key>

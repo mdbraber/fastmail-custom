@@ -11,6 +11,7 @@ public struct AppShell: View {
     @StateObject private var model = ShellModel()
     @ObservedObject private var downloads = DownloadManager.shared
     @ObservedObject private var settings = SettingsPresenter.shared
+    @ObservedObject private var pendingLinks = PendingLinks.shared
     @AppStorage(Backend.defaultsKey) private var backendName = Backend.production.rawValue
     @Environment(\.scenePhase) private var scenePhase
 
@@ -69,15 +70,25 @@ public struct AppShell: View {
             MobileSettingsSheet(profile: profile)
         }
         .onAppear {
-            // Ask for badge permission up front, so the prompt appears even on
-            // an account whose Triage starts empty.
-            BadgeController.shared.prime()
+            // The registrar asks for permission at launch; this puts the
+            // last badge back once the app is on screen, and opens the
+            // notification that launched it, if one did.
+            BadgeController.shared.reapply()
+            // The push names production; the page is on whichever server is selected
+            if let url = pendingLinks.take() { handle(live.backend.rehost(url)) }
         }
         .onChange(of: scenePhase) {
             // Coming back to the front is when a badge permission just granted
             // in Settings first takes effect, and when a number that drifted
             // while the app slept gets corrected.
-            if scenePhase == .active { BadgeController.shared.prime() }
+            if scenePhase == .active {
+                BadgeController.shared.reapply()
+                PushRegistrar.current?.becameActive()
+            }
+        }
+        .onChange(of: pendingLinks.url) {
+            // A tapped notification, routed exactly as a link from outside
+            if let url = pendingLinks.take() { handle(live.backend.rehost(url)) }
         }
         #else
         .onAppear {

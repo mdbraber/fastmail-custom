@@ -140,6 +140,10 @@ public struct MobileSettingsSheet: View {
                     InboxModeSettingsForm(group: .general)
                 }
 
+                // Notifications are not here: on the phone they belong to
+                // Settings → the app, beside iOS's own alert controls, and
+                // the Settings bundle carries the same switch.
+
                 ForEach(InboxModeSettings.Group.inboxGroups, id: \.self) { group in
                     Section(group.title) {
                         InboxModeSettingsForm(group: group)
