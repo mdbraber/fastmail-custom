@@ -15,9 +15,10 @@ import Testing
     #expect(BadgeController.action(for: 7) == .show(7))
 }
 
-// The prompt is worth showing only when there is a number to show.
-@Test func authorizationIsRequestedOnlyWhenUndecidedAndThereIsACount() {
-    #expect(BadgeController.move(authorization: .notDetermined, count: 5) == .request)
+// Asking is the push registrar's job, at launch; an undecided status waits
+// for that prompt, whose answer re-applies the last count.
+@Test func undecidedWaitsForThePrompt() {
+    #expect(BadgeController.move(authorization: .notDetermined, count: 5) == .skip)
     #expect(BadgeController.move(authorization: .notDetermined, count: 0) == .skip)
 }
 

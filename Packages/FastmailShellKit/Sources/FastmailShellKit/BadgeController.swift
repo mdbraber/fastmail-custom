@@ -24,7 +24,6 @@ public enum BadgeAuthorization: Equatable, Sendable {
 
 public enum BadgeAuthorizationMove: Equatable, Sendable {
     case proceed
-    case request
     case skip
 }
 
@@ -47,16 +46,14 @@ public final class BadgeController {
 
     /// The decision, read from the live authorization status rather than a
     /// remembered flag: a permission the user grants — or revokes — in Settings
-    /// is honoured on the very next badge, without an app restart. A prompt is
-    /// only worth showing when there is a number to show.
+    /// is honoured on the very next badge, without an app restart. Asking is
+    /// the push registrar's, at launch; an undecided status waits for that.
     nonisolated public static func move(
         authorization: BadgeAuthorization, count: Int
     ) -> BadgeAuthorizationMove {
         switch authorization {
-        case .denied:
+        case .denied, .notDetermined:
             return .skip
-        case .notDetermined:
-            return count > 0 ? .request : .skip
         case .allowed:
             return .proceed
         }
@@ -77,31 +74,12 @@ public final class BadgeController {
 
     /// Re-assert the last badge we knew about. Called when the app becomes
     /// active, so a permission just changed in Settings, or a count that
-    /// drifted while the app was away, lands without waiting for the next push.
+    /// drifted while the app was away, lands without waiting for the next
+    /// count. The push registrar calls this once its permission prompt is
+    /// answered.
     public func reapply() {
         guard let lastCount else { return }
         set(lastCount)
-    }
-
-    /// Ask for badge permission if it has never been decided, so the prompt
-    /// appears even before any Triage count exists — otherwise an account that
-    /// starts empty is never asked. Called when the app becomes active. Once a
-    /// decision exists, the last known badge is re-asserted instead.
-    public func prime() {
-        #if canImport(UIKit)
-        // current() is a singleton; call it fresh at each use rather than
-        // capturing it across closures, which Swift 6 flags as a data race.
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            if settings.authorizationStatus == .notDetermined {
-                UNUserNotificationCenter.current().requestAuthorization(options: [.badge]) { granted, _ in
-                    guard granted else { return }
-                    Task { @MainActor in BadgeController.shared.reapply() }
-                }
-            } else {
-                Task { @MainActor in BadgeController.shared.reapply() }
-            }
-        }
-        #endif
     }
 
     private func set(_ value: Int) {
@@ -122,11 +100,6 @@ public final class BadgeController {
             switch decision {
             case .skip:
                 return
-            case .request:
-                UNUserNotificationCenter.current().requestAuthorization(options: [.badge]) { granted, _ in
-                    guard granted else { return }
-                    Task { @MainActor in UNUserNotificationCenter.current().setBadgeCount(value) }
-                }
             case .proceed:
                 Task { @MainActor in UNUserNotificationCenter.current().setBadgeCount(value) }
             }
