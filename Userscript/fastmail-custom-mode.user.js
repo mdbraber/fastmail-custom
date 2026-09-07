@@ -39,8 +39,12 @@ of them means "leave it in the Inbox with no label". Only the mode's own
 Remove label button still removes the label, which is what it is for.
 Nothing is taken off an action bar that draws no More: the tablet's header
 bar owns one without ever drawing it, so verbs moved there — Labels among
-them — had gone rather than been tidied away. That bar is left as Fastmail
-draws it until the mode can add to it without taking anything away.
+them — had gone rather than been tidied away. Such a bar is added to and
+never taken from: File, which Fastmail draws no button for anywhere, and
+Archive on a label view, beside the Remove label the slot holds rather
+than instead of it. On a bar that does draw More, a verb is put in its new
+place before it is taken out of the old one, and any verb found in neither
+place is put back into More from the toolbar's own registry.
 
 3.9 — e archives everywhere, and archiving keeps a hold label. With E and Y
 swapped, e used to inherit whatever Fastmail had bound to y, which is one
@@ -1864,6 +1868,69 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return Math.max(1, Math.floor(width / SLOT_WIDTH) - 1);
     };
 
+    /*
+     * A bar that cannot overflow, which is the tablet's header.
+     *
+     * Everything the full dressing does rests on More: verbs past the width
+     * go there, verbs wanted back come from there, and every insert is
+     * anchored against it. A bar with no More can do none of that, and a bar
+     * that cannot hold seven verbs should not be made to try.
+     *
+     * So this adds and never takes away. File, because Fastmail draws no
+     * button for it at all and there is otherwise no way to file from the
+     * bar. Archive on a label view, because the contextual slot holds Remove
+     * label there — the stock button stays beside it, saying what it does.
+     * Both are appended after the last button, since there is no More to sit
+     * in front of, and both are skipped if already there, because this runs
+     * on every rebuilt bar.
+     */
+    const addOwnVerbs = (toolbar) => {
+        try {
+            const children = () => toolbar.get('childViews') || [];
+            const find = (test) => children().filter(test)[0];
+            const append = (view) => {
+                const last = children()[children().length - 1];
+                if (!last) return;
+                toolbar.insertView(view, last, 'after');
+            };
+
+            const ownFile = find(view => view.customStateVerb === 'file');
+            const ownArchive = find(view => view.customArchive);
+
+            if (!modeIsOn) {
+                if (ownFile) toolbar.removeView(ownFile);
+                if (ownArchive) toolbar.removeView(ownArchive);
+                return;
+            }
+
+            if (!ownFile) append(stateVerbOption('File', 'file'));
+
+            // Only where Fastmail is not already offering one: in the Inbox,
+            // and under the Inbox filter, its own slot reads Archive
+            const wantArchive = !!currentLabel() &&
+                !find(view => !view.customArchive &&
+                    (actionOf(view) === ARCHIVE_ACTION ||
+                        (() => {
+                            try {
+                                const layer = view.get('layer');
+                                return !!(layer && layer.querySelector('svg.i-archive'));
+                            } catch (error) {
+                                return false;
+                            }
+                        })()));
+
+            if (wantArchive && !ownArchive) {
+                const archive = archiveOption();
+                archive.customArchive = true;
+                append(archive);
+            } else if (!wantArchive && ownArchive) {
+                toolbar.removeView(ownArchive);
+            }
+        } catch (error) {
+            console.warn('Custom mode: could not add the verbs to the bar', error);
+        }
+    };
+
     const dressToolbar = () => {
         const toolbar = messageToolbar();
         if (!toolbar) return;
@@ -1872,17 +1939,20 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         const menu = overflow && overflow.get('menuView');
         if (!menu) return;
 
-        // Nothing comes off a bar with nowhere to put it. More is a view
-        // every ToolbarView owns, but owning it is not drawing it: the
-        // tablet's header bar is built with an empty right-hand config, so
-        // it never draws one — measured in the app's own construction. A
-        // verb moved into a menu with no button to open it has not been
-        // tidied away, it has gone, which is what happened to Labels there.
+        // More is a view every ToolbarView owns, but owning it is not drawing
+        // it: the tablet's header bar is built with an empty right-hand
+        // config, so it never draws one — measured in the app's own
+        // construction. A verb moved into a menu with no button to open it
+        // has not been tidied away, it has gone, which is what happened to
+        // Labels there. Every insert below is anchored against More as well,
+        // so a bar without one has nothing to anchor to either.
         //
-        // The bar is also where every insert below is anchored, so a bar
-        // without More has nothing to anchor to either. Left as Fastmail
-        // drew it, which is a whole set of working buttons.
-        if ((toolbar.get('childViews') || []).indexOf(overflow) === -1) return;
+        // Such a bar gets the other treatment: the mode's own verbs added to
+        // the end and nothing of Fastmail's taken away or moved.
+        if ((toolbar.get('childViews') || []).indexOf(overflow) === -1) {
+            addOwnVerbs(toolbar);
+            return;
+        }
 
         try {
             // The bar holds whatever settings.bottomBarSlots names, in that
@@ -1918,6 +1988,20 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     test: (view) => view.customStateVerb === 'file',
                     make: () => stateVerbOption('File', 'file')
                 },
+            };
+
+            // The name the toolbar's own registry knows each stock verb by,
+            // for putting one back that has ended up nowhere. removeView
+            // takes a view off the bar without forgetting it, so the registry
+            // still hands it over — which is what makes the repair below
+            // possible at all. File is ours and can be made again instead.
+            const SLOT_REGISTRY = {
+                snooze: 'snooze',
+                pin: 'flag',
+                archive: 'archive',
+                labels: 'labels',
+                move: 'move',
+                'delete': 'trash'
             };
 
             // The setting is an order over every verb, not a subset: kinds
@@ -1999,15 +2083,39 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 }
             }
 
+            // Nothing the bar knows about may end up in neither place. A
+            // verb that is on the bar or in More is somewhere you can reach
+            // it; one that is in neither has been lost rather than tidied,
+            // and Labels going missing is what that looks like. Run before
+            // the moves as well as after, so a bar that arrives already
+            // short of one is repaired rather than shuffled around it.
+            const restoreLost = () => {
+                Object.keys(SLOT_KINDS).forEach((name) => {
+                    const kind = SLOT_KINDS[name];
+                    if (onBar(kind.test) || inMore(kind.test)) return;
+
+                    const registered = SLOT_REGISTRY[name] &&
+                        registeredToolbarView(SLOT_REGISTRY[name]);
+                    if (registered) addToMore(registered);
+                });
+            };
+
+            restoreLost();
+
             // Off the bar and into More: every kind past the cut. A stock
             // view keeps existing in More; a state verb's button is reused
             // the same way.
+            //
+            // Into More first, off the bar second. The other order leaves a
+            // moment where the verb is in neither place, and anything that
+            // throws in between — a bar Fastmail is rebuilding underneath
+            // us — leaves it there for good.
             overflowNames.forEach((name) => {
                 const view = onBar(SLOT_KINDS[name].test);
                 if (!view) return;
 
-                toolbar.removeView(view);
                 if (!inMore(SLOT_KINDS[name].test)) addToMore(view);
+                toolbar.removeView(view);
             });
 
             // Onto the bar: whatever the setting names that is not there
@@ -2017,10 +2125,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 const kind = SLOT_KINDS[name];
                 if (onBar(kind.test)) return;
 
+                // Onto the bar first, out of More second, for the same
+                // reason the other direction adds before it removes.
                 const lifted = inMore(kind.test);
                 if (lifted) {
-                    dropFromMore(lifted);
                     toolbar.insertView(lifted, overflow, 'before');
+                    dropFromMore(lifted);
                     return;
                 }
 
@@ -2051,6 +2161,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     toolbar.insertView(view, overflow, 'before');
                 });
             }
+
+            // And again afterwards, so a verb the moves above dropped is put
+            // back on this pass rather than the next one
+            restoreLost();
 
             // The stock button carries `flag`, which only ever sets: in More
             // it could be rebuilt to say Unpin, but lifted onto the bar it
