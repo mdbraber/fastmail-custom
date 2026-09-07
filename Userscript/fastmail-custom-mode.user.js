@@ -36,7 +36,12 @@ which is what carries the rule that archive strips Triage, every project
 label and the pin while a hold label such as Later stays on. The funnel on
 the Triage row takes the label's colour, which the icon it stands in for
 had: Fastmail colours a sidebar icon inline as it draws it, so a stand-in
-inherits nothing and has to be told.
+inherits nothing and has to be told. And a decision moves to the next
+message rather than the first: the row it moves on from is noted before
+the decision, not after. Archiving takes the row out of the list, and so
+does filing in the triage label's own view, so an index read afterwards
+found nothing — which was read as the top of the list, sending every
+archive to whatever sat there.
 
 3.8 — a decision moves on to the next message, and the Triage label is a
 triage surface of its own. Filing and archiving now go to the next message
@@ -2728,7 +2733,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                         const result = original.call(this, storeKeys, adds, merged);
                         // A File verb waiting on this pick moves the view on
                         // to the next message.
-                        if (advance) advanceAfterDecision(advance.from);
+                        if (advance) advanceAfterDecision(advance.from, advance.index);
                         return result;
                     }
 
@@ -2742,7 +2747,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     });
                     const advance = takeFileAdvance();
                     const result = original.apply(self, args);
-                    if (advance) advanceAfterDecision(advance.from);
+                    if (advance) advanceAfterDecision(advance.from, advance.index);
                     return result;
                 } finally {
                     applyingLabelRules = false;
@@ -2999,13 +3004,17 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // filing has left it in place, or whatever has taken its slot when
     // archiving has removed it. Null past the end of what the list has
     // fetched, which sends the view back to the list rather than nowhere.
+    //
+    // An index of -1 — the row was never found — is nothing rather than the
+    // top of the list. Reading it as row 0 is how archiving came to jump to
+    // the first message: the row is gone by the time an index read too late
+    // looks for it, and every archive landed on whatever was at the top.
     const nextBelow = (from, index) => {
         const list = controller().get('mailboxMessageList');
-        if (!list || typeof list.getObjectAt !== 'function') return null;
-        const at = index < 0 ? 0 : index;
-        const here = list.getObjectAt(at);
+        if (!list || typeof list.getObjectAt !== 'function' || index < 0) return null;
 
-        if (here && sameConversation(here, from)) return list.getObjectAt(at + 1) || null;
+        const here = list.getObjectAt(index);
+        if (here && sameConversation(here, from)) return list.getObjectAt(index + 1) || null;
         return here || null;
     };
 
@@ -3035,13 +3044,19 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     //
     // Run a tick after the decision, so the store has taken Triage off the one
     // just decided and the list has settled.
-    const advanceAfterDecision = (from) => {
+    //
+    // `index` is where the conversation sat before the decision, and the
+    // caller reads it before making one — which is the whole point of it.
+    // Archiving takes the row out of the list and filing in the triage
+    // label's own view does too, so an index read here, afterwards, finds
+    // nothing. rowIndexOf still stands in where a caller has none to give.
+    const advanceAfterDecision = (from, index) => {
         if (!onTriageSurface()) return;
-        const index = rowIndexOf(from);
+        const at = typeof index === 'number' ? index : rowIndexOf(from);
 
         setTimeout(() => {
             if (!onTriageSurface()) return;
-            const next = nextBelow(from, index);
+            const next = nextBelow(from, at);
 
             if (FastMail.isMobile && settings.backToListWhenTriaged &&
                 (!next || !carriesTriage(next))) {
@@ -3083,6 +3098,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // unrelated label add.
     let pendingFileAdvance = false;
     let pendingFileFrom = null;
+    // Where that conversation sat when the picker opened. Read at arming time
+    // for the same reason every other caller reads it early: the pick may take
+    // the row out of the list it was in, and by then there is nothing to find.
+    let pendingFileIndex = -1;
     let pendingFileAdvanceTimer = null;
 
     const clearFileAdvanceTimer = () => {
@@ -3094,23 +3113,28 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const armFileAdvance = (from) => {
         pendingFileAdvance = true;
         pendingFileFrom = from || null;
+        pendingFileIndex = rowIndexOf(from);
         clearFileAdvanceTimer();
         pendingFileAdvanceTimer = setTimeout(() => {
             pendingFileAdvance = false;
             pendingFileFrom = null;
+            pendingFileIndex = -1;
             pendingFileAdvanceTimer = null;
         }, 12000);
     };
 
-    // The remembered conversation wrapped in an object when a File verb is
-    // waiting on this pick, or null when nothing is. One-shot.
+    // The remembered conversation and the row it was on, wrapped in an object
+    // when a File verb is waiting on this pick, or null when nothing is.
+    // One-shot.
     const takeFileAdvance = () => {
         if (!pendingFileAdvance) return null;
         const from = pendingFileFrom;
+        const index = pendingFileIndex;
         pendingFileAdvance = false;
         pendingFileFrom = null;
+        pendingFileIndex = -1;
         clearFileAdvanceTimer();
-        return { from: from };
+        return { from: from, index: index };
     };
 
     // Whether the label add about to land is a filing — the File verb's
@@ -3471,8 +3495,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // conversation waiting for triage instead, exactly as filing does;
         // elsewhere the stock archive advances as it always has.
         if (onTriageSurface()) {
+            // Where the row sits, read while it is still there. The archive
+            // below takes it out of the list, and looking afterwards finds
+            // nothing at all rather than the row that replaced it.
+            const index = rowIndexOf(from);
             withDidAction(actions, stayHereAfter, finish);
-            advanceAfterDecision(from);
+            advanceAfterDecision(from, index);
         } else {
             finish();
         }
@@ -3490,11 +3518,15 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             .concat(projectWins ? excludedAmong(keys) : []);
         if (!removes.length) return;
         const from = messagesFrom(keys)[0];
+        // Read first: in the Inbox the row stays put, but in the triage
+        // label's own view taking Triage off takes the row out of the list,
+        // and the index would be gone by the line after this one.
+        const index = rowIndexOf(from);
         actions.addremove(keys, [], removes);
         // Kept in place; the view moves on to the next conversation waiting
         // for triage, or back to the list — first row focused — when none is
         // left.
-        advanceAfterDecision(from);
+        advanceAfterDecision(from, index);
     };
 
     // pin — `s`. A toggle over the selection: all pinned, unpin; else pin.
