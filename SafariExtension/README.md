@@ -117,3 +117,12 @@ window.customMode.isOn()
 The console also logs `Custom mode ready (Shift-I to toggle)` on load. If the CSP
 error still appears, that is the Userscripts copy of the script failing — disable
 it there, since this extension now delivers it.
+
+## Identifiers
+
+The host app is `com.mdbraber.fastmail.custommode` and the extension inside it
+`com.mdbraber.fastmail.custommode.extension`. They were renamed from the
+converter's `com.yourCompany.Fastmail-Inbox-mode` on 2026-09-07, along with
+the mode itself. Safari keys an extension's enabled state and its stored
+settings to that identifier, so the rename presents this as a new extension:
+enable it again in Safari's settings, and set the options once more.
