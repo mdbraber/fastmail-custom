@@ -38,16 +38,33 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
             Task { @MainActor in
                 BadgeController.shared.reapply()
                 guard granted else { return }
-                UIApplication.shared.registerForRemoteNotifications()
+                PushRegistrar.current?.requestToken()
             }
         }
+    }
+
+    /// Apple's device token, asked for only when there is a server to give
+    /// it to and none has arrived yet. Asked again on every activation until
+    /// it comes: a launch without network gets none, and Apple does not
+    /// retry on the app's behalf.
+    private func requestToken() {
+        guard config != nil, account != nil, deviceToken == nil else { return }
+        UIApplication.shared.registerForRemoteNotifications()
     }
 
     /// Called by AppShell when the scene becomes active.
     public func becameActive() {
         // Whatever was announced is on screen now
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
-        if registrationDue {
+        if deviceToken == nil {
+            // Permission may have been granted in Settings since launch
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                let allowed = settings.authorizationStatus == .authorized
+                    || settings.authorizationStatus == .provisional
+                guard allowed else { return }
+                Task { @MainActor in PushRegistrar.current?.requestToken() }
+            }
+        } else if registrationDue {
             Task { await register() }
         }
     }
