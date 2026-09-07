@@ -33,7 +33,10 @@ bound to that same button, so it archived in the Inbox and did nothing in a
 label view — the desktop had no archive there at all, where the phone's bar
 had been swapping the slot for one since 3.0. Both keys now run the verb,
 which is what carries the rule that archive strips Triage, every project
-label and the pin while a hold label such as Later stays on.
+label and the pin while a hold label such as Later stays on. The funnel on
+the Triage row takes the label's colour, which the icon it stands in for
+had: Fastmail colours a sidebar icon inline as it draws it, so a stand-in
+inherits nothing and has to be told.
 
 3.8 — a decision moves on to the next message, and the Triage label is a
 triage surface of its own. Filing and archiving now go to the next message
@@ -4412,6 +4415,41 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             names.some(name => name.indexOf('i-') === 0);
     })[0] || null;
 
+    // A sidebar row's own icon is coloured inline from the label, not by any
+    // rule a stylesheet could carry: measured, Fastmail's redrawIcon sets
+    // style.color from the label's foreground colour and style.fill from its
+    // background one, on a glyph it has just built. A stand-in for that icon
+    // inherits none of it and comes out in the theme's ink unless it is told.
+    //
+    // The funnel is stroke-drawn on currentColor and filled with nothing, so
+    // colour is the property that shows and the label's own colour is the
+    // value to give it — the shade the row rules tint with, not the
+    // contrasting foreground Fastmail strokes a filled tag with.
+    //
+    // Not gated on the colour settings. Those decide whether message rows are
+    // tinted, and skip Triage there on purpose, because every undecided row
+    // carries it and the whole group would go one shade. This is a different
+    // claim: the icon was replaced, so it owes what it replaced.
+    const labelColour = (mailbox) => {
+        if (!mailbox || typeof mailbox.get !== 'function') return '';
+
+        try {
+            return String(mailbox.get('color') ||
+                mailbox.get('backgroundColor') || '');
+        } catch (error) {
+            return '';
+        }
+    };
+
+    const paintFilterGlyph = (svg, mailbox) => {
+        const colour = labelColour(mailbox);
+        if (colour) {
+            svg.style.color = colour;
+        } else {
+            svg.style.removeProperty('color');
+        }
+    };
+
     const dressTriageRows = () => {
         sidebarRows().forEach(({ mailbox, el }) => {
             const drawn = el.querySelector('svg.' + FILTER_ICON_CLASS);
@@ -4423,10 +4461,17 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 return;
             }
 
-            if (drawn || !stock || !stock.parentNode) return;
+            const funnel = drawn || (stock && stock.parentNode
+                ? stock.parentNode.insertBefore(filterGlyph(stock), stock)
+                : null);
+            if (!funnel) return;
 
-            stock.parentNode.insertBefore(filterGlyph(stock), stock);
-            stock.classList.add(HIDDEN_SOURCE_ICON_CLASS);
+            if (stock) stock.classList.add(HIDDEN_SOURCE_ICON_CLASS);
+
+            // Painted on every pass rather than only as it goes in: recolouring
+            // the label redraws the row, and a funnel already in place would
+            // otherwise keep the old shade until something removed it.
+            paintFilterGlyph(funnel, mailbox);
         });
     };
 
