@@ -1,7 +1,7 @@
 PROJECT = FastmailShell.xcodeproj
 DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/ available/ {print $$3; exit}')
 
-.PHONY: generate test build-macos install-macos build-ios install-ios install deploy settings-bundle clean
+.PHONY: generate test build-macos install-macos build-ios install-ios build-extension install-extension install deploy settings-bundle clean
 
 generate:
 	xcodegen generate
@@ -36,7 +36,21 @@ install-ios: build-ios
 	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/mdbraber.com.app"
 	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/nexthealth.nl.app"
 
-install: install-macos install-ios
+# The Safari extension ships inside a host app, which Safari only sees once
+# the app is in /Applications. Xcode resolves the extension's symlinks into
+# real files as it builds, so the app always carries the current script.
+EXTENSION_DIR = SafariExtension/App/Fastmail Custom Mode
+EXTENSION_APP = Fastmail Custom Mode.app
+
+build-extension:
+	cd "$(EXTENSION_DIR)" && xcodebuild -project "Fastmail Custom Mode.xcodeproj" -scheme "Fastmail Custom Mode" -configuration Release -derivedDataPath build build
+
+install-extension: build-extension
+	rm -rf "/Applications/$(EXTENSION_APP)"
+	cp -R "$(EXTENSION_DIR)/build/Build/Products/Release/$(EXTENSION_APP)" /Applications/
+	@echo "Installed /Applications/$(EXTENSION_APP) — enable it in Safari's Extensions settings"
+
+install: install-macos install-ios install-extension
 
 # install-ios takes DEVICE, which defaults to the first device listed, so
 # `install` reaches one of them and quietly leaves the others behind. deploy

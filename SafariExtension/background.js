@@ -1,5 +1,5 @@
 /*
-Fastmail Custom mode injector
+Fastmail Custom Mode injector
 
 Fastmail serves `script-src 'self' …` with no 'unsafe-inline'. A userscript
 manager runs page-world code by adding an inline <script> to the page, which

@@ -1,5 +1,5 @@
 /*
-Fastmail Custom mode — head start
+Fastmail Custom Mode — head start
 
 The payload runs in the page world, which means waiting for the document to be
 complete and then for Fastmail itself to be ready. Fastmail paints its first

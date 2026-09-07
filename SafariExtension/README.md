@@ -1,4 +1,4 @@
-# Fastmail Custom mode injector
+# Fastmail Custom Mode injector
 
 A minimal Safari web extension whose only job is to start
 `fastmail-custom-mode.user.js` on `app.fastmail.com` and `app.beta.fastmail.com`.
@@ -54,21 +54,28 @@ Safari extensions must be delivered inside an app, so this needs converting once
 
 ```sh
 xcrun safari-web-extension-converter \
-    --app-name "Fastmail Custom mode" \
+    --app-name "Fastmail Custom Mode" \
     --copy-resources \
     SafariExtension
 ```
 
 The app project's `Resources` are symlinks back here, so there is nothing to
 copy by hand — but **Xcode resolves them into real files when it builds**, so
-every edit needs a rebuild before Safari sees it:
+every edit needs a rebuild before Safari sees it. From the repository root:
 
 ```sh
-cd "SafariExtension/App/Fastmail Custom mode"
-xcodebuild -project "Fastmail Custom mode.xcodeproj" \
-    -scheme "Fastmail Custom mode" -configuration Debug \
+make install-extension
+```
+
+That builds the host app in Release and puts it in `/Applications`, which is
+where Safari looks for it. To iterate without installing, build in place:
+
+```sh
+cd "SafariExtension/App/Fastmail Custom Mode"
+xcodebuild -project "Fastmail Custom Mode.xcodeproj" \
+    -scheme "Fastmail Custom Mode" -configuration Debug \
     -derivedDataPath build build
-open "build/Build/Products/Debug/Fastmail Custom mode.app"
+open "build/Build/Products/Debug/Fastmail Custom Mode.app"
 ```
 
 Reloading the tab without rebuilding silently runs the previous payload:
@@ -80,7 +87,7 @@ underneath a running app is what makes the extension vanish from Safari's list
 altogether.
 
 ```sh
-osascript -e 'tell application "Fastmail Custom mode" to quit'
+osascript -e 'tell application "Fastmail Custom Mode" to quit'
 ```
 
 ### Signing
@@ -96,7 +103,7 @@ with the Apple Development certificate and the identity stays put across
 rebuilds. Check it with:
 
 ```sh
-codesign -dv "build/Build/Products/Debug/Fastmail Custom mode.app" 2>&1 |
+codesign -dv "build/Build/Products/Debug/Fastmail Custom Mode.app" 2>&1 |
     grep TeamIdentifier
 ```
 

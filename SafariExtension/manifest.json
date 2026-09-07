@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "Fastmail Custom mode injector",
+    "name": "Fastmail Custom Mode",
     "version": "1.0",
-    "description": "Runs Fastmail Custom mode in the page world, which Fastmail's Content Security Policy blocks for an ordinary userscript.",
+    "description": "Runs the Custom mode userscript in the page world, which Fastmail's Content Security Policy blocks for an ordinary userscript.",
     "icons": {
         "48": "images/icon-48.png",
         "96": "images/icon-96.png",

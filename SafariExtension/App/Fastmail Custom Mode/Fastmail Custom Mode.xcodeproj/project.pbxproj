@@ -15,7 +15,7 @@
 		6BD4977F302BA54000196E0B /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD4977E302BA54000196E0B /* ViewController.swift */; };
 		6BD49782302BA54000196E0B /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 6BD49780302BA54000196E0B /* Main.storyboard */; };
 		6BD49784302BA54200196E0B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BD49783302BA54200196E0B /* Assets.xcassets */; };
-		6BD4978B302BA54200196E0B /* Fastmail Custom mode Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6BD4978A302BA54200196E0B /* Fastmail Custom mode Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6BD4978B302BA54200196E0B /* Fastmail Custom Mode Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6BD4978A302BA54200196E0B /* Fastmail Custom Mode Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6BD49790302BA54200196E0B /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD4978F302BA54200196E0B /* SafariWebExtensionHandler.swift */; };
 		6BD497A4302BA54200196E0B /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 6BD4979C302BA54200196E0B /* background.js */; };
 		6BD497A5302BA54200196E0B /* images in Resources */ = {isa = PBXBuildFile; fileRef = 6BD4979D302BA54200196E0B /* images */; };
@@ -33,7 +33,7 @@
 			containerPortal = 6BD49767302BA54000196E0B /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 6BD49789302BA54200196E0B;
-			remoteInfo = "Fastmail Custom mode Extension";
+			remoteInfo = "Fastmail Custom Mode Extension";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -44,7 +44,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				6BD4978B302BA54200196E0B /* Fastmail Custom mode Extension.appex in Embed Foundation Extensions */,
+				6BD4978B302BA54200196E0B /* Fastmail Custom Mode Extension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -52,7 +52,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		6BD4976F302BA54000196E0B /* Fastmail Custom mode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Fastmail Custom mode.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6BD4976F302BA54000196E0B /* Fastmail Custom Mode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Fastmail Custom Mode.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6BD49772302BA54000196E0B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		6BD49776302BA54000196E0B /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
 		6BD49778302BA54000196E0B /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
@@ -62,7 +62,7 @@
 		6BD49781302BA54000196E0B /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		6BD49783302BA54200196E0B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6BD49785302BA54200196E0B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		6BD4978A302BA54200196E0B /* Fastmail Custom mode Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Fastmail Custom mode Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6BD4978A302BA54200196E0B /* Fastmail Custom Mode Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Fastmail Custom Mode Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6BD4978F302BA54200196E0B /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
 		6BD49791302BA54200196E0B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6BD4979C302BA54200196E0B /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = Resources/background.js; sourceTree = "<group>"; };
@@ -96,8 +96,8 @@
 		6BD49766302BA54000196E0B = {
 			isa = PBXGroup;
 			children = (
-				6BD49771302BA54000196E0B /* Fastmail Custom mode */,
-				6BD4978E302BA54200196E0B /* Fastmail Custom mode Extension */,
+				6BD49771302BA54000196E0B /* Fastmail Custom Mode */,
+				6BD4978E302BA54200196E0B /* Fastmail Custom Mode Extension */,
 				6BD49770302BA54000196E0B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -105,13 +105,13 @@
 		6BD49770302BA54000196E0B /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				6BD4976F302BA54000196E0B /* Fastmail Custom mode.app */,
-				6BD4978A302BA54200196E0B /* Fastmail Custom mode Extension.appex */,
+				6BD4976F302BA54000196E0B /* Fastmail Custom Mode.app */,
+				6BD4978A302BA54200196E0B /* Fastmail Custom Mode Extension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		6BD49771302BA54000196E0B /* Fastmail Custom mode */ = {
+		6BD49771302BA54000196E0B /* Fastmail Custom Mode */ = {
 			isa = PBXGroup;
 			children = (
 				6BD49772302BA54000196E0B /* AppDelegate.swift */,
@@ -121,7 +121,7 @@
 				6BD49785302BA54200196E0B /* Info.plist */,
 				6BD49774302BA54000196E0B /* Resources */,
 			);
-			path = "Fastmail Custom mode";
+			path = "Fastmail Custom Mode";
 			sourceTree = "<group>";
 		};
 		6BD49774302BA54000196E0B /* Resources */ = {
@@ -135,14 +135,14 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
-		6BD4978E302BA54200196E0B /* Fastmail Custom mode Extension */ = {
+		6BD4978E302BA54200196E0B /* Fastmail Custom Mode Extension */ = {
 			isa = PBXGroup;
 			children = (
 				6BD4979B302BA54200196E0B /* Resources */,
 				6BD4978F302BA54200196E0B /* SafariWebExtensionHandler.swift */,
 				6BD49791302BA54200196E0B /* Info.plist */,
 			);
-			path = "Fastmail Custom mode Extension";
+			path = "Fastmail Custom Mode Extension";
 			sourceTree = "<group>";
 		};
 		6BD4979B302BA54200196E0B /* Resources */ = {
@@ -158,15 +158,15 @@
 				6BD497A3302BA54200196E0B /* settings.js */,
 			);
 			name = Resources;
-			path = "Fastmail Custom mode Extension";
+			path = "Fastmail Custom Mode Extension";
 			sourceTree = SOURCE_ROOT;
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		6BD4976E302BA54000196E0B /* Fastmail Custom mode */ = {
+		6BD4976E302BA54000196E0B /* Fastmail Custom Mode */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 6BD49798302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Custom mode" */;
+			buildConfigurationList = 6BD49798302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Custom Mode" */;
 			buildPhases = (
 				6BD4976B302BA54000196E0B /* Sources */,
 				6BD4976C302BA54000196E0B /* Frameworks */,
@@ -178,16 +178,16 @@
 			dependencies = (
 				6BD4978D302BA54200196E0B /* PBXTargetDependency */,
 			);
-			name = "Fastmail Custom mode";
+			name = "Fastmail Custom Mode";
 			packageProductDependencies = (
 			);
-			productName = "Fastmail Custom mode";
-			productReference = 6BD4976F302BA54000196E0B /* Fastmail Custom mode.app */;
+			productName = "Fastmail Custom Mode";
+			productReference = 6BD4976F302BA54000196E0B /* Fastmail Custom Mode.app */;
 			productType = "com.apple.product-type.application";
 		};
-		6BD49789302BA54200196E0B /* Fastmail Custom mode Extension */ = {
+		6BD49789302BA54200196E0B /* Fastmail Custom Mode Extension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 6BD49794302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Custom mode Extension" */;
+			buildConfigurationList = 6BD49794302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Custom Mode Extension" */;
 			buildPhases = (
 				6BD49786302BA54200196E0B /* Sources */,
 				6BD49787302BA54200196E0B /* Frameworks */,
@@ -197,11 +197,11 @@
 			);
 			dependencies = (
 			);
-			name = "Fastmail Custom mode Extension";
+			name = "Fastmail Custom Mode Extension";
 			packageProductDependencies = (
 			);
-			productName = "Fastmail Custom mode Extension";
-			productReference = 6BD4978A302BA54200196E0B /* Fastmail Custom mode Extension.appex */;
+			productName = "Fastmail Custom Mode Extension";
+			productReference = 6BD4978A302BA54200196E0B /* Fastmail Custom Mode Extension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -222,7 +222,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 6BD4976A302BA54000196E0B /* Build configuration list for PBXProject "Fastmail Custom mode" */;
+			buildConfigurationList = 6BD4976A302BA54000196E0B /* Build configuration list for PBXProject "Fastmail Custom Mode" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -236,8 +236,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				6BD4976E302BA54000196E0B /* Fastmail Custom mode */,
-				6BD49789302BA54200196E0B /* Fastmail Custom mode Extension */,
+				6BD4976E302BA54000196E0B /* Fastmail Custom Mode */,
+				6BD49789302BA54200196E0B /* Fastmail Custom Mode Extension */,
 			);
 		};
 /* End PBXProject section */
@@ -296,7 +296,7 @@
 /* Begin PBXTargetDependency section */
 		6BD4978D302BA54200196E0B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 6BD49789302BA54200196E0B /* Fastmail Custom mode Extension */;
+			target = 6BD49789302BA54200196E0B /* Fastmail Custom Mode Extension */;
 			targetProxy = 6BD4978C302BA54200196E0B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -449,8 +449,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Fastmail Custom mode Extension/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Custom mode Extension";
+				INFOPLIST_FILE = "Fastmail Custom Mode Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Custom Mode Extension";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -484,8 +484,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Fastmail Custom mode Extension/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Custom mode Extension";
+				INFOPLIST_FILE = "Fastmail Custom Mode Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Custom Mode Extension";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -523,8 +523,8 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Fastmail Custom mode/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Custom mode";
+				INFOPLIST_FILE = "Fastmail Custom Mode/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Custom Mode";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMainStoryboardFile = Main;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -565,8 +565,8 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Fastmail Custom mode/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Custom mode";
+				INFOPLIST_FILE = "Fastmail Custom Mode/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Fastmail Custom Mode";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMainStoryboardFile = Main;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -596,7 +596,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		6BD4976A302BA54000196E0B /* Build configuration list for PBXProject "Fastmail Custom mode" */ = {
+		6BD4976A302BA54000196E0B /* Build configuration list for PBXProject "Fastmail Custom Mode" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				6BD49792302BA54200196E0B /* Debug */,
@@ -605,7 +605,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		6BD49794302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Custom mode Extension" */ = {
+		6BD49794302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Custom Mode Extension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				6BD49795302BA54200196E0B /* Debug */,
@@ -614,7 +614,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		6BD49798302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Custom mode" */ = {
+		6BD49798302BA54200196E0B /* Build configuration list for PBXNativeTarget "Fastmail Custom Mode" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				6BD49799302BA54200196E0B /* Debug */,
