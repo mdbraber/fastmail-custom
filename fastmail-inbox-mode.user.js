@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Inbox mode
 // @namespace    custom
-// @version      3.6
+// @version      3.7
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -14,9 +14,14 @@
 /*
 Fastmail Inbox mode
 Maarten den Braber <m@mdbraber.com>
-version 3.6 - 2026-09-06
+version 3.7 - 2026-09-06
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
+
+3.7 — back on the list, the first row takes the focus. When filing or
+archiving finds nothing left to triage and walks back to the list, the
+first row is focused — the one j and k move and Enter opens — rather than
+nothing.
 
 3.6 — Later is somewhere to file. A label named in settings.excludedLabels
 is a hold, not a queue: the File picker offers it beside the projects, and
@@ -3295,7 +3300,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * (often a filed one) unless held. Either way the walk is explicit: down
      * the list to the next one carrying Triage, stepping over any already
      * filed, and back to the list when none is left rather than opening a
-     * filed one. Only in the Inbox with the mode on, the triage surface.
+     * filed one — with its first row focused, so the keyboard has somewhere
+     * to be. Only in the Inbox with the mode on, the triage surface.
      */
 
     // A conversation still waiting to be triaged carries the Triage label.
@@ -3375,7 +3381,23 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 (list && typeof list.getObjectAt === 'function' && list.getObjectAt(0));
             const listUrl = listURLFrom(anchor);
             if (listUrl) goToUrl(listUrl);
+            // Back on the list — or already there — the first row takes the
+            // focus rather than nothing. A tick later, so the route has landed.
+            setTimeout(focusFirstRow, 0);
         }, 0);
+    };
+
+    // The row the keyboard is on: Fastmail's focus is a single-selection
+    // controller over the list, and index 0 is its first row — it waits for
+    // the row itself if the list is still loading. Measured: setting it moves
+    // the highlight without opening the conversation.
+    const focusFirstRow = () => {
+        try {
+            const focused = controller().get('focused');
+            if (focused && typeof focused.set === 'function') focused.set('index', 0);
+        } catch (error) {
+            // No list on screen, nothing to focus
+        }
     };
 
     // The picker path finishes a tick later, after the pick, so the File verb
@@ -3795,7 +3817,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         const from = messagesFrom(keys)[0];
         actions.addremove(keys, [], removes);
         // Kept in place; the view moves on to the next conversation waiting
-        // for triage, or back to the list when none is left.
+        // for triage, or back to the list — first row focused — when none is
+        // left.
         advanceToNextTriage(from);
     };
 
