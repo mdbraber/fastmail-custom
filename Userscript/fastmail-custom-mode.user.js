@@ -354,6 +354,76 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // Get controller
     const controller = () => FastMail.router.getAppController('mail');
 
+    /*
+     * ----------------------------------------------------------------
+     * Saying when something did not work
+     * ----------------------------------------------------------------
+     *
+     * This mode is full of places that give up quietly: a view that is not
+     * drawn yet, a bar being rebuilt underneath us, a name the app has
+     * stopped answering to. Carrying on is right — half a toolbar is worse
+     * than none — but going quiet about it is not. The Labels button was
+     * missing for days, through three wrong diagnoses, and at no point did
+     * anything say "I looked for Labels and could not find it". A console
+     * warning is no help either: there is no console on a phone.
+     *
+     * So a failure that matters raises Fastmail's own toast, the one an
+     * archive raises. Once per distinct failure, since these run on every
+     * redraw and the second thousand tell you nothing the first did not.
+     */
+
+    const faultsReported = new Set();
+    let notificationView = null;
+
+    /*
+     * Fastmail's toast host, found by walking the root view for one of that
+     * class. By class rather than by CSS name: the markup is Fastmail's to
+     * rename and the class is the thing itself.
+     */
+    const notifications = () => {
+        if (notificationView) return notificationView;
+
+        const Container = FastMail.classes.NotificationContainerView;
+        if (!Container) return null;
+
+        const walk = (view, depth) => {
+            if (!view || depth > 6) return null;
+            if (view instanceof Container) return view;
+
+            let children = [];
+            try {
+                children = view.get('childViews') || [];
+            } catch (error) {
+                return null;
+            }
+
+            for (const child of children) {
+                const found = walk(child, depth + 1);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        notificationView = walk(FastMail.root, 0);
+        return notificationView;
+    };
+
+    const reportFault = (what, error) => {
+        if (error !== undefined) console.warn('Custom mode: ' + what, error);
+        else console.warn('Custom mode: ' + what);
+
+        if (faultsReported.has(what)) return;
+        faultsReported.add(what);
+
+        try {
+            const host = notifications();
+            // Long enough to read and dismissible, since it is not routine
+            if (host) host.toast('Custom mode: ' + what, 8000, true);
+        } catch (toastError) {
+            // The console line above is all that is left
+        }
+    };
+
     // Overture collections are sometimes real arrays and sometimes record
     // arrays. A record array indexes store keys rather than records and has no
     // own length, so it must be walked with its own map() to get records out.
@@ -517,7 +587,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         if (settings.triageLabel && !cached.triage && warnedNoTriage !== settings.triageLabel) {
             warnedNoTriage = settings.triageLabel;
-            console.warn('Custom mode: no label named "' + settings.triageLabel +
+            reportFault('no label named "' + settings.triageLabel +
                 '" — v takes nothing off and archive strips no Triage until it exists');
         }
 
@@ -795,7 +865,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             try {
                 view.redrawBadgeCount();
             } catch (error) {
-                console.warn('Custom mode: could not repaint a badge', error);
+                reportFault('could not repaint a badge', error);
             }
         });
     };
@@ -1404,7 +1474,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         try {
             home.parent.insertView(indicatorView, home.anchor, home.side);
         } catch (error) {
-            console.warn('Custom mode: could not add the toolbar indicator', error);
+            reportFault('could not add the toolbar indicator', error);
             indicatorView = null;
         }
     };
@@ -1421,16 +1491,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         if (!children) return null;
 
         return children.find(view => isViewOfClass(view, 'MenuButtonView')) || null;
-    };
-
-    // The label in front of you, where there is one: the bar swaps a verb
-    // on a label view that it does not swap in the Inbox.
-    const currentLabel = () => {
-        const mailController = controller();
-        if (mailController.get('search')) return null;
-
-        const mailbox = mailController.get('mailbox');
-        return isUserLabel(mailbox) ? mailbox : null;
     };
 
     const indicatorIsActive = () => modeIsOn;
@@ -1564,13 +1624,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // meant here, now that the two halves of the question are told apart.
     const isPhoneLayout = () => !!FastMail.isMobile && !isTabletLayout();
 
-    // The phone's bottom bar is the one to dress; a tablet's actions are in
-    // the header, so ask the registry there and leave the bottom bar alone.
-    // Each still falls back to the other, so a layout that draws only one of
-    // them is answered either way.
-    const messageToolbar = () => (isTabletLayout()
-        ? actionBar() || bottomToolbar()
-        : bottomToolbar() || actionBar());
+    // The bar the message actions are on. The plain question first — which
+    // bar carries its own list of actions — since that is what being this bar
+    // consists of, and it answers on every layout without knowing about any
+    // of them. Where it does not, the older guess by layout stands behind it.
+    const messageToolbar = () => messageActionsBar() ||
+        (isTabletLayout() ? actionBar() || bottomToolbar()
+            : bottomToolbar() || actionBar());
 
     /*
      * A button's real name.
@@ -1632,8 +1692,17 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return null;
     };
 
-    const isRegisteredAs = (target, name) =>
-        !!target && registeredToolbarView(name) === target;
+    // Every bar's registry, not just the first to answer. A tablet draws two
+    // message actions bars and each has its own Labels button; asking only
+    // the first would say no to the second one's.
+    const isRegisteredAs = (target, name) => !!target &&
+        toolbarsOnScreen().some((bar) => {
+            try {
+                return bar.getView(name) === target;
+            } catch (error) {
+                return false;
+            }
+        });
 
     // The bar the message actions are on, whichever layout drew it. Asked by
     // name for the same reason everything else here is: the names are the
@@ -1653,38 +1722,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return null;
     };
 
-    // The More button. ToolbarView registers its own under "overflow" in
-    // init, before any caller adds a thing, so the name is there on every
-    // bar there is; the class scan behind it covers a toolbar we were
-    // handed rather than found.
-    const toolbarOverflowView = (toolbar) => {
-        if (!toolbar || typeof toolbar.get !== 'function') return null;
-
-        try {
-            if (typeof toolbar.getView === 'function') {
-                const registered = toolbar.getView('overflow');
-                if (registered) return registered;
-            }
-
-            return (toolbar.get('childViews') || []).filter(view =>
-                isViewOfClass(view, 'OverflowMenuView'))[0] || null;
-        } catch (error) {
-            return null;
-        }
-    };
-
-    const actionOf = (view) => {
-        try {
-            return String(view.get('action') || '');
-        } catch (error) {
-            return '';
-        }
-    };
-
-    const DELETE_ACTION = 'deleteToTrash';
-    // Pinning is flagging; Fastmail's own button for it says Pin
-    const PIN_ACTION = 'flag';
-    const ARCHIVE_ACTION = 'archive';
     const SNOOZE_SHORTCUT = 'b';
 
     // Our own "Remove label", since Fastmail draws no such button here: the
@@ -1796,29 +1833,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         method: 'removeLabel'
     });
 
-    // An archive crate in the same hand, for the same reason: the views the
-    // button below serves are exactly the ones with no archive glyph on
-    // screen to copy
-    const ARCHIVE_SHAPES = [
-        ['rect', { x: '3.75', y: '4.75', width: '16.5', height: '3.5', rx: '0.75' }],
-        ['path', { d: 'M5.25,8.25v9a2,2,0,0,0,2,2h9.5a2,2,0,0,0,2-2v-9' }],
-        ['line', { x1: '9.75', y1: '12.25', x2: '14.25', y2: '12.25' }]
-    ];
-
-    const archiveIcon = () => borrowedIcon('archive', 'i-archive') ||
-        standardIcon('i-archive', ARCHIVE_SHAPES);
-
-    // The archive for a label view: the same wrapped verb the Inbox's own
-    // button runs — Triage, every project label and the pin come off, the
-    // Inbox too; helper labels stay. The i-archive class names the glyph
-    // the way Fastmail's own archive button does.
-    const archiveOption = () => new FastMail.classes.ButtonView({
-        label: 'Archive',
-        icon: archiveIcon(),
-        target: { archive: () => controller().actions.archive(null) },
-        method: 'archive'
-    });
-
     // The phone's spellings of the verbs it has no key for, for More: file
     // a tick, snooze for a while a clock. Feather glyphs, stroke-drawn like
     // the rest of the bar.
@@ -1908,7 +1922,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         try {
             if (typeof toolbar.measureViews === 'function') toolbar.measureViews();
         } catch (error) {
-            console.warn('Custom mode: could not measure the bar', error);
+            reportFault('could not measure the bar', error);
         }
     };
 
@@ -1938,69 +1952,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
 
         return Math.max(1, Math.floor(width / SLOT_WIDTH) - 1);
-    };
-
-    /*
-     * A bar that cannot overflow, which is the tablet's header.
-     *
-     * Everything the full dressing does rests on More: verbs past the width
-     * go there, verbs wanted back come from there, and every insert is
-     * anchored against it. A bar with no More can do none of that, and a bar
-     * that cannot hold seven verbs should not be made to try.
-     *
-     * So this adds and never takes away. File, because Fastmail draws no
-     * button for it at all and there is otherwise no way to file from the
-     * bar. Archive on a label view, because the contextual slot holds Remove
-     * label there — the stock button stays beside it, saying what it does.
-     * Both are appended after the last button, since there is no More to sit
-     * in front of, and both are skipped if already there, because this runs
-     * on every rebuilt bar.
-     */
-    const addOwnVerbs = (toolbar) => {
-        try {
-            const children = () => toolbar.get('childViews') || [];
-            const find = (test) => children().filter(test)[0];
-            const append = (view) => {
-                const last = children()[children().length - 1];
-                if (!last) return;
-                toolbar.insertView(view, last, 'after');
-            };
-
-            const ownFile = find(view => view.customStateVerb === 'file');
-            const ownArchive = find(view => view.customArchive);
-
-            if (!modeIsOn) {
-                if (ownFile) toolbar.removeView(ownFile);
-                if (ownArchive) toolbar.removeView(ownArchive);
-                return;
-            }
-
-            if (!ownFile) append(stateVerbOption('File', 'file'));
-
-            // Only where Fastmail is not already offering one: in the Inbox,
-            // and under the Inbox filter, its own slot reads Archive
-            const wantArchive = !!currentLabel() &&
-                !find(view => !view.customArchive &&
-                    (actionOf(view) === ARCHIVE_ACTION ||
-                        (() => {
-                            try {
-                                const layer = view.get('layer');
-                                return !!(layer && layer.querySelector('svg.i-archive'));
-                            } catch (error) {
-                                return false;
-                            }
-                        })()));
-
-            if (wantArchive && !ownArchive) {
-                const archive = archiveOption();
-                archive.customArchive = true;
-                append(archive);
-            } else if (!wantArchive && ownArchive) {
-                toolbar.removeView(ownArchive);
-            }
-        } catch (error) {
-            console.warn('Custom mode: could not add the verbs to the bar', error);
-        }
     };
 
     /*
@@ -2183,7 +2134,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             try {
                 return arrangeActions(names, this);
             } catch (error) {
-                console.warn('Custom mode: could not arrange the bar', error);
+                reportFault('could not arrange the bar', error);
                 return names;
             }
         };
@@ -2216,7 +2167,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             toolbar.computedPropertyDidChange('actionsConfig');
             return true;
         } catch (error) {
-            console.warn('Custom mode: could not take over the bar', error);
+            reportFault('could not take over the bar', error);
             toolbar.customOwnsConfig = false;
             return false;
         }
@@ -2231,8 +2182,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * list of its own: the class holds one, and this bar is handed a second
      * that answers for the open message. So that is what to look for.
      */
-    const messageActionsBar = () => toolbarsOnScreen().filter(toolbar =>
-        Object.prototype.hasOwnProperty.call(toolbar, 'actionsConfig'))[0] || null;
+    // All of them, not the first. A tablet draws two — the open message's
+    // header and the list's own bar for a selection — and both are message
+    // actions bars with the same list. Dressing one and leaving the other
+    // would put File on one of them and not the other.
+    const messageActionsBars = () => toolbarsOnScreen().filter(toolbar =>
+        Object.prototype.hasOwnProperty.call(toolbar, 'actionsConfig'));
+
+    const messageActionsBar = () => messageActionsBars()[0] || null;
 
     const configWatcher = {
         widthDidChange(toolbar) {
@@ -2260,374 +2217,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     /*
-     * More is not a list you may add to and expect to keep.
+     * The bar arranges itself.
      *
-     * A ToolbarView draws itself from a config of *names* — the account's own
-     * action list — each looked up in the bar's registry. Whatever the width
-     * cannot take is the config's tail, and every time that tail changes the
-     * bar throws the whole menu away and builds a fresh one from those names
-     * alone:
-     *
-     *     if (t && !isEqual(this._oldOverflowConfig, t)) {
-     *         overflow.set('menuView', new MenuView({ options: t.map(...) }))
-     *     }
-     *
-     * A verb we moved there by hand is in no config, so it is not in the new
-     * menu; and the same pass took it off the bar. It now exists nowhere.
-     *
-     * That is what happened to Labels and Delete on the phone. The bar there
-     * fits four, so both fall past the cut, both were moved into More, and
-     * then reading the message flipped the config from "Mark read" to "Mark
-     * unread" — a changed tail, a new menu, and the two of them gone. Move
-     * survived only because Fastmail's own config already had it in the tail.
-     *
-     * The repair for it was already written: restoreLost puts back a verb
-     * that is in neither place. It had simply never been given the cue, since
-     * nothing else about the bar changes when the menu is swapped. So watch
-     * for the swap itself and dress the new menu.
+     * Everything this used to do — moving buttons between the bar and More,
+     * putting back the ones a rebuild dropped, keeping a substitute Archive
+     * and a Pin that could toggle — was work created by writing to the drawn
+     * bar instead of to the list it is drawn from. Taking the list over left
+     * none of it to do.
      */
-    const menuWatcher = {
-        pending: false,
-        menuViewDidChange() {
-            if (this.pending) return;
-            this.pending = true;
-            // After this turn, not during it: the menu is swapped partway
-            // through the bar's own redraw, and moving views around one
-            // mid-redraw is how a verb ends up drawn twice. A timer rather
-            // than a frame, so a swap while the app is in the background is
-            // still repaired rather than left pending until it is looked at.
-            window.setTimeout(() => {
-                this.pending = false;
-                try {
-                    dressToolbar();
-                } catch (error) {
-                    console.warn('Custom mode: could not dress the new menu', error);
-                }
-            });
-        }
-    };
-
-    const watchOverflowMenu = (overflow) => {
-        if (!overflow || overflow.customWatchesMenu) return;
-
-        try {
-            overflow.addObserverForKey('menuView', menuWatcher, 'menuViewDidChange');
-            overflow.customWatchesMenu = true;
-        } catch (error) {
-            // An older build without the observer; the bar still gets dressed
-            // on every other cue, it just cannot be repaired after a swap.
-        }
-    };
-
     const dressToolbar = () => {
-        // The bar states what it holds and draws itself from that. Nothing
-        // below applies: there is no button to move, no menu to correct and
-        // nothing that a rebuild can drop.
-        if (ownActionsConfig(messageActionsBar())) return;
-
-        const toolbar = messageToolbar();
-        if (!toolbar) return;
-
-        const overflow = toolbarOverflowView(toolbar);
-        watchOverflowMenu(overflow);
-
-        const menu = overflow && overflow.get('menuView');
-        if (!menu) return;
-
-        // More is a view every ToolbarView owns, but owning it is not drawing
-        // it: the tablet's header bar is built with an empty right-hand
-        // config, so it never draws one — measured in the app's own
-        // construction. A verb moved into a menu with no button to open it
-        // has not been tidied away, it has gone, which is what happened to
-        // Labels there. Every insert below is anchored against More as well,
-        // so a bar without one has nothing to anchor to either.
-        //
-        // Such a bar gets the other treatment: the mode's own verbs added to
-        // the end and nothing of Fastmail's taken away or moved.
-        if ((toolbar.get('childViews') || []).indexOf(overflow) === -1) {
-            addOwnVerbs(toolbar);
-            return;
-        }
-
-        try {
-            // The bar holds whatever settings.bottomBarSlots names, in that
-            // order; every other verb waits in More. Everything is found by
-            // what it does rather than by what it reads — action, shortcut,
-            // our own marks — because the words are translated and would
-            // match in one language only. And every step is written to be
-            // safe to run again: this runs on each rebuilt bar, and a step
-            // that only appends is how More once held four copies of Delete.
-            const onBar = (test) => (toolbar.get('childViews') || []).filter(test)[0];
-            const inMore = (test) => (menu.get('options') || []).filter(test)[0];
-            const isPin = (view) => actionOf(view) === PIN_ACTION;
-
-            const dropFromMore = (view) => menu.set('options',
-                (menu.get('options') || []).filter(option => option !== view));
-            const addToMore = (view) => menu.set('options',
-                (menu.get('options') || []).concat([view]));
-
-            // The slot vocabulary. File can be made from nothing, since
-            // Fastmail draws no button for it; the rest are stock views,
-            // found wherever the last pass left them.
-            const SLOT_KINDS = {
-                snooze: { test: (view) => hasShortcut(view, SNOOZE_SHORTCUT) },
-                pin: { test: isPin },
-                archive: {
-                    test: (view) =>
-                        actionOf(view) === ARCHIVE_ACTION || !!view.customArchive
-                },
-                labels: { test: isLabelsButton },
-                move: { test: isMoveButton },
-                'delete': { test: (view) => actionOf(view) === DELETE_ACTION },
-                file: {
-                    test: (view) => view.customStateVerb === 'file',
-                    make: () => stateVerbOption('File', 'file')
-                },
-            };
-
-            // The name the toolbar's own registry knows each stock verb by,
-            // for putting one back that has ended up nowhere. removeView
-            // takes a view off the bar without forgetting it, so the registry
-            // still hands it over — which is what makes the repair below
-            // possible at all. File is ours and can be made again instead.
-            const SLOT_REGISTRY = {
-                snooze: 'snooze',
-                pin: 'flag',
-                archive: 'archive',
-                labels: 'labels',
-                move: 'move',
-                'delete': 'trash'
-            };
-
-            // The setting is an order over every verb, not a subset: kinds
-            // it does not name join at the end, so an older saved value
-            // still places all seven somewhere
-            const named = String(settings.bottomBarSlots || '')
-                .split(',')
-                .map(part => part.trim().toLowerCase())
-                .filter(name => SLOT_KINDS[name]);
-
-            Object.keys(SLOT_KINDS).forEach((name) => {
-                if (named.indexOf(name) === -1) named.push(name);
-            });
-
-            // Sizing decides visibility: as many leading verbs as the bar
-            // is wide, one slot always held back for More
-            const slotNames = named.slice(0, barCapacity(toolbar));
-            const overflowNames = named.slice(slotNames.length);
-
-            // Any label view is past filing: getting here at all means the
-            // label is on, so the slot Fastmail fills contextually holds
-            // the wrong verb — Remove label, the unfiling correction — where
-            // Archive belongs. Swap the slot for an Archive running the full
-            // verb; Remove label keeps its home in More below. Off a label —
-            // the Inbox, mode off, or a bar configured without Archive — the
-            // stock slot stands.
-            const wantArchiveSlot = modeIsOn && !!currentLabel() &&
-                slotNames.indexOf('archive') !== -1;
-            const barArchive = onBar(view => view.customArchive);
-            const drawsIcon = (name) => (view) => {
-                try {
-                    const layer = view.get('layer');
-                    return !!(layer && layer.querySelector('svg.' + name));
-                } catch (error) {
-                    return false;
-                }
-            };
-            const hasRemoveIcon = drawsIcon('i-removelabel');
-
-            // Fastmail's own Archive, however it got there. The contextual
-            // slot becomes one whenever the list it is looking at is filtered
-            // to the Inbox — which, with the Inbox filter on, a project
-            // label's list now always is. Read by its glyph as well as its
-            // action, because the slot is one view wearing either meaning and
-            // only the drawing changes reliably with it.
-            const stockArchive = () => onBar(view => !view.customArchive &&
-                (actionOf(view) === ARCHIVE_ACTION || drawsIcon('i-archive')(view)));
-
-            if (wantArchiveSlot && stockArchive()) {
-                // Nothing to stand in for: adding ours here is the same
-                // button twice, which is exactly what the Inbox filter
-                // started doing. Take ours away if a previous pass, made
-                // before the filter went on, had already put it there.
-                if (barArchive) toolbar.removeView(barArchive);
-                toolbar.customStockRemove = null;
-            } else if (wantArchiveSlot) {
-                const stockRemove = onBar(hasRemoveIcon);
-                if (stockRemove) {
-                    toolbar.customStockRemove = stockRemove;
-                    toolbar.removeView(stockRemove);
-                }
-
-                if (!barArchive) {
-                    const archive = archiveOption();
-                    archive.customArchive = true;
-                    toolbar.insertView(archive, overflow, 'before');
-                }
-            } else if (barArchive) {
-                toolbar.removeView(barArchive);
-                // Only if it is not already back: Fastmail rebuilds this bar
-                // freely, and putting a view back that it has already redrawn
-                // is the same duplicate from the other direction.
-                const held = toolbar.customStockRemove;
-                if (held) {
-                    if (!onBar(view => view === held)) {
-                        toolbar.insertView(held, overflow, 'before');
-                    }
-                    toolbar.customStockRemove = null;
-                }
-            }
-
-            // Nothing the bar knows about may end up in neither place. A
-            // verb that is on the bar or in More is somewhere you can reach
-            // it; one that is in neither has been lost rather than tidied,
-            // and Labels going missing is what that looks like. Run before
-            // the moves as well as after, so a bar that arrives already
-            // short of one is repaired rather than shuffled around it.
-            const restoreLost = () => {
-                Object.keys(SLOT_KINDS).forEach((name) => {
-                    const kind = SLOT_KINDS[name];
-                    if (onBar(kind.test) || inMore(kind.test)) return;
-
-                    const registered = SLOT_REGISTRY[name] &&
-                        registeredToolbarView(SLOT_REGISTRY[name]);
-                    if (registered) addToMore(registered);
-                });
-            };
-
-            restoreLost();
-
-            // Off the bar and into More: every kind past the cut. A stock
-            // view keeps existing in More; a state verb's button is reused
-            // the same way.
-            //
-            // Into More first, off the bar second. The other order leaves a
-            // moment where the verb is in neither place, and anything that
-            // throws in between — a bar Fastmail is rebuilding underneath
-            // us — leaves it there for good.
-            overflowNames.forEach((name) => {
-                const view = onBar(SLOT_KINDS[name].test);
-                if (!view) return;
-
-                if (!inMore(SLOT_KINDS[name].test)) addToMore(view);
-                toolbar.removeView(view);
-            });
-
-            // Onto the bar: whatever the setting names that is not there
-            // yet — lifted out of More first so nothing is drawn twice, or
-            // made fresh when there is nothing to lift
-            slotNames.forEach((name) => {
-                const kind = SLOT_KINDS[name];
-                if (onBar(kind.test)) return;
-
-                // Onto the bar first, out of More second, for the same
-                // reason the other direction adds before it removes.
-                const lifted = inMore(kind.test);
-                if (lifted) {
-                    toolbar.insertView(lifted, overflow, 'before');
-                    dropFromMore(lifted);
-                    return;
-                }
-
-                if (kind.make) {
-                    const made = kind.make();
-                    toolbar.insertView(made, overflow, 'before');
-                }
-            });
-
-            // The order is the setting's, stated once rather than arrived at
-            // by nudging one past another. Each is taken out and put back
-            // against More in turn, which lands them in exactly this order
-            // from whatever order they were in. Skipped when the bar already
-            // reads that way: this runs on every rebuilt bar and every
-            // resize, and pulling views through the DOM to land them where
-            // they already stand is churn a redraw can notice.
-            const wanted = slotNames
-                .map(name => onBar(SLOT_KINDS[name].test))
-                .filter(Boolean);
-            const bar = toolbar.get('childViews') || [];
-            const moreAt = bar.indexOf(overflow);
-            const inOrder = moreAt >= wanted.length && wanted.every(
-                (view, index) => bar[moreAt - wanted.length + index] === view);
-
-            if (!inOrder) {
-                wanted.forEach((view) => {
-                    toolbar.removeView(view);
-                    toolbar.insertView(view, overflow, 'before');
-                });
-            }
-
-            // And again afterwards, so a verb the moves above dropped is put
-            // back on this pass rather than the next one
-            restoreLost();
-
-            // The stock button carries `flag`, which only ever sets: in More
-            // it could be rebuilt to say Unpin, but lifted onto the bar it
-            // froze as Pin. Wrapped into a toggle instead — pressed on a
-            // pinned conversation it unpins, and the paint follows at once.
-            const barPin = onBar(isPin);
-            if (barPin && !barPin.customToggles &&
-                typeof barPin.activate === 'function') {
-                barPin.customToggles = true;
-
-                const originalActivate = barPin.activate;
-
-                barPin.activate = function () {
-                    if (openThreadIsPinned()) {
-                        const actions = controller().actions;
-                        const keys = resolveKeys(actions, null);
-                        if (keys) {
-                            actions.unflag(keys);
-                            updatePinState();
-                            return this;
-                        }
-                    }
-
-                    const result = originalActivate.apply(this, arguments);
-                    updatePinState();
-                    return result;
-                };
-            }
-
-            // The keyboard's v and w, for thumbs. File named as a slot is
-            // already on the bar; otherwise it waits in More. Snooze for the
-            // default period is More-only: the bar's Snooze is Fastmail's.
-            if (slotNames.indexOf('file') === -1 && !inMore(SLOT_KINDS.file.test)) {
-                addToMore(stateVerbOption('File', 'file'));
-            }
-            if (!inMore(view => view.customStateVerb === 'snooze')) {
-                addToMore(stateVerbOption(
-                    'Snooze ' + snoozePeriodLabel(settings.snoozeDefault), 'snooze'));
-            }
-
-            // More reads in the list's order too: the known verbs are
-            // pulled out and re-appended in sequence, after Fastmail's own.
-            // Written back only when that moves something — a fresh array on
-            // every pass would redraw a menu that already reads correctly.
-            const moreNow = menu.get('options') || [];
-            const ordered = [];
-            named.forEach((name) => {
-                const view = inMore(SLOT_KINDS[name].test);
-                if (view) ordered.push(view);
-            });
-            if (ordered.length) {
-                const reordered = moreNow
-                    .filter(option => ordered.indexOf(option) === -1)
-                    .concat(ordered);
-                if (reordered.some((option, index) => option !== moreNow[index])) {
-                    menu.set('options', reordered);
-                }
-            }
-
-            const current = menu.get('options') || [];
-            if (!current.some(option => option.customRemoveLabel)) {
-                const option = removeLabelOption();
-                option.customRemoveLabel = true;
-                menu.set('options', current.concat([option]));
-            }
-        } catch (error) {
-            console.warn('Custom mode: could not rearrange the toolbar', error);
-        }
+        messageActionsBars().forEach(ownActionsConfig);
     };
 
     // The bar's Pin says nothing about state as Fastmail draws it: one
@@ -2646,24 +2245,28 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return threadOf(message).some(other => other.get('isFlagged'));
     };
 
+    // Pin and Unpin are two buttons in the bar's own registry, not one that
+    // changes its mind, and the list names whichever applies. So both are
+    // asked for by name and whichever is drawn takes the paint — no scanning
+    // the drawn bar for something that looks like a pin.
+    const PIN_VIEW_NAMES = ['flag', 'unflag'];
+
     const updatePinState = () => {
         if (!FastMail.isMobile) return;
-        const toolbar = messageToolbar();
-        if (!toolbar) return;
 
-        const pin = (toolbar.get('childViews') || [])
-            .filter(view => actionOf(view) === PIN_ACTION)[0];
-        if (!pin) return;
+        const pinned = openThreadIsPinned();
 
-        let layer = null;
-        try {
-            layer = pin.get('layer');
-        } catch (error) {
-            return;
-        }
-        if (!layer) return;
-
-        layer.classList.toggle('custom-pinned', openThreadIsPinned());
+        messageActionsBars().forEach((toolbar) => {
+            PIN_VIEW_NAMES.forEach((name) => {
+                try {
+                    const view = toolbar.getView(name);
+                    const layer = view && view.get('layer');
+                    if (layer) layer.classList.toggle('custom-pinned', pinned);
+                } catch (error) {
+                    // Not drawn, or the bar is going away
+                }
+            });
+        });
     };
 
     const toggleCurrent = () => toggleMode();
@@ -2675,7 +2278,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             try {
                 toolbar.removeView(indicatorView);
             } catch (error) {
-                console.warn('Custom mode: could not remove the toolbar indicator', error);
+                reportFault('could not remove the toolbar indicator', error);
             }
         }
 
@@ -3156,7 +2759,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             try {
                 group.removeContact(contact);
             } catch (error) {
-                console.warn('Custom mode: could not take the contact back out', error);
+                reportFault('could not take the contact back out', error);
             }
         });
     };
@@ -3177,7 +2780,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 makeContactGroup(accountId, leaf);
 
             if (!group) {
-                console.warn('Custom mode: could not find or make a contact' +
+                reportFault('could not find or make a contact' +
                     ' group named ' + mailboxPath(mailbox));
                 return;
             }
@@ -3234,7 +2837,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     : who + ' added to ' + group.get('name'));
             }
         } catch (error) {
-            console.warn('Custom mode: could not file the sender', error);
+            reportFault('could not file the sender', error);
         }
     };
 
@@ -3401,7 +3004,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const openSnoozeDialog = () => {
         const button = snoozeButtonView();
         if (!button || typeof button.get !== 'function') {
-            console.warn('Custom mode: no Snooze button to open');
+            reportFault('no Snooze button to open');
             return;
         }
 
@@ -4018,7 +3621,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 return true;
             }
         } catch (error) {
-            console.warn('Custom mode: could not press the button', error);
+            reportFault('could not press the button', error);
         }
         return false;
     };
@@ -4048,37 +3651,37 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             entry.target[entry.method]();
             return true;
         } catch (error) {
-            console.warn('Custom mode: could not open the project picker', error);
+            reportFault('could not open the project picker', error);
             return false;
         }
     };
 
-    // The Labels button wherever the bar has put it. dressToolbar moves it
-    // between the bar and More by width, and a button waiting in More is
-    // drawn nowhere — so the icon search misses it, which is how a narrow
-    // bar turned the picker into the bare-archive dialog. Both places are
-    // asked here, and a press that opens nothing is caught by the deadline
-    // rather than left to strand the verb.
+    /*
+     * The Labels button, asked for by name.
+     *
+     * Its place is the bar's business — on the bar when the width allows,
+     * under More when it does not — and a button waiting in a closed menu is
+     * drawn nowhere, so looking for it on screen used to miss it and hand the
+     * verb the bare archive dialog instead of the picker. The registry knows
+     * it either way, and knows it in every language.
+     *
+     * Every bar is asked, because a tablet draws two and the one that answers
+     * first may be the one you cannot see; a drawn button wins where there is
+     * a choice. A press that opens nothing is still caught by the deadline.
+     */
     const toolbarLabelsView = () => {
-        // The name first: it answers wherever the button is, drawn or not
-        const registered = registeredToolbarView('labels');
-        if (registered) return registered;
+        const found = [];
 
-        const toolbar = messageToolbar();
-        if (!toolbar) return null;
-
-        try {
-            const onBar = (toolbar.get('childViews') || []).filter(isLabelsButton)[0];
-            if (onBar) return onBar;
-
-            const overflow = toolbarOverflowView(toolbar);
-            const menu = overflow && overflow.get('menuView');
-            const options = menu && menu.get('options');
-
-            return (options || []).filter(isLabelsButton)[0] || null;
-        } catch (error) {
-            return null;
+        for (const bar of toolbarsOnScreen()) {
+            try {
+                const named = bar.getView('labels');
+                if (named) found.push(named);
+            } catch (error) {
+                // A bar that has never heard of the name
+            }
         }
+
+        return found.filter(isDrawn)[0] || found[0] || null;
     };
 
     // Anything that opens a label menu. The Labels control is the one to
@@ -4210,7 +3813,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             return true;
         } catch (error) {
             wantOurMove = false;
-            console.warn('Custom mode: could not open the project picker', error);
+            reportFault('could not open the project picker', error);
             return false;
         }
     };
@@ -4248,7 +3851,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // No button anywhere: ask Fastmail for the menu itself
         if (buildPicker(keys)) return;
 
-        console.warn('Custom mode: no label menu to open');
+        reportFault('no label menu to open');
     };
 
     /*
@@ -4398,7 +4001,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
             router.restoreEncodedState(state, target.searchParams);
         } catch (error) {
-            console.warn('Custom mode: could not walk back to the message', error);
+            reportFault('could not walk back to the message', error);
         }
     };
 
@@ -4593,7 +4196,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 patchUndo();
                 if (!undoTarget && lastUndoReturn && !warnedNoUndo) {
                     warnedNoUndo = true;
-                    console.warn('Custom mode: no undo manager found to wrap;' +
+                    reportFault('no undo manager found to wrap;' +
                         ' undo will not walk back to the message');
                 }
             }
@@ -4664,50 +4267,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // A shortcut is a keyboard's way of naming a button, and the phone has no
-    // keyboard: its toolbar buttons carry no shortcut property at all, which
-    // is why the captured registrations are null there. Naming Labels and Move
-    // by the shortcut alone therefore matched nothing on the phone — so the
-    // bar's Labels and Move slots quietly did nothing, which is a configured
-    // order that does not apply, and the project picker had no button to open,
-    // which is the bare-archive dialog turning up in place of the picker.
-    //
-    // The glyph is the other name a button has. A drawn view carries it in its
-    // layer; one built from an icon element carries it there before ever being
-    // drawn. isInDocument guards the layer read, because asking an undrawn view
-    // for its layer is what renders it, and a button waiting in a closed menu
-    // should stay closed.
-    const viewHasIcon = (target, name) => {
-        if (!target || typeof target.get !== 'function') return false;
-
-        try {
-            const icon = target.get('icon');
-            if (icon && icon.nodeType === 1 && icon.getAttribute) {
-                const classes = (icon.getAttribute('class') || '').split(/\s+/);
-                if (classes.indexOf(name) !== -1) return true;
-            }
-        } catch (error) {
-            // The drawn glyph below is the other half of the answer
-        }
-
-        try {
-            if (!target.get('isInDocument')) return false;
-
-            const layer = target.get('layer');
-            return !!(layer && layer.querySelector &&
-                layer.querySelector('svg.' + name));
-        } catch (error) {
-            return false;
-        }
-    };
-
+    // The name the bar knows it by, then the key it answers to. The glyph
+    // used to be a third way of asking, matching the CSS class Fastmail's
+    // icons carry — but a class name is Fastmail's to change, and the
+    // registry is the button itself. The name answers wherever the button
+    // is, drawn or waiting in a closed menu, keyboard or none.
     const isLabelsButton = (target) => isRegisteredAs(target, 'labels') ||
-        hasShortcut(target, LABELS_SHORTCUT) ||
-        viewHasIcon(target, 'i-label');
+        hasShortcut(target, LABELS_SHORTCUT);
 
     const isMoveButton = (target) => isRegisteredAs(target, 'move') ||
-        hasShortcut(target, MOVE_SHORTCUT) ||
-        viewHasIcon(target, 'i-folder');
+        hasShortcut(target, MOVE_SHORTCUT);
 
     // Where "l" would have gone. Captured from the registration rather than
     // looked up, so whatever Fastmail bound is what we call.
@@ -5549,7 +5118,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         try {
             localStorage.setItem(STORAGE_KEY, modeIsOn ? '1' : '0');
         } catch (error) {
-            console.warn('Custom mode: could not persist the mode', error);
+            reportFault('could not persist the mode', error);
         }
 
         // Nothing reads the counting queries with the mode off, so they stop
@@ -5860,7 +5429,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     options.unshift(copyLinkOption(), null);
                 }
             } catch (error) {
-                console.warn('Custom mode: could not add Copy link', error);
+                reportFault('could not add Copy link', error);
             }
 
             return originalDraw.apply(this, arguments);
