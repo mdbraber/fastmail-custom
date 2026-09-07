@@ -37,6 +37,10 @@ project label, taking the label off archives instead — a swipe, [ and ]
 and Fastmail's own contextual button all ask for that one call, and none
 of them means "leave it in the Inbox with no label". Only the mode's own
 Remove label button still removes the label, which is what it is for.
+Nothing is taken off an action bar that draws no More: the tablet's header
+bar owns one without ever drawing it, so verbs moved there — Labels among
+them — had gone rather than been tidied away. That bar is left as Fastmail
+draws it until the mode can add to it without taking anything away.
 
 3.9 — e archives everywhere, and archiving keeps a hold label. With E and Y
 swapped, e used to inherit whatever Fastmail had bound to y, which is one
@@ -1867,6 +1871,18 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         const overflow = toolbarOverflowView(toolbar);
         const menu = overflow && overflow.get('menuView');
         if (!menu) return;
+
+        // Nothing comes off a bar with nowhere to put it. More is a view
+        // every ToolbarView owns, but owning it is not drawing it: the
+        // tablet's header bar is built with an empty right-hand config, so
+        // it never draws one — measured in the app's own construction. A
+        // verb moved into a menu with no button to open it has not been
+        // tidied away, it has gone, which is what happened to Labels there.
+        //
+        // The bar is also where every insert below is anchored, so a bar
+        // without More has nothing to anchor to either. Left as Fastmail
+        // drew it, which is a whole set of working buttons.
+        if ((toolbar.get('childViews') || []).indexOf(overflow) === -1) return;
 
         try {
             // The bar holds whatever settings.bottomBarSlots names, in that
