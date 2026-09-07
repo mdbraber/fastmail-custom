@@ -3518,11 +3518,21 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
                     // The removals go first and silenced, so the add's own
                     // didAction is the one that cuts the checkpoint — and
-                    // everything queued before it joins that checkpoint
+                    // everything queued before it joins that checkpoint.
+                    //
+                    // On purpose, because these are the rule's own removals
+                    // rather than anything asked for. Fastmail's addremove
+                    // hands a lone removal with nothing added straight to
+                    // remove — `if (1 === removes.length && !adds.length)
+                    // return this.remove(keys, removes[0])` — and a project
+                    // label arriving at remove is read as "archive". Refiling
+                    // a message that already had one label under another
+                    // therefore archived it: the label swapped and the Inbox
+                    // came off with it.
                     const self = this;
                     const args = arguments;
                     silencingDidAction(this, () => {
-                        self.addremove(keys, [], removes);
+                        removingOnPurpose(() => self.addremove(keys, [], removes));
                     });
                     const advance = takeFileAdvance();
                     const result = original.apply(self, args);
