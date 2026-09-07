@@ -106,3 +106,37 @@ private let nonMatchingHeader = """
     }
     #expect(webView.url == chosen)
 }
+
+// An iPad's default is desktop-class browsing, which makes Fastmail serve the
+// wide layout in a shell built for the touch one. The value is per platform
+// and this suite runs on the Mac, so what is worth pinning here is the wiring:
+// whatever the platform asks for reaches the configuration the view is built
+// with. Without the assignment this reads back as recommended on iOS too, and
+// the iPad goes quietly back to the desktop layout.
+@Test @MainActor func theWebViewCarriesThePlatformsContentMode() {
+    let loader = StubLoader(resources: [
+        "harness.js": "HARNESS",
+        "userscript.js": nonMatchingHeader + "\nBODY"
+    ])
+    let model = ShellModel()
+    let profile = Profile(
+        id: "test",
+        displayName: "Test",
+        startURL: URL(string: "https://127.0.0.1:1/")!,
+        overlayScriptName: nil,
+        urlScheme: "test",
+        accountID: nil
+    )
+    let container = WebContainer(profile: profile, model: model, loader: loader)
+    let coordinator = WebCoordinator(model: model, startURL: profile.startURL)
+    let webView = container.makeWebView(coordinator: coordinator)
+
+    #expect(webView.configuration.defaultWebpagePreferences.preferredContentMode
+        == WebContainer.preferredContentMode)
+
+    #if os(iOS)
+    #expect(WebContainer.preferredContentMode == .mobile)
+    #else
+    #expect(WebContainer.preferredContentMode == .recommended)
+    #endif
+}

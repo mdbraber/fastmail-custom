@@ -32,6 +32,27 @@ public struct WebContainer {
     // drift apart.
     public static let electronUserAgentToken = "Electron/0.0.0 FastmailShell"
 
+    /// Which layout the page is asked for.
+    ///
+    /// An iPad asks for the desktop site unless it is told otherwise. The
+    /// recommended mode is the default, and on a large iPad it means
+    /// desktop-class browsing: the web view reports itself as a Mac and
+    /// Fastmail serves the wide layout. Mobile is what this shell wants on a
+    /// touch screen, and it is what the mode's own touch surfaces are built
+    /// on — the bottom action bar, and the walk back to the list when the
+    /// next message is already triaged — since those follow Fastmail's own
+    /// reading of whether it is on a phone. A phone is unaffected either
+    /// way, because recommended already means mobile there.
+    ///
+    /// The Mac keeps recommended, which is the desktop layout it should have.
+    static var preferredContentMode: WKWebpagePreferences.ContentMode {
+        #if os(iOS)
+        .mobile
+        #else
+        .recommended
+        #endif
+    }
+
     let profile: Profile
     let model: ShellModel
     let loader: ResourceLoading
@@ -66,6 +87,9 @@ public struct WebContainer {
         // receive push, so it is the only branch that can ever notify.
         configuration.applicationNameForUserAgent = Self.electronUserAgentToken
         #endif
+
+        configuration.defaultWebpagePreferences.preferredContentMode =
+            Self.preferredContentMode
 
         let bridge = NativeBridge(
             // The page this view is being built for, not the profile's
