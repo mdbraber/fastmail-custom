@@ -57,6 +57,7 @@ test('a registration can turn alerts off for that device, and only with a real b
     try {
         assert.equal((await post({ account: 'personal', token, alerts: 'no' })).status, 400);
         assert.equal((await post({ account: 'personal', token, alerts: 0 })).status, 400);
+        assert.equal((await post({ account: 'personal', token, alerts: null })).status, 400);
         assert.equal(s.registered.length, 0);
         const off = await post({ account: 'personal', token, alerts: false });
         assert.equal(off.status, 200);

@@ -27,6 +27,10 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         )
     }
 
+    /// The notification's thread is not promised, so the work hops to the
+    /// main actor. The acknowledgement written after a registration lands
+    /// here too; by then the switch and the acknowledged value agree, so
+    /// nothing is due and the chain ends.
     @objc private func defaultsChanged() {
         Task { @MainActor in
             guard let registrar = PushRegistrar.current, registrar.deviceToken != nil, PushPreferences.registrationDue() else { return }
@@ -90,9 +94,31 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         print("[push] Apple would not register this device: \(error.localizedDescription)")
     }
 
-    /// Tells the server about this device. A failure is remembered and tried
-    /// again on the next activation, never shown.
+    private var inFlight: Task<Void, Never>?
+    private var again = false
+
+    /// Tells the server about this device. One registration at a time: a
+    /// trigger that arrives while one is out (the switch flipped again, an
+    /// activation) is folded into a repeat that reads the switch afresh, so
+    /// the last word the server hears is the current one.
     private func register() async {
+        if inFlight != nil {
+            again = true
+            return
+        }
+        let task = Task { @MainActor in
+            repeat {
+                again = false
+                await send()
+            } while again
+        }
+        inFlight = task
+        await task.value
+        inFlight = nil
+    }
+
+    /// A failure is remembered and tried again on the next activation, never shown.
+    private func send() async {
         guard let config, let account, let deviceToken else { return }
         registrationDue = false
         let alerts = PushPreferences.alertsEnabled()

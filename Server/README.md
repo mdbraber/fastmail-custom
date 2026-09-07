@@ -25,10 +25,10 @@ badge. Design and payload contract:
    `notices` (`"push"`, or `"eventsource"` if Fastmail refused the push
    subscription for an API token; either works, push is quicker),
    `verified` (true once Fastmail's verification round-trip is done),
-   `lastNotice`, `devices` and `muted` (devices that turned alerts off in
-   the app's settings; they still get the badge). If `verified` stays `false` for more than
-   a minute, `docker compose restart`: the subscription is recreated at
-   every start.
+   `lastNotice`, `devices` and `muted`. A muted device turned alerts off in
+   the Settings app and still gets the badge. If `verified` stays `false`
+   for more than a minute, run `docker compose restart`; the subscription
+   is recreated at every start.
 6. **Apps** — add `PUSH_SERVER_HOST` (the host, no `https://`) and
    `PUSH_DEVICE_SECRET` to `Config/Local.xcconfig`, then `make deploy`.
    On the first launch the app asks for notification permission and
