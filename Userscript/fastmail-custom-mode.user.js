@@ -1764,14 +1764,30 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // in between and be mistaken for it.
     let removingLabelOnPurpose = false;
 
-    const removeCurrentLabel = () => {
+    /*
+     * A removal the mode is making itself, rather than one to interpret.
+     *
+     * Taking a project label off is normally a request, and this mode reads
+     * it as "archive" — the label is the queue, so leaving it is done. But
+     * archive's own first act is to take the project label off, and read as a
+     * request that is archive again: archive called archive until the stack
+     * ran out, and archiving anything already filed did nothing at all.
+     *
+     * So the mode's own removals say so. Nested on purpose, since the whole
+     * verb runs inside one of these and the parts must not clear it early.
+     */
+    const removingOnPurpose = (work) => {
+        const was = removingLabelOnPurpose;
         removingLabelOnPurpose = true;
         try {
-            controller().actions.removeCurrent(null);
+            return work();
         } finally {
-            removingLabelOnPurpose = false;
+            removingLabelOnPurpose = was;
         }
     };
+
+    const removeCurrentLabel = () =>
+        removingOnPurpose(() => controller().actions.removeCurrent(null));
 
     const removeLabelOption = () => new FastMail.classes.ButtonView({
         label: 'Remove label',
@@ -4201,7 +4217,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             mailboxesAmong(keys).forEach((mailbox) => {
                 if (isTriage(mailbox) || isProject(mailbox)) dropped.push(mailbox);
             });
-            if (dropped.length) actions.addremove(keys, [], dropped);
+            // The mode's own removal, not a request to read back: the labels
+            // coming off here are what archive means, and a project among
+            // them would otherwise be understood as asking to archive again.
+            if (dropped.length) {
+                removingOnPurpose(() => actions.addremove(keys, [], dropped));
+            }
 
             if (anyFlagged(keys)) actions.unflag(keys);
         });
@@ -4233,13 +4254,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         const projectWins = !withoutProject(keys).length;
         const removes = triageAmong(keys)
             .concat(projectWins ? excludedAmong(keys) : []);
-        if (!removes.length) return;
         const from = messagesFrom(keys)[0];
         // Read first: in the Inbox the row stays put, but in the triage
         // label's own view taking Triage off takes the row out of the list,
         // and the index would be gone by the line after this one.
         const index = rowIndexOf(from);
-        actions.addremove(keys, [], removes);
+        // Nothing to take off is not nothing to do. A message already filed
+        // and already past Triage is a decision that has been made, and the
+        // answer to being asked again is the same as the first time: move on.
+        // Stopping here left the view sitting on it.
+        if (removes.length) actions.addremove(keys, [], removes);
         // Kept in place; the view moves on to the next conversation waiting
         // for triage, or back to the list — first row focused — when none is
         // left.
