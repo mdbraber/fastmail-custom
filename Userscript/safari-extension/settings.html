@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fastmail Inbox mode</title>
+<style>
+    :root {
+        color-scheme: light dark;
+        --fg: #1c1c1e;
+        --muted: #6b6b70;
+        --bg: #ffffff;
+        --line: #e3e3e6;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --fg: #f2f2f7;
+            --muted: #9a9aa0;
+            --bg: #1c1c1e;
+            --line: #38383a;
+        }
+    }
+
+    /* Safari sizes the popup to the document and stops at a ceiling of its
+       own; past that the rest is cut off rather than reachable, because
+       nothing here was scrollable. Capping the document under that ceiling
+       and letting it scroll is what keeps the last option reachable however
+       many there are. */
+    html {
+        max-height: 560px;
+        overflow-y: scroll;
+    }
+
+    /* macOS hides an overlay scrollbar until you happen to scroll, which in a
+       popup means nothing tells you the list carries on past the bottom edge.
+       Giving the bar a width and a thumb of its own keeps it there. */
+    html::-webkit-scrollbar {
+        width: 11px;
+        background: var(--bg);
+    }
+
+    html::-webkit-scrollbar-thumb {
+        background: var(--muted);
+        border: 3px solid var(--bg);
+        border-radius: 6px;
+    }
+
+    html::-webkit-scrollbar-track {
+        background: var(--bg);
+    }
+
+    body {
+        margin: 0;
+        padding: 16px 18px;
+        min-width: 300px;
+        background: var(--bg);
+        color: var(--fg);
+        font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    }
+
+    h1 {
+        margin: 0 0 14px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    label {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
+        padding: 9px 0;
+        border-top: 1px solid var(--line);
+        cursor: pointer;
+    }
+
+    label:first-of-type { border-top: none; }
+
+    /* A suboption belongs to the option above it, so it is indented and its
+       rule dropped — the group reads as one thing */
+    label.sub {
+        border-top: none;
+        padding: 3px 0 3px 26px;
+    }
+
+    label.sub + label:not(.sub) { border-top: 1px solid var(--line); }
+
+    /* Off with its parent: still legible, plainly not in play */
+    label.is-disabled {
+        cursor: default;
+        opacity: 0.45;
+    }
+
+    input { margin: 1px 0 0; flex: none; }
+
+    .title { font-weight: 500; }
+
+    .sub .title { font-weight: 400; }
+
+    label.text { display: block; }
+
+    label.text input[type="text"] {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 5px 7px;
+        box-sizing: border-box;
+        font: inherit;
+        color: var(--fg);
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 5px;
+    }
+
+    .hint {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+    }
+</style>
+</head>
+<body>
+    <h1>Inbox mode</h1>
+
+    <label>
+        <input type="checkbox" id="labelColours">
+        <span>
+            <span class="title">Colour rows by label</span>
+            <span class="hint">Rows take the colour of a label they carry.</span>
+        </span>
+    </label>
+
+    <label class="sub" data-parent="labelColours">
+        <input type="checkbox" id="labelColoursSidebarOnly">
+        <span>
+            <span class="title">Only labels in the sidebar</span>
+            <span class="hint">Plain tags stay uncoloured.</span>
+        </span>
+    </label>
+
+    <label class="sub" data-parent="labelColours">
+        <input type="checkbox" id="labelColoursSkipTriage">
+        <span>
+            <span class="title">Ignore the triage label</span>
+            <span class="hint">Every undecided message carries it; its colour would tint everything.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="sidebarSeparators">
+        <span>
+            <span class="title">Separate folders from labels</span>
+            <span class="hint">A line between the system folders and your labels.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="hideLoneExpando">
+        <span>
+            <span class="title">Hide the Labels collapse arrow</span>
+            <span class="hint">Hidden while only one account is shown.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="dragAdditive">
+        <span>
+            <span class="title">Dragging adds a label</span>
+            <span class="hint">A drop files the message and keeps it in the Inbox. Option moves it.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="hideInboxLabel">
+        <span>
+            <span class="title">Hide the Inbox tag</span>
+            <span class="hint">Hidden where every message is in the Inbox anyway.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="stripLabelPrefix">
+        <span>
+            <span class="title">Show only the label&rsquo;s own name</span>
+            <span class="hint">&ldquo;Work&rdquo; instead of &ldquo;Projects/Work&rdquo;. Hover for the full path.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="labelsShortcut">
+        <span>
+            <span class="title">File instead of move</span>
+            <span class="hint">Files under a project label and keeps the message in the Inbox; one already filed just loses its triage label. Shift-V refiles, Option-V moves.</span>
+        </span>
+    </label>
+
+    <label class="sub" data-parent="labelsShortcut">
+        <input type="checkbox" id="labelsSidebarOnly">
+        <span>
+            <span class="title">Only labels in the sidebar</span>
+            <span class="hint">The picker hides Trash, Spam and plain tags; typing still finds any label.</span>
+        </span>
+    </label>
+
+    <label class="sub" data-parent="labelsShortcut">
+        <input type="checkbox" id="labelsAutoSave">
+        <span>
+            <span class="title">Apply the only match automatically</span>
+            <span class="hint">A single remaining match is applied and the picker closes.</span>
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="backToListWhenTriaged">
+        <span>
+            <span class="title">Back to the list when the next is triaged</span>
+            <span class="hint">A decision opens the next message. On the phone, in the Inbox or the triage label, one that lands on a message already triaged goes back to the list instead.</span>
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Triage label</span>
+            <span class="hint">Added to every incoming message by your rule; removed by keeping, filing or archiving.</span>
+            <input type="text" id="triageLabel" spellcheck="false" autocapitalize="off" placeholder="Triage">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Labels that are never projects</span>
+            <span class="hint">Filing destinations that hold mail rather than queue it; archive leaves them on. Comma-separated paths.</span>
+            <input type="text" id="excludedLabels" spellcheck="false" autocapitalize="off" placeholder="Later">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Labels that add the sender to a contact group</span>
+            <span class="hint">Applying one adds the sender to the contact group of the same name, creating it if needed. Comma-separated paths.</span>
+            <input type="text" id="contactGroupLabels" spellcheck="false" autocapitalize="off" placeholder="none">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Pin key</span>
+            <span class="hint">Pins or unpins the selection.</span>
+            <input type="text" id="urgentKey" spellcheck="false" autocapitalize="off" placeholder="s">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Snooze key</span>
+            <span class="hint">Opens the snooze dialog with the default period filled in.</span>
+            <input type="text" id="snoozeKey" spellcheck="false" autocapitalize="off" placeholder="w">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Default snooze period</span>
+            <span class="hint">A number and d, w or m for days, weeks or months, such as 2w.</span>
+            <input type="text" id="snoozeDefault" spellcheck="false" autocapitalize="off" placeholder="2w">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Snooze time of day</span>
+            <span class="hint">When a snoozed message returns, as HH:MM.</span>
+            <input type="text" id="snoozeTime" spellcheck="false" autocapitalize="off" placeholder="08:00">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Bottom bar actions</span>
+            <span class="hint">In order; what fits on screen shows, the rest go under More.</span>
+            <input type="text" id="bottomBarSlots" spellcheck="false" autocapitalize="off" placeholder="Snooze, Pin, Archive, Labels, File, Delete, Move">
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">App badge label</span>
+            <span class="hint">The shell apps&rsquo; icon shows how many messages carry this label. Empty uses the Inbox count.</span>
+            <input type="text" id="appBadgeLabel" spellcheck="false" autocapitalize="off" placeholder="Triage">
+        </span>
+    </label>
+
+    <label>
+        <input type="checkbox" id="swapArchiveExpand">
+        <span>
+            <span class="title">Swap E and Y</span>
+            <span class="hint">E archives and Y expands, the reverse of Fastmail&rsquo;s default. H still archives.</span>
+        </span>
+    </label>
+
+    <script src="settings.js"></script>
+</body>
+</html>
