@@ -1121,7 +1121,7 @@ In `toggleCurrent`, change the first two lines to:
 
 Run: `node --check fastmail-custom-mode.user.js && echo parses` → `parses`. Rebuild and reload.
 
-Expected in the beta tab: sidebar badges on `Personal`, `Kerk`, `Admin`, `Fiddle` show their thread totals (matching the group counts in the Inbox); `Triage` (if shown) shows its total; rows in the Inbox keep their project colours; a row carrying only `Triage` is uncoloured. Clicking the toolbar's Inbox-mode indicator toggles the whole mode (the console reports `isOn()` flipping), whichever label is open. In a shell app the icon badge is the Triage total (deploy comes with Task 12).
+Expected in the beta tab: sidebar badges on `Personal`, `Kerk`, `Admin`, `Fiddle` show their thread totals (matching the group counts in the Inbox); `Triage` (if shown) shows its total; rows in the Inbox keep their project colours; a row carrying only `Triage` is uncoloured. Clicking the toolbar's Custom-mode indicator toggles the whole mode (the console reports `isOn()` flipping), whichever label is open. In a shell app the icon badge is the Triage total (deploy comes with Task 12).
 
 - [ ] **Step 6: Commit**
 

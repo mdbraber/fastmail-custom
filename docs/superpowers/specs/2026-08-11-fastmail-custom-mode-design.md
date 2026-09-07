@@ -834,7 +834,7 @@ button would mean two lit controls saying the same thing. So the filter button
 is left inactive for the inbox filter, which our button now represents, and
 stays active for every other filter. "All mail" is no filter, so neither is lit.
 
-| Filter | Inbox-mode button | Filter button |
+| Filter | Custom-mode button | Filter button |
 |---|---|---|
 | `inbox` | active | not active |
 | `unread`, `pinned`, `vips` | follows the mode | active |

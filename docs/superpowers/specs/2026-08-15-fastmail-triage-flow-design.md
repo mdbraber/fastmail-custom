@@ -300,7 +300,7 @@ no per-label-kind split and `Process` needs no exemption.
 `inbox` remains a filter you can pick, isolating the untriaged part of a label,
 and is remembered per label as any hand-picked filter already is.
 
-The Inbox-mode indicator now represents `actionable`, so it is that value the
+The Custom-mode indicator now represents `actionable`, so it is that value the
 filter button suppresses its own active state for, not `inbox`.
 
 ### Two things keyed to the old default
