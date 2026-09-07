@@ -9,7 +9,7 @@ import Cocoa
 import SafariServices
 import WebKit
 
-let extensionBundleIdentifier = "com.mdbraber.fastmail.custommode.extension"
+let extensionBundleIdentifier = "com.mdbraber.fastmail-custom.extension"
 
 class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHandler {
 
