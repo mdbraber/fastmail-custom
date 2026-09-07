@@ -1820,9 +1820,18 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // transform put over it, so the stroke keeps the weight the rest of the
     // bar is drawn at.
     const STATE_VERB_SHAPES = {
+        // An arrow going down into an open tray. It was a tick in a circle,
+        // which is the mark for done — and done is Archive, two buttons
+        // along. Filing is not finishing: the message stays in the Inbox
+        // under one project label, so the glyph says put this away rather
+        // than this is over. The tray is open at the top and shares nothing
+        // with the archive crate, the Labels tag or the Move folder beside
+        // it. Drawn to 13.6 by 15.2, which is the span Fastmail's own icons
+        // keep.
         file: [
-            ['path', { d: 'M19.75,11.29V12a7.75,7.75,0,1,1-4.6-7.08' }],
-            ['polyline', { points: '19.75 5.8 12 13.56 9.68 11.23' }]
+            ['line', { x1: '12', y1: '4.4', x2: '12', y2: '13.6' }],
+            ['polyline', { points: '7.6 9.2 12 13.6 16.4 9.2' }],
+            ['polyline', { points: '5.2 12.6 5.2 19.6 18.8 19.6 18.8 12.6' }]
         ],
         snooze: [
             ['circle', { cx: '12', cy: '12', r: '7.75' }],
