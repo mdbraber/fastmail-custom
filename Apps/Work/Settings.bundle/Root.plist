@@ -346,6 +346,38 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
+			<string>Its list opens showing only what is still in the Inbox, since that is the queue and the rest is history. Turning the filter off holds while you stay on that label.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Filter a project label to the Inbox</string>
+			<key>Key</key>
+			<string>customMode.stickyInboxFilter</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
+			<string>A project label’s badge counts the same messages its filtered list shows, rather than everything it has ever held.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Count only what is in the Inbox</string>
+			<key>Key</key>
+			<string>customMode.filteredLabelCounts</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
 			<string>A decision opens the next message. On the phone, in the Inbox or the triage label, one that lands on a message already triaged goes back to the list instead.</string>
 		</dict>
 		<dict>

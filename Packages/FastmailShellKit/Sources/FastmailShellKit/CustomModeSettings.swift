@@ -238,6 +238,20 @@ public enum CustomModeSettings {
             default: .toggle(true)
         ),
         Option(
+            "stickyInboxFilter",
+            group: .labelsFiling,
+            title: "Filter a project label to the Inbox",
+            hint: "Its list opens showing only what is still in the Inbox, since that is the queue and the rest is history. Turning the filter off holds while you stay on that label.",
+            default: .toggle(true)
+        ),
+        Option(
+            "filteredLabelCounts",
+            group: .labelsFiling,
+            title: "Count only what is in the Inbox",
+            hint: "A project label’s badge counts the same messages its filtered list shows, rather than everything it has ever held.",
+            default: .toggle(true)
+        ),
+        Option(
             "backToListWhenTriaged",
             group: .labelsFiling,
             title: "Back to the list when the next is triaged",

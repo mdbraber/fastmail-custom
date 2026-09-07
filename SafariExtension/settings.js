@@ -11,6 +11,8 @@ const DEFAULT_SETTINGS = {
     labelsShortcut: true,
     labelsSidebarOnly: true,
     labelsAutoSave: true,
+    stickyInboxFilter: true,
+    filteredLabelCounts: true,
     backToListWhenTriaged: true,
     triageLabel: 'Triage',
     snoozeKey: 'w',

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Custom mode
 // @namespace    custom
-// @version      3.9
+// @version      3.10
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -14,9 +14,22 @@
 /*
 Fastmail Custom mode
 Maarten den Braber <m@mdbraber.com>
-version 3.9 - 2026-09-07
+version 3.10 - 2026-09-07
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
+
+3.10 — a project label is a queue, and reads like one. Its list opens on
+Fastmail's own In Inbox filter, which the app offers on a label and then
+forgets the moment you leave; here it is applied on arrival, so turning it
+off in the filter menu still holds for as long as you stay on that label.
+The sidebar badge counts the same set the filtered list shows — the label
+and the Inbox both — rather than everything the label has ever held, which
+on a label older than this model is history rather than work. That number
+is stored nowhere, so it is a query per project label, built the first
+time a badge asks and dropped when the setting or the mode goes off. Both
+are settings: stickyInboxFilter and filteredLabelCounts, on by default,
+and both are about project labels alone. A hold label such as Later is
+left as it was, since a held message is meant to sit outside the queue.
 
 3.9 — e archives everywhere, and archiving keeps a hold label. With E and Y
 swapped, e used to inherit whatever Fastmail had bound to y, which is one
@@ -261,6 +274,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         labelsShortcut: true,
         labelsSidebarOnly: true,
         labelsAutoSave: true,
+        // A project label is a queue, not an archive: its list opens showing
+        // only what is still in the Inbox. Fastmail has the filter already
+        // and forgets it the moment you leave, so it is applied on arrival —
+        // which leaves turning it off working for as long as you stay.
+        stickyInboxFilter: true,
+        // And the badge counts the same set the filtered list shows, rather
+        // than everything the label has ever held.
+        filteredLabelCounts: true,
         // A decision always moves on to the next message. On the phone, where
         // the message is the whole screen, landing on one already triaged
         // means the run is over: with this on the view goes back to the list
@@ -518,11 +539,98 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // confirms. A project label implies the Inbox, so a label's total is
     // its queue and nothing has to be intersected to find it.
 
-    // What a row's badge reads: the label's own total. A project label
-    // implies the Inbox, so its total is its queue, and Triage's total is
-    // what is left to decide. Read off the Mailbox record — canonical, and
-    // free, since Fastmail keeps it up to date anyway.
-    const countFor = (mailbox) => mailbox.get('totalThreads') || 0;
+    /*
+     * A project label's badge, counted against the Inbox.
+     *
+     * The model says a project label implies the Inbox, so its total is its
+     * queue — but only for mail filed under this model. A label that was in
+     * use before it, or one picked from the L-key menu, holds messages that
+     * left the Inbox long ago, and the badge then counts history rather than
+     * work. settings.filteredLabelCounts counts what the filtered list shows
+     * instead: the label and the Inbox both.
+     *
+     * That number is stored nowhere, so it is a query per label. Collapsed to
+     * threads, because that is what a badge counts. Built the first time a
+     * badge asks for one and kept, since a live query tracks its own changes;
+     * dropped when the setting goes off, so nothing is running for a feature
+     * nobody is using.
+     */
+    const inboxCounts = new Map();
+
+    // A WindowedQuery fetches nothing until a range is observed, and the
+    // length is all this wants, so the range is the smallest one there is.
+    const COUNT_RANGE = { start: 0, end: 1 };
+    const countRangeObserver = { rangeDidChange() {} };
+    const countLengthObserver = { go: () => scheduleBadgeRepaint() };
+
+    const countQueryFor = (mailbox) => {
+        const id = mailbox.get('id');
+        const held = inboxCounts.get(id);
+        if (held) return held;
+
+        const accountId = mailbox.get('accountId');
+        const inbox = inboxMailbox(accountId);
+        if (!inbox) return null;
+
+        try {
+            const params = {
+                accountId: accountId,
+                where: {
+                    operator: 'AND',
+                    conditions: [{ inMailbox: id }, { inMailbox: inbox.get('id') }]
+                },
+                sort: [{ property: 'receivedAt', isAscending: false }],
+                collapseThreads: true
+            };
+
+            // The id has to come from getQueryId: the source resolves a
+            // response back to its query by recomputing it from the request,
+            // so a query filed under any other id never resolves.
+            const query = FastMail.store.getQuery(
+                FastMail.classes.Message.getQueryId(params),
+                FastMail.classes.MessageList,
+                params
+            );
+
+            query.addObserverForRange(COUNT_RANGE, countRangeObserver, 'rangeDidChange');
+            query.getObjectAt(0);
+            query.addObserverForKey('length', countLengthObserver, 'go');
+
+            inboxCounts.set(id, query);
+            return query;
+        } catch (error) {
+            // No query to be had; the total below still answers
+            return null;
+        }
+    };
+
+    const forgetInboxCounts = () => {
+        inboxCounts.forEach((query) => {
+            try {
+                query.removeObserverForRange(COUNT_RANGE, countRangeObserver, 'rangeDidChange');
+                query.removeObserverForKey('length', countLengthObserver, 'go');
+            } catch (error) {
+                // Already gone
+            }
+        });
+        inboxCounts.clear();
+    };
+
+    // What a row's badge reads: the label's own total, or the part of it that
+    // is still in the Inbox. Triage's total is what is left to decide either
+    // way, since everything carrying it is in the Inbox by definition.
+    //
+    // The total stands in until the query lands — it is the same number
+    // whenever the model has been kept — so a badge never sits empty waiting.
+    const countFor = (mailbox) => {
+        if (settings.filteredLabelCounts && modeIsOn && isProject(mailbox)) {
+            const query = countQueryFor(mailbox);
+            const length = query && query.get('length');
+            if (typeof length === 'number') return length;
+        }
+
+        return mailbox.get('totalThreads') || 0;
+    };
 
     // Badge repaints arrive in bursts as query totals land
     let badgeTimer = null;
@@ -1311,6 +1419,39 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     const indicatorIsActive = () => modeIsOn;
+
+    /*
+     * The Inbox filter, made to stick.
+     *
+     * Fastmail offers it on a label's list — mailboxFilter, value "inbox",
+     * offered only for a label with no inherited role while the account has
+     * an Inbox — and forgets it the moment you go somewhere else. Under this
+     * model a project label is a queue and the rest of what it holds is
+     * history, so the queue is what its list should open on.
+     *
+     * Applied on arrival rather than held on, which is what makes turning it
+     * off in the filter menu work: it stays off for as long as you stay, and
+     * the next label comes up filtered again. Only a filter nobody has set is
+     * written, so an unread or pinned filter carried in from elsewhere is
+     * left exactly as it is.
+     */
+    const applyStickyFilter = () => {
+        if (!modeIsOn || !settings.stickyInboxFilter) return;
+
+        const mailController = controller();
+        if (mailController.get('search')) return;
+
+        const mailbox = mailController.get('mailbox');
+        if (!mailbox || !isProject(mailbox)) return;
+
+        try {
+            if (!mailController.get('mailboxFilter')) {
+                mailController.set('mailboxFilter', 'inbox');
+            }
+        } catch (error) {
+            // No filter on this screen; nothing to make stick
+        }
+    };
 
     // Fastmail's is-active is a faint grey wash behind the icon — enough to
     // separate a pressed button from an unpressed one, not enough for a switch
@@ -4800,9 +4941,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             console.warn('Custom mode: could not persist the mode', error);
         }
 
+        // Nothing reads the counting queries with the mode off, so they stop
+        // running until it comes back on
+        if (!modeIsOn) forgetInboxCounts();
+
         // The colour rules are only emitted while the mode is on
         updateStyles();
         refresh();
+        applyStickyFilter();
     };
 
     const toggleMode = () => setMode(!modeIsOn);
@@ -4893,6 +5039,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // with it. This runs whether the mode is on or off, because the button
         // stays visible either way — grey when off.
         controller().addObserverForKey('mailbox', { go: refreshToolbar }, 'go');
+
+        // Arriving at a project label is when the Inbox filter goes on, so
+        // this rides the same change of mailbox.
+        controller().addObserverForKey('mailbox', { go: applyStickyFilter }, 'go');
 
         // Opening a message does not always rebuild the bar, so the pin's
         // paint follows the open message directly rather than waiting for a
@@ -5156,6 +5306,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 forgetHide();
                 // The label names may have changed
                 forgetLabelCache();
+                // A query per label is worth running only while something
+                // reads it, so turning the setting off stops them
+                if (!settings.filteredLabelCounts) forgetInboxCounts();
+                applyStickyFilter();
                 // The verb keys, the bar slots and the app badge are
                 // settings too
                 reclaimKeys();
