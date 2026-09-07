@@ -32,7 +32,11 @@ and both are about project labels alone. A hold label such as Later is
 left as it was, since a held message is meant to sit outside the queue.
 The bar stops offering Archive twice with the filter on: the contextual
 slot becomes an Archive of Fastmail's own whenever the list is filtered to
-the Inbox, so ours stands down rather than sitting beside it.
+the Inbox, so ours stands down rather than sitting beside it. And on a
+project label, taking the label off archives instead — a swipe, [ and ]
+and Fastmail's own contextual button all ask for that one call, and none
+of them means "leave it in the Inbox with no label". Only the mode's own
+Remove label button still removes the label, which is what it is for.
 
 3.9 — e archives everywhere, and archiving keeps a hold label. With E and Y
 swapped, e used to inherit whatever Fastmail had bound to y, which is one
@@ -1743,10 +1747,28 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const removeLabelIcon = () => borrowedIcon('removeLabel', 'i-removelabel') ||
         standardIcon('i-removelabel', REMOVE_LABEL_SHAPES);
 
+    // Set while this button is the one asking, so the redirection below lets
+    // it through. Every other route into "remove the label you are looking
+    // at" — a swipe, the bracket keys, Fastmail's own contextual button —
+    // means leaving the queue, and on a project label that is archiving. This
+    // one says remove the label and means it, which is the whole reason it
+    // exists. Synchronous either side of the call, so nothing else can land
+    // in between and be mistaken for it.
+    let removingLabelOnPurpose = false;
+
+    const removeCurrentLabel = () => {
+        removingLabelOnPurpose = true;
+        try {
+            controller().actions.removeCurrent(null);
+        } finally {
+            removingLabelOnPurpose = false;
+        }
+    };
+
     const removeLabelOption = () => new FastMail.classes.ButtonView({
         label: 'Remove label',
         icon: removeLabelIcon(),
-        target: { removeLabel: () => controller().actions.removeCurrent(null) },
+        target: { removeLabel: () => removeCurrentLabel() },
         method: 'removeLabel'
     });
 
@@ -3917,6 +3939,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * when the mailbox coming off is the Inbox: removeCurrent — the [ and ]
      * keys, the Remove-from-Inbox button, a swipe — is measured to be
      * `remove(keys, whichever mailbox you are looking at)`.
+     *
+     * On a project label that same call is redirected to archive rather than
+     * treated as one, since removing the label would leave the message in the
+     * Inbox. So a swipe, [ and ] and Fastmail's contextual button all archive
+     * there, and only the mode's own Remove label button still takes the
+     * label off — it is the one route that asks for that and means it.
      */
     const ARCHIVE_VERBS = ['archive', 'remove'];
 
@@ -3959,6 +3987,24 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
             actions[verb] = function (storeKeys, goTo) {
                 const mailbox = arguments[1];
+
+                // Taking the label you are looking at off is what a swipe,
+                // the bracket keys and Fastmail's contextual button all ask
+                // for, and on a project label it is not what any of them
+                // mean: the label is the queue, so leaving it is archiving.
+                // Removing the label alone would leave the message in the
+                // Inbox, which is the opposite of done.
+                //
+                // Handed to archive rather than done here, so the whole verb
+                // — Triage, every project label, the pin, the Inbox — runs
+                // once, in one place. A hold label such as Later is not a
+                // project and keeps coming off as asked.
+                if (verb === 'remove' && modeIsOn && !removingLabelOnPurpose &&
+                        mailbox && typeof mailbox.get === 'function' &&
+                        mailbox.get('role') !== 'inbox' && isProject(mailbox)) {
+                    return this.archive(storeKeys);
+                }
+
                 const archiving = modeIsOn && isArchiving(verb, arguments);
 
                 if (!archiving) {
