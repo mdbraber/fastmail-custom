@@ -15,8 +15,11 @@ public final class PendingLinks: ObservableObject {
         self.url = url
     }
 
+    /// Only clears when there was something to take: `onAppear` asks on every
+    /// appearance, and publishing a change to nothing would be a change.
     public func take() -> URL? {
-        defer { url = nil }
-        return url
+        guard let taken = url else { return nil }
+        url = nil
+        return taken
     }
 }

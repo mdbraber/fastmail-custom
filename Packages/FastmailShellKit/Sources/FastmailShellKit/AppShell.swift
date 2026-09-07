@@ -74,7 +74,8 @@ public struct AppShell: View {
             // last badge back once the app is on screen, and opens the
             // notification that launched it, if one did.
             BadgeController.shared.reapply()
-            if let url = pendingLinks.take() { handle(url) }
+            // The push names production; the page is on whichever server is selected
+            if let url = pendingLinks.take() { handle(live.backend.rehost(url)) }
         }
         .onChange(of: scenePhase) {
             // Coming back to the front is when a badge permission just granted
@@ -87,7 +88,7 @@ public struct AppShell: View {
         }
         .onChange(of: pendingLinks.url) {
             // A tapped notification, routed exactly as a link from outside
-            if let url = pendingLinks.take() { handle(url) }
+            if let url = pendingLinks.take() { handle(live.backend.rehost(url)) }
         }
         #else
         .onAppear {
