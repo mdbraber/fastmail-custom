@@ -8,33 +8,31 @@ import Foundation
 // macOS apps (extract-icons.swift), soft at the edges and with no way to make
 // a dark variant; this draws the same geometry crisply from a palette.
 //
-// Light keeps the field. Dark drops it — iOS paints its own dark background
-// behind a transparent icon — and either keeps the white disc (--disc white)
-// or paints the disc in the brand colour, as Fastmail's own dark icon does
-// (--disc brand, the default). Tinted is grayscale on transparency, for iOS to
-// colour with the user's tint.
+// Light is the icon as it always was. Dark follows Fastmail's own dark icon:
+// a circle three quarters the icon wide — iOS paints its own dark background
+// behind the transparent corners — with the two-tone field inside it and the
+// mark, scaled up, straight on the halves. Tinted is grayscale on
+// transparency, for iOS to colour with the user's tint.
 //
 //   swift tools/gen-icons.swift preview <outdir>     every variant + preview.png
-//   swift tools/gen-icons.swift install [--disc brand|white]
-//                                                    writes the app icon sets
+//   swift tools/gen-icons.swift install              writes the app icon sets
 //
 // The Mac icon (icon-mac.png) is left alone: this is about the phone.
 
 struct Palette {
     let fieldDark: NSColor
     let fieldLight: NSColor
-    // The mark on the white disc
-    let markLight: NSColor
+    // The mark's large triangle on the white disc; the small one is yellow
+    // everywhere, and in the dark variant the large one goes white
     let markDark: NSColor
-    // The mark on the brand-coloured disc of the dark variant
-    let brandMarkLight: NSColor
-    let brandMarkDark: NSColor
     // Tinted is grayscale and iOS colours every icon the same, so two apps
     // sharing the mark would be twins. Both stay light on transparency — a
     // dark fill all but vanishes on iOS's dark background — and one draws
     // its disc as a ring rather than a fill, to stay telling apart.
     let tintedRing: Bool
 }
+
+let markYellow = hex("#F7C951")  // Fastmail's own
 
 func hex(_ s: String) -> NSColor {
     let v = UInt32(s.dropFirst(), radix: 16)!
@@ -49,21 +47,30 @@ func hex(_ s: String) -> NSColor {
 let apps: [(name: String, target: String, palette: Palette)] = [
     ("mdbraber.com", "Personal", Palette(
         fieldDark: hex("#88AA56"), fieldLight: hex("#B7D097"),
-        markLight: hex("#AFCA88"), markDark: hex("#506632"),
-        brandMarkLight: .white, brandMarkDark: hex("#3F5327"), tintedRing: false)),
-    // All blue: the mark's small triangle takes the lighter field blue on the
-    // white disc; on the dark variant's blue disc the mark goes white over a
-    // deeper blue, the same arrangement as the green icon.
+        markDark: hex("#506632"), tintedRing: false)),
     ("nexthealth.nl", "Work", Palette(
         fieldDark: hex("#377BC4"), fieldLight: hex("#79BFEB"),
-        markLight: hex("#79BFEB"), markDark: hex("#424F59"),
-        brandMarkLight: .white, brandMarkDark: hex("#1B3D66"), tintedRing: true)),
+        markDark: hex("#424F59"), tintedRing: true)),
 ]
 
-// Geometry, in unit coordinates with y down, measured off the old rasters.
+// Geometry, in unit coordinates with y down. The mark is a box: a light
+// triangle on its left half with the apex at the centre, and a dark triangle
+// whose hypotenuse runs from the bottom-left corner to the top-right one.
+// The field's split runs along that same line, extended to the edges.
+struct Mark { let x0, x1, y0, y1: CGFloat }
+struct Geometry {
+    let split: (left: CGFloat, right: CGFloat)  // where the split meets each edge
+    let mark: Mark
+}
+
 let discRadius: CGFloat = 0.30
-let mark = (x0: CGFloat(0.322), x1: CGFloat(0.676), y0: CGFloat(0.39), y1: CGFloat(0.607))
-let diagonal = (left: CGFloat(0.81), right: CGFloat(0.185))  // where the split meets each edge
+// On the disc, measured off the old rasters
+let onDisc = Geometry(split: (0.81, 0.185), mark: Mark(x0: 0.322, x1: 0.676, y0: 0.39, y1: 0.607))
+// In the dark circle, measured off Fastmail's own dark icon: the circle is
+// three quarters the icon wide, the split passes through its centre, and the
+// mark grows to 43% of the icon wide, its hypotenuse still on the split.
+let circleRadius: CGFloat = 0.375
+let inCircle = Geometry(split: (0.835, 0.165), mark: Mark(x0: 0.285, x1: 0.715, y0: 0.356, y1: 0.644))
 
 // The light icon is opaque — iOS wants the primary icon without an alpha
 // channel — while the dark and tinted ones are drawn on transparency.
@@ -88,22 +95,34 @@ func draw(into rep: NSBitmapImageRep, _ body: (CGFloat) -> Void) {
     NSGraphicsContext.restoreGraphicsState()
 }
 
-/// One icon. `field` nil leaves the background transparent; with a field
-/// the icon is opaque and rendered without an alpha channel. `ring` draws
-/// the disc as an outline rather than a fill.
-func icon(size: Int, field: (NSColor, NSColor)?, disc: NSColor, markLight: NSColor, markDark: NSColor, ring: Bool = false) -> NSBitmapImageRep {
-    let rep = bitmap(size, alpha: field == nil)
+/// One icon. `field` nil leaves the background transparent; a field fills
+/// the icon, which is then opaque and rendered without an alpha channel,
+/// unless `clipRadius` cuts it to a circle on transparency. `disc` nil draws
+/// the mark straight on the field; `ring` draws the disc as an outline
+/// rather than a fill.
+func icon(size: Int, field: (NSColor, NSColor)?, clipRadius: CGFloat? = nil, disc: NSColor?,
+          geometry: Geometry, markLight: NSColor, markDark: NSColor, ring: Bool = false) -> NSBitmapImageRep {
+    let rep = bitmap(size, alpha: field == nil || clipRadius != nil)
     draw(into: rep) { s in
         // Unit coords, y down → AppKit
         func p(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSPoint(x: x * s, y: (1 - y) * s) }
+        func circle(_ radius: CGFloat) -> NSBezierPath {
+            let r = s * radius
+            return NSBezierPath(ovalIn: NSRect(x: s / 2 - r, y: s / 2 - r, width: 2 * r, height: 2 * r))
+        }
 
         if let (dark, light) = field {
+            NSGraphicsContext.saveGraphicsState()
+            if let clipRadius { circle(clipRadius).addClip() }
+            defer { NSGraphicsContext.restoreGraphicsState() }
+
             dark.setFill()
             NSRect(x: 0, y: 0, width: s, height: s).fill()
 
+            let split = geometry.split
             let lower = NSBezierPath()
-            lower.move(to: p(0, diagonal.left))
-            lower.line(to: p(1, diagonal.right))
+            lower.move(to: p(0, split.left))
+            lower.line(to: p(1, split.right))
             lower.line(to: p(1, 1))
             lower.line(to: p(0, 1))
             lower.close()
@@ -112,26 +131,26 @@ func icon(size: Int, field: (NSColor, NSColor)?, disc: NSColor, markLight: NSCol
 
             // The faint highlight the original carries along the split
             let edge = NSBezierPath()
-            edge.move(to: p(0, diagonal.left))
-            edge.line(to: p(1, diagonal.right))
+            edge.move(to: p(0, split.left))
+            edge.line(to: p(1, split.right))
             edge.lineWidth = s * 0.004
             light.blended(withFraction: 0.45, of: .white)!.setStroke()
             edge.stroke()
         }
 
-        let r = s * discRadius
-        let circle = NSBezierPath(ovalIn: NSRect(x: s / 2 - r, y: s / 2 - r, width: 2 * r, height: 2 * r))
-        if ring {
-            circle.lineWidth = s * 0.055
-            disc.setStroke()
-            circle.stroke()
-        } else {
-            disc.setFill()
-            circle.fill()
+        if let disc {
+            let path = circle(discRadius)
+            if ring {
+                path.lineWidth = s * 0.055
+                disc.setStroke()
+                path.stroke()
+            } else {
+                disc.setFill()
+                path.fill()
+            }
         }
 
-        // The mark: a light triangle on the left, its apex on the centre,
-        // and a dark triangle whose hypotenuse runs corner to corner
+        let mark = geometry.mark
         let cx = (mark.x0 + mark.x1) / 2
         let cy = (mark.y0 + mark.y1) / 2
         let lightTri = NSBezierPath()
@@ -153,27 +172,27 @@ func icon(size: Int, field: (NSColor, NSColor)?, disc: NSColor, markLight: NSCol
     return rep
 }
 
-enum Variant { case light, darkWhiteDisc, darkBrandDisc, tinted }
+enum Variant { case light, dark, tinted }
 
 func render(_ variant: Variant, _ pal: Palette, size: Int = 1024) -> NSBitmapImageRep {
     switch variant {
     case .light:
         return icon(size: size, field: (pal.fieldDark, pal.fieldLight), disc: .white,
-                    markLight: pal.markLight, markDark: pal.markDark)
-    case .darkWhiteDisc:
-        return icon(size: size, field: nil, disc: .white,
-                    markLight: pal.markLight, markDark: pal.markDark)
-    case .darkBrandDisc:
-        return icon(size: size, field: nil, disc: pal.fieldDark,
-                    markLight: pal.brandMarkLight, markDark: pal.brandMarkDark)
+                    geometry: onDisc, markLight: markYellow, markDark: pal.markDark)
+    case .dark:
+        // The mark straight on the halves: its hypotenuse lies on the split,
+        // so the yellow triangle sits on the dark half and the white one on
+        // the light half
+        return icon(size: size, field: (pal.fieldDark, pal.fieldLight), clipRadius: circleRadius, disc: nil,
+                    geometry: inCircle, markLight: markYellow, markDark: .white)
     case .tinted:
         // Grayscale for iOS to colour, light on transparency. A filled white
         // disc carries the mark in grays; a ring carries it in light tones.
         return pal.tintedRing
             ? icon(size: size, field: nil, disc: .white,
-                   markLight: hex("#BDBDBD"), markDark: .white, ring: true)
+                   geometry: onDisc, markLight: hex("#BDBDBD"), markDark: .white, ring: true)
             : icon(size: size, field: nil, disc: .white,
-                   markLight: hex("#BDBDBD"), markDark: hex("#4A4A4A"))
+                   geometry: onDisc, markLight: hex("#BDBDBD"), markDark: hex("#4A4A4A"))
     }
 }
 
@@ -186,40 +205,40 @@ func png(_ rep: NSBitmapImageRep) -> Data { rep.representation(using: .png, prop
 // ----------------------------------------------------------------------
 
 func preview(to path: String) {
+    let columns: [(header: String, variant: Variant)] = [
+        ("Light", .light), ("Dark", .dark), ("Tinted (sample tint)", .tinted),
+    ]
     let tile = 220, gap = 36, labelH = 34, nameW = 150
-    let cols = 4, rows = apps.count
-    let width = nameW + cols * (tile + gap) + gap
-    let height = gap + rows * (tile + labelH + gap) + 40
-    let rep = bitmap(width) // square is fine; we only use the top part
-    _ = height
-    draw(into: rep) { _ in
+    let rows = apps.count
+    let width = nameW + columns.count * (tile + gap) + gap
+    let height = gap + 40 + rows * (tile + labelH + gap)
+    let rep = bitmap(max(width, height))  // square is fine; we only use the top-left
+    draw(into: rep) { side in
         hex("#000000").setFill()
-        NSRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(width)).fill()
+        NSRect(x: 0, y: 0, width: side, height: side).fill()
 
         let font = NSFont.systemFont(ofSize: 18, weight: .medium)
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
-        let headers = ["Light", "Dark — white disc", "Dark — brand disc", "Tinted (sample tint)"]
 
         for (row, app) in apps.enumerated() {
-            let y = CGFloat(width) - CGFloat(gap + 40 + row * (tile + labelH + gap)) - CGFloat(tile)
+            let y = side - CGFloat(gap + 40 + row * (tile + labelH + gap)) - CGFloat(tile)
             NSAttributedString(string: app.name, attributes: attrs)
                 .draw(at: NSPoint(x: CGFloat(gap), y: y + CGFloat(tile) / 2 - 10))
 
-            let variants: [Variant] = [.light, .darkWhiteDisc, .darkBrandDisc, .tinted]
-            for (col, variant) in variants.enumerated() {
+            for (col, column) in columns.enumerated() {
                 let x = CGFloat(nameW + gap + col * (tile + gap))
                 let rect = NSRect(x: x, y: y, width: CGFloat(tile), height: CGFloat(tile))
 
                 NSGraphicsContext.saveGraphicsState()
                 NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.225, yRadius: rect.height * 0.225).addClip()
-                if variant != .light {
+                if column.variant != .light {
                     // iOS's dark icon background
                     NSGradient(starting: hex("#2C2C2E"), ending: hex("#0B0B0C"))!.draw(in: rect, angle: -90)
                 }
                 let img = NSImage(size: rect.size)
-                img.addRepresentation(render(variant, app.palette, size: tile))
+                img.addRepresentation(render(column.variant, app.palette, size: tile))
                 img.draw(in: rect)
-                if variant == .tinted {
+                if column.variant == .tinted {
                     // What iOS makes of the grayscale: white takes the tint,
                     // the grays a darker tint — a multiply with a sample blue
                     hex("#6C8CFF").setFill()
@@ -228,7 +247,7 @@ func preview(to path: String) {
                 NSGraphicsContext.restoreGraphicsState()
 
                 if row == 0 {
-                    NSAttributedString(string: headers[col], attributes: attrs)
+                    NSAttributedString(string: column.header, attributes: attrs)
                         .draw(at: NSPoint(x: x, y: y + CGFloat(tile) + 10))
                 }
             }
@@ -242,11 +261,11 @@ func preview(to path: String) {
 // Install: the icon sets, with the appearance variants declared
 // ----------------------------------------------------------------------
 
-func install(disc: Variant) {
+func install() {
     for app in apps {
         let set = "Apps/\(app.target)/Assets.xcassets/AppIcon.appiconset"
         try! png(render(.light, app.palette)).write(to: URL(fileURLWithPath: "\(set)/icon-ios.png"))
-        try! png(render(disc, app.palette)).write(to: URL(fileURLWithPath: "\(set)/icon-ios-dark.png"))
+        try! png(render(.dark, app.palette)).write(to: URL(fileURLWithPath: "\(set)/icon-ios-dark.png"))
         try! png(render(.tinted, app.palette)).write(to: URL(fileURLWithPath: "\(set)/icon-ios-tinted.png"))
 
         let contents = """
@@ -294,8 +313,7 @@ case "preview":
     try! FileManager.default.createDirectory(atPath: out, withIntermediateDirectories: true)
     preview(to: "\(out)/preview.png")
 case "install":
-    let disc: Variant = args.contains("--disc") && args.last == "white" ? .darkWhiteDisc : .darkBrandDisc
-    install(disc: disc)
+    install()
 default:
-    print("usage: swift tools/gen-icons.swift preview <outdir> | install [--disc brand|white]")
+    print("usage: swift tools/gen-icons.swift preview <outdir> | install")
 }
