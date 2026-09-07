@@ -20,7 +20,8 @@ Notifications on macOS (the page hands its own to `NotificationPresenter` there,
 3. **The builds are development-signed** (`get-task-allow` is true), so their `aps-environment` is `development` and pushes must go to `api.sandbox.push.apple.com`.
 4. **Fastmail's JMAP** is at `https://api.fastmail.com/jmap/session` with a bearer API token created under Settings → Privacy & Security → Manage API tokens; a token scoped to `urn:ietf:params:jmap:mail` read-only suffices. Change notices come either through a push subscription (`PushSubscription/set`, RFC 8620 §7.2, Fastmail calling a URL of ours) or through the session's `eventSourceUrl`. Whether Fastmail grants push subscriptions to API tokens is not documented; the first implementation task settles it, and the server supports both.
 5. **A thread's address** in the web app is `https://app.fastmail.com/mail/Inbox/<threadId>`, with the JMAP `threadId` used as is; each app is logged into one account, and Fastmail adds its own `u=` on arrival. `AppShell.handle(url)` already loads such an address into the web view through `LinkRouter`.
-6. **The badge** the apps show is the number of messages carrying the badge label (`Triage` by default), which is that label's mailbox `totalEmails` in JMAP.
+6. **The badge** the apps show is the number of conversations carrying the badge label (`Triage` by default) — that label's mailbox `totalThreads` in JMAP. The page's own badge counts the same way, and a count of messages would jump every time the app came to the front.
+7. **A tapped push is rehosted** to the selected backend before it is routed: the payload names `app.fastmail.com`, and the web view, the bridge and the injected scripts are all keyed to the server the setting chose.
 
 ## Architecture
 
@@ -89,7 +90,7 @@ Bundle identifiers are fixed in code: `com.mdbraber.fastmail.personal` and `com.
 2. `Mailbox/get` → the Inbox (role `inbox`) and the badge label (name equals `BADGE_LABEL`; missing means badge pushes are skipped, logged once).
 3. Load `/data/state-<account>.json`: `{ emailState, notified: [emailId…], badge }`. Absent or unusable state means a resync: take the current `Email` state and treat everything already there as seen, so a fresh start never notifies for old mail.
 4. Subscribe to change notices, types `Email` and `Mailbox`:
-   - **Push subscription** (preferred): `PushSubscription/set` creating `{ deviceClientId, url: PUBLIC_URL + "/jmap/<account>/<secret>", types, expires }`. Fastmail then POSTs `{ "@type": "PushVerification", "pushSubscriptionId", "verificationCode" }` to the URL; the server answers with `PushSubscription/set` updating `verificationCode`. Subscriptions are renewed before `expires`, and recreated on startup if the stored id is gone.
+   - **Push subscription** (preferred): `PushSubscription/set` creating `{ deviceClientId, url: PUBLIC_URL + "/jmap/<account>/<secret>", types, expires }`. Fastmail then POSTs `{ "@type": "PushVerification", "pushSubscriptionId", "verificationCode" }` to the URL; the server answers with `PushSubscription/set` updating `verificationCode`. That POST can arrive before the create has returned the id it names, so a verification for an unknown id is held and used as soon as the id is known. Subscriptions are renewed before `expires`, and recreated on startup if the stored id is gone.
    - **Event source** (fallback, chosen automatically when the create is refused, or forced by `NOTICES=eventsource`): a long-lived `GET eventSourceUrl?types=Email,Mailbox&closeafter=no&ping=300`, reconnecting with backoff.
    - Either way, a poll every 5 minutes runs the same handler, so a missed notice costs at most 5 minutes.
 
@@ -97,10 +98,10 @@ The `<secret>` in the callback path is random per start and is only used to igno
 
 ### On a notice
 
-1. `Email/changes` since `emailState` (looping on `hasMoreChanges`) → the created ids, and the new state.
-2. `Email/get` on the created ids with properties `id, threadId, mailboxIds, keywords, from, subject, receivedAt`.
+1. `Email/changes` since `emailState` (looping on `hasMoreChanges`) → the created ids, and the new state. More than 500 created ids means the server was away long enough that the backlog is not news: it is treated as lost, resynced silently, and nothing is announced.
+2. `Email/get` on the created ids with properties `id, threadId, mailboxIds, keywords, from, subject, receivedAt`, in chunks of 500 so the call stays inside Fastmail's `maxObjectsInGet`.
 3. Keep an email when: it is in the Inbox (`mailboxIds[inboxId]`), it is not `$seen` and not `$draft`, and its id is not in `notified`.
-4. `Mailbox/get` on the badge label → `totalEmails` is the badge.
+4. `Mailbox/get` on the badge label → `totalThreads` is the badge.
 5. For each kept email, an alert push (below). Then, if the badge differs from the stored one and no alert carried it, a badge-only push. Badge-only pushes are coalesced: notices within two seconds produce one.
 6. Store the new `emailState`, the notified ids (capped at the most recent 500), and the badge.
 
@@ -158,7 +159,7 @@ Installed from each `App` struct through `@UIApplicationDelegateAdaptor`; on mac
 - **Token**: after permission, `registerForRemoteNotifications()`; `didRegisterForRemoteNotificationsWithDeviceToken` hex-encodes the token and `POST`s `{ account, token }` to `https://<FMPushHost>/devices` with the bearer secret. Sent at every launch and on every activation where the last attempt failed; a failure is logged, never shown.
 - **Presentation**: as `UNUserNotificationCenterDelegate`, `willPresent` (which iOS only calls while the app is in front, where the page is on screen) returns `[.badge]`: the badge applies, no banner or sound. On becoming active, `removeAllDeliveredNotifications()`.
 - **Tap**: `didReceive` reads `url` from `userInfo`, and hands it to `AppShell` through a small `@MainActor` observable, `PendingLinks.shared`, which `AppShell` observes and routes through the same `handle(url)` that `onOpenURL` uses. Only `https://app.fastmail.com` URLs pass `LinkRouter`, so a bad payload can at most show the "Only Fastmail links can be opened" banner.
-- **No config**: with `FMPushServer` empty, the registrar asks for permission and applies badges but registers nothing.
+- **No config**: with `FMPushHost` empty, the registrar asks for permission and applies badges but registers nothing.
 
 ## Setup checklist (one-time, by hand)
 

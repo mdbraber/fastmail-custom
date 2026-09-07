@@ -3,7 +3,8 @@
 New-mail pushes for the shell apps on iOS. A read-only Fastmail token per
 account lives here, never on the phone; the service watches each mailbox
 over JMAP and sends an APNs alert for every message that lands in the
-Inbox, with the Triage count as the badge. Design and payload contract:
+Inbox, with the number of conversations carrying the Triage label as the
+badge. Design and payload contract:
 `docs/superpowers/specs/2026-09-07-ios-push-notifications-design.md`.
 
 ## One-time setup
@@ -20,10 +21,13 @@ Inbox, with the Triage count as the badge. Design and payload contract:
 4. **Run** — `docker compose up -d --build`. Put the reverse proxy in front
    of `127.0.0.1:8080` at the address you gave as `PUBLIC_URL`; Fastmail
    calls back there over HTTPS.
-5. **Check** — `curl https://<PUBLIC_URL>/healthz` lists each account with
-   `notices: "push"` (and `verified: true` once Fastmail's verification
-   round-trip is done) or `notices: "eventsource"` if Fastmail refused the
-   push subscription for an API token. Either works; push is quicker.
+5. **Check** — `curl "$PUBLIC_URL/healthz"` lists each account with
+   `notices` (`"push"`, or `"eventsource"` if Fastmail refused the push
+   subscription for an API token; either works, push is quicker),
+   `verified` (true once Fastmail's verification round-trip is done),
+   `lastNotice` and `devices`. If `verified` stays `false` for more than
+   a minute, `docker compose restart`: the subscription is recreated at
+   every start.
 6. **Apps** — add `PUSH_SERVER_HOST` (the host, no `https://`) and
    `PUSH_DEVICE_SECRET` to `Config/Local.xcconfig`, then `make deploy`.
    On the first launch the app asks for notification permission and
