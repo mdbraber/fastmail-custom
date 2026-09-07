@@ -1941,6 +1941,259 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     /*
+     * Saying what the bar holds, rather than rearranging what it drew.
+     *
+     * A ToolbarView does not keep a list of buttons. It keeps a list of
+     * *names* — the account's own action list, the one Settings > Actions
+     * edits — and looks each one up in a registry the bar was built with.
+     * Whatever the width cannot take is the tail of that list, and the tail
+     * becomes More. Both halves are derived, and both are rebuilt from the
+     * names whenever the list changes.
+     *
+     * So a button moved by hand is a button the next rebuild does not know
+     * about. Everything this mode used to fight — Labels and Delete going
+     * missing, Archive drawn twice, Pin frozen reading Pin on a pinned
+     * conversation — is that one mistake wearing different clothes.
+     *
+     * The list is the thing to write, then. Fastmail already puts only the
+     * applicable verb in it (Pin or Unpin, never both), already drops what
+     * the mailbox cannot do, and already draws and redraws from it. Restated
+     * in the order the setting asks for, with the cut where the width falls,
+     * it needs no correcting afterwards: a verb is on the bar or under More
+     * because the list says so, and no rebuild can lose it.
+     *
+     * The conversation bar carries its own copy of that list rather than
+     * sharing the class's, which is what makes this safe to do at all: the
+     * message actions are taken over and the mailbox list's own bar, built
+     * from the same class, is left completely alone.
+     */
+
+    // Each slot, and the name Fastmail's registry knows it by. Pin is two
+    // buttons, not one that toggles — the list carries whichever applies,
+    // and that is why the bar no longer needs a toggle wrapped over it.
+    const SLOT_ACTION_NAMES = {
+        snooze: ['snooze'],
+        pin: ['flag', 'unflag'],
+        archive: ['archive'],
+        labels: ['labels'],
+        move: ['move'],
+        'delete': ['trash'],
+        file: ['file']
+    };
+
+    // The verbs that mark a list as the message actions. A mailbox the
+    // account may only read gets a much shorter list, which is not ours to
+    // rewrite; so is an empty one, before a message is open.
+    const ACTION_LIST_MARKS = ['archive', 'labels', 'move', 'trash', 'snooze', 'removeLabel'];
+
+    /*
+     * Two verbs of the mode's own that live in the menu and nowhere else.
+     *
+     * Snooze for the set period, beside Fastmail's Snooze rather than in
+     * place of it: the stock button opens the dialog, this one just does it.
+     *
+     * Remove label, because Fastmail's own button cannot be used here. It
+     * runs the plain remove, and this mode reads a plain remove on a project
+     * label as "archive" — that is what keeps a swipe from quietly unfiling
+     * a message. Removing on purpose has to say so, which is what this one
+     * does.
+     *
+     * Named rather than inserted, like everything else on the bar, and named
+     * last so they sit under Fastmail's own.
+     */
+    const MODE_MENU_NAMES = ['customSnooze', 'customRemoveLabel'];
+
+    const snoozeMenuLabel = () =>
+        'Snooze ' + snoozePeriodLabel(settings.snoozeDefault);
+
+    // Registered once per bar and kept: the registry is what a name is
+    // looked up in, and a name it cannot answer for is a verb that is not
+    // there. Re-registering instead would leave the old view owned by
+    // nobody, so the one that exists is updated in place.
+    const registerModeViews = (toolbar) => {
+        const named = (name, make) => {
+            const existing = toolbar.getView(name);
+            if (existing) return existing;
+            const view = make();
+            toolbar.registerView(name, view, true);
+            return view;
+        };
+
+        // Measured as it is registered, since a bar that decides what fits by
+        // width has no width on file for a button it has never drawn. The
+        // other two are never on the bar, so they need no width.
+        if (!toolbar.getView('file')) {
+            toolbar.registerView('file', stateVerbOption('File', 'file'));
+        }
+
+        const snooze = named('customSnooze',
+            () => stateVerbOption(snoozeMenuLabel(), 'snooze'));
+        try {
+            // The period is a setting, so the wording follows it
+            snooze.set('label', snoozeMenuLabel());
+        } catch (error) {
+            // A label that will not be set is still a working button
+        }
+
+        named('customRemoveLabel', () => {
+            const option = removeLabelOption();
+            option.customRemoveLabel = true;
+            return option;
+        });
+    };
+
+    // The setting is an order over every slot, not a subset: slots it does
+    // not name join at the end, so an older saved value still places them all
+    const orderedSlots = () => {
+        const named = String(settings.bottomBarSlots || '')
+            .split(',')
+            .map(part => part.trim().toLowerCase())
+            .filter(name => SLOT_ACTION_NAMES[name]);
+
+        Object.keys(SLOT_ACTION_NAMES).forEach((name) => {
+            if (named.indexOf(name) === -1) named.push(name);
+        });
+
+        return named;
+    };
+
+    const arrangeActions = (original, toolbar) => {
+        const names = (original || []).filter(name => name !== '-' && name !== '*');
+        const has = (name) => names.indexOf(name) !== -1;
+
+        // Not the message actions: a read-only mailbox's short list, or none
+        // at all. Left exactly as it came.
+        if (!ACTION_LIST_MARKS.some(has)) return original;
+
+        const wanted = [];
+        orderedSlots().forEach((slot) => {
+            const candidates = SLOT_ACTION_NAMES[slot];
+            let pick = candidates.filter(has)[0];
+
+            // File is ours, so it is never in Fastmail's list; and inside a
+            // label Fastmail offers Remove label in Archive's place, while
+            // this mode wants the full verb. Both are views the bar knows,
+            // so both can be named whether or not the list mentions them.
+            // Remove label keeps its own place further down.
+            if (!pick && (slot === 'file' || slot === 'archive')) pick = candidates[0];
+            if (pick && wanted.indexOf(pick) === -1) wanted.push(pick);
+        });
+
+        const onBar = wanted.slice(0, barCapacity(toolbar));
+        const underMore = wanted.slice(onBar.length)
+            .concat(names.filter(name => wanted.indexOf(name) === -1))
+            .concat(MODE_MENU_NAMES);
+
+        // A trailing divider after each drawn verb and none after the cut, in
+        // the shape the bar builds for itself
+        const config = [];
+        onBar.forEach((name) => config.push(name, '-'));
+        config.push('*');
+        return config.concat(underMore);
+    };
+
+    /*
+     * Take the list over, once per bar.
+     *
+     * The wrapper keeps the original's own marks — what makes it a computed
+     * property, and which changes it recomputes for — so the bar still
+     * redraws itself when the mailbox, the labels mode or the pinned state
+     * moves. Only the answer differs.
+     */
+    const ownActionsConfig = (toolbar) => {
+        if (!toolbar) return false;
+        if (toolbar.customOwnsConfig) return true;
+
+        // Only a bar with a list of its own. The mailbox list's bar shares
+        // the class's, and rewriting that would rewrite its Actions menu too.
+        if (!Object.prototype.hasOwnProperty.call(toolbar, 'actionsConfig')) return false;
+
+        const original = toolbar.actionsConfig;
+        if (typeof original !== 'function' || !original.isProperty) return false;
+        if (typeof toolbar.registerView !== 'function') return false;
+        if (typeof toolbar.computedPropertyDidChange !== 'function') return false;
+
+        const wrapped = function () {
+            const names = original.apply(this, arguments);
+            if (!modeIsOn) return names;
+
+            try {
+                return arrangeActions(names, this);
+            } catch (error) {
+                console.warn('Custom mode: could not arrange the bar', error);
+                return names;
+            }
+        };
+
+        // isProperty and dependencies above all; whatever else Overture hung
+        // on it travels too, since the bar reads them and we do not own them
+        Object.getOwnPropertyNames(original).forEach((key) => {
+            if (key === 'length' || key === 'name' || key === 'prototype') return;
+            try {
+                wrapped[key] = original[key];
+            } catch (error) {
+                // Read-only; the ones that matter are not
+            }
+        });
+
+        try {
+            // Before the list can name them: a name the registry cannot
+            // answer for is a hole in the drawn bar, and the redraw walks
+            // straight into it.
+            registerModeViews(toolbar);
+            toolbar.actionsConfig = wrapped;
+            toolbar.customOwnsConfig = true;
+
+            // How many fit is a width, so the list is worth recomputing when
+            // the width moves — a rotation, or the reading pane opening
+            toolbar.addObserverForKey('pxWidth', configWatcher, 'widthDidChange');
+            toolbar.computedPropertyDidChange('actionsConfig');
+            return true;
+        } catch (error) {
+            console.warn('Custom mode: could not take over the bar', error);
+            toolbar.customOwnsConfig = false;
+            return false;
+        }
+    };
+
+    /*
+     * The message actions bar, identified by the thing that makes it one.
+     *
+     * Asking the registry for a verb finds any bar that knows the name, and
+     * the mailbox list's bar knows all of them — it builds its own Actions
+     * menu from the same buttons. What only the message actions bar has is a
+     * list of its own: the class holds one, and this bar is handed a second
+     * that answers for the open message. So that is what to look for.
+     */
+    const messageActionsBar = () => toolbarsOnScreen().filter(toolbar =>
+        Object.prototype.hasOwnProperty.call(toolbar, 'actionsConfig'))[0] || null;
+
+    const configWatcher = {
+        widthDidChange(toolbar) {
+            try {
+                toolbar.computedPropertyDidChange('actionsConfig');
+            } catch (error) {
+                // The bar is going away
+            }
+        }
+    };
+
+    // The mode being switched off has to reach the bar: the wrapper hands
+    // back Fastmail's own answer then, but only the next time it is asked.
+    const refreshOwnedConfigs = () => {
+        toolbarsOnScreen().forEach((toolbar) => {
+            if (!toolbar.customOwnsConfig) return;
+            try {
+                // The snooze period may have moved with the rest
+                registerModeViews(toolbar);
+                toolbar.computedPropertyDidChange('actionsConfig');
+            } catch (error) {
+                // Gone
+            }
+        });
+    };
+
+    /*
      * More is not a list you may add to and expect to keep.
      *
      * A ToolbarView draws itself from a config of *names* — the account's own
@@ -2001,6 +2254,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     const dressToolbar = () => {
+        // The bar states what it holds and draws itself from that. Nothing
+        // below applies: there is no button to move, no menu to correct and
+        // nothing that a rebuild can drop.
+        if (ownActionsConfig(messageActionsBar())) return;
+
         const toolbar = messageToolbar();
         if (!toolbar) return;
 
@@ -5216,6 +5474,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         // The colour rules are only emitted while the mode is on
         updateStyles();
+        // The bar decides what it holds from a list it caches; switching the
+        // mode changes the answer, so the list has to be asked again
+        refreshOwnedConfigs();
         refresh();
         applyStickyFilter();
     };
@@ -5580,7 +5841,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 if (!settings.filteredLabelCounts) forgetInboxCounts();
                 applyStickyFilter();
                 // The verb keys, the bar slots and the app badge are
-                // settings too
+                // settings too, and the bar's list is cached until asked again
+                refreshOwnedConfigs();
                 reclaimKeys();
                 updateIndicator();
                 installAppBadge();
