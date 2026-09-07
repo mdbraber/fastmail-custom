@@ -116,6 +116,15 @@ test('the stream parser handles split chunks, CRLF, comments and multi-line data
     ]);
 });
 
+test('a CRLF split across two chunks is one line ending', () => {
+    const parser = new EventStreamParser();
+    assert.deepEqual(parser.feed('data: hello\r'), []);
+    assert.deepEqual(parser.feed('\ndata: world\r\n\r\n'), [{ event: 'message', data: 'hello\nworld' }]);
+    const lone = new EventStreamParser();
+    assert.deepEqual(lone.feed('data: a\r'), []);
+    assert.deepEqual(lone.feed('data: b\r\r'), [{ event: 'message', data: 'a\nb' }]);
+});
+
 test('runEventSource hands every state event over and stops when aborted', async () => {
     const encoder = new TextEncoder();
     const body = new ReadableStream({
