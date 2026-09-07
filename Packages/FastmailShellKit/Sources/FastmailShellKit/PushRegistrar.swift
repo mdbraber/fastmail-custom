@@ -4,7 +4,9 @@ import UserNotifications
 
 /// The phone's side of pushes: asks for permission, hands the device token
 /// to the push server, and turns a tapped banner into a link for the shell.
-/// The server writes the words; this only registers and routes.
+/// The server writes the words; this only registers and routes. As the app's
+/// one delegate it also keeps the home screen's long-press menu in step with
+/// the settings, and turns a chosen entry into the same kind of link.
 @MainActor
 public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     /// The one the app installed. With scenes, the delegate is not told
@@ -33,6 +35,8 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     /// nothing is due and the chain ends.
     @objc private func defaultsChanged() {
         Task { @MainActor in
+            // The badge label is one of these settings, and it names a shortcut
+            HomeShortcuts.refresh()
             guard let registrar = PushRegistrar.current, registrar.deviceToken != nil, PushPreferences.registrationDue() else { return }
             await registrar.register()
         }
@@ -44,7 +48,38 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         ask()
+        HomeShortcuts.refresh()
+        // A launch straight from the home screen menu, where there is no scene
+        if let chosen = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem {
+            HomeShortcuts.open(chosen)
+        }
         return true
+    }
+
+    /// SwiftUI runs in a scene, and a scene's quick action goes to the scene's
+    /// delegate rather than to this one. Naming a delegate class here is how a
+    /// SwiftUI app is given one; the rest of the configuration is left as the
+    /// session already has it, so SwiftUI's own window setup is untouched.
+    public func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(
+            name: connectingSceneSession.configuration.name,
+            sessionRole: connectingSceneSession.role
+        )
+        configuration.delegateClass = ShellSceneDelegate.self
+        return configuration
+    }
+
+    /// Chosen while the app was already running, on a build with no scene.
+    public func application(
+        _ application: UIApplication,
+        performActionFor shortcutItem: UIApplicationShortcutItem,
+        completionHandler: @escaping (Bool) -> Void
+    ) {
+        completionHandler(HomeShortcuts.open(shortcutItem))
     }
 
     /// One prompt for everything the shell wants — alerts, sound and badge —

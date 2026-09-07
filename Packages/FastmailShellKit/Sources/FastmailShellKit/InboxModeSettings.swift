@@ -125,8 +125,8 @@ public enum InboxModeSettings {
             "appBadgeLabel",
             group: .general,
             clearable: true,
-            title: "App badge label",
-            hint: "The app icon shows how many messages carry this label. Empty uses the Inbox count.",
+            title: "Badge label",
+            hint: "The app icon shows how many conversations carry this label. Empty uses the Inbox count.",
             default: .text("Triage")
         ),
 
@@ -235,6 +235,13 @@ public enum InboxModeSettings {
             parent: "labelsShortcut",
             title: "Apply the only match automatically",
             hint: "A single remaining match is applied and the picker closes.",
+            default: .toggle(true)
+        ),
+        Option(
+            "backToListWhenTriaged",
+            group: .labelsFiling,
+            title: "Back to the list when the next is triaged",
+            hint: "A decision opens the next message. On the phone, in the Inbox or the triage label, one that lands on a message already triaged goes back to the list instead.",
             default: .toggle(true)
         ),
 

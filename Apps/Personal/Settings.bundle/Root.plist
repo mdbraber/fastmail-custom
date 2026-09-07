@@ -60,13 +60,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>The app icon shows how many messages carry this label. Empty uses the Inbox count.</string>
+			<string>The app icon shows how many conversations carry this label. Empty uses the Inbox count.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>App badge label</string>
+			<string>Badge label</string>
 			<key>Key</key>
 			<string>inboxMode.appBadgeLabel</string>
 			<key>DefaultValue</key>
@@ -339,6 +339,22 @@
 			<string>Apply the only match automatically</string>
 			<key>Key</key>
 			<string>inboxMode.labelsAutoSave</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
+			<string>A decision opens the next message. On the phone, in the Inbox or the triage label, one that lands on a message already triaged goes back to the list instead.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Back to the list when the next is triaged</string>
+			<key>Key</key>
+			<string>inboxMode.backToListWhenTriaged</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>

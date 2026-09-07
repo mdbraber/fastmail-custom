@@ -94,7 +94,6 @@ public struct MobileSettingsSheet: View {
     private let profile: Profile
     @AppStorage(StartView.defaultsKey) private var startView = ""
     @AppStorage(Backend.defaultsKey) private var backendName = Backend.production.rawValue
-    @AppStorage(PushPreferences.alertsKey) private var alerts = true
     @Environment(\.dismiss) private var dismiss
 
     public init(profile: Profile) {
@@ -141,18 +140,9 @@ public struct MobileSettingsSheet: View {
                     InboxModeSettingsForm(group: .general)
                 }
 
-                #if canImport(UIKit)
-                Section {
-                    Picker("New mail", selection: $alerts) {
-                        Text("Notify").tag(true)
-                        Text("Off").tag(false)
-                    }
-                } header: {
-                    Text("Notifications")
-                } footer: {
-                    Text("Off stops the banners for new mail on this device. The badge keeps counting, and other devices are not affected.")
-                }
-                #endif
+                // Notifications are not here: on the phone they belong to
+                // Settings → the app, beside iOS's own alert controls, and
+                // the Settings bundle carries the same switch.
 
                 ForEach(InboxModeSettings.Group.inboxGroups, id: \.self) { group in
                     Section(group.title) {
