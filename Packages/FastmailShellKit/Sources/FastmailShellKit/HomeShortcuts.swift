@@ -5,9 +5,20 @@ import UIKit
 
 /// One entry in the menu a long press on the home screen icon opens.
 public struct HomeShortcut: Equatable, Sendable {
+    /// The picture drawn beside the title.
+    public enum Icon: Hashable, Sendable {
+        /// A name from Apple's own symbol catalog.
+        case system(String)
+        /// A template image in the app's asset catalog. Needed for the
+        /// funnel, which Apple has no symbol for: its filter glyph is three
+        /// shortening lines, and the funnel is what this label wears
+        /// everywhere else it is drawn.
+        case template(String)
+    }
+
     public let type: String
     public let title: String
-    public let systemImage: String
+    public let icon: Icon
     /// The page it opens, as a path on Fastmail.
     public let path: String
 }
@@ -24,19 +35,28 @@ public enum HomeShortcuts {
     static let inboxTitle = "Inbox"
     static let inboxPath = "/mail/Inbox"
 
+    /// The funnel, drawn from the same geometry the sidebar row and the
+    /// switch above the list use, and carried in the apps' shared asset
+    /// catalog because Apple's catalog has no funnel in it.
+    public static let funnelImageName = "TriageFunnel"
+
     public static func shortcuts(badgeLabel: String?) -> [HomeShortcut] {
-        let inbox = HomeShortcut(type: inboxType, title: inboxTitle, systemImage: "tray", path: inboxPath)
+        let inbox = HomeShortcut(
+            type: inboxType,
+            title: inboxTitle,
+            icon: .system("tray"),
+            path: inboxPath
+        )
         let label = (badgeLabel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !label.isEmpty, label.lowercased() != inboxTitle.lowercased() else { return [inbox] }
-        // The funnel, not a tag. Everywhere else this label is drawn — the
-        // sidebar row, and the switch above the list — it wears the filter
-        // glyph, because what it names is the mail still waiting rather than
-        // a label like any other. The long-press menu is one more place it is
-        // drawn, and it was the only one still showing a tag.
+        // The funnel, not a tag. Everywhere else this label is drawn it wears
+        // that glyph, because what it names is the mail still waiting rather
+        // than a label like any other. The long-press menu was the one place
+        // still showing a tag.
         let shortcut = HomeShortcut(
             type: labelType,
             title: label,
-            systemImage: "line.3.horizontal.decrease",
+            icon: .template(funnelImageName),
             path: path(forLabel: label)
         )
         return [shortcut, inbox]
@@ -81,6 +101,18 @@ extension CharacterSet {
 
 #if canImport(UIKit)
 extension HomeShortcuts {
+    /// A template image is looked up in the main bundle's asset catalog,
+    /// which is the app's own — the shared catalog these live in is compiled
+    /// into both shells, so the name resolves in either.
+    static func icon(for icon: HomeShortcut.Icon) -> UIApplicationShortcutIcon {
+        switch icon {
+        case .system(let name):
+            return UIApplicationShortcutIcon(systemImageName: name)
+        case .template(let name):
+            return UIApplicationShortcutIcon(templateImageName: name)
+        }
+    }
+
     /// Rebuilds the menu from the current settings. Cheap and idempotent.
     @MainActor
     public static func refresh(defaults: UserDefaults = .standard) {
@@ -89,7 +121,7 @@ extension HomeShortcuts {
                 type: shortcut.type,
                 localizedTitle: shortcut.title,
                 localizedSubtitle: nil,
-                icon: UIApplicationShortcutIcon(systemImageName: shortcut.systemImage),
+                icon: icon(for: shortcut.icon),
                 userInfo: [pathKey: shortcut.path as NSString]
             )
         }

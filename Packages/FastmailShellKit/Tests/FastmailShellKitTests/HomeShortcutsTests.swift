@@ -7,27 +7,66 @@ import Testing
     #expect(shortcuts.map(\.title) == ["Triage", "Inbox"])
     #expect(shortcuts.map(\.path) == ["/mail/Triage", "/mail/Inbox"])
     #expect(shortcuts.map(\.type) == [HomeShortcuts.labelType, HomeShortcuts.inboxType])
-    #expect(Set(shortcuts.map(\.systemImage)).count == 2, "the two are told apart at a glance")
-    // The funnel, the same thing the sidebar row and the switch above the
+    #expect(Set(shortcuts.map(\.icon)).count == 2, "the two are told apart at a glance")
+    // The funnel, the same glyph the sidebar row and the switch above the
     // list wear for this label, rather than the tag a label would otherwise
-    // get. A symbol iOS cannot resolve draws nothing at all, so the name is
-    // spelled out here and checked against the catalog below.
-    #expect(shortcuts.first?.systemImage == "line.3.horizontal.decrease")
+    // get. It is a drawing of ours rather than one of Apple's, because Apple
+    // has no funnel: its filter symbol is three shortening lines.
+    #expect(shortcuts.first?.icon == .template(HomeShortcuts.funnelImageName))
+    #expect(shortcuts.last?.icon == .system("tray"))
 }
 
-// Both names have to be real: UIApplicationShortcutIcon draws a blank for a
-// symbol that does not exist, and nothing about that says which one was
-// wrong. The catalog is shared across platforms, so asking AppKit here
-// answers for the phone too.
+// An icon that does not resolve draws a blank rather than complaining, and a
+// blank says nothing about which of the two was wrong. So both are checked:
+// the symbol against Apple's catalog, which is shared across platforms and so
+// answers for the phone from a suite running on the Mac, and the drawing
+// against the asset catalog both shells compile in.
 #if canImport(AppKit)
 import AppKit
 
-@Test @MainActor func theShortcutSymbolsAreRealOnes() {
-    for name in HomeShortcuts.shortcuts(badgeLabel: "Triage").map(\.systemImage) {
-        #expect(
-            NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
-            "\(name) is not a symbol iOS can draw"
-        )
+private let repoRoot = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+
+@Test @MainActor func everyShortcutIconIsOneThatWillDraw() throws {
+    for shortcut in HomeShortcuts.shortcuts(badgeLabel: "Triage") {
+        switch shortcut.icon {
+        case .system(let name):
+            #expect(
+                NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
+                "\(name) is not a symbol iOS can draw"
+            )
+        case .template(let name):
+            let imageset = repoRoot
+                .appendingPathComponent("Apps/Shared/Glyphs.xcassets")
+                .appendingPathComponent("\(name).imageset")
+            #expect(
+                FileManager.default.fileExists(atPath: imageset.appendingPathComponent("Contents.json").path),
+                "\(name) is not in the shared asset catalog"
+            )
+
+            // Rendered as a template, or it arrives as flat black artwork
+            // rather than taking the menu's own colour.
+            let data = try Data(contentsOf: imageset.appendingPathComponent("Contents.json"))
+            let contents = try #require(
+                try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            )
+            let properties = contents["properties"] as? [String: Any]
+            #expect(properties?["template-rendering-intent"] as? String == "template")
+
+            let files = (contents["images"] as? [[String: Any]] ?? [])
+                .compactMap { $0["filename"] as? String }
+            #expect(!files.isEmpty, "\(name) names no artwork")
+            for file in files {
+                #expect(
+                    FileManager.default.fileExists(atPath: imageset.appendingPathComponent(file).path),
+                    "\(name) names \(file), which is not there"
+                )
+            }
+        }
     }
 }
 #endif
