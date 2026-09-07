@@ -43,7 +43,7 @@ async function route({ config, watchers, devices }, request, response) {
         if (!raw) return reply(response, 204);
         // With keys on the subscription Fastmail seals every callback (RFC 8291)
         const sealed = String(request.headers['content-encoding'] ?? '').toLowerCase() === 'aes128gcm';
-        const body = sealed ? watcher.decrypt(raw) : parseJSON(raw);
+        const body = sealed ? watcher.unseal(raw) : parseJSON(raw);
         if (!body) return reply(response, 204);
         await watcher.receive(body);
         return reply(response, 200, { ok: true });

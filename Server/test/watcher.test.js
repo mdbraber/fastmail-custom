@@ -204,7 +204,7 @@ test('the subscription is renewed before it expires, on a fresh secret', async (
 
 test('the subscription carries Web Push keys, and a callback sealed to them is read', async () => {
     const t = await build();
-    assert.equal(t.watcher.decrypt(Buffer.from('early')), null, 'nothing decrypts before there is a subscription');
+    assert.equal(t.watcher.unseal(Buffer.from('early')), null, 'nothing decrypts before there is a subscription');
     await t.watcher.start();
 
     const sent = t.jmap.calls.find((c) => c[0] === 'subscribe')[2];
@@ -214,9 +214,9 @@ test('the subscription carries Web Push keys, and a callback sealed to them is r
     assert.equal(keys.auth.length, 16);
 
     const notice = { '@type': 'StateChange', changed: { acc1: { Email: 's1' } } };
-    assert.deepEqual(t.watcher.decrypt(encrypt(JSON.stringify(notice), keys)), notice);
-    assert.equal(t.watcher.decrypt(encrypt('not json', keys)), null);
-    assert.equal(t.watcher.decrypt(Buffer.from('garbage that is long enough to look at'.repeat(3))), null);
+    assert.deepEqual(t.watcher.unseal(encrypt(JSON.stringify(notice), keys)), notice);
+    assert.equal(t.watcher.unseal(encrypt('not json', keys)), null);
+    assert.equal(t.watcher.unseal(Buffer.from('garbage that is long enough to look at'.repeat(3))), null);
 });
 
 test('a renewal seals to fresh keys; the old ones are no longer accepted', async () => {
@@ -230,8 +230,8 @@ test('a renewal seals to fresh keys; the old ones are no longer accepted', async
     assert.notDeepEqual(after.auth, before.auth);
 
     const body = JSON.stringify({ '@type': 'PushVerification', pushSubscriptionId: 'sub1', verificationCode: 'x' });
-    assert.equal(t.watcher.decrypt(encrypt(body, before)), null);
-    assert.deepEqual(t.watcher.decrypt(encrypt(body, after)), JSON.parse(body));
+    assert.equal(t.watcher.unseal(encrypt(body, before)), null);
+    assert.deepEqual(t.watcher.unseal(encrypt(body, after)), JSON.parse(body));
 });
 
 test('a renewal Fastmail refuses hands the account to the event source', async () => {

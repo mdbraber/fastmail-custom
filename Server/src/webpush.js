@@ -12,7 +12,7 @@ const AUTH_LENGTH = 16;
 const SALT_LENGTH = 16;
 const HEADER_LENGTH = SALT_LENGTH + 4 + 1;
 const TAG_LENGTH = 16;
-const MIN_RECORD_SIZE = 18; // RFC 8188 §2.1: room for the tag and the delimiter
+const MIN_RECORD_SIZE = 18; // RFC 8188 §2.1: the tag, the delimiter, and at least one byte of content
 const DELIMITER_MORE = 1;
 const DELIMITER_LAST = 2;
 
@@ -71,6 +71,9 @@ function deriveKeys({ privateKey, publicKey, auth }, senderPublic, salt) {
     };
 }
 
+// The sequence number is a 96-bit big-endian integer XORed into the nonce
+// (RFC 8188 §2.3); only its low 32 bits can ever be set here, since the
+// HTTP body cap (http.js) keeps a message to a few thousand records at most.
 function nonceFor(base, sequence) {
     const nonce = Buffer.from(base);
     nonce.writeUInt32BE((nonce.readUInt32BE(8) ^ sequence) >>> 0, 8);
@@ -79,8 +82,8 @@ function nonceFor(base, sequence) {
 
 function decryptRecord(record, key, nonce) {
     const decipher = createDecipheriv('aes-128-gcm', key, nonce);
-    decipher.setAuthTag(record.subarray(record.length - TAG_LENGTH));
     try {
+        decipher.setAuthTag(record.subarray(record.length - TAG_LENGTH));
         return Buffer.concat([decipher.update(record.subarray(0, record.length - TAG_LENGTH)), decipher.final()]);
     } catch {
         throw new Error('webpush: authentication failed');

@@ -151,7 +151,7 @@ export class AccountWatcher {
     // A sealed callback body → the notice inside it, or null when it is not
     // for the current subscription's keys (an old subscription's straggler,
     // or noise on the callback path) or holds no JSON object.
-    decrypt(raw) {
+    unseal(raw) {
         if (!this.pushKeys) return null;
         try {
             const body = JSON.parse(decrypt(raw, this.pushKeys).toString('utf8'));

@@ -15,7 +15,7 @@ async function running() {
             status: () => ({ notices: 'push', verified: true, lastNotice: null, devices: 1 }),
             receive: async (body) => { received.push(body); },
             // The real one unseals RFC 8291; here "sealed" is the only body that opens
-            decrypt: (raw) => (raw.equals(Buffer.from('sealed')) ? sealedNotice : null),
+            unseal: (raw) => (raw.equals(Buffer.from('sealed')) ? sealedNotice : null),
         },
     };
     const devices = { register: async (account, value) => { registered.push([account, value]); } };

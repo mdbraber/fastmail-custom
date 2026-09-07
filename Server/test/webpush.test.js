@@ -75,3 +75,14 @@ test('a body that is not for these keys, or was touched, is refused', () => {
     badRecordSize.writeUInt32BE(17, 16);
     assert.throws(() => decrypt(badRecordSize, keys), /webpush: .*record/);
 });
+
+test('a message cut off after a whole non-final record is refused, not silently shortened', () => {
+    // RFC 8188's delimiter exists for this: the first record decrypts fine on
+    // its own, but its delimiter says more was coming
+    const keys = generateKeys();
+    const body = encrypt('a message long enough to need more than one record', keys, { recordSize: 40 });
+    const afterFirstRecord = 21 + 65 + 40;
+    assert.ok(body.length > afterFirstRecord + 40, 'the message spans at least three records');
+    assert.throws(() => decrypt(body.subarray(0, afterFirstRecord), keys), /webpush: bad padding delimiter/);
+    assert.throws(() => decrypt(body.subarray(0, afterFirstRecord + 40), keys), /webpush: bad padding delimiter/);
+});
