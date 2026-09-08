@@ -45,7 +45,7 @@ export function loadConfig(env = process.env) {
         // Holds, in the app's sense: filing destinations that hold mail rather
         // than queue it. A decision replaces them, an archive leaves them on,
         // and the first of them is where the notification's Later button files.
-        holdLabels: Object.freeze(labelList(env.HOLD_LABELS, ['Later'])),
+        holdLabels: Object.freeze(labelList(env.HOLD_LABELS, ['Later', 'Feedbin'])),
         notices: (env.NOTICES || 'auto').trim(),
         dataDir: (env.DATA_DIR || '/data').trim(),
         port: Number(env.PORT || 8080),

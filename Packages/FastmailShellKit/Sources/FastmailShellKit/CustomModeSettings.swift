@@ -196,8 +196,8 @@ public enum CustomModeSettings {
             group: .labelsFiling,
             clearable: true,
             title: "Labels that are never projects",
-            hint: "Filing destinations that hold mail rather than queue it; archive leaves them on. Comma-separated paths.",
-            default: .text("Later")
+            hint: "Filing destinations that hold mail rather than queue it; archive leaves them on, and Shift-E archives into one. Comma-separated paths.",
+            default: .text("Later, Feedbin")
         ),
         Option(
             "contactGroupLabels",
@@ -297,7 +297,7 @@ public enum CustomModeSettings {
             group: .bottomBar,
             title: "Bottom bar actions",
             hint: "In order; what fits on screen shows, the rest go under More.",
-            default: .text("Snooze, Pin, Archive, Labels, File, Delete, Move")
+            default: .text("Snooze, Pin, File, Archive, Labels, Move, Delete")
         )
     ]
 

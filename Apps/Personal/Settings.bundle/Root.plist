@@ -238,7 +238,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Filing destinations that hold mail rather than queue it; archive leaves them on. Comma-separated paths.</string>
+			<string>Filing destinations that hold mail rather than queue it; archive leaves them on, and Shift-E archives into one. Comma-separated paths.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -248,7 +248,7 @@
 			<key>Key</key>
 			<string>customMode.excludedLabels</string>
 			<key>DefaultValue</key>
-			<string>Later</string>
+			<string>Later, Feedbin</string>
 			<key>IsSecure</key>
 			<false/>
 			<key>AutocapitalizationType</key>
@@ -498,7 +498,7 @@
 			<key>Key</key>
 			<string>customMode.bottomBarSlots</string>
 			<key>DefaultValue</key>
-			<string>Snooze, Pin, Archive, Labels, File, Delete, Move</string>
+			<string>Snooze, Pin, File, Archive, Labels, Move, Delete</string>
 			<key>IsSecure</key>
 			<false/>
 			<key>AutocapitalizationType</key>

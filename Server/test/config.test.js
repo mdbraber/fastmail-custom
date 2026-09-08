@@ -19,7 +19,7 @@ test('a complete environment loads with the defaults filled in', () => {
     assert.equal(config.publicUrl, 'https://push.example.net');
     assert.equal(config.apns.sandbox, true);
     assert.equal(config.badgeLabel, 'Triage');
-    assert.deepEqual(config.holdLabels, ['Later']);
+    assert.deepEqual(config.holdLabels, ['Later', 'Feedbin']);
     assert.equal(config.notices, 'auto');
     assert.equal(config.dataDir, '/data');
     assert.equal(config.port, 8080);
@@ -44,7 +44,7 @@ test('APNS_SANDBOX=0 selects production', () => {
 // rather than queue it, which a decision replaces and an archive leaves on.
 test('HOLD_LABELS is a list, and blanks in it are not labels', () => {
     assert.deepEqual(loadConfig({ ...complete, HOLD_LABELS: 'Later, Someday ,' }).holdLabels, ['Later', 'Someday']);
-    assert.deepEqual(loadConfig({ ...complete, HOLD_LABELS: '' }).holdLabels, ['Later']);
+    assert.deepEqual(loadConfig({ ...complete, HOLD_LABELS: '' }).holdLabels, ['Later', 'Feedbin']);
 });
 
 test('an unknown NOTICES value and a bad PORT are refused', () => {

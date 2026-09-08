@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Custom mode
 // @namespace    custom
-// @version      3.10
+// @version      3.11
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -14,9 +14,20 @@
 /*
 Fastmail Custom mode
 Maarten den Braber <m@mdbraber.com>
-version 3.10 - 2026-09-07
+version 3.11 - 2026-09-08
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
+
+3.11 — archive into a hold label. Shift-E, or a long press on Archive where
+there is no Shift to hold, opens the File picker narrowed to the hold labels
+and archives into the one you pick: the label goes on, then Inbox, Triage,
+every project label and the pin come off, and the hold stays — one gesture
+for "done, but keep it there". Only holds are offered because only a hold
+survives an archive; a project reached by typing its name would be stripped
+a moment later, so typing does not widen this list the way it widens the
+File picker's. The label and the archive share one checkpoint, so one undo
+puts both back. The bar's default order is Snooze, Pin, File, Archive,
+Labels, Move, Delete, and Feedbin joins Later as a hold label by default.
 
 3.10 — a project label is a queue, and reads like one. Its list opens on
 Fastmail's own In Inbox filter, which the app offers on a label and then
@@ -312,10 +323,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // bar takes as many leading ones as the screen fits — More always
         // keeps a slot — and the rest wait inside More, in the same order.
         // Kinds missing from a saved value join at the end.
-        bottomBarSlots: 'Snooze, Pin, Archive, Labels, File, Delete, Move',
+        bottomBarSlots: 'Snooze, Pin, File, Archive, Labels, Move, Delete',
         // Shown in the sidebar but worked as piles, not queues: never filed
         // into, never stripped by archive
-        excludedLabels: 'Later',
+        excludedLabels: 'Later, Feedbin',
         // Labels that file the sender as well as the message: adding one —
         // from any menu, by typing, or by drag — adds from[0] to the contact
         // group of the same name, making the contact, and the group, if
@@ -2526,6 +2537,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         menuController.filterOptions = function () {
             const options = originalFilterOptions.apply(this, arguments);
 
+            // Archiving into a label: the hold labels and nothing else, since
+            // a hold label is the only kind that survives an archive. Typing
+            // does not widen this one — a project reached by name would be
+            // taken off again by the archive a moment later, which is a
+            // stranger answer than not offering it.
+            if (this.customHoldsOnly) {
+                return options.filter(option =>
+                    option instanceof FastMail.classes.Mailbox && isExcludedLabel(option));
+            }
+
             // The Labels menu is Fastmail's own — the full list, helpers and
             // all — so it is left as it comes. Only the File picker
             // (customOurs) is narrowed to where you file — the projects and
@@ -2590,6 +2611,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
             if (typeof menu.done === 'function') menu.done();
 
+            // Archiving into a label: the tristate menu has just put the
+            // label on, and the decision is what follows it
+            if (takeArchiveInto()) runDoneInto(option);
+
             return result;
         };
     };
@@ -2600,8 +2625,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         // The list is left stock — Labels is Fastmail's full picker. Only the
         // placing behaviour is kept: a project commits and closes, a helper
-        // stays open for the next one.
+        // stays open for the next one. The one exception is archiving into a
+        // label, where this menu is the multi-selection's picker and is
+        // narrowed to the holds like the single-selection one.
         submitAfterPlacing(menuController, menu);
+        narrowLabelOptions(menuController);
+        menuController.customHoldsOnly = archiveIntoArmed();
 
         menuController.customMenu = menu;
         menuController.customLabels = modeIsOn;
@@ -2841,6 +2870,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         menu.didSelect = function (mailbox) {
             if (!this.customOurs) return originalDidSelect.apply(this, arguments);
 
+            // Opened by Shift-E or a long press on Archive: the pick is a
+            // decision rather than a filing, and the verb finishes it.
+            if (takeArchiveInto()) {
+                runDoneInto(mailbox);
+                return;
+            }
+
             // A pick is an add. Rule 2 takes Triage and every other destination
             // off underneath, rule 3 files the sender; nothing is decided here.
             // This is the File picker, so a hold label files too.
@@ -2870,6 +2906,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         menuController.customMenu = menu;
         menu.customOurs = ours;
         menuController.customOurs = ours;
+        // Read rather than taken: the pick is what takes it, and a picker
+        // dismissed without one has to leave it to time out
+        menuController.customHoldsOnly = ours && archiveIntoArmed();
 
         // filterOptions keeps a mailbox when rolesVisible has a truthy entry for
         // its inherited role, so this leaves the labels you gave names to and
@@ -3585,6 +3624,44 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     /*
+     * Archive into a hold label — Shift-E, or a long press on Archive.
+     *
+     * Armed while the picker opens, which is what narrows that picker to the
+     * hold labels and what turns the pick into a decision rather than a
+     * filing. Read while the menu is drawn and taken when the pick lands, so
+     * a picker dismissed without a pick times out like the others rather
+     * than waiting to catch some later, unrelated pick.
+     *
+     * Only hold labels are offered because only a hold label survives an
+     * archive: a project label is the live state, and a project label on a
+     * message that is done is a contradiction the archive would undo a
+     * moment later anyway.
+     */
+    let pendingArchiveInto = false;
+    let pendingArchiveIntoTimer = null;
+
+    const armArchiveInto = () => {
+        pendingArchiveInto = true;
+        if (pendingArchiveIntoTimer) clearTimeout(pendingArchiveIntoTimer);
+        pendingArchiveIntoTimer = setTimeout(() => {
+            pendingArchiveInto = false;
+            pendingArchiveIntoTimer = null;
+        }, 12000);
+    };
+
+    const archiveIntoArmed = () => pendingArchiveInto;
+
+    const takeArchiveInto = () => {
+        if (!pendingArchiveInto) return false;
+        pendingArchiveInto = false;
+        if (pendingArchiveIntoTimer) {
+            clearTimeout(pendingArchiveIntoTimer);
+            pendingArchiveIntoTimer = null;
+        }
+        return true;
+    };
+
+    /*
      * The project picker.
      *
      * A keep that finds no project on the selection opens a menu and stops.
@@ -3950,6 +4027,41 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // wins and Later comes off with Triage. One that carries neither is
     // asked where it goes, and the pick is an ordinary add that rule 2
     // finishes.
+    /*
+     * Archive into a hold label — what the picker opened by Shift-E, or by a
+     * long press on Archive, commits to.
+     *
+     * Two things in one gesture, and one undo: the label goes on with its own
+     * didAction silenced, so the archive's checkpoint carries both, the way
+     * the archive verb already carries its own removals. The label is put on
+     * by the ordinary route, so the rules under every menu still apply — the
+     * hold replaces Triage and any project label, and a label that names a
+     * contact group still files the sender.
+     *
+     * Then the archive verb, unchanged: Inbox off, Triage off, every project
+     * label off, the pin off, and hold labels left alone — which is what
+     * leaves the one just chosen standing, and the whole point of the verb.
+     *
+     * The advance the picker armed is dropped first. Filing moves the view on
+     * and so does archiving; both would step, and the message after next is
+     * not where anyone asked to be.
+     */
+    const runDoneInto = (mailbox) => {
+        if (!mailbox) return;
+        const actions = controller().actions;
+
+        takeFileAdvance();
+        silencingDidAction(actions, () => {
+            armDestinationFiling();
+            if (FastMail.preferences.get('inLabelsMode')) {
+                actions.add(null, mailbox);
+            } else {
+                actions.copy(null, mailbox);
+            }
+        });
+        actions.archive(null);
+    };
+
     const runKeep = (actions, keys) => {
         const projectWins = !withoutProject(keys).length;
         const removes = triageAmong(keys)
@@ -4366,6 +4478,99 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         openProjectPicker(keys);
     };
 
+    // The hold labels this account has, by the same names the setting gives.
+    // Asked before the picker opens: a picker with nothing in it is a worse
+    // answer than being told there is nothing to archive into.
+    const holdLabelsHere = () => {
+        const accountId = controller().get('accountId');
+        return mailboxesOf(accountId).filter(isExcludedLabel);
+    };
+
+    // Shift-E, and a long press on Archive. The picker is the File picker,
+    // narrowed to the holds while this is armed, and the pick archives.
+    const openArchiveIntoPicker = () => {
+        const actions = controller().actions;
+        const keys = resolveKeys(actions, null);
+        if (!keys) return;
+
+        if (!holdLabelsHere().length) {
+            reportFault('no hold label to archive into — name one in "' +
+                'Labels that are never projects"');
+            return;
+        }
+
+        armArchiveInto();
+        openProjectPicker(keys);
+    };
+
+    /*
+     * A long press on the Archive button opens the same picker, because the
+     * phone has no Shift to hold. Half a second, and a drag of more than a
+     * few pixels is a scroll rather than a press.
+     *
+     * The click that follows the press is swallowed: the button would
+     * otherwise archive underneath the picker that just opened, which is the
+     * one outcome a long press must not have.
+     */
+    const LONG_PRESS_MS = 500;
+    const LONG_PRESS_SLOP = 10;
+
+    const archiveButtonUnder = (node) => {
+        if (!node) return null;
+        for (const bar of toolbarsOnScreen()) {
+            try {
+                const view = bar.getView('archive');
+                const layer = view && view.get('layer');
+                if (layer && layer.contains(node)) return view;
+            } catch (error) {
+                // Next bar
+            }
+        }
+        return null;
+    };
+
+    const watchArchiveLongPress = () => {
+        let timer = null;
+        let from = null;
+        let swallowClick = false;
+
+        const cancel = () => {
+            if (timer) clearTimeout(timer);
+            timer = null;
+            from = null;
+        };
+
+        document.addEventListener('pointerdown', (event) => {
+            cancel();
+            if (!modeIsOn || !archiveButtonUnder(event.target)) return;
+
+            from = { x: event.clientX, y: event.clientY };
+            timer = setTimeout(() => {
+                timer = null;
+                from = null;
+                swallowClick = true;
+                openArchiveIntoPicker();
+            }, LONG_PRESS_MS);
+        }, true);
+
+        document.addEventListener('pointermove', (event) => {
+            if (!from) return;
+            const moved = Math.abs(event.clientX - from.x) + Math.abs(event.clientY - from.y);
+            if (moved > LONG_PRESS_SLOP) cancel();
+        }, true);
+
+        ['pointerup', 'pointercancel', 'scroll'].forEach((name) => {
+            document.addEventListener(name, cancel, true);
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!swallowClick) return;
+            swallowClick = false;
+            event.preventDefault();
+            event.stopPropagation();
+        }, true);
+    };
+
     // A shortcut and the button it stands for should not disagree, so clicking
     // Move to opens what v opens, and Option-clicking opens what Option-V does.
     //
@@ -4450,7 +4655,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     const wantedClaims = () => {
         const wanted = {
-            'Shift-V': () => openLabelPicker()
+            'Shift-V': () => openLabelPicker(),
+            // Archive into a hold label. Fastmail's expandAll sits underneath
+            // on this key and answers again the moment the mode is off.
+            'Shift-E': () => openArchiveIntoPicker()
         };
 
         // null is the caller's selection untouched — the focused conversation
@@ -4653,6 +4861,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         reclaimKeys();
 
         watchMoveClick();
+        watchArchiveLongPress();
     };
 
     /*

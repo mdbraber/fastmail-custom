@@ -16,7 +16,7 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     #expect(settings["swapArchiveExpand"] as? Bool == true)
     #expect(settings["triageLabel"] as? String == "Triage")
     #expect(settings["snoozeDefault"] as? String == "2w")
-    #expect(settings["bottomBarSlots"] as? String == "Snooze, Pin, Archive, Labels, File, Delete, Move")
+    #expect(settings["bottomBarSlots"] as? String == "Snooze, Pin, File, Archive, Labels, Move, Delete")
 }
 
 @Test func storedValuesWinOverDefaults() {
@@ -60,7 +60,7 @@ private func freshDefaults(_ name: String) -> UserDefaults {
 // has touched still gets the default.
 @Test func untouchedClearableFieldsStillGetTheirDefaults() {
     let settings = CustomModeSettings.current(from: freshDefaults(#function))
-    #expect(settings["excludedLabels"] as? String == "Later")
+    #expect(settings["excludedLabels"] as? String == "Later, Feedbin")
     #expect(settings["contactGroupLabels"] as? String == "")
     #expect(settings["appBadgeLabel"] as? String == "Triage")
 }
@@ -97,7 +97,7 @@ private func freshDefaults(_ name: String) -> UserDefaults {
 // missed the rename to File, so the screen showed nine stale verbs.
 @Test @MainActor func barSlotNamesAreTheCurrentVerbs() {
     #expect(CustomModeSettingsModel.barSlotNames
-        == ["Snooze", "Pin", "Archive", "Labels", "File", "Delete", "Move"])
+        == ["Snooze", "Pin", "File", "Archive", "Labels", "Move", "Delete"])
     #expect(!CustomModeSettingsModel.barSlotNames.contains("Keep"))
     #expect(!CustomModeSettingsModel.barSlotNames.contains("Waiting"))
     #expect(!CustomModeSettingsModel.barSlotNames.contains("Someday"))
@@ -115,7 +115,7 @@ private func freshDefaults(_ name: String) -> UserDefaults {
 // With nothing stored the reorder list is exactly the current verbs.
 @Test @MainActor func loadBarOrderWithoutAStoredValueListsTheCurrentVerbs() {
     #expect(CustomModeSettingsModel.loadBarOrder(from: freshDefaults(#function))
-        == ["Snooze", "Pin", "Archive", "Labels", "File", "Delete", "Move"])
+        == ["Snooze", "Pin", "File", "Archive", "Labels", "Move", "Delete"])
 }
 
 // A value saved by an older build still names Keep, Waiting and Someday; those
@@ -130,7 +130,7 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     #expect(!order.contains("Someday"))
     #expect(order.contains("File"))
     #expect(Array(order.prefix(2)) == ["Delete", "Move"])
-    #expect(Set(order) == Set(["Snooze", "Pin", "Archive", "Labels", "File", "Delete", "Move"]))
+    #expect(Set(order) == Set(["Snooze", "Pin", "File", "Archive", "Labels", "Move", "Delete"]))
 }
 
 @Test func subOptionsNameARealToggleParent() {
