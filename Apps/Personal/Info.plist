@@ -34,7 +34,7 @@
     <array>
         <dict>
             <key>CFBundleURLName</key>
-            <string>com.mdbraber.fastmail.personal.links</string>
+            <string>com.mdbraber.fastmail-custom.personal.links</string>
             <key>CFBundleTypeRole</key>
             <string>Viewer</string>
             <key>CFBundleURLSchemes</key>

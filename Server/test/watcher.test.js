@@ -9,7 +9,7 @@ import { JMAPError } from '../src/jmap.js';
 import { encrypt, keysFromSubscription } from './helpers/webpush-encrypt.js';
 
 const silent = { warn() {}, info() {}, error() {} };
-const account = { name: 'personal', token: 't', topic: 'com.mdbraber.fastmail.personal' };
+const account = { name: 'personal', token: 't', topic: 'com.mdbraber.fastmail-custom.personal' };
 
 const arrival = (id, over = {}) => ({
     id, threadId: `T-${id}`, mailboxIds: { inbox: true }, keywords: {},

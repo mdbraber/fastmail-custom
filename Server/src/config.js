@@ -3,8 +3,8 @@
 // would otherwise come up and sit there quietly doing nothing.
 
 export const BUNDLE_IDS = Object.freeze({
-    personal: 'com.mdbraber.fastmail.personal',
-    work: 'com.mdbraber.fastmail.work',
+    personal: 'com.mdbraber.fastmail-custom.personal',
+    work: 'com.mdbraber.fastmail-custom.work',
 });
 
 export const NOTICE_MODES = ['auto', 'push', 'eventsource'];

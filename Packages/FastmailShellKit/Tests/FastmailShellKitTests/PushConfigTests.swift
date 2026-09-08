@@ -28,9 +28,9 @@ import Testing
 }
 
 @Test func theAccountIsTheBundleIdentifiersLastPart() {
-    #expect(PushConfig.account(forBundleIdentifier: "com.mdbraber.fastmail.personal") == "personal")
-    #expect(PushConfig.account(forBundleIdentifier: "com.mdbraber.fastmail.work") == "work")
-    #expect(PushConfig.account(forBundleIdentifier: "com.mdbraber.fastmail.personal.share") == nil)
+    #expect(PushConfig.account(forBundleIdentifier: "com.mdbraber.fastmail-custom.personal") == "personal")
+    #expect(PushConfig.account(forBundleIdentifier: "com.mdbraber.fastmail-custom.work") == "work")
+    #expect(PushConfig.account(forBundleIdentifier: "com.mdbraber.fastmail-custom.personal.share") == nil)
     #expect(PushConfig.account(forBundleIdentifier: nil) == nil)
 }
 

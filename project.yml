@@ -1,6 +1,6 @@
 name: FastmailShell
 options:
-  bundleIdPrefix: com.mdbraber.fastmail
+  bundleIdPrefix: com.mdbraber.fastmail-custom
   deploymentTarget:
     iOS: "17.0"
     macOS: "14.0"
@@ -52,7 +52,7 @@ targets:
         destinationFilters: [iOS]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.personal
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail-custom.personal
         PRODUCT_NAME: mdbraber.com
         INFOPLIST_FILE: Apps/Personal/Info.plist
         "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": Apps/Personal/iOS.entitlements
@@ -68,7 +68,7 @@ targets:
         destinationFilters: [iOS]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.work
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail-custom.work
         PRODUCT_NAME: nexthealth.nl
         INFOPLIST_FILE: Apps/Work/Info.plist
         "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": Apps/Work/iOS.entitlements
@@ -100,7 +100,7 @@ targets:
       - path: Extensions/Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.personal.share
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail-custom.personal.share
         PRODUCT_NAME: PersonalShare
         INFOPLIST_FILE: Extensions/PersonalShare/Info.plist
         GENERATE_INFOPLIST_FILE: NO
@@ -114,7 +114,7 @@ targets:
       - path: Extensions/Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.work.share
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail-custom.work.share
         PRODUCT_NAME: WorkShare
         INFOPLIST_FILE: Extensions/WorkShare/Info.plist
         GENERATE_INFOPLIST_FILE: NO
