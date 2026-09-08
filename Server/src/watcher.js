@@ -235,33 +235,103 @@ export class AccountWatcher {
     }
 
     /*
-     * Archive, asked for by the button on a notification.
+     * The buttons on a notification: archive, later, pin.
      *
      * The phone holds no Fastmail credentials and a background action gets a
      * few seconds, so it asks here and this makes the change.
      *
-     * What archive means has to be what it means in the app: out of the
-     * Inbox, and no longer waiting for triage. A patch rather than a whole
-     * set of mailboxes, so anything else the message carries — a hold label,
-     * a label a rule put on it — is left exactly as it was. The app also
-     * takes a project label off when it archives; this does not, because it
-     * would have to guess which of your labels are projects, and leaving a
-     * label alone is the kinder mistake.
+     * Each verb has to mean what it means in the app, or the same word does
+     * two different things depending on where you press it. The model the app
+     * works to: a project label is the live state, a message carries at most
+     * one, a hold label — Later — holds mail that has not been decided, and
+     * the labels hidden from the sidebar are history that nothing touches.
      *
-     * Any failure travels back to the phone, which says so. A message
-     * archived here is a change like any other, so the badge and the state
-     * follow from the notice Fastmail sends about it.
+     * So the labels have to be read, not guessed at, and they are read fresh
+     * on every press: a project label made this morning is one you can file
+     * out of tonight, and one extra round trip costs nothing on a button
+     * nobody presses twice a minute.
+     *
+     * Any failure travels back to the phone, which says so. A message changed
+     * here is a change like any other, so the badge and the state follow from
+     * the notice Fastmail sends about it.
      */
+
+    // Archive: out of the Inbox, off the triage label, the project label off
+    // with it — it is the live state and this is no longer live — the pin off,
+    // and every hold label left alone, because a hold outlives a decision.
     async archive(emailId) {
         if (!this.archiveMailboxId) throw new Error('no Archive folder in this account');
+        const { email, projects } = await this.labelsOn(emailId);
 
         const patch = { [`mailboxIds/${this.inboxId}`]: null };
-        if (this.badgeMailboxId) patch[`mailboxIds/${this.badgeMailboxId}`] = null;
+        if (this.badgeMailboxId && email.mailboxIds?.[this.badgeMailboxId]) {
+            patch[`mailboxIds/${this.badgeMailboxId}`] = null;
+        }
+        for (const id of projects) patch[`mailboxIds/${id}`] = null;
         patch[`mailboxIds/${this.archiveMailboxId}`] = true;
+        if (email.keywords?.$flagged) patch['keywords/$flagged'] = null;
 
-        await this.jmap.setEmailMailboxes(emailId, patch);
-        this.log.info(`[${this.name}] archived ${emailId} from a notification`);
+        return this.write('archived', emailId, patch);
+    }
+
+    // Later: a hold label is a filing destination like a project, so it
+    // replaces — the triage label and every other destination come off. The
+    // Inbox stays on: a held message is still in the Inbox, waiting for you.
+    // The pin is none of filing's business.
+    async later(emailId) {
+        const { email, mailboxes, projects, holds } = await this.labelsOn(emailId);
+        const wanted = this.config.holdLabels?.[0];
+        const destination = mailboxes.find((m) => !m.role && m.name === wanted);
+        if (!destination) throw new Error(`no "${wanted}" label in this account`);
+
+        const patch = { [`mailboxIds/${destination.id}`]: true };
+        if (this.badgeMailboxId && email.mailboxIds?.[this.badgeMailboxId]) {
+            patch[`mailboxIds/${this.badgeMailboxId}`] = null;
+        }
+        for (const id of projects) patch[`mailboxIds/${id}`] = null;
+        for (const id of holds) if (id !== destination.id) patch[`mailboxIds/${id}`] = null;
+
+        return this.write(`filed under ${wanted}`, emailId, patch);
+    }
+
+    // Pin: one keyword, and nothing moves. Setting rather than toggling — a
+    // banner announces a message that has just arrived, and you cannot see
+    // from the lock screen what state you would be toggling out of.
+    async pin(emailId) {
+        await this.labelsOn(emailId);
+        return this.write('pinned', emailId, { 'keywords/$flagged': true });
+    }
+
+    async write(what, emailId, patch) {
+        await this.jmap.patchEmail(emailId, patch);
+        this.log.info(`[${this.name}] ${what} ${emailId} from a notification`);
         return true;
+    }
+
+    /*
+     * The message and the labels it carries, sorted into the model's kinds.
+     * A message that has been dealt with between the banner and the press is
+     * not something to guess about, so a missing one stops here.
+     */
+    async labelsOn(emailId) {
+        const [email] = await this.jmap.emails([emailId]);
+        if (!email) throw new Error(`no such message: ${emailId}`);
+
+        const mailboxes = await this.jmap.mailboxes();
+        const holdNames = this.config.holdLabels ?? [];
+        const carried = (m) => email.mailboxIds?.[m.id] === true;
+        // Sidebar membership is the rule: bit 1 of Fastmail's `hidden` flag is
+        // "not in the folder list", which is every history shelf and no label
+        // anyone files under.
+        const label = (m) => !m.role && !(Number(m.hidden) & 1) && m.id !== this.badgeMailboxId;
+        const isHold = (m) => holdNames.includes(m.name);
+
+        return {
+            email,
+            mailboxes,
+            projects: mailboxes.filter((m) => label(m) && !isHold(m) && carried(m)).map((m) => m.id),
+            holds: mailboxes.filter((m) => label(m) && isHold(m) && carried(m)).map((m) => m.id),
+        };
     }
 
     // The badge label as a link context: a message still carrying it opens

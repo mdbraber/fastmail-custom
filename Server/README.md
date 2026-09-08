@@ -1,11 +1,25 @@
 # fastmail-push
 
-New-mail pushes for the shell apps on iOS. A read-only Fastmail token per
-account lives here, never on the phone; the service watches each mailbox
-over JMAP and sends an APNs alert for every message that lands in the
-Inbox, with the number of conversations carrying the Triage label as the
-badge. Design and payload contract:
+New-mail pushes for the shell apps on iOS. A Fastmail token per account
+lives here, never on the phone; the service watches each mailbox over JMAP
+and sends an APNs alert for every message that lands in the Inbox, with the
+number of conversations carrying the Triage label as the badge. Design and
+payload contract:
 `docs/superpowers/specs/2026-09-07-ios-push-notifications-design.md`.
+
+## The buttons on a notification
+
+Pulling a banner down shows Archive, Later and Pin. The phone holds no
+Fastmail credentials, so it posts the verb and the message id to `/actions`
+with the same device secret it registers with, and the work happens here.
+Each verb means what it means in the app: archiving takes the message out
+of the Inbox, off the triage label and off its project label, unpins it and
+leaves any hold label on; Later files it under the first `HOLD_LABELS`
+name, replacing the triage and project labels but keeping the Inbox; Pin
+flags it and moves nothing. Labels are read fresh on every press, and the
+ones hidden from Fastmail's folder list — the history shelves — are never
+touched. A press that fails says so on the phone rather than going quiet,
+so the tokens have to be able to write.
 
 ## One-time setup
 
@@ -13,7 +27,9 @@ badge. Design and payload contract:
    Keys → +, tick *Apple Push Notifications service (APNs)*, download the
    `.p8` (only offered once), note the Key ID. Put the file in `secrets/`.
 2. **Fastmail tokens** — in each account: Settings → Privacy & Security →
-   Manage API tokens → New API token, scope *Mail*, read-only.
+   Manage API tokens → New API token, scope *Mail*. Not read-only: the
+   buttons on a notification write, and a read-only token fails them with
+   `accountReadOnly` at the moment you press one.
 3. **Configure** — `cp .env.example .env` and fill it in. `DEVICE_SECRET`
    is any long random string (`openssl rand -hex 32`); the same value goes
    into the app repo's `Config/Local.xcconfig` as `PUSH_DEVICE_SECRET`.

@@ -18,16 +18,18 @@ async function running() {
             unseal: (raw) => (raw.equals(Buffer.from('sealed')) ? sealedNotice : null),
         },
     };
-    const archived = [];
-    watchers.personal.archive = async (emailId) => {
-        if (emailId === 'M-missing') throw new Error('no such message');
-        archived.push(emailId);
-    };
+    const done = [];
+    for (const verb of ['archive', 'later', 'pin']) {
+        watchers.personal[verb] = async (emailId) => {
+            if (emailId === 'M-missing') throw new Error('no such message');
+            done.push([verb, emailId]);
+        };
+    }
     const devices = { register: async (account, value, options) => { registered.push([account, value, options]); } };
     const server = createServer({ config: { deviceSecret: 's3cret' }, watchers, devices, log: silent });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
-    return { base, received, registered, archived, close: () => new Promise((resolve) => server.close(resolve)) };
+    return { base, received, registered, done, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
 test('healthz reports every account', async () => {
@@ -113,10 +115,10 @@ test('anything else is not found, and a broken body is a bad request', async () 
 });
 
 
-// The Archive button on a notification comes back here: the phone has no
-// Fastmail credentials of its own, and the few seconds a background action
-// gets are enough for one request but not for a whole session.
-test('a notification action archives, and refuses anything it cannot vouch for', async () => {
+// The buttons on a notification come back here: the phone has no Fastmail
+// credentials of its own, and the few seconds a background action gets are
+// enough for one request but not for a whole session.
+test('a notification action is carried out, and anything it cannot vouch for is refused', async () => {
     const s = await running();
     const post = (headers, body) => fetch(`${s.base}/actions`, {
         method: 'POST',
@@ -129,15 +131,22 @@ test('a notification action archives, and refuses anything it cannot vouch for',
     assert.equal((await post({ authorization: 'Bearer wrong' }, { account: 'personal', action: 'archive', emailId: 'M1' })).status, 401);
     assert.equal((await post(good, { account: 'work', action: 'archive', emailId: 'M1' })).status, 400);
     assert.equal((await post(good, { account: '__proto__', action: 'archive', emailId: 'M1' })).status, 400);
+    // A verb is one of the three buttons or it is nothing: the name is not a
+    // way to reach whatever method happens to be on the watcher
     assert.equal((await post(good, { account: 'personal', action: 'delete', emailId: 'M1' })).status, 400);
+    assert.equal((await post(good, { account: 'personal', action: 'receive', emailId: 'M1' })).status, 400);
     assert.equal((await post(good, { account: 'personal', action: 'archive' })).status, 400);
     assert.equal((await post(good, { account: 'personal', action: 'archive', emailId: '' })).status, 400);
-    assert.deepEqual(s.archived, []);
+    assert.deepEqual(s.done, []);
 
     const ok = await post(good, { account: 'personal', action: 'archive', emailId: 'M1' });
     assert.equal(ok.status, 200);
     assert.deepEqual(await ok.json(), { ok: true });
-    assert.deepEqual(s.archived, ['M1']);
+
+    // Each button reaches its own verb, and no other
+    assert.equal((await post(good, { account: 'personal', action: 'later', emailId: 'M2' })).status, 200);
+    assert.equal((await post(good, { account: 'personal', action: 'pin', emailId: 'M3' })).status, 200);
+    assert.deepEqual(s.done, [['archive', 'M1'], ['later', 'M2'], ['pin', 'M3']]);
 
     // A message the account cannot archive is a failure the phone is told
     // about, so it can say so rather than leave you thinking it worked

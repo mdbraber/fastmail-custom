@@ -26,12 +26,17 @@ function fakeJMAP({ emails = [], created = [], counts = { badge: 4 }, refusePush
         fetch: async () => { throw new Error('no network in tests'); },
         headers: () => ({ authorization: 'Bearer t' }),
         connect: async () => {},
+        // `hidden` is Fastmail's own flag; bit 1 is "not in the folder list",
+        // which is how a history label is told from one you file under.
         mailboxes: async () => [
-            { id: 'inbox', name: 'Inbox', role: 'inbox' },
-            { id: 'triage', name: 'Triage', role: null },
-            { id: 'archive', name: 'Archive', role: 'archive' },
+            { id: 'inbox', name: 'Inbox', role: 'inbox', hidden: 0 },
+            { id: 'triage', name: 'Triage', role: null, hidden: 0 },
+            { id: 'kerk', name: 'Kerk', role: null, hidden: 0 },
+            { id: 'later', name: 'Later', role: null, hidden: 0 },
+            { id: 'y2019', name: '2019', role: null, hidden: 1 },
+            { id: 'archive', name: 'Archive', role: 'archive', hidden: 0 },
         ],
-        setEmailMailboxes: async (id, patch) => {
+        patchEmail: async (id, patch) => {
             calls.push(['set', id, patch]);
             if (id === 'M-missing') throw new JMAPError('Email/set: notFound', { type: 'notFound' });
         },
@@ -88,9 +93,9 @@ function manualTimers() {
     };
 }
 
-async function build(jmapOptions, { apns = fakeAPNs(), devices = fakeDevices(['tok1', 'tok2']), notices = 'auto' } = {}) {
+async function build(jmapOptions, { apns = fakeAPNs(), devices = fakeDevices(['tok1', 'tok2']), notices = 'auto', holdLabels = ['Later'] } = {}) {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'watcher-'));
-    const config = { publicUrl: 'https://push.example.net', badgeLabel: 'Triage', notices, dataDir: dir };
+    const config = { publicUrl: 'https://push.example.net', badgeLabel: 'Triage', holdLabels, notices, dataDir: dir };
     const jmap = fakeJMAP(jmapOptions);
     const timers = manualTimers();
     const watcher = new AccountWatcher({ account, config, jmap, apns, devices, state: emptyState(), log: silent, timers });
@@ -299,25 +304,104 @@ test('NOTICES=push does not fall back', async () => {
 });
 
 
-// The Archive button on a notification. The phone cannot do this itself, so
-// it asks here — and what "archive" means has to be the same thing the app
-// means by it: out of the Inbox, no longer waiting for triage, on the shelf.
-test('archiving from a notification takes the message out of the Inbox and off the triage label', async () => {
-    const t = await setUp({});
+// The buttons on a notification. The phone cannot do any of this itself, so
+// it asks here — and each verb has to mean the same thing it means in the
+// app, or the same button does two different things depending on where you
+// press it. A message carrying the Inbox, Triage, a project and a hold.
+const decided = (over = {}) => arrival('M1', {
+    mailboxIds: { inbox: true, triage: true, kerk: true, later: true },
+    keywords: { $seen: true, $flagged: true },
+    ...over,
+});
+
+const patchOf = (t) => {
+    const write = t.jmap.calls.find((c) => c[0] === 'set');
+    return write?.[2];
+};
+
+// Archive: out of the Inbox, no longer waiting for triage, the project label
+// off since it is the live state and this message is no longer live, the pin
+// off, and the hold label left alone — a hold outlives a decision.
+test('archiving from a notification means what archiving means in the app', async () => {
+    const t = await setUp({ emails: [decided()] });
 
     await t.watcher.archive('M1');
 
-    const write = t.jmap.calls.find((c) => c[0] === 'set');
-    assert.deepEqual(write, ['set', 'M1', {
+    assert.deepEqual(patchOf(t), {
         'mailboxIds/inbox': null,
         'mailboxIds/triage': null,
+        'mailboxIds/kerk': null,
         'mailboxIds/archive': true,
-    }]);
+        'keywords/$flagged': null,
+    });
+});
+
+// Nothing is asked for that is not needed: an unpinned message in nothing but
+// the Inbox archives without a word about pins or labels it does not carry.
+test('archiving asks only for the changes the message actually needs', async () => {
+    const t = await setUp({ emails: [decided({ mailboxIds: { inbox: true }, keywords: {} })] });
+
+    await t.watcher.archive('M1');
+
+    assert.deepEqual(patchOf(t), {
+        'mailboxIds/inbox': null,
+        'mailboxIds/archive': true,
+    });
+});
+
+// Later: a hold is a filing destination like a project, so it replaces —
+// Triage and the project come off. The Inbox stays: a held message is still
+// in the Inbox, and the pin is none of filing's business.
+test('filing under the hold label replaces the labels but keeps the Inbox', async () => {
+    const t = await setUp({ emails: [decided({ mailboxIds: { inbox: true, triage: true, kerk: true } })] });
+
+    await t.watcher.later('M1');
+
+    assert.deepEqual(patchOf(t), {
+        'mailboxIds/later': true,
+        'mailboxIds/triage': null,
+        'mailboxIds/kerk': null,
+    });
+});
+
+// The history labels — the years, the shelves — are hidden from the sidebar,
+// and nothing here adds, removes or counts them.
+test('a hidden history label is never touched', async () => {
+    const t = await setUp({ emails: [decided({ mailboxIds: { inbox: true, y2019: true, kerk: true } })] });
+
+    await t.watcher.archive('M1');
+
+    assert.equal(Object.hasOwn(patchOf(t), 'mailboxIds/y2019'), false);
+});
+
+// Pin: one keyword, and nothing else moves.
+test('pinning from a notification flags the message and moves nothing', async () => {
+    const t = await setUp({ emails: [decided({ keywords: {} })] });
+
+    await t.watcher.pin('M1');
+
+    assert.deepEqual(patchOf(t), { 'keywords/$flagged': true });
+});
+
+// A label that is not in the account cannot be filed under, and saying so is
+// better than a patch that quietly does half the job.
+test('filing without a hold label in the account is refused', async () => {
+    const t = await build({ emails: [decided()] }, { holdLabels: ['Nowhere'] });
+    await t.watcher.start();
+
+    await assert.rejects(() => t.watcher.later('M1'), /Nowhere/);
 });
 
 // Nothing is quietly swallowed: the phone shows a banner saying it failed,
 // and it can only do that if the failure reaches it.
 test('an archive that will not go through is reported rather than swallowed', async () => {
-    const t = await setUp({});
+    const t = await setUp({ emails: [decided({ id: 'M-missing' })] });
     await assert.rejects(() => t.watcher.archive('M-missing'), /notFound/);
+});
+
+// A message that has been dealt with elsewhere between the banner and the
+// button press is not something to guess about.
+test('an action on a message that is gone says so', async () => {
+    const t = await setUp({ emails: [] });
+    await assert.rejects(() => t.watcher.pin('M1'), /no such message/);
 });

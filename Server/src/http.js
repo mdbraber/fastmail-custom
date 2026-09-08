@@ -4,6 +4,11 @@ import { isDeviceToken } from './devices.js';
 
 const BODY_LIMIT = 64 * 1024;
 
+// The buttons a notification may carry, and the only names that reach a
+// watcher's methods. A list rather than a check for "is it a function":
+// `receive` is a method too, and it is nobody's business from out here.
+export const ACTIONS = ['archive', 'later', 'pin'];
+
 export function createServer({ config, watchers, devices, log = console }) {
     return http.createServer((request, response) => {
         route({ config, watchers, devices }, request, response).catch((error) => {
@@ -38,10 +43,10 @@ async function route({ config, watchers, devices }, request, response) {
         return reply(response, 200, { ok: true, alerts });
     }
 
-    // The Archive button on a notification. The phone has no Fastmail
-    // credentials of its own and a background action gets a few seconds, so
-    // it says what it wants in one request and this does the work — with the
-    // same device secret it registers with, since it is the same device.
+    // The buttons on a notification. The phone has no Fastmail credentials of
+    // its own and a background action gets a few seconds, so it says what it
+    // wants in one request and this does the work — with the same device
+    // secret it registers with, since it is the same device.
     if (request.method === 'POST' && url.pathname === '/actions') {
         if (!bearerMatches(request.headers.authorization, config.deviceSecret)) {
             return reply(response, 401, { error: 'unauthorized' });
@@ -49,13 +54,13 @@ async function route({ config, watchers, devices }, request, response) {
         const body = await readJSON(request);
         // A string, not an array of one: hasOwn would pass on its toString
         if (!body || typeof body.account !== 'string' || !Object.hasOwn(watchers, body.account)
-            || body.action !== 'archive'
+            || !ACTIONS.includes(body.action)
             || typeof body.emailId !== 'string' || !body.emailId) {
             return reply(response, 400, { error: 'account, action and emailId required' });
         }
         // A failure travels: the phone says so rather than leaving you to
         // think a message was filed away when it was not.
-        await watchers[body.account].archive(body.emailId);
+        await watchers[body.account][body.action](body.emailId);
         return reply(response, 200, { ok: true });
     }
 

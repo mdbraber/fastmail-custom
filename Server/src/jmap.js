@@ -78,7 +78,9 @@ export class JMAPClient {
 
     async mailboxes() {
         const result = await this.call('Mailbox/get', {
-            accountId: this.accountId, ids: null, properties: ['id', 'name', 'role', 'totalThreads'],
+            // `hidden` is Fastmail's own flag, and bit 1 is "not in the folder
+            // list": 0 on the labels you file under, 1 on the history shelves.
+            accountId: this.accountId, ids: null, properties: ['id', 'name', 'role', 'hidden', 'totalThreads'],
         });
         return result.list;
     }
@@ -118,9 +120,10 @@ export class JMAPClient {
         return list;
     }
 
-    // The one write this makes. A patch rather than a whole mailboxIds map,
-    // so a label the server knows nothing about is left exactly as it was.
-    async setEmailMailboxes(id, patch) {
+    // The one write this makes. A patch rather than whole maps of mailboxes
+    // and keywords, so anything the server has no opinion about — a label a
+    // rule put on, a keyword another client keeps — is left exactly as it was.
+    async patchEmail(id, patch) {
         const result = await this.call('Email/set', { accountId: this.accountId, update: { [id]: patch } });
         const problem = result.notUpdated?.[id];
         if (problem) {

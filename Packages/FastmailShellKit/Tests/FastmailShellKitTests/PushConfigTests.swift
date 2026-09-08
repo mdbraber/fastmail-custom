@@ -80,6 +80,30 @@ import Testing
 // The name has to be the one the server sends and the one the app registers
 // its buttons under; a category iOS does not know draws no buttons at all.
 @Test func theNotificationCategoryIsTheOneTheServerSends() {
-    #expect(PushActions.category == "message")
-    #expect(PushActions.archive == "archive")
+    #expect(PushAction.category == "message")
+}
+
+// Three buttons, in the order they are drawn — iOS shows them in the order
+// they are registered, so the order is the whole of the priority. The names
+// are the ones the server's own list of actions accepts.
+@Test func theNotificationCarriesTheThreeVerbsInOrder() {
+    #expect(PushAction.allCases.map(\.rawValue) == ["archive", "later", "pin"])
+    #expect(PushAction.allCases.map(\.title) == ["Archive", "Later", "Pin"])
+}
+
+// A press arrives as an identifier, and only these three are ours: a tap on
+// the notification itself, or a dismissal, has to fall through to the link.
+@Test func onlyTheThreeButtonsAreReadAsButtons() {
+    #expect(PushAction(rawValue: "later") == .later)
+    #expect(PushAction(rawValue: "com.apple.UNNotificationDefaultActionIdentifier") == nil)
+    #expect(PushAction(rawValue: "") == nil)
+}
+
+// A press that does not land is said out loud, in the words of the verb that
+// failed: the banner is gone by then, and silence would read as success.
+@Test func eachVerbSaysItsOwnFailure() {
+    #expect(PushAction.archive.failureTitle == "Not archived")
+    #expect(PushAction.later.failureTitle == "Not filed")
+    #expect(PushAction.pin.failureTitle == "Not pinned")
+    #expect(PushAction.archive.failureBody == "The message is still in your Inbox.")
 }

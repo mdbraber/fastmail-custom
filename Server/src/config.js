@@ -9,6 +9,13 @@ export const BUNDLE_IDS = Object.freeze({
 
 export const NOTICE_MODES = ['auto', 'push', 'eventsource'];
 
+// Comma-separated label names, the same spelling the app's settings use.
+// Nothing between two commas is not a label named "".
+function labelList(value, fallback) {
+    const names = String(value ?? '').split(',').map((name) => name.trim()).filter(Boolean);
+    return names.length ? names : fallback;
+}
+
 export function loadConfig(env = process.env) {
     const missing = [];
     const required = (key) => {
@@ -35,6 +42,10 @@ export function loadConfig(env = process.env) {
         publicUrl: required('PUBLIC_URL').replace(/\/+$/, ''),
         deviceSecret: required('DEVICE_SECRET'),
         badgeLabel: (env.BADGE_LABEL || 'Triage').trim(),
+        // Holds, in the app's sense: filing destinations that hold mail rather
+        // than queue it. A decision replaces them, an archive leaves them on,
+        // and the first of them is where the notification's Later button files.
+        holdLabels: Object.freeze(labelList(env.HOLD_LABELS, ['Later'])),
         notices: (env.NOTICES || 'auto').trim(),
         dataDir: (env.DATA_DIR || '/data').trim(),
         port: Number(env.PORT || 8080),

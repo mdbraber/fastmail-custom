@@ -100,19 +100,16 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     /// the app has already declared, and draws no buttons at all for a name
     /// it does not know.
     ///
-    /// Archive runs without opening the app — that is the whole point of it —
-    /// so it is not `.foreground`, and it is not `.destructive` either: a red
-    /// button is for something you cannot undo, and this is a message put on
-    /// a shelf you can go and read.
+    /// None of them opens the app — that is the whole point of them — so none
+    /// is `.foreground`, and none is `.destructive` either: a red button is
+    /// for something you cannot undo, and archiving, filing and pinning are
+    /// all a keystroke away from being put back.
     private func registerCategories() {
-        let archive = UNNotificationAction(
-            identifier: PushActions.archive,
-            title: "Archive",
-            options: []
-        )
         let message = UNNotificationCategory(
-            identifier: PushActions.category,
-            actions: [archive],
+            identifier: PushAction.category,
+            actions: PushAction.allCases.map {
+                UNNotificationAction(identifier: $0.rawValue, title: $0.title, options: [])
+            },
             intentIdentifiers: [],
             options: []
         )
@@ -214,12 +211,11 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         withCompletionHandler completionHandler: @escaping @Sendable () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        let chosen = response.actionIdentifier
 
-        if chosen == PushActions.archive {
+        if let button = PushAction(rawValue: response.actionIdentifier) {
             let emailId = PushPayload.emailId(from: userInfo)
             Task { @MainActor in
-                await PushRegistrar.current?.archive(emailId)
+                await PushRegistrar.current?.perform(button, on: emailId)
                 completionHandler()
             }
             return
@@ -232,40 +228,41 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         }
     }
 
-    /// The Archive button, done by the push server: this device has no
-    /// Fastmail credentials and the few seconds a background action gets are
-    /// enough for one request and not for a sign-in.
+    /// A button, done by the push server: this device has no Fastmail
+    /// credentials and the few seconds a background action gets are enough
+    /// for one request and not for a sign-in. What each verb means to labels
+    /// and keywords is the server's business; this only asks.
     ///
     /// A failure is said out loud. The banner is gone by the time this runs,
-    /// so a press that silently did nothing would leave the message sitting
-    /// in the Inbox with nothing to show for it.
-    private func archive(_ emailId: String?) async {
+    /// so a press that silently did nothing would leave the message exactly
+    /// as it was with nothing to show for it.
+    private func perform(_ button: PushAction, on emailId: String?) async {
         guard let config, let account, let emailId else {
-            return announceArchiveFailed()
+            return announce(button)
         }
 
         do {
             let (_, response) = try await URLSession.shared.data(
-                for: config.action(PushActions.archive, account: account, emailId: emailId)
+                for: config.action(button.rawValue, account: account, emailId: emailId)
             )
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             if !(200..<300).contains(status) {
-                print("[push] archive: the push server answered \(status)")
-                announceArchiveFailed()
+                print("[push] \(button.rawValue): the push server answered \(status)")
+                announce(button)
             }
         } catch {
-            print("[push] archive: the push server was unreachable: \(error.localizedDescription)")
-            announceArchiveFailed()
+            print("[push] \(button.rawValue): the push server was unreachable: \(error.localizedDescription)")
+            announce(button)
         }
     }
 
     /// Said as a notification of our own, since there is no app on screen to
     /// say it in. No sound: the failure is worth knowing about, not worth
     /// being interrupted for a second time.
-    private func announceArchiveFailed() {
+    private func announce(_ failed: PushAction) {
         let content = UNMutableNotificationContent()
-        content.title = "Not archived"
-        content.body = "The message is still in your Inbox."
+        content.title = failed.failureTitle
+        content.body = failed.failureBody
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         )
