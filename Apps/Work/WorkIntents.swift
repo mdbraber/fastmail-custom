@@ -30,7 +30,7 @@ struct OpenFastmail: AppIntent {
 
 struct GetCurrentLink: AppIntent {
     static let title: LocalizedStringResource = "Get Current Link"
-    static let openAppWhenRun = true
+    static let openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<MailLink> {
@@ -40,7 +40,7 @@ struct GetCurrentLink: AppIntent {
 
 struct GetURL: AppIntent {
     static let title: LocalizedStringResource = "Get URL"
-    static let openAppWhenRun = true
+    static let openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<URL> {
@@ -50,7 +50,7 @@ struct GetURL: AppIntent {
 
 struct GetTitle: AppIntent {
     static let title: LocalizedStringResource = "Get Title"
-    static let openAppWhenRun = true
+    static let openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
@@ -60,7 +60,7 @@ struct GetTitle: AppIntent {
 
 struct RunJavaScript: AppIntent {
     static let title: LocalizedStringResource = "Run JavaScript"
-    static let openAppWhenRun = true
+    static let openAppWhenRun = false
 
     @Parameter(
         title: "JavaScript",
@@ -82,7 +82,7 @@ struct RunJavaScript: AppIntent {
 
 struct RunScriptAction: AppIntent {
     static let title: LocalizedStringResource = "Run Script Action"
-    static let openAppWhenRun = true
+    static let openAppWhenRun = false
 
     @Parameter(title: "Action", optionsProvider: RegisteredActionOptions())
     var name: String
