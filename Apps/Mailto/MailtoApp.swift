@@ -29,7 +29,7 @@ struct ChooserView: View {
     let mailto: URL?
 
     var body: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 48) {
             Spacer()
             if let mailto, let summary = MailtoChooser.summary(of: mailto) {
                 message(summary)
@@ -73,12 +73,13 @@ struct ChooserView: View {
                 } label: {
                     VStack(spacing: 2) {
                         Text(target.title).font(.headline)
-                        Text(target.subtitle).font(.caption).foregroundStyle(.secondary)
+                        Text(target.subtitle).font(.caption).foregroundStyle(.white.opacity(0.85))
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
+                .tint(tint(target))
                 .controlSize(.large)
                 .disabled(!installed(target))
             }
@@ -100,6 +101,18 @@ struct ChooserView: View {
                 .font(.footnote.monospaced())
                 .foregroundStyle(.tertiary)
                 .padding(.top, 4)
+        }
+    }
+
+    /// A colour each, so the answer is a glance rather than a read: green is
+    /// personal, blue is work. Anything the chooser learns to offer later
+    /// falls back to the system's own accent rather than borrowing one of
+    /// these two, which mean something.
+    private func tint(_ target: MailtoTarget) -> Color {
+        switch target.id {
+        case "personal": return .green
+        case "work": return .blue
+        default: return .accentColor
         }
     }
 
