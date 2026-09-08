@@ -28,10 +28,16 @@ products () {
     -destination 'generic/platform=iOS' -configuration Release \
     -showBuildSettings 2>/dev/null | awk '/ BUILT_PRODUCTS_DIR/ {print $3; exit}'
 }
-P_APP="$(products Personal)/mdbraber.com.app"
-W_APP="$(products Work)/nexthealth.nl.app"
+# The iOS apps, in install order. The mailto chooser is iPhone only and has
+# no macOS half, which is why the list here is longer than the one above.
+APPS=(
+  "$(products Personal)/mdbraber.com.app"
+  "$(products Work)/nexthealth.nl.app"
+  "$(products Mailto)/Mailto.app"
+)
+NAMES=(personal work mailto)
 
-for app in "$P_APP" "$W_APP"; do
+for app in $APPS; do
   [ -d "$app" ] || { echo "IOS BUILD FAILED (no $app)"; exit 1; }
 done
 
@@ -97,7 +103,9 @@ failure_reason () {
   esac
 }
 
-typeset -A done_p done_w seen last_error told
+# Keyed "$udid:$index" — one entry per app per device, so adding an app to
+# APPS is the whole change rather than another pair of maps.
+typeset -A installed seen last_error told
 
 # Install, keeping the error rather than discarding it, and say why the first
 # time a device's reason changes — once per reason, not once per attempt, so a
@@ -123,21 +131,22 @@ for try in $(seq 1 $TRIES); do
   for udid in $devices; do
     [ -n "$udid" ] || continue
     seen[$udid]=1
-    : ${done_p[$udid]:=0} ${done_w[$udid]:=0}
 
-    if [ ${done_p[$udid]} -eq 0 ] && install_to $udid "$P_APP"; then
-      done_p[$udid]=1; echo "personal ok on $udid (try $try)"
-    fi
-    if [ ${done_w[$udid]} -eq 0 ] && install_to $udid "$W_APP"; then
-      done_w[$udid]=1; echo "work ok on $udid (try $try)"
-    fi
+    for i in {1..${#APPS}}; do
+      : ${installed[$udid:$i]:=0}
+      if [ ${installed[$udid:$i]} -eq 0 ] && install_to $udid "${APPS[$i]}"; then
+        installed[$udid:$i]=1; echo "${NAMES[$i]} ok on $udid (try $try)"
+      fi
+    done
   done
 
-  # Done when something was found and every one of them has both apps
+  # Done when something was found and every one of them has every app
   if [ ${#seen} -gt 0 ]; then
     outstanding=0
     for udid in ${(k)seen}; do
-      { [ ${done_p[$udid]} -eq 1 ] && [ ${done_w[$udid]} -eq 1 ] } || outstanding=1
+      for i in {1..${#APPS}}; do
+        [ ${installed[$udid:$i]} -eq 1 ] || outstanding=1
+      done
     done
     if [ $outstanding -eq 0 ]; then
       # Only ever the devices that turned up. A paired device that stayed
@@ -157,7 +166,7 @@ for try in $(seq 1 $TRIES); do
         echo "skipped (not reachable): ${line%% *}"
       done
       echo "installed on ${#seen} device(s): ${(k)seen}"
-      echo "BOTH INSTALLED"
+      echo "ALL INSTALLED"
       exit 0
     fi
   fi
@@ -171,7 +180,9 @@ done
 # indistinguishable from a broken build, which is a long way to look for a
 # short answer.
 for udid in ${(k)seen}; do
-  echo "$(device_name $udid) ($udid): personal=${done_p[$udid]} work=${done_w[$udid]} — ${last_error[$udid]:-no error recorded}"
+  state=""
+  for i in {1..${#APPS}}; do state+="${NAMES[$i]}=${installed[$udid:$i]:-0} "; done
+  echo "$(device_name $udid) ($udid): ${state}— ${last_error[$udid]:-no error recorded}"
 done
 [ ${#seen} -eq 0 ] && echo "no paired devices found"
 echo "IOS INSTALL TIMED OUT"

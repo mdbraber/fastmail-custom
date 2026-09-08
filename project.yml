@@ -73,6 +73,25 @@ targets:
         INFOPLIST_FILE: Apps/Work/Info.plist
         "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": Apps/Work/iOS.entitlements
 
+  # The mailto chooser: iPhone only, no web view, no account of its own. It
+  # asks which shell a mailto belongs to and hands the link over. iOS gives
+  # mailto links to the default mail app and to nothing else, so until Apple
+  # grants the Default Mail App capability this is reached by its own scheme.
+  Mailto:
+    type: application
+    supportedDestinations: [iOS]
+    sources:
+      - path: Apps/Mailto
+    dependencies:
+      - package: FastmailShellKit
+        product: FastmailShellKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.mailto
+        PRODUCT_NAME: Mailto
+        INFOPLIST_FILE: Apps/Mailto/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
   PersonalShare:
     type: app-extension
     platform: iOS
