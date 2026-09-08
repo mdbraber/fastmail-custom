@@ -263,7 +263,9 @@ final class CommandRelay {
                 switch result {
                 case .success(let value):
                     let link = value as? [String: Any]
-                    let url = (link?["url"] as? String).flatMap(URL.init(string:))
+                    // What is shared is the production address, not this
+                    // shell's beta one, which opens for nobody else
+                    let url = (link?["url"] as? String).flatMap(URL.init(string:)).map(Backend.canonical)
                     let title = link?["title"] as? String
                     guard url != nil || title != nil else {
                         model.banner = "No message open"

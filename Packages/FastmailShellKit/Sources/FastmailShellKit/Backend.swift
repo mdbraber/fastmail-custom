@@ -72,4 +72,18 @@ public enum Backend: String, CaseIterable, Sendable {
         components.host = host
         return components.url ?? url
     }
+
+    /// The address as it should leave the app. Both shells run against beta,
+    /// so the page's own address names a server that is nobody else's and
+    /// opens nowhere else; a link handed to Shortcuts, a share sheet or the
+    /// clipboard names the production host instead. Coming back the other way
+    /// the shell rehosts, which is how a home screen shortcut and a tapped
+    /// notification already work.
+    ///
+    /// Only Fastmail's own hosts move. Anything else is somebody else's
+    /// address, and rewriting it would point it somewhere it never named.
+    public static func canonical(_ url: URL) -> URL {
+        guard let host = url.host?.lowercased(), knownHosts.contains(host) else { return url }
+        return production.rehost(url)
+    }
 }

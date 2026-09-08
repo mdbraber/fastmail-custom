@@ -17,5 +17,17 @@ public struct MailLink: TransientAppEntity {
         DisplayRepresentation(title: "\(title)")
     }
 
+    /// The link as markdown, built here rather than in the page so that it
+    /// carries the same canonical address as the URL beside it. A subject
+    /// with brackets in it is a subject, not markup.
+    public static func markdown(title: String, url: URL) -> String {
+        var escaped = ""
+        for character in title {
+            if character == "[" || character == "]" || character == "\\" { escaped.append("\\") }
+            escaped.append(character)
+        }
+        return "[\(escaped)](\(url.absoluteString))"
+    }
+
     public init() {}
 }

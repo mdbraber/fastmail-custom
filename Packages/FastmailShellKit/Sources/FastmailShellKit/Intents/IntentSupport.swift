@@ -76,10 +76,15 @@ public enum IntentSupport {
         guard let strings, let url = URL(string: strings.url) else {
             throw IntentSupportError("No message is open.")
         }
+        // The page's own address names whichever server this shell talks to,
+        // and both shells talk to beta. What leaves the app is the production
+        // address — the one that opens for anyone, on any device — with the
+        // markdown rebuilt around it rather than the one the page wrote.
+        let canonical = Backend.canonical(url)
         let link = MailLink()
-        link.url = url
+        link.url = canonical
         link.title = strings.title
-        link.markdown = strings.markdown
+        link.markdown = MailLink.markdown(title: strings.title, url: canonical)
         return link
     }
 

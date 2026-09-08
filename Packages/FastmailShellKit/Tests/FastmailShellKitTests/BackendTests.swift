@@ -57,3 +57,24 @@ import Testing
     let hostless = URL(string: "mailto:someone@example.com")!
     #expect(Backend.beta.rehost(hostless) == hostless)
 }
+
+// A link that leaves the app names the production host whatever server this
+// shell is talking to. Both shells run against beta, so without this every
+// address handed to Shortcuts or a share sheet was a beta address: it opens
+// for nobody else, and it is not the address of the message anywhere but here.
+@Test func canonicalNamesTheProductionHost() {
+    let beta = URL(string: "https://app.beta.fastmail.com/mail/Inbox/T1.M1?u=abc#x")!
+    #expect(Backend.canonical(beta) == URL(string: "https://app.fastmail.com/mail/Inbox/T1.M1?u=abc#x")!)
+
+    let already = URL(string: "https://app.fastmail.com/mail/Inbox")!
+    #expect(Backend.canonical(already) == already)
+}
+
+// Only Fastmail's own hosts are moved: anything else is somebody else's
+// address and rewriting it would point it somewhere it was never meant to go.
+@Test func canonicalLeavesEveryOtherAddressAlone() {
+    let elsewhere = URL(string: "https://example.com/mail/Inbox")!
+    #expect(Backend.canonical(elsewhere) == elsewhere)
+    let hostless = URL(string: "mailto:someone@example.com")!
+    #expect(Backend.canonical(hostless) == hostless)
+}

@@ -23,3 +23,17 @@ import Testing
     #expect(PushPayload.emailId(from: ["emailId": ""]) == nil)
     #expect(PushPayload.emailId(from: ["emailId": 42]) == nil)
 }
+
+// The markdown a shortcut returns is built here rather than in the page, so
+// it carries the same canonical address as the URL beside it.
+@Test func markdownPairsTheTitleWithTheAddress() {
+    let url = URL(string: "https://app.fastmail.com/mail/Inbox/T1.M1")!
+    #expect(MailLink.markdown(title: "Hello", url: url) == "[Hello](https://app.fastmail.com/mail/Inbox/T1.M1)")
+}
+
+// A subject with brackets in it is a subject, not markup.
+@Test func markdownEscapesWhatWouldReadAsMarkup() {
+    let url = URL(string: "https://app.fastmail.com/mail/Inbox")!
+    #expect(MailLink.markdown(title: "[draft] c:\\path", url: url)
+        == "[\\[draft\\] c:\\\\path](https://app.fastmail.com/mail/Inbox)")
+}

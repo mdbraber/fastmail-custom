@@ -15,7 +15,7 @@ struct RegisteredActionOptions: DynamicOptionsProvider {
 }
 
 struct OpenFastmail: AppIntent {
-    static let title: LocalizedStringResource = "Open Fastmail (nexthealth.nl)"
+    static let title: LocalizedStringResource = "Open Fastmail"
     static let openAppWhenRun = true
 
     @Parameter(title: "Path")
@@ -29,7 +29,7 @@ struct OpenFastmail: AppIntent {
 }
 
 struct GetCurrentLink: AppIntent {
-    static let title: LocalizedStringResource = "Get Current Link (nexthealth.nl)"
+    static let title: LocalizedStringResource = "Get Current Link"
     static let openAppWhenRun = true
 
     @MainActor
@@ -39,7 +39,7 @@ struct GetCurrentLink: AppIntent {
 }
 
 struct GetURL: AppIntent {
-    static let title: LocalizedStringResource = "Get URL (nexthealth.nl)"
+    static let title: LocalizedStringResource = "Get URL"
     static let openAppWhenRun = true
 
     @MainActor
@@ -49,7 +49,7 @@ struct GetURL: AppIntent {
 }
 
 struct GetTitle: AppIntent {
-    static let title: LocalizedStringResource = "Get Title (nexthealth.nl)"
+    static let title: LocalizedStringResource = "Get Title"
     static let openAppWhenRun = true
 
     @MainActor
@@ -59,7 +59,7 @@ struct GetTitle: AppIntent {
 }
 
 struct RunJavaScript: AppIntent {
-    static let title: LocalizedStringResource = "Run JavaScript (nexthealth.nl)"
+    static let title: LocalizedStringResource = "Run JavaScript"
     static let openAppWhenRun = true
 
     @Parameter(
@@ -81,7 +81,7 @@ struct RunJavaScript: AppIntent {
 }
 
 struct RunScriptAction: AppIntent {
-    static let title: LocalizedStringResource = "Run Script Action (nexthealth.nl)"
+    static let title: LocalizedStringResource = "Run Script Action"
     static let openAppWhenRun = true
 
     @Parameter(title: "Action", optionsProvider: RegisteredActionOptions())
