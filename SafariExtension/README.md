@@ -127,9 +127,12 @@ it there, since this extension now delivers it.
 
 ## Identifiers
 
-The host app is `com.mdbraber.fastmail-custom` and the extension inside it
-`com.mdbraber.fastmail-custom.extension`. They were renamed from the
-converter's `com.yourCompany.Fastmail-Inbox-mode` on 2026-09-07, along with
-the mode itself. Safari keys an extension's enabled state and its stored
-settings to that identifier, so the rename presents this as a new extension:
-enable it again in Safari's settings, and set the options once more.
+The host app is `com.mdbraber.fastmail-custom.safari` and the extension
+inside it `com.mdbraber.fastmail-custom.safari.extension`. They were renamed
+from the converter's `com.yourCompany.Fastmail-Inbox-mode` on 2026-09-07,
+along with the mode itself, and moved a level deeper on 2026-09-08 when the
+shells and the mailto chooser joined them under `com.mdbraber.fastmail-custom`
+— the bare identifier is a prefix the whole family shares rather than one
+app's name. Safari keys an extension's enabled state and its stored settings
+to that identifier, so each rename presents this as a new extension: enable
+it again in Safari's settings, and set the options once more.
