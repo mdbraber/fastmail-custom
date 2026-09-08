@@ -29,7 +29,12 @@ function fakeJMAP({ emails = [], created = [], counts = { badge: 4 }, refusePush
         mailboxes: async () => [
             { id: 'inbox', name: 'Inbox', role: 'inbox' },
             { id: 'triage', name: 'Triage', role: null },
+            { id: 'archive', name: 'Archive', role: 'archive' },
         ],
+        setEmailMailboxes: async (id, patch) => {
+            calls.push(['set', id, patch]);
+            if (id === 'M-missing') throw new JMAPError('Email/set: notFound', { type: 'notFound' });
+        },
         emailState: async () => 's0',
         mailboxTotal: async () => counts.badge,
         emailChanges: async (since) => {
@@ -291,4 +296,28 @@ test('NOTICES=push does not fall back', async () => {
     await t.watcher.start();
     assert.equal(t.watcher.notices, null);
     assert.equal(t.timers.queue.length, 1);
+});
+
+
+// The Archive button on a notification. The phone cannot do this itself, so
+// it asks here — and what "archive" means has to be the same thing the app
+// means by it: out of the Inbox, no longer waiting for triage, on the shelf.
+test('archiving from a notification takes the message out of the Inbox and off the triage label', async () => {
+    const t = await setUp({});
+
+    await t.watcher.archive('M1');
+
+    const write = t.jmap.calls.find((c) => c[0] === 'set');
+    assert.deepEqual(write, ['set', 'M1', {
+        'mailboxIds/inbox': null,
+        'mailboxIds/triage': null,
+        'mailboxIds/archive': true,
+    }]);
+});
+
+// Nothing is quietly swallowed: the phone shows a banner saying it failed,
+// and it can only do that if the failure reaches it.
+test('an archive that will not go through is reported rather than swallowed', async () => {
+    const t = await setUp({});
+    await assert.rejects(() => t.watcher.archive('M-missing'), /notFound/);
 });

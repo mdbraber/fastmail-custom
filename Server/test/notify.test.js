@@ -42,6 +42,7 @@ test('the alert payload carries title, body, badge, thread and the url to open',
             alert: { title: 'Ada Lovelace', body: 'Engines' },
             sound: 'default',
             'thread-id': 'T1',
+            category: 'message',
             badge: 3,
         },
         url: 'https://app.fastmail.com/mail/Inbox/T1.M1',
@@ -110,4 +111,15 @@ test('a label whose name needs encoding still makes one path segment', () => {
         threadURL(waiting, { badge: { id: held, label: 'To read/now' } }),
         'https://app.fastmail.com/mail/To%20read%2Fnow/T1.M1',
     );
+});
+
+
+// Buttons on a notification come from a category the app registers under
+// this name. Without it iOS draws the banner with no buttons at all, so the
+// name has to travel with every alert and has to stay what the app expects.
+test('an alert names the category whose buttons the app registered', () => {
+    const payload = alertPayload(email(), { badge: 1 });
+    assert.equal(payload.aps.category, 'message');
+    // The button needs to say which message it is acting on
+    assert.equal(payload.emailId, 'M1');
 });

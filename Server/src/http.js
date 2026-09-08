@@ -38,6 +38,27 @@ async function route({ config, watchers, devices }, request, response) {
         return reply(response, 200, { ok: true, alerts });
     }
 
+    // The Archive button on a notification. The phone has no Fastmail
+    // credentials of its own and a background action gets a few seconds, so
+    // it says what it wants in one request and this does the work — with the
+    // same device secret it registers with, since it is the same device.
+    if (request.method === 'POST' && url.pathname === '/actions') {
+        if (!bearerMatches(request.headers.authorization, config.deviceSecret)) {
+            return reply(response, 401, { error: 'unauthorized' });
+        }
+        const body = await readJSON(request);
+        // A string, not an array of one: hasOwn would pass on its toString
+        if (!body || typeof body.account !== 'string' || !Object.hasOwn(watchers, body.account)
+            || body.action !== 'archive'
+            || typeof body.emailId !== 'string' || !body.emailId) {
+            return reply(response, 400, { error: 'account, action and emailId required' });
+        }
+        // A failure travels: the phone says so rather than leaving you to
+        // think a message was filed away when it was not.
+        await watchers[body.account].archive(body.emailId);
+        return reply(response, 200, { ok: true });
+    }
+
     if (request.method === 'POST' && parts.length === 3 && parts[0] === 'jmap') {
         const watcher = watchers[parts[1]];
         // A wrong secret is not worth telling anyone about

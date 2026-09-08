@@ -47,6 +47,7 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        registerCategories()
         ask()
         HomeShortcuts.refresh()
         // A launch straight from the home screen menu, where there is no scene
@@ -92,6 +93,30 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
                 PushRegistrar.current?.requestToken()
             }
         }
+    }
+
+    /// The buttons a banner carries. Registered at launch and not when one
+    /// arrives: iOS matches the category the notification names against what
+    /// the app has already declared, and draws no buttons at all for a name
+    /// it does not know.
+    ///
+    /// Archive runs without opening the app — that is the whole point of it —
+    /// so it is not `.foreground`, and it is not `.destructive` either: a red
+    /// button is for something you cannot undo, and this is a message put on
+    /// a shelf you can go and read.
+    private func registerCategories() {
+        let archive = UNNotificationAction(
+            identifier: PushActions.archive,
+            title: "Archive",
+            options: []
+        )
+        let message = UNNotificationCategory(
+            identifier: PushActions.category,
+            actions: [archive],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([message])
     }
 
     /// Apple's device token, asked for only when there is a server to give
@@ -188,11 +213,62 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping @Sendable () -> Void
     ) {
-        let url = PushPayload.url(from: response.notification.request.content.userInfo)
+        let userInfo = response.notification.request.content.userInfo
+        let chosen = response.actionIdentifier
+
+        if chosen == PushActions.archive {
+            let emailId = PushPayload.emailId(from: userInfo)
+            Task { @MainActor in
+                await PushRegistrar.current?.archive(emailId)
+                completionHandler()
+            }
+            return
+        }
+
+        let url = PushPayload.url(from: userInfo)
         Task { @MainActor in
             if let url { PendingLinks.shared.open(url) }
             completionHandler()
         }
+    }
+
+    /// The Archive button, done by the push server: this device has no
+    /// Fastmail credentials and the few seconds a background action gets are
+    /// enough for one request and not for a sign-in.
+    ///
+    /// A failure is said out loud. The banner is gone by the time this runs,
+    /// so a press that silently did nothing would leave the message sitting
+    /// in the Inbox with nothing to show for it.
+    private func archive(_ emailId: String?) async {
+        guard let config, let account, let emailId else {
+            return announceArchiveFailed()
+        }
+
+        do {
+            let (_, response) = try await URLSession.shared.data(
+                for: config.action(PushActions.archive, account: account, emailId: emailId)
+            )
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if !(200..<300).contains(status) {
+                print("[push] archive: the push server answered \(status)")
+                announceArchiveFailed()
+            }
+        } catch {
+            print("[push] archive: the push server was unreachable: \(error.localizedDescription)")
+            announceArchiveFailed()
+        }
+    }
+
+    /// Said as a notification of our own, since there is no app on screen to
+    /// say it in. No sound: the failure is worth knowing about, not worth
+    /// being interrupted for a second time.
+    private func announceArchiveFailed() {
+        let content = UNMutableNotificationContent()
+        content.title = "Not archived"
+        content.body = "The message is still in your Inbox."
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        )
     }
 }
 #endif

@@ -31,6 +31,7 @@ export class AccountWatcher {
         this.timers = timers;
         this.inboxId = null;
         this.badgeMailboxId = null;
+        this.archiveMailboxId = null;
         this.notices = null;
         this.callbackSecret = null;
         this.pushSubscriptionId = null;
@@ -68,6 +69,8 @@ export class AccountWatcher {
             ?? mailboxes.find((m) => m.name === this.config.badgeLabel)?.id
             ?? null;
         if (!this.badgeMailboxId) this.log.warn(`[${this.name}] no "${this.config.badgeLabel}" label: badges are off`);
+        this.archiveMailboxId = mailboxes.find((m) => m.role === 'archive')?.id ?? null;
+        if (!this.archiveMailboxId) this.log.warn(`[${this.name}] no Archive folder: the notification's Archive button is off`);
         if (!this.state.emailState) await this.resync();
         await this.subscribe();
         this.pollTimer = this.timers.setInterval(() => this.notice('poll'), POLL_MS);
@@ -229,6 +232,36 @@ export class AccountWatcher {
         this.state.badge = badge;
         await this.persist();
         if (fresh.length) this.log.info(`[${this.name}] ${fresh.length} new (${source})`);
+    }
+
+    /*
+     * Archive, asked for by the button on a notification.
+     *
+     * The phone holds no Fastmail credentials and a background action gets a
+     * few seconds, so it asks here and this makes the change.
+     *
+     * What archive means has to be what it means in the app: out of the
+     * Inbox, and no longer waiting for triage. A patch rather than a whole
+     * set of mailboxes, so anything else the message carries — a hold label,
+     * a label a rule put on it — is left exactly as it was. The app also
+     * takes a project label off when it archives; this does not, because it
+     * would have to guess which of your labels are projects, and leaving a
+     * label alone is the kinder mistake.
+     *
+     * Any failure travels back to the phone, which says so. A message
+     * archived here is a change like any other, so the badge and the state
+     * follow from the notice Fastmail sends about it.
+     */
+    async archive(emailId) {
+        if (!this.archiveMailboxId) throw new Error('no Archive folder in this account');
+
+        const patch = { [`mailboxIds/${this.inboxId}`]: null };
+        if (this.badgeMailboxId) patch[`mailboxIds/${this.badgeMailboxId}`] = null;
+        patch[`mailboxIds/${this.archiveMailboxId}`] = true;
+
+        await this.jmap.setEmailMailboxes(emailId, patch);
+        this.log.info(`[${this.name}] archived ${emailId} from a notification`);
+        return true;
     }
 
     // The badge label as a link context: a message still carrying it opens

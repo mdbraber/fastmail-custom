@@ -14,3 +14,12 @@ import Testing
     #expect(PushPayload.url(from: ["url": "javascript:alert(1)"]) == nil)
     #expect(PushPayload.url(from: ["url": "http://app.fastmail.com/mail/Inbox/T1"]) == nil)
 }
+
+// The Archive button acts on one message, and the only thing that names it
+// is the id the server puts beside the address.
+@Test func theMessageIdComesOutOfThePayload() {
+    #expect(PushPayload.emailId(from: ["url": "https://app.fastmail.com/mail/Inbox/T1.M1", "emailId": "M1"]) == "M1")
+    #expect(PushPayload.emailId(from: [:]) == nil)
+    #expect(PushPayload.emailId(from: ["emailId": ""]) == nil)
+    #expect(PushPayload.emailId(from: ["emailId": 42]) == nil)
+}

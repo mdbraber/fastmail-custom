@@ -118,6 +118,18 @@ export class JMAPClient {
         return list;
     }
 
+    // The one write this makes. A patch rather than a whole mailboxIds map,
+    // so a label the server knows nothing about is left exactly as it was.
+    async setEmailMailboxes(id, patch) {
+        const result = await this.call('Email/set', { accountId: this.accountId, update: { [id]: patch } });
+        const problem = result.notUpdated?.[id];
+        if (problem) {
+            const detail = problem.description ? ` — ${problem.description}` : '';
+            throw new JMAPError(`Email/set: ${problem.type}${detail}`, { type: problem.type });
+        }
+        return id;
+    }
+
     async pushSubscriptions() {
         return (await this.call('PushSubscription/get', { ids: null }, [CORE])).list;
     }

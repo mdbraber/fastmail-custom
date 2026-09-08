@@ -41,6 +41,11 @@ export function threadURL(email, { badge } = {}) {
 // The APNs payload for one new message. `badge` is the conversation count to
 // show, or null when there is no badge label to count; `context` is that
 // label's id and name, so the link can open the message where it is worked.
+// The category whose buttons the app registers under this name. iOS draws no
+// buttons at all on a notification whose category it does not know, so the
+// two spellings — here and in the app — have to stay the same.
+export const ALERT_CATEGORY = 'message';
+
 export function alertPayload(email, { badge, context = null }) {
     const aps = {
         alert: {
@@ -49,6 +54,7 @@ export function alertPayload(email, { badge, context = null }) {
         },
         sound: 'default',
         'thread-id': email.threadId,
+        category: ALERT_CATEGORY,
     };
     if (Number.isInteger(badge)) aps.badge = badge;
     return { aps, url: threadURL(email, { badge: context }), emailId: email.id };

@@ -47,4 +47,20 @@ public struct PushConfig: Equatable, Sendable {
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         return request
     }
+
+    /// A button on a notification, done by the server on this device's behalf.
+    /// The phone holds no Fastmail credentials and a background action has
+    /// seconds rather than the time a sign-in would take, so it says what it
+    /// wants in one request — vouching for itself with the secret it
+    /// registers with, since it is the same device.
+    public func action(_ action: String, account: String, emailId: String) -> URLRequest {
+        var request = URLRequest(url: server.appendingPathComponent("actions"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["account": account, "action": action, "emailId": emailId]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return request
+    }
 }

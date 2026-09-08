@@ -57,3 +57,29 @@ import Testing
     #expect(json["alerts"] as? Bool == false)
     #expect(json["token"] as? String == "01")
 }
+
+// The Archive button asks the push server to do the work: the phone holds no
+// Fastmail credentials, and a background action has seconds rather than the
+// time a whole sign-in would take. It vouches for itself with the same secret
+// it registers with, since it is the same device.
+@Test func theArchiveRequestNamesTheMessageAndCarriesTheSecret() throws {
+    let config = try #require(PushConfig(host: "push.example.net/base", secret: "s3cret"))
+    let request = config.action("archive", account: "personal", emailId: "M1")
+
+    #expect(request.url?.absoluteString == "https://push.example.net/base/actions")
+    #expect(request.httpMethod == "POST")
+    #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer s3cret")
+
+    let body = try #require(request.httpBody)
+    let sent = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+    #expect(sent["account"] as? String == "personal")
+    #expect(sent["action"] as? String == "archive")
+    #expect(sent["emailId"] as? String == "M1")
+}
+
+// The name has to be the one the server sends and the one the app registers
+// its buttons under; a category iOS does not know draws no buttons at all.
+@Test func theNotificationCategoryIsTheOneTheServerSends() {
+    #expect(PushActions.category == "message")
+    #expect(PushActions.archive == "archive")
+}
