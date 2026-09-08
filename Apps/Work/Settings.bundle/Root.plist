@@ -378,22 +378,6 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>A decision opens the next message. On the phone, in the Inbox or the triage label, one that lands on a message already triaged goes back to the list instead.</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSToggleSwitchSpecifier</string>
-			<key>Title</key>
-			<string>Back to the list when the next is triaged</string>
-			<key>Key</key>
-			<string>customMode.backToListWhenTriaged</string>
-			<key>DefaultValue</key>
-			<true/>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSGroupSpecifier</string>
-			<key>FooterText</key>
 			<string>Opens the snooze dialog with the default period filled in.</string>
 			<key>Title</key>
 			<string>Snooze</string>

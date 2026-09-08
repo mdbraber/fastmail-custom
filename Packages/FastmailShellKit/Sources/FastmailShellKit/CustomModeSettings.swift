@@ -251,13 +251,6 @@ public enum CustomModeSettings {
             hint: "A project label’s badge counts the same messages its filtered list shows, rather than everything it has ever held.",
             default: .toggle(true)
         ),
-        Option(
-            "backToListWhenTriaged",
-            group: .labelsFiling,
-            title: "Back to the list when the next is triaged",
-            hint: "A decision opens the next message. On the phone, in the Inbox or the triage label, one that lands on a message already triaged goes back to the list instead.",
-            default: .toggle(true)
-        ),
 
         // Snooze — the snooze action and its defaults, kept together.
         Option(

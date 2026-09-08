@@ -83,9 +83,10 @@ the same reason — a tablet has the list beside the message already.
 3.8 — a decision moves on to the next message, and the Triage label is a
 triage surface of its own. Filing and archiving now go to the next message
 whatever it carries, which is what Fastmail does everywhere else; nothing
-is skipped. On the phone, where the message is the whole screen, landing on
-one already triaged ends the run and the view goes back to the list —
-settings.backToListWhenTriaged, on by default. Both apply in the Triage
+is skipped. Where that step lands is Fastmail's own setting for after an
+action — the mailbox, the next conversation or the previous one — since
+archiving applies it on its own and filing, which leaves the message in
+the Inbox, makes the same step for itself. Both apply in the Triage
 label as well as the Inbox, which hold the same mail. The Triage row in the
 sidebar wears the funnel, the same glyph as the switch above the list. The
 retired v2 filter system is gone rather than dormant: about a thousand
@@ -297,11 +298,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // And the badge counts the same set the filtered list shows, rather
         // than everything the label has ever held.
         filteredLabelCounts: true,
-        // A decision always moves on to the next message. On the phone, where
-        // the message is the whole screen, landing on one already triaged
-        // means the run is over: with this on the view goes back to the list
-        // instead. Off opens the next message wherever you are.
-        backToListWhenTriaged: true,
         // The label a rule puts on everything incoming. Taken off by keeping
         // or filing; the script never adds it.
         triageLabel: 'Triage',
@@ -1618,11 +1614,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             return false;
         }
     };
-
-    // The phone proper: the build that has a bottom bar, drawn narrow enough
-    // that the message is the whole screen. What "on the phone" has always
-    // meant here, now that the two halves of the question are told apart.
-    const isPhoneLayout = () => !!FastMail.isMobile && !isTabletLayout();
 
     // The bar the message actions are on. The plain question first — which
     // bar carries its own list of actions — since that is what being this bar
@@ -3289,32 +3280,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // Run `work` with didAction replaced. The replacement is handed the real
-    // one first, then whatever arguments Fastmail passed, so it can drop the
-    // call or pass it on changed. Restored on the first call as well as at the
-    // end.
-    const withDidAction = (actions, replacement, work) => {
-        const original = actions.didAction;
-        let restored = false;
-        const restore = () => {
-            if (restored) return;
-            restored = true;
-            actions.didAction = original;
-        };
-
-        actions.didAction = function () {
-            restore();
-            return replacement.apply(this,
-                [original].concat(Array.prototype.slice.call(arguments)));
-        };
-
-        try {
-            work();
-        } finally {
-            restore();
-        }
-    };
-
     // Swallow every didAction inside `work`, however many calls make one.
     // Each action queues its undo data before didAction runs, so everything
     // swallowed here joins the checkpoint the *next* unswallowed didAction
@@ -3330,15 +3295,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // Hold the view where it is. Archive removes the Inbox, so the message
-    // leaves the list and Fastmail would step to the next row on its own —
-    // often a filed one. Forcing stayHere suppresses that step so our own walk
-    // to the next triage is the only move. Not an arrow: withDidAction applies
-    // the actions object as `this`.
-    const stayHereAfter = function (didAction, text, stayHere, goTo) {
-        return didAction.call(this, text, true, goTo);
-    };
-
     /*
      * Filing and archiving both move the view on to the next conversation
      * still waiting for triage. Filing keeps the message in the Inbox — Filed
@@ -3350,12 +3306,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * filed one — with its first row focused, so the keyboard has somewhere
      * to be. Only in the Inbox with the mode on, the triage surface.
      */
-
-    // A conversation still waiting to be triaged carries the Triage label.
-    const carriesTriage = (message) =>
-        !!message && threadOf(message).some(other =>
-            toArray(other.get('mailboxes')).some(isTriage));
-
     // The same conversation however the two records were reached: the list
     // holds a thread's top message, the verb may hold another of its messages.
     const sameConversation = (a, b) => {
@@ -3410,6 +3360,35 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return here || null;
     };
 
+    // The row above, for a setting that asks to go back rather than on. It is
+    // the same row whether or not the decision took `from` out of the list,
+    // since everything above it keeps its place either way.
+    const previousAbove = (index) => {
+        const list = controller().get('mailboxMessageList');
+        if (!list || typeof list.getObjectAt !== 'function' || index <= 0) return null;
+        return list.getObjectAt(index - 1) || null;
+    };
+
+    /*
+     * Where to go after a decision: Fastmail's own answer.
+     *
+     * It is a preference — Settings, Mail, after moving, deleting or
+     * archiving — with three values: back to the mailbox, on to the next
+     * conversation, back to the previous one. Archiving, deleting and moving
+     * take a message out of the list, so Fastmail applies it on its own.
+     * Filing does not: the message keeps its place in the Inbox, so the step
+     * has to be made here, and this is the step to make.
+     */
+    const AFTER_ACTION_DEFAULT = 'next';
+
+    const afterActionGoTo = () => {
+        try {
+            return FastMail.preferences.get('afterActionGoTo') || AFTER_ACTION_DEFAULT;
+        } catch (error) {
+            return AFTER_ACTION_DEFAULT;
+        }
+    };
+
     // The current mailbox's list URL, built from a message in it — Fastmail
     // has no getUrlForMailbox — by dropping the message id off the end.
     const listURLFrom = (message) => {
@@ -3424,38 +3403,39 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // A decision moves on to the next message, which is what Fastmail does
-    // everywhere else — filing here keeps the message in the Inbox, so the
-    // step has to be made rather than waited for. Nothing is skipped: the
-    // next message is the next message, triaged or not.
-    //
-    // The exception is the phone, where the reading pane is the whole screen:
-    // landing on one already triaged means the run is over, so the view goes
-    // back to the list instead of into mail that was already dealt with. Only
-    // in the Inbox and the triage label, and only with the setting on.
-    //
-    // Run a tick after the decision, so the store has taken Triage off the one
-    // just decided and the list has settled.
-    //
-    // `index` is where the conversation sat before the decision, and the
-    // caller reads it before making one — which is the whole point of it.
-    // Archiving takes the row out of the list and filing in the triage
-    // label's own view does too, so an index read here, afterwards, finds
-    // nothing. rowIndexOf still stands in where a caller has none to give.
+    /*
+     * The step filing has to make for itself, made the way Fastmail would.
+     *
+     * Archiving, deleting and moving take the message out of the list, so
+     * Fastmail applies its own after-an-action setting and nothing is needed
+     * here. Filing does not — the message keeps its place in the Inbox under
+     * one project label — so no step happens unless this one makes it, and
+     * the step to make is the one that setting names.
+     *
+     * It used to be a rule of its own: on the phone, landing on a message
+     * already triaged meant the run was over and the view went back to the
+     * list. That reads as the setting being ignored once the Inbox has
+     * nothing left to triage in it, because then every decision ends the run.
+     * Fastmail's own setting says all three of these things already — back to
+     * the mailbox, on to the next, back to the previous — so it decides.
+     *
+     * Run a tick after the decision, so the store has taken Triage off the
+     * one just decided and the list has settled.
+     *
+     * `index` is where the conversation sat before the decision, and the
+     * caller reads it before making one — which is the whole point of it.
+     * Filing in the triage label's own view takes the row out of the list, so
+     * an index read here, afterwards, finds nothing. rowIndexOf still stands
+     * in where a caller has none to give.
+     */
     const advanceAfterDecision = (from, index) => {
         if (!onTriageSurface()) return;
         const at = typeof index === 'number' ? index : rowIndexOf(from);
 
         setTimeout(() => {
             if (!onTriageSurface()) return;
-            const next = nextBelow(from, at);
 
-            // The phone, and only the phone. FastMail.isMobile names the
-            // build, which an iPad loads too — and an iPad shows the list
-            // beside the message, so ending the run there would throw away a
-            // reading pane that never went anywhere.
-            if (isPhoneLayout() && settings.backToListWhenTriaged &&
-                (!next || !carriesTriage(next))) {
+            const backToList = () => {
                 const list = controller().get('mailboxMessageList');
                 const anchor = from ||
                     (list && typeof list.getObjectAt === 'function' && list.getObjectAt(0));
@@ -3464,10 +3444,26 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 // Back on the list — or already there — the first row takes the
                 // focus rather than nothing. A tick later, so the route has landed.
                 setTimeout(focusFirstRow, 0);
+            };
+
+            const where = afterActionGoTo();
+            if (where === 'mailbox') {
+                backToList();
                 return;
             }
 
-            if (!next) return;
+            const next = where === 'prev'
+                ? previousAbove(at)
+                : nextBelow(from, at);
+
+            // Nothing that way is the end of the list, and Fastmail answers
+            // that with the mailbox rather than by staying on the message the
+            // decision has just finished with.
+            if (!next) {
+                backToList();
+                return;
+            }
+
             const url = urlForMessage(next);
             if (url) goToUrl(url);
         }, 0);
@@ -3873,8 +3869,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // so the archive's own didAction cuts the one checkpoint: Triage, every
     // project label and the pin. Helper labels stay.
     const runDone = (actions, keys, finish) => {
-        const from = messagesFrom(keys)[0];
-
         silencingDidAction(actions, () => {
             const dropped = [];
             mailboxesAmong(keys).forEach((mailbox) => {
@@ -3891,20 +3885,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         });
 
         // Archive takes the Inbox off, so the message leaves the list and
-        // Fastmail would step to the next row on its own — often a filed one.
-        // In the Inbox with the mode on, hold that step and walk to the next
-        // conversation waiting for triage instead, exactly as filing does;
-        // elsewhere the stock archive advances as it always has.
-        if (onTriageSurface()) {
-            // Where the row sits, read while it is still there. The archive
-            // below takes it out of the list, and looking afterwards finds
-            // nothing at all rather than the row that replaced it.
-            const index = rowIndexOf(from);
-            withDidAction(actions, stayHereAfter, finish);
-            advanceAfterDecision(from, index);
-        } else {
-            finish();
-        }
+        // Fastmail moves the view on by its own after-an-action setting —
+        // the mailbox, the next conversation or the previous one. That step
+        // used to be held here and replaced with a walk of this mode's own,
+        // which ended the run and went back to the mailbox as soon as the
+        // next message was not waiting for triage. In an Inbox where
+        // everything is already filed that is every message, so archiving
+        // always went back to the mailbox however the setting was set.
+        finish();
     };
 
     // keep — `v`. A thread that already has a destination is kept by taking
