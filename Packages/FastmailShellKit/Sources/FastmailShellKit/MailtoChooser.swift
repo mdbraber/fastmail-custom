@@ -66,6 +66,29 @@ public enum MailtoChooser {
         return URL(string: command)
     }
 
+    /// This app's own scheme, and the command it answers to on it.
+    public static let scheme = "fastmail-mailto"
+
+    /// The message a URL arriving at this app is asking to write, or nothing.
+    ///
+    /// A mailto: is itself the answer. Until Apple grants the Default Mail App
+    /// capability iOS will not deliver one, though, so the app's own scheme is
+    /// the way in meanwhile — from a Shortcut, or anything else that can open
+    /// a URL — carrying the message in the same `compose?mailto=` command the
+    /// shells answer to. Anything else arriving there is refused: an address
+    /// that is not a mailto is not a message to write.
+    public static func incoming(_ url: URL) -> URL? {
+        if url.scheme?.lowercased() == "mailto" { return url }
+        guard
+            url.scheme?.lowercased() == scheme,
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            (components.host ?? "").lowercased() == "compose",
+            let raw = (components.queryItems ?? []).first(where: { $0.name == "mailto" })?.value,
+            raw.lowercased().hasPrefix("mailto:")
+        else { return nil }
+        return URL(string: raw)
+    }
+
     /// What the link is about, for the chooser to show while it asks. A tap on
     /// a link you did not mean is caught here rather than in a compose window
     /// in the wrong account.

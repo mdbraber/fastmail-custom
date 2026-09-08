@@ -73,3 +73,25 @@ import Testing
     #expect(summary.recipients == "")
     #expect(MailtoChooser.summary(of: URL(string: "https://example.com")!) == nil)
 }
+
+// Until Apple grants the Default Mail App capability, iOS will not hand this
+// app a mailto: tap at all. Its own scheme is the way in meanwhile — from a
+// Shortcut, or from anything else that can open a URL — so it takes a mailto
+// wrapped in the same compose command the shells answer to.
+@Test func theChooserTakesAMailtoThroughItsOwnScheme() throws {
+    let wrapped = URL(string: "fastmail-mailto://compose?mailto="
+        + LinkRouter.percentEncode("mailto:a@b.com?subject=Hi there"))!
+    #expect(MailtoChooser.incoming(wrapped)?.absoluteString == "mailto:a@b.com?subject=Hi%20there")
+}
+
+@Test func aDirectMailtoNeedsNoUnwrapping() {
+    let direct = URL(string: "mailto:a@b.com")!
+    #expect(MailtoChooser.incoming(direct) == direct)
+}
+
+// Anything else arriving on the scheme is not a message to write.
+@Test func nothingButAMailtoGetsIn() {
+    #expect(MailtoChooser.incoming(URL(string: "fastmail-mailto://compose?mailto=https%3A%2F%2Fevil.com")!) == nil)
+    #expect(MailtoChooser.incoming(URL(string: "fastmail-mailto://open")!) == nil)
+    #expect(MailtoChooser.incoming(URL(string: "https://example.com")!) == nil)
+}

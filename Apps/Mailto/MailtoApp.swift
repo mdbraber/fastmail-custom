@@ -15,8 +15,11 @@ struct MailtoApp: App {
             ChooserView(mailto: mailto)
                 // A link that arrives while the app is already open replaces
                 // the one on screen; the newest tap is the one you meant.
+                // A mailto arrives either as itself or wrapped in this app's
+                // own scheme, which is how Shortcuts can reach it while iOS
+                // still gives mailto taps to the default mail app.
                 .onOpenURL { url in
-                    if url.scheme?.lowercased() == "mailto" { mailto = url }
+                    if let arrived = MailtoChooser.incoming(url) { mailto = arrived }
                 }
         }
     }
@@ -90,6 +93,13 @@ struct ChooserView: View {
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            // iOS gives mailto taps to the default mail app, which this
+            // cannot be until Apple grants the capability. Until then the
+            // way in is a Shortcut opening this address.
+            Text("\(MailtoChooser.scheme)://compose?mailto=…")
+                .font(.footnote.monospaced())
+                .foregroundStyle(.tertiary)
+                .padding(.top, 4)
         }
     }
 
