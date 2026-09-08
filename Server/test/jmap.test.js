@@ -92,9 +92,10 @@ test('the badge count is conversations, not messages', async () => {
     assert.deepEqual(calls.at(-1).body.methodCalls[0][1].properties, ['totalThreads']);
 
     assert.deepEqual(await client.mailboxes(), [{ id: 'inbox', name: 'Inbox', role: 'inbox', totalThreads: 2 }]);
-    // `hidden` comes along because the notification's buttons need to know a
-    // label you file under from a history shelf you never touch
-    assert.deepEqual(calls.at(-1).body.methodCalls[0][1].properties, ['id', 'name', 'role', 'hidden', 'totalThreads']);
+    // Every property, named none: the buttons need Fastmail's own `hidden`
+    // flag to tell a label you file under from a history shelf you never
+    // touch, and naming an extension property in the list is invalidArguments
+    assert.equal(calls.at(-1).body.methodCalls[0][1].properties, undefined);
 });
 
 test('a call that never comes back gives up rather than holding the account', async () => {

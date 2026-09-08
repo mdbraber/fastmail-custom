@@ -77,11 +77,13 @@ export class JMAPClient {
     }
 
     async mailboxes() {
-        const result = await this.call('Mailbox/get', {
-            // `hidden` is Fastmail's own flag, and bit 1 is "not in the folder
-            // list": 0 on the labels you file under, 1 on the history shelves.
-            accountId: this.accountId, ids: null, properties: ['id', 'name', 'role', 'hidden', 'totalThreads'],
-        });
+        // Every property rather than a named few. The buttons on a
+        // notification need `hidden`, Fastmail's own flag whose bit 1 is "not
+        // in the folder list" — 0 on the labels you file under, 1 on the
+        // history shelves — and it is an extension property: it comes back
+        // with everything else, but naming it in `properties` is refused as
+        // invalidArguments. A mailbox list is small; this costs nothing.
+        const result = await this.call('Mailbox/get', { accountId: this.accountId, ids: null });
         return result.list;
     }
 
