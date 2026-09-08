@@ -18,9 +18,16 @@ version 3.11 - 2026-09-08
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
 
-3.11 — a swipe stays on the list, and archive into a hold label. Deciding
-from the list — a swipe, or a key on the focused row — no longer opens the
-next conversation: there was nothing open to move on from, so there is
+3.11 — a row keeps its colour, a swipe stays on the list, and archive into
+a hold label. Rows in the Inbox lost their label chips, and with them their
+colour, and never got them back: Fastmail leaves a chip behind when a label
+is removed, so the mode takes the stale ones off, and it read a record whose
+mailboxes had not loaded yet — which reports none — as a record whose labels
+had all gone. A row with chips and no known mailboxes is now left alone,
+since nothing redraws a row whose record never changed.
+
+Deciding from the list — a swipe, or a key on the focused row — no longer
+opens the next conversation: there was nothing open to move on from, so there is
 nowhere to move on to, and the step now asks whether the message decided on
 is the one being read. Fastmail draws the same line for its own step, which
 is left alone from the list rather than held.
@@ -5349,6 +5356,15 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             if (!message) return;
 
             const actual = mailboxPaths(message);
+
+            // A record whose mailboxes have not arrived yet reports none, and
+            // none is not the same answer as "every one of these labels is
+            // gone". Read as the latter it took every chip off the row — the
+            // colour with them — and nothing put them back: Fastmail redraws a
+            // row from its record when the record changes, and a record that
+            // was merely still loading never changed. A row with chips and no
+            // known mailboxes is a row this cannot speak for.
+            if (!actual.length) return;
 
             chips.forEach((chip) => {
                 const span = chip.querySelector('span[title]');
