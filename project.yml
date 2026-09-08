@@ -87,7 +87,7 @@ targets:
         product: FastmailShellKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail.mailto
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail-custom.mailto
         PRODUCT_NAME: Mailto
         INFOPLIST_FILE: Apps/Mailto/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -139,6 +139,7 @@ aggregateTargets:
     targets:
       - Personal
       - Work
+      - Mailto
 
 schemes:
   Personal:
