@@ -18,7 +18,14 @@ version 3.11 - 2026-09-08
 
 Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
 
-3.11 — archive into a hold label. Shift-E, or a long press on Archive where
+3.11 — a swipe stays on the list, and archive into a hold label. Deciding
+from the list — a swipe, or a key on the focused row — no longer opens the
+next conversation: there was nothing open to move on from, so there is
+nowhere to move on to, and the step now asks whether the message decided on
+is the one being read. Fastmail draws the same line for its own step, which
+is left alone from the list rather than held.
+
+Shift-E, or a long press on Archive where
 there is no Shift to hold, opens the File picker narrowed to the hold labels
 and archives into the one you pick: the label goes on, then Inbox, Triage,
 every project label and the pin come off, and the hold stays — one gesture
@@ -3430,6 +3437,32 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * An index of -1 — the row was never found — has no neighbours rather
      * than the first and last rows of the list.
      */
+    // The conversation on screen, or nothing when the list is all there is.
+    const openMessage = () => {
+        try {
+            return controller().get('message') || null;
+        } catch (error) {
+            return null;
+        }
+    };
+
+    /*
+     * Whether a decision on this message is a decision on what you are
+     * reading. Moving on to the next conversation only means anything if you
+     * were in one: a swipe on a row, or a key on the focused row, is made
+     * from the list, and the list is where it should leave you. Fastmail
+     * draws the same line — its own step is gated on isActioningFocused,
+     * which asks whether the conversation is visible and whether the message
+     * acted on is the one selected — and a mode that stepped anyway turned a
+     * swipe in the list into a conversation opening in your face.
+     *
+     * Read before the decision lands, like the neighbours either side.
+     */
+    const decidingOnOpenMessage = (message) => {
+        const open = openMessage();
+        return !!open && !!message && open === message;
+    };
+
     const stepFrom = (message) => {
         const index = rowIndexOf(message);
         const list = controller().get('mailboxMessageList');
@@ -3441,6 +3474,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         return {
             index: index,
+            reading: decidingOnOpenMessage(message),
             next: index < 0 ? null : at(index + 1),
             previous: index < 1 ? null : at(index - 1)
         };
@@ -3507,6 +3541,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const advanceAfterDecision = (from, step) => {
         if (!onTriageSurface()) return;
         const plan = step && typeof step === 'object' ? step : stepFrom(from);
+        // A decision made from the list stays on the list: nothing was open
+        // to move on from, so there is nowhere to move on to
+        if (!plan.reading) return;
 
         setTimeout(() => {
             if (!onTriageSurface()) return;
@@ -4013,7 +4050,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
          * Fastmail's own is held so it cannot also happen. Anywhere else the
          * stock behaviour stands.
          */
-        if (onTriageSurface()) {
+        // Only when the decision was made on the conversation you are
+        // reading. From the list — a swipe, or a key on the focused row —
+        // Fastmail's own behaviour is left exactly as it is, which is to
+        // stay put, and nothing here is held or stepped.
+        if (onTriageSurface() && step.reading) {
             withDidAction(actions, stayHereAfter, finish);
             advanceAfterDecision(from, step);
         } else {
@@ -4027,6 +4068,31 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // wins and Later comes off with Triage. One that carries neither is
     // asked where it goes, and the pick is an ordinary add that rule 2
     // finishes.
+    const runKeep = (actions, keys) => {
+        const projectWins = !withoutProject(keys).length;
+        const removes = triageAmong(keys)
+            .concat(projectWins ? excludedAmong(keys) : []);
+        const from = messagesFrom(keys)[0];
+        // Read first: in the Inbox the row stays put, but in the triage
+        // label's own view taking Triage off takes the row out of the list,
+        // and the neighbours would be gone by the line after this one.
+        const step = stepFrom(from);
+        // Nothing to take off is not nothing to do. A message already filed
+        // and already past Triage is a decision that has been made, and the
+        // answer to being asked again is the same as the first time: move on.
+        // Stopping here left the view sitting on it.
+        if (removes.length) actions.addremove(keys, [], removes);
+        // Kept in place; the view moves on to where the setting says, or back
+        // to the list — first row focused — when there is nothing that way.
+        advanceAfterDecision(from, step);
+    };
+
+    // pin — `s`. A toggle over the selection: all pinned, unpin; else pin.
+    const runUrgent = (actions, keys) => {
+        if (allFlagged(keys)) actions.unflag(keys);
+        else actions.flag(keys);
+    };
+
     /*
      * Archive into a hold label — what the picker opened by Shift-E, or by a
      * long press on Archive, commits to.
@@ -4060,31 +4126,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             }
         });
         actions.archive(null);
-    };
-
-    const runKeep = (actions, keys) => {
-        const projectWins = !withoutProject(keys).length;
-        const removes = triageAmong(keys)
-            .concat(projectWins ? excludedAmong(keys) : []);
-        const from = messagesFrom(keys)[0];
-        // Read first: in the Inbox the row stays put, but in the triage
-        // label's own view taking Triage off takes the row out of the list,
-        // and the neighbours would be gone by the line after this one.
-        const step = stepFrom(from);
-        // Nothing to take off is not nothing to do. A message already filed
-        // and already past Triage is a decision that has been made, and the
-        // answer to being asked again is the same as the first time: move on.
-        // Stopping here left the view sitting on it.
-        if (removes.length) actions.addremove(keys, [], removes);
-        // Kept in place; the view moves on to where the setting says, or back
-        // to the list — first row focused — when there is nothing that way.
-        advanceAfterDecision(from, step);
-    };
-
-    // pin — `s`. A toggle over the selection: all pinned, unpin; else pin.
-    const runUrgent = (actions, keys) => {
-        if (allFlagged(keys)) actions.unflag(keys);
-        else actions.flag(keys);
     };
 
     const runVerb = (kind, storeKeys) => {
