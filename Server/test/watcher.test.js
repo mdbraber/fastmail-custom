@@ -120,7 +120,7 @@ test('one new Inbox message becomes one alert per device, carrying the badge, an
     assert.deepEqual(t.apns.sent.map((s) => s.token), ['tok1', 'tok2']);
     assert.equal(t.apns.sent[0].payload.aps.alert.title, 'Ada');
     assert.equal(t.apns.sent[0].payload.aps.badge, 4);
-    assert.equal(t.apns.sent[0].payload.url, 'https://app.fastmail.com/mail/Inbox/T-M1');
+    assert.equal(t.apns.sent[0].payload.url, 'https://app.fastmail.com/mail/Inbox/T-M1.M1');
     assert.equal(t.apns.sent[0].collapseId, 'M1');
     assert.equal(t.apns.sent[0].topic, account.topic);
 

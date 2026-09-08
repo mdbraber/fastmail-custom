@@ -19,10 +19,23 @@ export function senderName(email) {
 // list it is worked from: one still carrying the badge label opens in that
 // label, where the triage verbs act on the list behind it. Anything else —
 // already triaged, or no badge label configured — opens in the Inbox.
+//
+// The last segment names both the conversation and the message in it,
+// separated by a dot, because that is how the app reads it back:
+//
+//     const at = segment.indexOf('.');
+//     thread  = at > -1 ? segment.slice(0, at) : '';
+//     message = at > -1 ? segment.slice(at + 1) : segment;
+//
+// A segment with no dot is therefore a message id on its own, not a short
+// way of naming the conversation. Sending the thread id alone meant sending
+// a message id that matches no message, and the app answers that by showing
+// the mailbox — which is what a tapped notification used to do.
 export function threadURL(email, { badge } = {}) {
     const inTriage = badge?.id && email.mailboxIds?.[badge.id] === true;
     const list = inTriage ? badge.label : 'Inbox';
-    return `https://app.fastmail.com/mail/${encodeURIComponent(list)}/${encodeURIComponent(email.threadId)}`;
+    const conversation = `${encodeURIComponent(email.threadId)}.${encodeURIComponent(email.id)}`;
+    return `https://app.fastmail.com/mail/${encodeURIComponent(list)}/${conversation}`;
 }
 
 // The APNs payload for one new message. `badge` is the conversation count to

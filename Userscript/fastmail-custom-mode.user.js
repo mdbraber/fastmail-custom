@@ -3106,7 +3106,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                         const result = original.call(this, storeKeys, adds, merged);
                         // A File verb waiting on this pick moves the view on
                         // to the next message.
-                        if (advance) advanceAfterDecision(advance.from, advance.index);
+                        if (advance) advanceAfterDecision(advance.from, advance.step);
                         return result;
                     }
 
@@ -3130,7 +3130,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     });
                     const advance = takeFileAdvance();
                     const result = original.apply(self, args);
-                    if (advance) advanceAfterDecision(advance.from, advance.index);
+                    if (advance) advanceAfterDecision(advance.from, advance.step);
                     return result;
                 } finally {
                     applyingLabelRules = false;
@@ -3280,6 +3280,38 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
+    // Run `work` with didAction replaced. The replacement is handed the real
+    // one first, then whatever arguments Fastmail passed, so it can drop the
+    // call or pass it on changed. Restored on the first call as well as at
+    // the end.
+    const withDidAction = (actions, replacement, work) => {
+        const original = actions.didAction;
+        let restored = false;
+        const restore = () => {
+            if (restored) return;
+            restored = true;
+            actions.didAction = original;
+        };
+
+        actions.didAction = function () {
+            restore();
+            return replacement.apply(this,
+                [original].concat(Array.prototype.slice.call(arguments)));
+        };
+
+        try {
+            work();
+        } finally {
+            restore();
+        }
+    };
+
+    // Hold the view where it is, so the step this mode makes is the only one.
+    // Not an arrow: withDidAction applies the actions object as `this`.
+    const stayHereAfter = function (didAction, text, stayHere, goTo) {
+        return didAction.call(this, text, true, goTo);
+    };
+
     // Swallow every didAction inside `work`, however many calls make one.
     // Each action queues its undo data before didAction runs, so everything
     // swallowed here joins the checkpoint the *next* unswallowed didAction
@@ -3342,31 +3374,37 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return -1;
     };
 
-    // The conversation the decision moves to: the row after `from` when
-    // filing has left it in place, or whatever has taken its slot when
-    // archiving has removed it. Null past the end of what the list has
-    // fetched, which sends the view back to the list rather than nowhere.
-    //
-    // An index of -1 — the row was never found — is nothing rather than the
-    // top of the list. Reading it as row 0 is how archiving came to jump to
-    // the first message: the row is gone by the time an index read too late
-    // looks for it, and every archive landed on whatever was at the top.
-    const nextBelow = (from, index) => {
+    /*
+     * The conversations on either side of this one, taken before the decision
+     * lands rather than looked up after it.
+     *
+     * Afterwards there may be nothing to look up. Archiving takes the row out
+     * of the list, the query goes back to the server for the rest, and a list
+     * mid-refetch answers for no row at all — so a step to the next message
+     * read a blank and became a step back to the mailbox instead. The records
+     * themselves do not go anywhere, so holding on to them is enough.
+     *
+     * Neighbours rather than a slot, too: whether the row stays put (filing)
+     * or leaves (archiving), the message after this one is the message that
+     * was after it, and the message before is the one that was before.
+     *
+     * An index of -1 — the row was never found — has no neighbours rather
+     * than the first and last rows of the list.
+     */
+    const stepFrom = (message) => {
+        const index = rowIndexOf(message);
         const list = controller().get('mailboxMessageList');
-        if (!list || typeof list.getObjectAt !== 'function' || index < 0) return null;
+        const at = (position) => {
+            if (!list || typeof list.getObjectAt !== 'function') return null;
+            if (position < 0) return null;
+            return list.getObjectAt(position) || null;
+        };
 
-        const here = list.getObjectAt(index);
-        if (here && sameConversation(here, from)) return list.getObjectAt(index + 1) || null;
-        return here || null;
-    };
-
-    // The row above, for a setting that asks to go back rather than on. It is
-    // the same row whether or not the decision took `from` out of the list,
-    // since everything above it keeps its place either way.
-    const previousAbove = (index) => {
-        const list = controller().get('mailboxMessageList');
-        if (!list || typeof list.getObjectAt !== 'function' || index <= 0) return null;
-        return list.getObjectAt(index - 1) || null;
+        return {
+            index: index,
+            next: index < 0 ? null : at(index + 1),
+            previous: index < 1 ? null : at(index - 1)
+        };
     };
 
     /*
@@ -3422,15 +3460,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * Run a tick after the decision, so the store has taken Triage off the
      * one just decided and the list has settled.
      *
-     * `index` is where the conversation sat before the decision, and the
-     * caller reads it before making one — which is the whole point of it.
-     * Filing in the triage label's own view takes the row out of the list, so
-     * an index read here, afterwards, finds nothing. rowIndexOf still stands
-     * in where a caller has none to give.
+     * `step` holds the neighbours as they were before the decision, and the
+     * caller takes it before making one — which is the whole point of it.
+     * Reading them here instead finds a list still refetching, and a list
+     * refetching answers for no row at all.
      */
-    const advanceAfterDecision = (from, index) => {
+    const advanceAfterDecision = (from, step) => {
         if (!onTriageSurface()) return;
-        const at = typeof index === 'number' ? index : rowIndexOf(from);
+        const plan = step && typeof step === 'object' ? step : stepFrom(from);
 
         setTimeout(() => {
             if (!onTriageSurface()) return;
@@ -3447,25 +3484,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             };
 
             const where = afterActionGoTo();
-            if (where === 'mailbox') {
-                backToList();
-                return;
-            }
+            const target = where === 'prev' ? plan.previous
+                : where === 'next' ? plan.next
+                    : null;
 
-            const next = where === 'prev'
-                ? previousAbove(at)
-                : nextBelow(from, at);
-
-            // Nothing that way is the end of the list, and Fastmail answers
-            // that with the mailbox rather than by staying on the message the
-            // decision has just finished with.
-            if (!next) {
-                backToList();
-                return;
-            }
-
-            const url = urlForMessage(next);
+            // Nothing that way is the end of the list, and the mailbox is
+            // what Fastmail answers that with — rather than staying on the
+            // message the decision has just finished with.
+            const url = target && urlForMessage(target);
             if (url) goToUrl(url);
+            else backToList();
         }, 0);
     };
 
@@ -3490,10 +3518,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // unrelated label add.
     let pendingFileAdvance = false;
     let pendingFileFrom = null;
-    // Where that conversation sat when the picker opened. Read at arming time
-    // for the same reason every other caller reads it early: the pick may take
-    // the row out of the list it was in, and by then there is nothing to find.
-    let pendingFileIndex = -1;
+    // Its neighbours when the picker opened. Taken at arming time for the
+    // same reason every other caller takes them early: the pick may take the
+    // row out of the list it was in, and by then there is nothing to find.
+    let pendingFileStep = null;
     let pendingFileAdvanceTimer = null;
 
     const clearFileAdvanceTimer = () => {
@@ -3505,28 +3533,28 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const armFileAdvance = (from) => {
         pendingFileAdvance = true;
         pendingFileFrom = from || null;
-        pendingFileIndex = rowIndexOf(from);
+        pendingFileStep = stepFrom(from);
         clearFileAdvanceTimer();
         pendingFileAdvanceTimer = setTimeout(() => {
             pendingFileAdvance = false;
             pendingFileFrom = null;
-            pendingFileIndex = -1;
+            pendingFileStep = null;
             pendingFileAdvanceTimer = null;
         }, 12000);
     };
 
-    // The remembered conversation and the row it was on, wrapped in an object
-    // when a File verb is waiting on this pick, or null when nothing is.
-    // One-shot.
+    // The remembered conversation and what sat either side of it, wrapped in
+    // an object when a File verb is waiting on this pick, or null when
+    // nothing is. One-shot.
     const takeFileAdvance = () => {
         if (!pendingFileAdvance) return null;
         const from = pendingFileFrom;
-        const index = pendingFileIndex;
+        const step = pendingFileStep;
         pendingFileAdvance = false;
         pendingFileFrom = null;
-        pendingFileIndex = -1;
+        pendingFileStep = null;
         clearFileAdvanceTimer();
-        return { from: from, index: index };
+        return { from: from, step: step };
     };
 
     // Whether the label add about to land is a filing — the File verb's
@@ -3869,6 +3897,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // so the archive's own didAction cuts the one checkpoint: Triage, every
     // project label and the pin. Helper labels stay.
     const runDone = (actions, keys, finish) => {
+        const from = messagesFrom(keys)[0];
+        // Before anything moves. In the triage label's own view the very
+        // first thing this does — take Triage off — is what takes the row out
+        // of the list, so neighbours read after it are already gone and the
+        // step becomes a step back to the mailbox.
+        const step = stepFrom(from);
+
         silencingDidAction(actions, () => {
             const dropped = [];
             mailboxesAmong(keys).forEach((mailbox) => {
@@ -3884,15 +3919,29 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             if (anyFlagged(keys)) actions.unflag(keys);
         });
 
-        // Archive takes the Inbox off, so the message leaves the list and
-        // Fastmail moves the view on by its own after-an-action setting —
-        // the mailbox, the next conversation or the previous one. That step
-        // used to be held here and replaced with a walk of this mode's own,
-        // which ended the run and went back to the mailbox as soon as the
-        // next message was not waiting for triage. In an Inbox where
-        // everything is already filed that is every message, so archiving
-        // always went back to the mailbox however the setting was set.
-        finish();
+        /*
+         * Fastmail applies its own after-an-action setting when it archives —
+         * but only in the Inbox. Its own test is
+         *
+         *     stayHere = !inbox || !actioningFocused ||
+         *                !listIsIn(inbox, mailboxMessageList.where)
+         *
+         * and the triage label's list is the triage label, whose query names
+         * that label and not the Inbox. So archiving from the Inbox stepped
+         * on and archiving from the triage label sat there, still showing a
+         * message that had just been archived.
+         *
+         * The two lists hold the same mail, so they should behave the same.
+         * The step is made here for both, to the place the setting names, and
+         * Fastmail's own is held so it cannot also happen. Anywhere else the
+         * stock behaviour stands.
+         */
+        if (onTriageSurface()) {
+            withDidAction(actions, stayHereAfter, finish);
+            advanceAfterDecision(from, step);
+        } else {
+            finish();
+        }
     };
 
     // keep — `v`. A thread that already has a destination is kept by taking
@@ -3908,17 +3957,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         const from = messagesFrom(keys)[0];
         // Read first: in the Inbox the row stays put, but in the triage
         // label's own view taking Triage off takes the row out of the list,
-        // and the index would be gone by the line after this one.
-        const index = rowIndexOf(from);
+        // and the neighbours would be gone by the line after this one.
+        const step = stepFrom(from);
         // Nothing to take off is not nothing to do. A message already filed
         // and already past Triage is a decision that has been made, and the
         // answer to being asked again is the same as the first time: move on.
         // Stopping here left the view sitting on it.
         if (removes.length) actions.addremove(keys, [], removes);
-        // Kept in place; the view moves on to the next conversation waiting
-        // for triage, or back to the list — first row focused — when none is
-        // left.
-        advanceAfterDecision(from, index);
+        // Kept in place; the view moves on to where the setting says, or back
+        // to the list — first row focused — when there is nothing that way.
+        advanceAfterDecision(from, step);
     };
 
     // pin — `s`. A toggle over the selection: all pinned, unpin; else pin.

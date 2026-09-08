@@ -44,7 +44,7 @@ test('the alert payload carries title, body, badge, thread and the url to open',
             'thread-id': 'T1',
             badge: 3,
         },
-        url: 'https://app.fastmail.com/mail/Inbox/T1',
+        url: 'https://app.fastmail.com/mail/Inbox/T1.M1',
         emailId: 'M1',
     });
 });
@@ -60,7 +60,25 @@ test('a badge-only payload is just the number', () => {
 });
 
 test('thread ids are url-encoded', () => {
-    assert.equal(threadURL({ threadId: 'T a/b' }), 'https://app.fastmail.com/mail/Inbox/T%20a%2Fb');
+    assert.equal(
+        threadURL({ id: 'M c+d', threadId: 'T a/b' }),
+        'https://app.fastmail.com/mail/Inbox/T%20a%2Fb.M%20c%2Bd',
+    );
+});
+
+// Fastmail reads the last path segment as "<thread id>.<message id>", and a
+// segment with no dot in it as a message id on its own. So a bare thread id
+// is not a short way of naming the conversation — it is a message id that
+// matches no message, and the app falls back to showing the mailbox. That is
+// what a tapped notification did: it opened the list instead of the message.
+test('the link names the message inside the thread, not the thread alone', () => {
+    const url = threadURL(email());
+    assert.equal(url, 'https://app.fastmail.com/mail/Inbox/T1.M1');
+    assert.equal(alertPayload(email(), { badge: null }).url, url);
+
+    // Both halves are there and in that order: thread first, then message
+    const segment = url.slice(url.lastIndexOf('/') + 1);
+    assert.deepEqual(segment.split('.'), ['T1', 'M1']);
 });
 
 // A message still carrying the badge label is opened where it is worked on,
@@ -71,18 +89,18 @@ test('a message in the badge label opens in that label rather than the Inbox', (
 
     assert.equal(
         threadURL(waiting, { badge: { id: triage, label: 'Triage' } }),
-        'https://app.fastmail.com/mail/Triage/T1',
+        'https://app.fastmail.com/mail/Triage/T1.M1',
     );
     assert.equal(alertPayload(waiting, { badge: 2, context: { id: triage, label: 'Triage' } }).url,
-        'https://app.fastmail.com/mail/Triage/T1');
+        'https://app.fastmail.com/mail/Triage/T1.M1');
 
     // Already triaged, or no badge label at all: the Inbox is the context
     assert.equal(
         threadURL(email(), { badge: { id: triage, label: 'Triage' } }),
-        'https://app.fastmail.com/mail/Inbox/T1',
+        'https://app.fastmail.com/mail/Inbox/T1.M1',
     );
-    assert.equal(threadURL(waiting), 'https://app.fastmail.com/mail/Inbox/T1');
-    assert.equal(threadURL(waiting, { badge: null }), 'https://app.fastmail.com/mail/Inbox/T1');
+    assert.equal(threadURL(waiting), 'https://app.fastmail.com/mail/Inbox/T1.M1');
+    assert.equal(threadURL(waiting, { badge: null }), 'https://app.fastmail.com/mail/Inbox/T1.M1');
 });
 
 test('a label whose name needs encoding still makes one path segment', () => {
@@ -90,6 +108,6 @@ test('a label whose name needs encoding still makes one path segment', () => {
     const waiting = email({ mailboxIds: { [inbox]: true, [held]: true } });
     assert.equal(
         threadURL(waiting, { badge: { id: held, label: 'To read/now' } }),
-        'https://app.fastmail.com/mail/To%20read%2Fnow/T1',
+        'https://app.fastmail.com/mail/To%20read%2Fnow/T1.M1',
     );
 });
