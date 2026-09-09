@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Custom mode
 // @namespace    custom
-// @version      3.11
+// @version      3.12
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @match        https://app.fastmail.com/*
@@ -692,7 +692,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     conditions: [{ inMailbox: id }, { inMailbox: inbox.get('id') }]
                 },
                 sort: [{ property: 'receivedAt', isAscending: false }],
-                collapseThreads: true
+                collapseThreads: true,
+                // A windowed query's length is the window it has loaded —
+                // thirty-odd rows — not how many there are. Asking for a
+                // total makes the server count them, and length then means
+                // what a badge needs. Without this, every label with more
+                // than a window's worth in the Inbox reads the same wrong
+                // number.
+                hasTotal: true
             };
 
             // The id has to come from getQueryId: the source resolves a
@@ -734,6 +741,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     //
     // The total stands in until the query lands — it is the same number
     // whenever the model has been kept — so a badge never sits empty waiting.
+    // A query that has not loaded reports a null length, which is what makes
+    // that stand-in happen rather than a flash of zero.
     const countFor = (mailbox) => {
         if (settings.filteredLabelCounts && modeIsOn && isProject(mailbox)) {
             const query = countQueryFor(mailbox);
