@@ -12,6 +12,10 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
     private let model: ShellModel
     private var lastURL: URL
     private let openExternally: @MainActor (URL) -> Void
+    /// Whether the app is the one you are looking at. Asked when the web
+    /// content process dies, which reads very differently depending on the
+    /// answer.
+    private let isInFront: @MainActor () -> Bool
     // Keeps the settings observer alive exactly as long as the view exists
     var settingsPusher: CustomModeSettingsPusher?
     var sharePresenter: SharePresenter?
@@ -30,11 +34,19 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             #else
             NSWorkspace.shared.open(url)
             #endif
+        },
+        isInFront: @escaping @MainActor () -> Bool = {
+            #if canImport(UIKit)
+            UIApplication.shared.applicationState == .active
+            #else
+            NSApplication.shared.isActive
+            #endif
         }
     ) {
         self.model = model
         self.lastURL = startURL
         self.openExternally = openExternally
+        self.isInFront = isInFront
     }
 
     enum FrameOutcome: Equatable {
@@ -183,8 +195,19 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         #endif
     }
 
+    /// The page's own process has gone. Reload either way; say so only when
+    /// you were looking at it.
+    ///
+    /// iOS reclaims the web content process of a backgrounded app whenever it
+    /// wants the memory, and Fastmail's page is a large tenant. Coming back to
+    /// an app that has quietly reloaded is ordinary, and a banner about it
+    /// says nothing anyone can act on — it just greets you on the way in.
+    /// A process that dies while the page is in front of you is the other
+    /// case: something you were reading vanished, and that is worth a line.
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        model.banner = "The page stopped responding and was reloaded."
+        if isInFront() {
+            model.banner = "The page stopped responding and was reloaded."
+        }
         webView.load(URLRequest(url: lastURL))
     }
 

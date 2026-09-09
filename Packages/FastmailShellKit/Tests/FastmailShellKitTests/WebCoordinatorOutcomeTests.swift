@@ -65,3 +65,35 @@ import WebKit
     let url = URL(string: "https://fastmailusercontent.com/evil.pdf")!
     #expect(WebCoordinator.subframeCancelLogMessage(for: url) == "Cancelled subframe response: https://fastmailusercontent.com/evil.pdf")
 }
+
+// The system reclaims a backgrounded app's web content process routinely, and
+// coming back to a page that reloaded itself is ordinary. Saying so there is
+// noise about something nobody can act on; saying so when the page vanished
+// while you were reading it is an explanation.
+@MainActor
+@Test func aTerminationInTheBackgroundReloadsWithoutSayingSo() {
+    let model = ShellModel()
+    let coordinator = WebCoordinator(
+        model: model,
+        startURL: URL(string: "https://app.fastmail.com/mail/Inbox")!,
+        isInFront: { false }
+    )
+
+    coordinator.webViewWebContentProcessDidTerminate(WKWebView())
+
+    #expect(model.banner == nil)
+}
+
+@MainActor
+@Test func aTerminationWhileYouAreLookingAtItSaysWhatHappened() {
+    let model = ShellModel()
+    let coordinator = WebCoordinator(
+        model: model,
+        startURL: URL(string: "https://app.fastmail.com/mail/Inbox")!,
+        isInFront: { true }
+    )
+
+    coordinator.webViewWebContentProcessDidTerminate(WKWebView())
+
+    #expect(model.banner == "The page stopped responding and was reloaded.")
+}
