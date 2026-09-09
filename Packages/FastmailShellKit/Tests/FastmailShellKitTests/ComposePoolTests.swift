@@ -139,4 +139,37 @@ private func makePlainWindow() -> NSWindow {
     #expect(compose.tabbingMode == .disallowed)
     #expect(compose.tabGroup == nil)
 }
+
+// A message written in a tab starts where its neighbours' pages start: below
+// the bar, with the same band of window colour above it. The window's own
+// content already begins under the bar, so only the band is left to add.
+@Test @MainActor func aComposeTabStartsWhereAMailPageStarts() {
+    #expect(ComposeWindows.topInset(air: 14) == 6)
+    #expect(ComposeWindows.topInset(air: 40) == 32)
+    // Nothing measured yet, or no air at all: the page keeps the whole window.
+    #expect(ComposeWindows.topInset(air: nil) == 0)
+    #expect(ComposeWindows.topInset(air: 4) == 0)
+}
+
+// Dressed as a tab it borrows the window it joined: the same title bar height,
+// so the tab bar does not jump, and the same colour behind it. Going back to
+// the pool it is a plain window again, title and all.
+@Test @MainActor func aComposeWindowBorrowsItsHostsChromeAndGivesItBack() {
+    let host = makePlainWindow()
+    host.backgroundColor = .systemGreen
+    let compose = makePlainWindow()
+    compose.title = "New Message"
+
+    ComposeWindows.dress(compose, asTabOf: host)
+    #expect(compose.toolbar != nil)
+    #expect(compose.titlebarAppearsTransparent)
+    #expect(compose.titleVisibility == .hidden)
+    #expect(compose.backgroundColor == host.backgroundColor)
+
+    ComposeWindows.readyForPool(compose)
+    #expect(compose.toolbar == nil)
+    #expect(!compose.titlebarAppearsTransparent)
+    #expect(compose.titleVisibility == .visible)
+    #expect(compose.tabbingMode == .disallowed)
+}
 #endif

@@ -94,7 +94,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
             create: { [weak self] in self?.makeWindow() ?? NSWindow() },
             prepare: { window in
                 ComposeWindows.readyForPool(window)
-                (window.contentView as? WKWebView)?.load(URLRequest(url: composeURL))
+                ComposeWindows.webView(of: window)?.load(URLRequest(url: composeURL))
             }
         )
         pool?.preload()
@@ -121,11 +121,67 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
     }
 
     /// Compose windows are reused, so being a tab is undone before one goes
-    /// back to the pool: it leaves the group and refuses tabs again, or the
-    /// next message would turn up somewhere nobody put it.
+    /// back to the pool: it leaves the group, gives back the chrome it
+    /// borrowed and refuses tabs again, or the next message would turn up
+    /// somewhere nobody put it, dressed as something it is not.
     static func readyForPool(_ window: NSWindow) {
         window.tabGroup?.removeWindow(window)
         window.tabbingMode = .disallowed
+        window.toolbar = nil
+        window.toolbarStyle = .automatic
+        window.titlebarAppearsTransparent = false
+        window.titleVisibility = .visible
+        window.backgroundColor = .windowBackgroundColor
+        window.appearance = nil
+        setTopInset(0, in: window)
+    }
+
+    /// Borrowed from the window it is joining: the same title bar height, so
+    /// the tab bar does not jump from tab to tab, and the same colour behind
+    /// it, so the band above the message matches the band above a mailbox.
+    static func dress(_ window: NSWindow, asTabOf host: NSWindow) {
+        raiseTitlebar(of: window)
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.backgroundColor = host.backgroundColor
+        window.appearance = host.appearance
+    }
+
+    /// How far down a message has to start to line up with the page in the
+    /// next tab. The window's own content already begins below the tab bar,
+    /// with the bar's bottom padding to spare, so only the rest of the band
+    /// is left to add.
+    static func topInset(air: CGFloat?) -> CGFloat {
+        guard let air else { return 0 }
+        return max(0, air - tabBarBottomPadding)
+    }
+
+    /// Keeps every compose window that is currently a tab lined up with its
+    /// neighbours. Called whenever any window's page is measured, since that
+    /// is when the answer can have changed.
+    func fitTabbedWindows() {
+        let inset = Self.topInset(air: FullScreenObserver.airAroundTabBar)
+        for window in NSApp.windows where window.delegate === self && window.tabGroup != nil {
+            Self.setTopInset(inset, in: window)
+        }
+    }
+
+    /// The page is held in a plain view rather than being the window's whole
+    /// content, so there is somewhere for the band above it to come from: the
+    /// window's own colour, showing through.
+    static func setTopInset(_ inset: CGFloat, in window: NSWindow) {
+        guard let container = window.contentView,
+              let view = container.subviews.first as? WKWebView else { return }
+        view.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: container.bounds.width,
+            height: max(0, container.bounds.height - inset)
+        )
+    }
+
+    static func webView(of window: NSWindow) -> WKWebView? {
+        window.contentView?.subviews.first as? WKWebView
     }
 
     deinit {
@@ -154,7 +210,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
         configure(profile: profile)
         guard let pool else { return }
         let window = pool.take()
-        (window.contentView as? WKWebView)?
+        Self.webView(of: window)?
             .load(URLRequest(url: ComposeURL.url(for: profile, mailto: mailto)))
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
@@ -172,8 +228,10 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
         }
         let window = pool.take()
         window.tabbingMode = .preferred
+        Self.dress(window, asTabOf: host)
         host.addTabbedWindow(window, ordered: .above)
         window.makeKeyAndOrderFront(nil)
+        fitTabbedWindows()
         NSApp.activate()
     }
 
@@ -198,7 +256,11 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.title = "New Message"
-        window.contentView = view
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: 640))
+        view.frame = container.bounds
+        view.autoresizingMask = [.width, .height]
+        container.addSubview(view)
+        window.contentView = container
         window.delegate = self
         window.center()
         return window
