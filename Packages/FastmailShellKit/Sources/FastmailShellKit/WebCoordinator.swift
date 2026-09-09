@@ -54,6 +54,10 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         case cancel
         case cancelAndOpenExternally
         case cancelWithBanner
+        /// A page asking for a window of its own — "Open in new window" on a
+        /// message or a draft — which is given one rather than being made to
+        /// take over the window it was asked from.
+        case openInWindow
     }
 
     nonisolated static func outcome(for decision: NavigationDecision, isMainFrame: Bool) -> FrameOutcome {
@@ -69,15 +73,22 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         }
     }
 
+    /// Fastmail's own windows are always given one: it asks for them in more
+    /// ways than a link click, and "Open in new window" is the app being used
+    /// rather than a page springing something on you. Anywhere else the old
+    /// rule stands — a window nobody clicked for is a pop-up.
     nonisolated static func windowOpenOutcome(
         navigationType: WKNavigationType,
         decision: NavigationDecision
     ) -> FrameOutcome {
-        guard navigationType == .linkActivated else { return .cancel }
+        let clicked = navigationType == .linkActivated
         switch decision {
-        case .allow: return .allow
-        case .openExternally, .download: return .cancelAndOpenExternally
-        case .refuse: return .cancelWithBanner
+        case .allow:
+            return .openInWindow
+        case .openExternally, .download:
+            return clicked ? .cancelAndOpenExternally : .cancel
+        case .refuse:
+            return clicked ? .cancelWithBanner : .cancel
         }
     }
 
@@ -96,7 +107,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         }
         let decision = NavigationPolicy.decide(url: url)
         switch Self.outcome(for: decision, isMainFrame: targetFrame.isMainFrame) {
-        case .allow:
+        case .allow, .openInWindow:
             if targetFrame.isMainFrame {
                 lastURL = url
             }
@@ -130,7 +141,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             return
         }
         switch Self.outcome(for: decision, isMainFrame: navigationResponse.isForMainFrame) {
-        case .allow:
+        case .allow, .openInWindow:
             decisionHandler(.allow)
         case .cancel:
             decisionHandler(.cancel)
@@ -175,6 +186,16 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         guard let url = navigationAction.request.url else { return nil }
         let decision = NavigationPolicy.decide(url: url)
         switch Self.windowOpenOutcome(navigationType: navigationAction.navigationType, decision: decision) {
+        case .openInWindow:
+            #if canImport(UIKit)
+            // One window is all there is on a phone.
+            webView.load(URLRequest(url: url))
+            #else
+            return ComposeWindows.shared.window(
+                for: configuration,
+                size: Self.windowSize(windowFeatures)
+            )
+            #endif
         case .allow:
             webView.load(URLRequest(url: url))
         case .cancel:
@@ -350,6 +371,17 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             top = presented
         }
         return top
+    }
+    #endif
+
+    #if !canImport(UIKit)
+    /// The size the page asked for, where it asked for one, and a size a
+    /// message reads comfortably at where it did not.
+    nonisolated static func windowSize(_ features: WKWindowFeatures) -> NSSize {
+        NSSize(
+            width: features.width?.doubleValue ?? 760,
+            height: features.height?.doubleValue ?? 640
+        )
     }
     #endif
 

@@ -29,14 +29,22 @@ import WebKit
 }
 
 @Test func linkActivatedWindowOpenFollowsTheNavigationDecision() {
-    #expect(WebCoordinator.windowOpenOutcome(navigationType: .linkActivated, decision: .allow) == .allow)
+    #expect(WebCoordinator.windowOpenOutcome(navigationType: .linkActivated, decision: .allow) == .openInWindow)
     #expect(WebCoordinator.windowOpenOutcome(navigationType: .linkActivated, decision: .openExternally) == .cancelAndOpenExternally)
     #expect(WebCoordinator.windowOpenOutcome(navigationType: .linkActivated, decision: .download) == .cancelAndOpenExternally)
     #expect(WebCoordinator.windowOpenOutcome(navigationType: .linkActivated, decision: .refuse) == .cancelWithBanner)
 }
 
-@Test func nonLinkActivatedWindowOpenIsCancelledRegardlessOfDecision() {
-    for decision: NavigationDecision in [.allow, .openExternally, .download, .refuse] {
+// Fastmail asks for a window of its own in more ways than a link click —
+// "Open in new window" on a message is one — and all of them get a window.
+@Test func aFastmailWindowIsGivenOneHoweverItWasAskedFor() {
+    #expect(WebCoordinator.windowOpenOutcome(navigationType: .other, decision: .allow) == .openInWindow)
+    #expect(WebCoordinator.windowOpenOutcome(navigationType: .formSubmitted, decision: .allow) == .openInWindow)
+}
+
+// Anywhere else, a window nobody clicked for is a pop-up and is refused.
+@Test func nonLinkActivatedWindowOpenIsCancelledForAnywhereElse() {
+    for decision: NavigationDecision in [.openExternally, .download, .refuse] {
         #expect(WebCoordinator.windowOpenOutcome(navigationType: .other, decision: decision) == .cancel)
     }
 }
