@@ -23,6 +23,33 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
 
     public func install() {
         UNUserNotificationCenter.current().delegate = self
+        // Asked at launch rather than when the first message arrives, so the
+        // app is registered with the system and can be set up under
+        // Notifications in System Settings before it has anything to show.
+        ask()
+    }
+
+    /// One request at a time, and everything that arrived while it was out
+    /// goes as soon as it is answered.
+    private func ask() {
+        guard !authorizationGranted, !authorizationDenied, !authorizationPending else { return }
+        authorizationPending = true
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
+            [weak self] granted, error in
+            Task { @MainActor in
+                guard let self else { return }
+                self.authorizationPending = false
+                let queued = self.waiting
+                self.waiting = []
+                if granted {
+                    self.authorizationGranted = true
+                    queued.forEach(self.deliver)
+                } else {
+                    self.authorizationDenied = true
+                    if let error { print("[notifications] \(error.localizedDescription)") }
+                }
+            }
+        }
     }
 
     // While the app is frontmost the page is on screen and the message
@@ -39,23 +66,7 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
             // request; otherwise a second or third notification in the same
             // burst falls through to deliver() before the prompt resolves.
             waiting.append(notification)
-            guard !authorizationPending else { return }
-            authorizationPending = true
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
-                [weak self] granted, _ in
-                Task { @MainActor in
-                    guard let self else { return }
-                    self.authorizationPending = false
-                    let queued = self.waiting
-                    self.waiting = []
-                    if granted {
-                        self.authorizationGranted = true
-                        queued.forEach(self.deliver)
-                    } else {
-                        self.authorizationDenied = true
-                    }
-                }
-            }
+            ask()
             return
         }
         deliver(notification)

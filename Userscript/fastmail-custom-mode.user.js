@@ -2937,12 +2937,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * one project label; so no step happens unless this one makes it, and
      * the step to make is the one that setting names.
      *
-     * It used to be a rule of its own: on the phone, landing on a message
-     * already triaged meant the run was over and the view went back to the
-     * list. That reads as the setting being ignored once the Inbox has
-     * nothing left to triage in it, because then every decision ends the run.
-     * Fastmail's own setting says all three of these things already; back to
-     * the mailbox, on to the next, back to the previous; so it decides.
+     * Fastmail's own setting says where to go; back to the mailbox, on to
+     * the next, back to the previous; so it decides, but only while there is
+     * still triage to do. A neighbour carrying no triage label is not part of
+     * the run, and landing on it means reading something nobody asked about,
+     * so the list catches that instead.
      *
      * Run a tick after the decision, so the store has taken Triage off the
      * one just decided and the list has settled.
@@ -2978,10 +2977,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 : where === 'next' ? plan.next
                     : null;
 
+            // The run ends where the triage label does. With no triage label
+            // set there is no run to end, and the setting has the last word.
+            const triage = target && triageMailbox(target.get('accountId'));
+            const stillTriage = !triage || carriesMailbox(target, triage);
+
             // Nothing that way is the end of the list, and the mailbox is what
             // Fastmail answers that with; rather than staying on the message
             // the decision has just finished with.
-            const url = target && urlForMessage(target);
+            const url = target && stillTriage && urlForMessage(target);
             if (url) goToUrl(url);
             else backToList();
         }, 0);
