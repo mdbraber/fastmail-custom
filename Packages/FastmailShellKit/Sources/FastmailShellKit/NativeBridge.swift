@@ -20,6 +20,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onNotify: @MainActor (MailNotification) -> Void
     private let onDismissNotifications: @MainActor ([String]) -> Void
     private let onShowWindow: @MainActor () -> Void
+    /// The message the page is showing, or nothing when it is showing a list.
+    private let onSubject: @MainActor (String?) -> Void
     /// Asked where to put a message, and answers where it put it; so a page
     /// told "inline" knows to go ahead and open one itself.
     private let onCompose: @MainActor (String) -> String
@@ -37,6 +39,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onNotify: @escaping @MainActor (MailNotification) -> Void = { _ in },
         onDismissNotifications: @escaping @MainActor ([String]) -> Void = { _ in },
         onShowWindow: @escaping @MainActor () -> Void = {},
+        onSubject: @escaping @MainActor (String?) -> Void = { _ in },
         onCompose: @escaping @MainActor (String) -> String = { _ in ComposeMode.inline.rawValue }
     ) {
         self.expectedHost = expectedHost
@@ -51,6 +54,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onNotify = onNotify
         self.onDismissNotifications = onDismissNotifications
         self.onShowWindow = onShowWindow
+        self.onSubject = onSubject
         self.onCompose = onCompose
     }
 
@@ -122,9 +126,11 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             onOpenSettings()
             return BridgeReply(value: nil, error: nil)
         case "subject":
+            let subject = payload["title"] as? String
             if let webView {
-                WebViewRegistry.shared.setSubject(payload["title"] as? String, for: webView)
+                WebViewRegistry.shared.setSubject(subject, for: webView)
             }
+            onSubject(subject)
             return BridgeReply(value: nil, error: nil)
         case "share":
             let url = (payload["url"] as? String).flatMap(URL.init(string:))

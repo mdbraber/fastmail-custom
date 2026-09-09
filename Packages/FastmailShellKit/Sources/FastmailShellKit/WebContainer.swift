@@ -26,6 +26,10 @@ public final class ShellModel: ObservableObject {
     @Published public var noDragRects: [CGRect] = []
     @Published public var shareRequest: ShareRequest?
     @Published public var pendingLoad: URL?
+    /// The page this window is showing, and the message on it when there is
+    /// one. Watched so the page can be offered to another device.
+    @Published public var pageURL: URL?
+    @Published public var pageSubject: String?
 
     public init() {}
 
@@ -125,6 +129,7 @@ public struct WebContainer {
                 NotificationPresenter.shared.showWindow()
                 #endif
             },
+            onSubject: { [model] subject in model.pageSubject = subject },
             onCompose: { asked in
                 #if os(macOS)
                 return ComposeCommands.open(asked: asked)
@@ -175,6 +180,7 @@ public struct WebContainer {
         coordinator.settingsPusher = CustomModeSettingsPusher(webView: webView)
         coordinator.sharePresenter = SharePresenter(model: model, webView: webView)
         coordinator.linkLoader = LinkLoader(model: model, webView: webView)
+        coordinator.pageWatcher = PageWatcher(model: model, webView: webView)
         #if !canImport(UIKit)
         coordinator.commandRelay = CommandRelay(model: model, webView: webView)
         #endif
@@ -220,6 +226,21 @@ final class LinkLoader {
     private func load(_ url: URL) {
         model.pendingLoad = nil
         webView?.load(URLRequest(url: url))
+    }
+}
+
+/// Fastmail moves between mailboxes and messages without loading anything, so
+/// the address is watched rather than read once when a page finishes.
+@MainActor
+final class PageWatcher {
+    private var observation: NSKeyValueObservation?
+
+    init(model: ShellModel, webView: WKWebView) {
+        observation = webView.observe(\.url, options: [.initial, .new]) { [weak model] view, _ in
+            MainActor.assumeIsolated {
+                model?.pageURL = view.url
+            }
+        }
     }
 }
 

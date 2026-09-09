@@ -44,6 +44,10 @@
             </array>
         </dict>
     </array>
+    <key>NSUserActivityTypes</key>
+    <array>
+        <string>$(PRODUCT_BUNDLE_IDENTIFIER).browse</string>
+    </array>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
     <key>NSAppleScriptEnabled</key>

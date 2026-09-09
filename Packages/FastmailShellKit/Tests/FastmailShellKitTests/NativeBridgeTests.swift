@@ -233,3 +233,22 @@ actor Recorder {
     let reply = await bridge.handle(body: ["action": "compose", "payload": [:]])
     #expect(reply.error != nil)
 }
+
+// The page reports the message it is showing, which titles the window and the
+// Handoff banner on another device. Leaving a message reports nothing, and
+// that has to arrive too, or the title outlives the message.
+@Test @MainActor func subjectPayloadIsReportedAndCanBeEmpty() async {
+    var received: [String?] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onSubject: { received.append($0) }
+    )
+    let reply = await bridge.handle(body: [
+        "action": "subject", "payload": ["title": "Dinner on Friday"],
+    ])
+    await bridge.handle(body: ["action": "subject", "payload": [:]])
+    #expect(reply.error == nil)
+    #expect(received == ["Dinner on Friday", nil])
+}

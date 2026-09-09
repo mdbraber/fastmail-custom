@@ -26,6 +26,13 @@ public struct AppShell: View {
         profile.on(Backend.resolve(backendName))
     }
 
+    // The app's own activity type, which Info.plist lists as well. Hung off
+    // the bundle identifier, so the personal app continues the personal app.
+    private var activityType: String {
+        Continuity.activityType(bundleID: Bundle.main.bundleIdentifier)
+            ?? "com.mdbraber.fastmail-custom.browse"
+    }
+
     public var body: some View {
         ZStack(alignment: .top) {
             // Keyed on the backend so choosing the other server builds a new
@@ -61,6 +68,22 @@ public struct AppShell: View {
         .animation(.default, value: downloads.items)
         .onOpenURL { url in
             handle(url)
+        }
+        // Handoff: the page open here offered to the same app on your other
+        // device, and to a browser on a device that does not have it.
+        .userActivity(activityType, isActive: Continuity.advertised(model.pageURL) != nil) { activity in
+            guard let url = Continuity.advertised(model.pageURL) else { return }
+            Continuity.describe(
+                activity,
+                url: url,
+                title: Continuity.title(subject: model.pageSubject, fallback: live.displayName)
+            )
+        }
+        .onContinueUserActivity(activityType) { activity in
+            // Routed like any other link, so a page belonging to the other
+            // account still ends up in the other account's app.
+            guard let target = Continuity.target(of: activity) else { return }
+            handle(target)
         }
         #if canImport(UIKit)
         .sheet(isPresented: $settings.isPresented) {

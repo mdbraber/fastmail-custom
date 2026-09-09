@@ -136,3 +136,22 @@ private let nonMatchingHeader = """
     #expect(WebContainer.preferredContentMode == .recommended)
     #endif
 }
+
+// Handoff offers whatever the window is showing, so the model has to keep up
+// with a page Fastmail swaps in without a load.
+@Test @MainActor func theModelFollowsThePageTheWindowIsShowing() async throws {
+    let model = ShellModel()
+    let webView = WKWebView(frame: .zero)
+    let watcher = PageWatcher(model: model, webView: webView)
+    webView.loadHTMLString(
+        "<html><body>hi</body></html>",
+        baseURL: URL(string: "https://app.fastmail.com/mail/Inbox")!
+    )
+    var waited = 0
+    while model.pageURL == nil, waited < 100 {
+        try await Task.sleep(for: .milliseconds(50))
+        waited += 1
+    }
+    #expect(model.pageURL?.absoluteString == "https://app.fastmail.com/mail/Inbox")
+    withExtendedLifetime(watcher) {}
+}

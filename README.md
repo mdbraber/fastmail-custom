@@ -61,6 +61,7 @@ cannot reach on its own: real windows, notifications, downloads and links.
 - ⬇️ **Downloads**: attachments go to a folder you choose.
 - 📤 **Share extension**: send a page or a link to Fastmail from any app.
 - 📮 **mailto handling**: mail links open in the right account.
+- 🤝 **Handoff**: carry on with the same message on your other device.
 - 🔔 **Push notifications**: new mail arrives with Archive, Later and Pin on it.
 - 🤖 **Shortcuts and AppleScript**: drive the app from your own scripts.
 - ⚙️ **Shared settings**: the same settings on Mac, iPhone and in Safari.
