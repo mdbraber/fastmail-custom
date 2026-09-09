@@ -22,6 +22,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
     var pageWatcher: PageWatcher?
     #if !canImport(UIKit)
     var commandRelay: CommandRelay?
+    var continuityBeacon: ContinuityBeacon?
     #endif
 
     public init(

@@ -183,6 +183,9 @@ public struct WebContainer {
         coordinator.pageWatcher = PageWatcher(model: model, webView: webView)
         #if !canImport(UIKit)
         coordinator.commandRelay = CommandRelay(model: model, webView: webView)
+        coordinator.continuityBeacon = ContinuityBeacon(
+            model: model, webView: webView, appName: profile.displayName
+        )
         #endif
         coordinator.badgePuller = BadgePuller(webView: webView)
         DownloadManager.shared.onFinished = { item in

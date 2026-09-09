@@ -70,7 +70,9 @@ public struct AppShell: View {
             handle(url)
         }
         // Handoff: the page open here offered to the same app on your other
-        // device, and to a browser on a device that does not have it.
+        // device, and to a browser on a device that does not have it. The Mac
+        // publishes it from the window instead, in ContinuityBeacon.
+        #if canImport(UIKit)
         .userActivity(activityType, isActive: Continuity.advertised(model.pageURL) != nil) { activity in
             guard let url = Continuity.advertised(model.pageURL) else { return }
             Continuity.describe(
@@ -79,6 +81,7 @@ public struct AppShell: View {
                 title: Continuity.title(subject: model.pageSubject, fallback: live.displayName)
             )
         }
+        #endif
         .onContinueUserActivity(activityType) { activity in
             // Routed like any other link, so a page belonging to the other
             // account still ends up in the other account's app.

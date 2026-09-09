@@ -3,6 +3,44 @@ import SwiftUI
 import WebKit
 import Combine
 
+/// Handoff on the Mac. A window is what carries a user activity here, so the
+/// activity is hung on the window and made current whenever the page changes.
+/// SwiftUI's own modifier fills an activity in but never publishes it, which
+/// left another device offering the page in a browser instead of the app.
+@MainActor
+final class ContinuityBeacon {
+    private let activity: NSUserActivity?
+    private let appName: String
+    private weak var webView: WKWebView?
+    private var subscription: AnyCancellable?
+
+    init(model: ShellModel, webView: WKWebView, appName: String) {
+        self.appName = appName
+        self.webView = webView
+        activity = Continuity.activityType(bundleID: Bundle.main.bundleIdentifier)
+            .map(NSUserActivity.init(activityType:))
+        subscription = model.$pageURL
+            .combineLatest(model.$pageSubject)
+            .sink { [weak self] url, subject in
+                self?.offer(url, subject: subject)
+            }
+    }
+
+    private func offer(_ url: URL?, subject: String?) {
+        guard let activity, let page = Continuity.advertised(url) else { return }
+        Continuity.describe(
+            activity,
+            url: page,
+            title: Continuity.title(subject: subject, fallback: appName)
+        )
+        activity.needsSave = true
+        // The window keeps it alive and current as windows come forward; the
+        // call below covers the first page, before there is a window.
+        webView?.window?.userActivity = activity
+        activity.becomeCurrent()
+    }
+}
+
 extension WebContainer: NSViewRepresentable {
     public func makeCoordinator() -> WebCoordinator {
         WebCoordinator(model: model, startURL: loadURL)
