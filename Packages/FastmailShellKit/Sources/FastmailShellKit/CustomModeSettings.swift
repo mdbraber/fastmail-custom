@@ -187,6 +187,13 @@ public enum CustomModeSettings {
             default: .text("")
         ),
         Option(
+            "backToListAfterTriage",
+            group: .labelsFiling,
+            title: "Back to the list when triage runs out",
+            hint: "Filing steps to the next message only while that message still carries the triage label; otherwise the message list comes back.",
+            default: .toggle(true)
+        ),
+        Option(
             "dragAdditive",
             group: .labelsFiling,
             title: "Dragging adds a label",

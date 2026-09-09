@@ -282,6 +282,22 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
+			<string>Filing steps to the next message only while that message still carries the triage label; otherwise the message list comes back.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Back to the list when triage runs out</string>
+			<key>Key</key>
+			<string>customMode.backToListAfterTriage</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
 			<string>A drop files the message and keeps it in the Inbox. Option moves it.</string>
 		</dict>
 		<dict>

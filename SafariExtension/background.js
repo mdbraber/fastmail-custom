@@ -39,6 +39,7 @@ const DEFAULT_SETTINGS = {
     labelsAutoSave: true,
     stickyInboxFilter: true,
     filteredLabelCounts: true,
+    backToListAfterTriage: true,
     triageLabel: 'Triage',
     snoozeKey: 'w',
     snoozeDefault: '2w',
