@@ -182,4 +182,34 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     #expect(window.toolbar?.isVisible == true)
 }
 
+// A tab bar is drawn over the page rather than moving it, so without help the
+// page keeps its full height and the bar hides a strip of it — Fastmail's list
+// toolbar, as it happens — with a sliver of page showing above.
+
+@Test @MainActor func aWindowWithoutTabsLeavesThePageAlone() {
+    let window = makeWindow()
+    configureWindow(window)
+    // The chrome does cover the top of the page: that is the design, and the
+    // header is meant to show through it.
+    #expect(contentTopInset(of: window) > 0)
+    // But nothing is pushed down until a tab bar is actually there.
+    #expect(tabbedPageInset(of: window) == 0)
+}
+
+@Test @MainActor func theScriptMovesOnlyWhatSitsBelowTheHeader() {
+    let showing = tabInsetScript(visible: true, barTop: 66, barBottom: 94)
+    #expect(showing.contains("add('fmshell-tabbed')"))
+    // Both edges are measured in the page: the header, which is what moves,
+    // and the search box, which sets how much air the bar gets.
+    #expect(showing.contains("v-PageHeader"))
+    #expect(showing.contains("searchBottom"))
+    // The room above the bar, and the room below it, are the same measurement.
+    #expect(showing.contains("66-searchBottom"))
+    #expect(showing.contains("94-header+above"))
+
+    let gone = tabInsetScript(visible: false, barTop: 0, barBottom: 0)
+    #expect(gone.contains("remove('fmshell-tabbed')"))
+    #expect(!gone.contains("v-PageHeader"))
+}
+
 #endif
