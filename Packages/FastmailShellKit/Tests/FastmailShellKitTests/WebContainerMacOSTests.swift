@@ -203,9 +203,10 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     // and the search box, which sets how much air the bar gets.
     #expect(showing.contains("v-PageHeader"))
     #expect(showing.contains("searchBottom"))
-    // The room above the bar, and the room below it, are the same measurement.
+    // The room below the bar is half the room above it, which is the only
+    // half of the pair that is ours to choose.
     #expect(showing.contains("66-searchBottom"))
-    #expect(showing.contains("94-header+above"))
+    #expect(showing.contains("94-header+Math.round(above/2)"))
 
     let gone = tabInsetScript(visible: false, barTop: 0, barBottom: 0)
     #expect(gone.contains("remove('fmshell-tabbed')"))

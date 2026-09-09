@@ -201,10 +201,11 @@ func tabBarEdges(contentInset: CGFloat) -> (top: CGFloat, bottom: CGFloat)? {
 /// sampled from the header itself, so it reads as one taller header with the
 /// tabs directly beneath the search bar.
 ///
-/// The bar is then given the same air below it as above: as much room between
-/// it and the page as there is between it and the bottom of the search box.
-/// Both of those are measured in the page rather than assumed here, so they
-/// stay right whatever Fastmail makes them.
+/// The bar is then given half as much air below it as it has above: the room
+/// above is macOS's to decide, since it puts the bar a fixed distance down and
+/// Fastmail centres the search box in its header, so only the room below is
+/// ours to set. Both edges are measured in the page rather than assumed here,
+/// so they stay right whatever Fastmail makes them.
 func tabInsetScript(visible: Bool, barTop: CGFloat, barBottom: CGFloat) -> String {
     guard visible else {
         return "document.body.classList.remove('fmshell-tabbed');"
@@ -216,7 +217,7 @@ func tabInsetScript(visible: Bool, barTop: CGFloat, barBottom: CGFloat) -> Strin
         + "var s=document.querySelector('.v-PageHeader input,.v-PageHeader .v-TextInput');"
         + "var searchBottom=s?s.getBoundingClientRect().bottom:header;"
         + "var above=Math.max(0,\(Int(barTop.rounded()))-searchBottom);"
-        + "var gap=Math.max(0,\(Int(barBottom.rounded()))-header+above);"
+        + "var gap=Math.max(0,\(Int(barBottom.rounded()))-header+Math.round(above/2));"
         + "document.body.classList.add('fmshell-tabbed');"
         + "document.body.style.setProperty('--fmshell-tab-inset',gap+'px');"
         + "})();"
