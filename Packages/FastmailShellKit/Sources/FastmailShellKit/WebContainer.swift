@@ -206,6 +206,7 @@ public extension Notification.Name {
     static let fmshellReload = Notification.Name("fmshellReload")
     static let fmshellShare = Notification.Name("fmshellShare")
     static let fmshellCompose = Notification.Name("fmshellCompose")
+    static let fmshellComposeInTab = Notification.Name("fmshellComposeInTab")
 }
 
 // External URLs land in the model from onOpenURL; the web view they should

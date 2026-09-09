@@ -101,3 +101,42 @@ private final class FakeWindow {}
     // The ampersand belongs to the subject, so it must not read as a separator.
     #expect(query.contains("%26"))
 }
+
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+import AppKit
+
+@MainActor
+private func makePlainWindow() -> NSWindow {
+    NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+        styleMask: [.titled, .closable],
+        backing: .buffered,
+        defer: true
+    )
+}
+
+// A message can be written in a tab of the window it was asked from, but a
+// compose window will not host one — those refuse tabs — so from inside one it
+// opens on its own instead.
+@Test @MainActor func aComposeTabNeedsAWindowThatTakesTabs() {
+    let main = makePlainWindow()
+    let compose = makePlainWindow()
+    compose.tabbingMode = .disallowed
+    #expect(ComposeWindows.tabHost(main) === main)
+    #expect(ComposeWindows.tabHost(compose) == nil)
+    #expect(ComposeWindows.tabHost(nil) == nil)
+}
+
+// Compose windows are reused, so being a tab is undone before one goes back:
+// the next message must not turn up in a group it was never asked into.
+@Test @MainActor func aComposeWindowGoingBackToThePoolRefusesTabsAgain() {
+    let host = makePlainWindow()
+    let compose = makePlainWindow()
+    compose.tabbingMode = .preferred
+    host.addTabbedWindow(compose, ordered: .above)
+    #expect(compose.tabGroup != nil)
+    ComposeWindows.readyForPool(compose)
+    #expect(compose.tabbingMode == .disallowed)
+    #expect(compose.tabGroup == nil)
+}
+#endif

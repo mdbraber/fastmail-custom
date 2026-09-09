@@ -75,6 +75,10 @@ public struct ShellCommands: Commands {
                 NotificationCenter.default.post(name: .fmshellCompose, object: nil)
             }
             .keyboardShortcut("n", modifiers: .command)
+            Button("New Message in Tab") {
+                NotificationCenter.default.post(name: .fmshellComposeInTab, object: nil)
+            }
+            .keyboardShortcut("n", modifiers: [.command, .option])
             Button("New Tab") {
                 ShellWindows.openAsTab(host: NSApplication.shared.keyWindow) {
                     openWindow(id: "main")

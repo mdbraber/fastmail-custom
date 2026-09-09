@@ -93,6 +93,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
         pool = ComposePool(
             create: { [weak self] in self?.makeWindow() ?? NSWindow() },
             prepare: { window in
+                ComposeWindows.readyForPool(window)
                 (window.contentView as? WKWebView)?.load(URLRequest(url: composeURL))
             }
         )
@@ -103,6 +104,28 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
         ) { _ in
             MainActor.assumeIsolated { ComposeWindows.shared.compose() }
         })
+        observers.append(NotificationCenter.default.addObserver(
+            forName: .fmshellComposeInTab, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                ComposeWindows.shared.compose(inTabOf: NSApp.keyWindow)
+            }
+        })
+    }
+
+    /// Where a compose tab can go. A compose window will not host one — they
+    /// refuse tabs — so a message asked for from inside one opens on its own.
+    static func tabHost(_ window: NSWindow?) -> NSWindow? {
+        guard let window, window.tabbingMode != .disallowed else { return nil }
+        return window
+    }
+
+    /// Compose windows are reused, so being a tab is undone before one goes
+    /// back to the pool: it leaves the group and refuses tabs again, or the
+    /// next message would turn up somewhere nobody put it.
+    static func readyForPool(_ window: NSWindow) {
+        window.tabGroup?.removeWindow(window)
+        window.tabbingMode = .disallowed
     }
 
     deinit {
@@ -133,6 +156,23 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
         let window = pool.take()
         (window.contentView as? WKWebView)?
             .load(URLRequest(url: ComposeURL.url(for: profile, mailto: mailto)))
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+    }
+
+    /// The same message, written in a tab of the window it was asked from.
+    /// The page is Fastmail's minimal one either way, and the window keeps its
+    /// ordinary title bar, so the message sits below the tab bar rather than
+    /// behind it.
+    public func compose(inTabOf host: NSWindow?) {
+        guard let pool else { return }
+        guard let host = Self.tabHost(host) else {
+            compose()
+            return
+        }
+        let window = pool.take()
+        window.tabbingMode = .preferred
+        host.addTabbedWindow(window, ordered: .above)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }
