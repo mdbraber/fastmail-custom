@@ -6,6 +6,17 @@ import SwiftUI
 /// then folding it into the window it was asked for from.
 @MainActor
 public enum ShellWindows {
+    /// Set just before a window is asked for, and taken by the first window
+    /// set up afterwards. A window told it prefers tabs joins the group as it
+    /// is ordered in, so nothing is ever seen standing on its own — the fold
+    /// below is only the fallback for when that does not take.
+    private static var wantsTab = false
+
+    static func takeTabPreference() -> Bool {
+        defer { wantsTab = false }
+        return wantsTab
+    }
+
     /// The window that appeared, if one did. A compose window opening at the
     /// same moment must not be taken for it, and those refuse to be tabs, which
     /// is the difference worth reading.
@@ -28,7 +39,9 @@ public enum ShellWindows {
             return
         }
         let before = NSApplication.shared.windows
+        wantsTab = true
         open()
+        wantsTab = false
         join(host: host, before: before, tries: 8)
     }
 
@@ -40,6 +53,10 @@ public enum ShellWindows {
                     join(host: host, before: before, tries: tries - 1)
                     return
                 }
+                // Normally it arrived as a tab already, having been told it
+                // preferred one before it was ordered in; there is nothing
+                // left to do then.
+                guard fresh.tabGroup !== host.tabGroup || fresh.tabGroup == nil else { return }
                 host.addTabbedWindow(fresh, ordered: .above)
                 fresh.makeKeyAndOrderFront(nil)
             }

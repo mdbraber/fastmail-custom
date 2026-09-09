@@ -254,6 +254,14 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     #expect(tabBarEdges(contentInset: 0) == nil)
 }
 
+// The preference is taken by whichever window is set up next, and only that
+// one: a second window opened later must not inherit it.
+@Test @MainActor func theTabPreferenceIsTakenOnceAndThenGone() {
+    #expect(ShellWindows.takeTabPreference() == false)
+    ShellWindows.openAsTab(host: nil) {}   // no host: opens plainly, claims nothing
+    #expect(ShellWindows.takeTabPreference() == false)
+}
+
 // A tab is only as useful as its name, and the page already names itself
 // after whatever mailbox or label is open.
 @Test @MainActor func aTabIsNamedAfterWhateverThePageIsShowing() {
