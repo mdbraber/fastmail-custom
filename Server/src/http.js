@@ -5,8 +5,7 @@ import { isDeviceToken } from './devices.js';
 const BODY_LIMIT = 64 * 1024;
 
 // The buttons a notification may carry, and the only names that reach a
-// watcher's methods. A list rather than a check for "is it a function":
-// `receive` is a method too, and it is nobody's business from out here.
+// watcher's methods.
 export const ACTIONS = ['archive', 'later', 'pin'];
 
 export function createServer({ config, watchers, devices, log = console }) {
@@ -45,8 +44,8 @@ async function route({ config, watchers, devices }, request, response) {
 
     // The buttons on a notification. The phone has no Fastmail credentials of
     // its own and a background action gets a few seconds, so it says what it
-    // wants in one request and this does the work — with the same device
-    // secret it registers with, since it is the same device.
+    // wants in one request and this does the work; with the same device secret
+    // it registers with, since it is the same device.
     if (request.method === 'POST' && url.pathname === '/actions') {
         if (!bearerMatches(request.headers.authorization, config.deviceSecret)) {
             return reply(response, 401, { error: 'unauthorized' });

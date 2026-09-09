@@ -41,9 +41,9 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     #expect(settings["snoozeTime"] as? String == "08:00")
 }
 
-// Emptying a field that names a list says none of them, and has to survive
-// the trip: clearing "Labels that are never projects" used to hand Later
-// straight back, so there was no way to stop excluding it.
+// Emptying a field that names a list says none of them, and has to survive the
+// trip: clearing "Labels that are never projects" used to hand Later straight
+// back, so there was no way to stop excluding it.
 @Test func emptyTextIsHonouredWhereEmptyMeansNone() {
     let defaults = freshDefaults(#function)
     for key in ["excludedLabels", "contactGroupLabels", "appBadgeLabel"] {
@@ -92,9 +92,7 @@ private func freshDefaults(_ name: String) -> UserDefaults {
 }
 
 // The reorder list must offer exactly the verbs the userscript knows, in the
-// catalog's order. It once kept listing Keep, Waiting and Someday — retired in
-// the one-label model — because this vocabulary was hardcoded separately and
-// missed the rename to File, so the screen showed nine stale verbs.
+// catalog's order.
 @Test @MainActor func barSlotNamesAreTheCurrentVerbs() {
     #expect(CustomModeSettingsModel.barSlotNames
         == ["Snooze", "Pin", "File", "Archive", "Labels", "Move", "Delete"])
@@ -120,7 +118,7 @@ private func freshDefaults(_ name: String) -> UserDefaults {
 
 // A value saved by an older build still names Keep, Waiting and Someday; those
 // retired verbs are dropped, the recognised ones keep their saved order, and
-// the rest — File included — follow in the catalog's order.
+// the rest; File included; follow in the catalog's order.
 @Test @MainActor func loadBarOrderDropsRetiredVerbsFromAnOlderStoredValue() {
     let defaults = freshDefaults(#function)
     defaults.set("Delete, Keep, Waiting, Someday, Move", forKey: "customMode.bottomBarSlots")
@@ -156,7 +154,7 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     }
 }
 
-// options(in:) partitions the catalog — every option lands in exactly one
+// options(in:) partitions the catalog; every option lands in exactly one
 // group, and no group is empty, so no tab or section comes up blank.
 @Test func everyOptionBelongsToExactlyOneNonEmptyGroup() {
     let regrouped = CustomModeSettings.Group.allCases.flatMap { CustomModeSettings.options(in: $0) }

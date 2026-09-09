@@ -17,8 +17,8 @@ const TYPES = ['Email', 'Mailbox'];
 const realTimers = { setTimeout, clearTimeout, setInterval, clearInterval };
 
 // One account, from first session to every push: learns the mailboxes,
-// subscribes to Fastmail's change notices, and turns each into the alerts
-// and badge updates its devices should see.
+// subscribes to Fastmail's change notices, and turns each into the alerts and
+// badge updates its devices should see.
 export class AccountWatcher {
     constructor({ account, config, jmap, apns, devices, state, log = console, timers = realTimers }) {
         this.account = account;
@@ -147,13 +147,7 @@ export class AccountWatcher {
         }).catch((error) => this.log.error(`[${this.name}] event source stopped: ${error.message}`));
     }
 
-    // What Fastmail sends: first a verification, then state changes. A change
-    // to someone else's account is ignored. A verification can arrive before
-    // `PushSubscription/set` has told us the id it names, so one we do not
-    // recognise is kept rather than dropped: `subscribePush` looks for it.
-    // A sealed callback body → the notice inside it, or null when it is not
-    // for the current subscription's keys (an old subscription's straggler,
-    // or noise on the callback path) or holds no JSON object.
+    // What Fastmail sends: first a verification, then state changes.
     unseal(raw) {
         if (!this.pushKeys) return null;
         try {
@@ -222,8 +216,7 @@ export class AccountWatcher {
         }
         if (badge !== null && badge !== this.state.badge) {
             // Devices with alerts on already got the count on the alert; the
-            // others only ever hear the count. One collapse id for all of
-            // them: only the newest matters.
+            // others only ever hear the count.
             await this.broadcast(badgePayload(badge), { collapseId: 'badge', alerts: fresh.length ? false : undefined });
         }
 
@@ -243,7 +236,7 @@ export class AccountWatcher {
      * Each verb has to mean what it means in the app, or the same word does
      * two different things depending on where you press it. The model the app
      * works to: a project label is the live state, a message carries at most
-     * one, a hold label — Later — holds mail that has not been decided, and
+     * one, a hold label; Later; holds mail that has not been decided, and
      * the labels hidden from the sidebar are history that nothing touches.
      *
      * So the labels have to be read, not guessed at, and they are read fresh
@@ -257,7 +250,7 @@ export class AccountWatcher {
      */
 
     // Archive: out of the Inbox, off the triage label, the project label off
-    // with it — it is the live state and this is no longer live — the pin off,
+    // with it; it is the live state and this is no longer live; the pin off,
     // and every hold label left alone, because a hold outlives a decision.
     async archive(emailId) {
         if (!this.archiveMailboxId) throw new Error('no Archive folder in this account');
@@ -275,9 +268,7 @@ export class AccountWatcher {
     }
 
     // Later: a hold label is a filing destination like a project, so it
-    // replaces — the triage label and every other destination come off. The
-    // Inbox stays on: a held message is still in the Inbox, waiting for you.
-    // The pin is none of filing's business.
+    // replaces; the triage label and every other destination come off.
     async later(emailId) {
         const { email, mailboxes, projects, holds } = await this.labelsOn(emailId);
         const wanted = this.config.holdLabels?.[0];
@@ -294,7 +285,7 @@ export class AccountWatcher {
         return this.write(`filed under ${wanted}`, emailId, patch);
     }
 
-    // Pin: one keyword, and nothing moves. Setting rather than toggling — a
+    // Pin: one keyword, and nothing moves. Setting rather than toggling, a
     // banner announces a message that has just arrived, and you cannot see
     // from the lock screen what state you would be toggling out of.
     async pin(emailId) {

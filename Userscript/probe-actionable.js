@@ -58,9 +58,7 @@
         snoozed:    AND({ inMailbox: topic }, { inMailbox: snoozed })
     };
 
-    // The query id MUST come from Message.getQueryId. The source resolves a
-    // response back to its query by recomputing the id from the request args,
-    // so a query filed under any other id never resolves.
+    // The query id MUST come from Message.getQueryId.
     const made = {};
     for (const [name, where] of Object.entries(specs)) {
         const params = { ...base, where };
@@ -91,7 +89,7 @@
         return out;
     };
 
-    console.log('%cactionable filter — ' + TOPIC, 'font-weight:bold;font-size:13px');
+    console.log('%cactionable filter; ' + TOPIC, 'font-weight:bold;font-size:13px');
     console.table(Object.fromEntries(
         Object.keys(specs).map(n => [n, { count: len(n) }])));
 
@@ -103,7 +101,7 @@
 
     const doingWork = len('excluded') > 0;
     console.log(doingWork
-        ? '%cthe NOT clause excluded ' + len('excluded') + ' message(s) — filter is doing real work'
+        ? '%cthe NOT clause excluded ' + len('excluded') + ' message(s); filter is doing real work'
         : '%cnothing was deferred, so this run cannot prove the NOT clause bites',
         'color:' + (doingWork ? 'green' : 'darkorange'));
 

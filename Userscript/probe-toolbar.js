@@ -7,10 +7,10 @@
  * The point of it. A ToolbarView draws itself from `_configs[config].left`,
  * an array of *names*, each looked up in `_views`. So a name the registry
  * does not know is a button that cannot be drawn, cannot be found and cannot
- * be put back — and the mode asks for six of them by name. Those names were
+ * be put back, and the mode asks for six of them by name. Those names were
  * guessed rather than read, and this is the reading.
  *
- * `actionsConfig` — which the conversation bar uses as its left config — is
+ * `actionsConfig`; which the conversation bar uses as its left config; is
  * the account's own list from Settings > Actions, so the vocabulary is the
  * server's rather than the bundle's and cannot be grepped out of the source.
  */

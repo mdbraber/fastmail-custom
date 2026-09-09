@@ -145,9 +145,7 @@ private let gear = CGRect(x: 1120, y: 14, width: 24, height: 24)
 
 // Fastmail's own app draws a 52-point header and sets its window buttons into
 // it; ours kept the standard title bar, which left them nine points high and
-// ten points left of the icons beside them. Measured against an untouched
-// window rather than against fixed numbers, since the exact metrics are
-// AppKit's to choose.
+// ten points left of the icons beside them.
 @MainActor
 private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: CGFloat)? {
     window.layoutIfNeeded()
@@ -183,8 +181,8 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
 }
 
 // A tab bar is drawn over the page rather than moving it, so without help the
-// page keeps its full height and the bar hides a strip of it — Fastmail's list
-// toolbar, as it happens — with a sliver of page showing above.
+// page keeps its full height and the bar hides a strip of it; Fastmail's list
+// toolbar, as it happens; with a sliver of page showing above.
 
 @Test @MainActor func aWindowWithoutTabsLeavesThePageAlone() {
     let window = makeWindow()
@@ -203,7 +201,7 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     // and the search box, which sets how much air the bar gets.
     #expect(showing.contains("v-PageHeader"))
     // The room above the bar, and the room below it, are the same measurement
-    // — taken from the header's edge, not from the search box inside it — and
+    // ; taken from the header's edge, not from the search box inside it, and
     // that measurement is handed back for a page that has to match it.
     #expect(showing.contains("66-header"))
     #expect(showing.contains("94-header+above"))
@@ -214,10 +212,7 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     #expect(!gone.contains("v-PageHeader"))
 }
 
-// New Tab opens a window and folds it into the one in front. Which window
-// appeared has to be worked out after the fact, since opening one hands back
-// nothing, and a compose window opening at the same moment must not be
-// mistaken for it — those refuse to be tabs.
+// New Tab opens a window and folds it into the one in front.
 
 @Test @MainActor func theWindowThatAppearedIsTheOneThatCanBeATab() {
     let existing = makeWindow()
@@ -242,9 +237,7 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
 }
 
 // Both edges of the tab bar come from what the window reports, so every tab
-// works them out the same way. Reading one of them off a spell without a tab
-// bar meant a window born into a group had never seen one, and its page lost
-// the air above the bar that its neighbours had.
+// works them out the same way.
 @Test @MainActor func theBarsEdgesDoNotDependOnWhatAWindowHasSeen() {
     let edges = tabBarEdges(contentInset: 102)
     #expect(edges?.top == 66)

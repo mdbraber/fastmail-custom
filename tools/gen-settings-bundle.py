@@ -4,7 +4,7 @@
 The catalog is CustomModeSettings.options, the same one the macOS Settings
 form and the page injection read, so it is parsed here rather than copied:
 a second table would be one more thing to keep in step, and the whole point
-of the catalog is that there is only one. Run this after changing it —
+of the catalog is that there is only one. Run this after changing it,
 `settingsBundleCarriesEveryCustomModeOption` fails if you forget.
 
 Settings.bundle cannot grey a sub-option out with its parent, so the parent
@@ -21,7 +21,7 @@ CATALOG = (ROOT / "Packages/FastmailShellKit/Sources/FastmailShellKit"
 APPS = ("Personal", "Work")
 
 # One Option(...) entry. `parent:` and `clearable:` are optional and
-# deliberately unused here — Settings.bundle greys nothing out, and a text
+# deliberately unused here; Settings.bundle greys nothing out, and a text
 # field emptied there reaches UserDefaults as an empty string regardless,
 # which is exactly what `clearable` asks the resolver to honour. The default
 # is a .toggle(bool) or a .text("string").

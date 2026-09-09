@@ -50,7 +50,7 @@ build-extension:
 install-extension: build-extension
 	rm -rf "/Applications/$(EXTENSION_APP)"
 	cp -R "$(EXTENSION_DIR)/build/Build/Products/Release/$(EXTENSION_APP)" /Applications/
-	@echo "Installed /Applications/$(EXTENSION_APP) — enable it in Safari's Extensions settings"
+	@echo "Installed /Applications/$(EXTENSION_APP); enable it in Safari's Extensions settings"
 
 install: install-macos install-ios install-extension
 

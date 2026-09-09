@@ -1,9 +1,7 @@
 import Foundation
 
-/// One notification as Fastmail's page hands it over — the service worker
-/// already decided it should exist and wrote its words. `dataJSON` is the
-/// worker's own click payload, kept verbatim so a click can hand it straight
-/// back.
+/// One notification as Fastmail's page hands it over; the service worker
+/// already decided it should exist and wrote its words.
 public struct MailNotification: Equatable, Sendable {
     public let id: String
     public let title: String

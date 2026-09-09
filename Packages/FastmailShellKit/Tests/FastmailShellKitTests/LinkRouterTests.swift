@@ -138,9 +138,7 @@ private func fastmailComposeFields(of composeURL: URL) -> [String: String] {
     #expect(LinkRouter.route(foreign, profile: profile(handoffScheme: nil)) == .load(foreign))
 }
 
-// A mailto is a message to write, not a page to go to. The route says so and
-// leaves it to each platform: a window of its own on the Mac, the window
-// there already on a phone.
+// A mailto is a message to write, not a page to go to.
 @Test func aRawMailtoIsAMessageToCompose() {
     let mailto = url("mailto:a%40b.com?subject=Hi%20there")
     guard case .compose(let raw) = LinkRouter.route(mailto, profile: profile()) else {

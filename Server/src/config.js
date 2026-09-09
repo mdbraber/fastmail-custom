@@ -1,6 +1,4 @@
-// The environment, read once into one frozen object. Anything that cannot
-// be defaulted stops the start: a server missing its key or its secret
-// would otherwise come up and sit there quietly doing nothing.
+// The environment, read once into one frozen object.
 
 export const BUNDLE_IDS = Object.freeze({
     personal: 'com.mdbraber.fastmail-custom.personal',
@@ -43,8 +41,7 @@ export function loadConfig(env = process.env) {
         deviceSecret: required('DEVICE_SECRET'),
         badgeLabel: (env.BADGE_LABEL || 'Triage').trim(),
         // Holds, in the app's sense: filing destinations that hold mail rather
-        // than queue it. A decision replaces them, an archive leaves them on,
-        // and the first of them is where the notification's Later button files.
+        // than queue it.
         holdLabels: Object.freeze(labelList(env.HOLD_LABELS, ['Later', 'Feedbin'])),
         notices: (env.NOTICES || 'auto').trim(),
         dataDir: (env.DATA_DIR || '/data').trim(),

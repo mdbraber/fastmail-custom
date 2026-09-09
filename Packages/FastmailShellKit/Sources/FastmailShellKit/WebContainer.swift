@@ -6,12 +6,8 @@ import WebKit
 import UIKit
 #endif
 
-/// What the page says it looks like: the colour to paint the window with,
-/// and whether Fastmail calls its own theme dark.
-///
-/// The flag is Fastmail's answer rather than ours. It is absent on a page that
-/// has no theme to ask — the log-in screen — and absent means unknown, so the
-/// window is left as it is rather than judged from the colour.
+/// What the page says it looks like: the colour to paint the window with, and
+/// whether Fastmail calls its own theme dark.
 public struct PageTint: Equatable, Sendable {
     public let color: String
     public let isDark: Bool?
@@ -41,26 +37,12 @@ public final class ShellModel: ObservableObject {
 @MainActor
 public struct WebContainer {
     // Fastmail's service worker hands notifications to the page instead of
-    // showing them itself when it sees Electron/ in the user agent — the
-    // mark of Fastmail's own desktop app. Every WKWebView that can host that
-    // worker needs the same token, or a restart picks the other client and
-    // starts the branch that never notifies; shared here so the two can't
-    // drift apart.
+    // showing them itself when it sees Electron/ in the user agent; the mark
+    // of Fastmail's own desktop app.
     public static let electronUserAgentToken = "Electron/0.0.0 FastmailShell"
 
-    /// Which layout the page is asked for.
-    ///
-    /// An iPad asks for the desktop site unless it is told otherwise. The
-    /// recommended mode is the default, and on a large iPad it means
-    /// desktop-class browsing: the web view reports itself as a Mac and
-    /// Fastmail serves the wide layout. Mobile is what this shell wants on a
-    /// touch screen, and it is what the mode's own touch surfaces are built
-    /// on — the bottom action bar, and the walk back to the list when the
-    /// next message is already triaged — since those follow Fastmail's own
-    /// reading of whether it is on a phone. A phone is unaffected either
-    /// way, because recommended already means mobile there.
-    ///
-    /// The Mac keeps recommended, which is the desktop layout it should have.
+    /// Which layout the page is asked for. An iPad asks for the desktop site
+    /// unless it is told otherwise.
     static var preferredContentMode: WKWebpagePreferences.ContentMode {
         #if os(iOS)
         .mobile
@@ -95,12 +77,10 @@ public struct WebContainer {
         configuration.websiteDataStore = .default()
 
         #if os(macOS)
-        // Fastmail's service worker hands notifications to the page instead
-        // of showing them itself when it sees Electron/ in the user agent —
-        // the mark of Fastmail's own desktop app — and the page then calls
-        // window.electron.showNotification, which the harness provides. The
-        // token is what makes the worker take that branch; WKWebView cannot
-        // receive push, so it is the only branch that can ever notify.
+        // Fastmail's service worker hands notifications to the page instead of
+        // showing them itself when it sees Electron/ in the user agent, the
+        // mark of Fastmail's own desktop app, and the page then calls
+        // window.electron.showNotification, which the harness provides.
         configuration.applicationNameForUserAgent = Self.electronUserAgentToken
         #endif
 
@@ -109,9 +89,9 @@ public struct WebContainer {
 
         let bridge = NativeBridge(
             // The page this view is being built for, not the profile's
-            // default: the two differ the moment a backend is chosen, and
-            // a bridge expecting the wrong host refuses every message the
-            // page sends.
+            // default: the two differ the moment a backend is chosen, and a
+            // bridge expecting the wrong host refuses every message the page
+            // sends.
             expectedHost: loadURL.host ?? "",
             onLog: { message in print("[userscript] \(message)") },
             onError: { [model] message in model.show(message) },
@@ -219,8 +199,8 @@ public extension Notification.Name {
 }
 
 // External URLs land in the model from onOpenURL; the web view they should
-// drive only exists in here, so this relay carries them across, the same
-// shape as SharePresenter.
+// drive only exists in here, so this relay carries them across, the same shape
+// as SharePresenter.
 @MainActor
 final class LinkLoader {
     private weak var webView: WKWebView?
@@ -244,9 +224,7 @@ final class LinkLoader {
 }
 
 #if !canImport(UIKit)
-// Menu-bar commands act on whichever window's web view is key. The window
-// draws no native toolbar — Fastmail's own header is the chrome — so Share
-// and Reload live in the menu bar and reach the page from here.
+// Menu-bar commands act on whichever window's web view is key.
 @MainActor
 final class CommandRelay {
     private weak var webView: WKWebView?
@@ -312,8 +290,8 @@ final class CommandRelay {
 #endif
 
 // The page pushes badge counts as they change, but a backgrounded app misses
-// those pushes, so returning to the foreground asks the page for a fresh
-// count rather than trusting the last one that arrived.
+// those pushes, so returning to the foreground asks the page for a fresh count
+// rather than trusting the last one that arrived.
 @MainActor
 final class BadgePuller {
     private weak var webView: WKWebView?
@@ -354,14 +332,11 @@ final class BadgePuller {
 }
 
 /// Pushes changed Custom mode settings into a running page, the way the Safari
-/// extension's storage listener does for its tabs. Any writer counts — the
-/// macOS Settings window, the iOS Settings app — because both land in
-/// UserDefaults. Coming back from the iOS Settings app is covered separately:
-/// the defaults change while the app is suspended, so foregrounding pushes too.
+/// extension's storage listener does for its tabs.
 @MainActor
 final class CustomModeSettingsPusher {
     private weak var webView: WKWebView?
-    // Written once in init, read again only from deinit — never concurrently
+    // Written once in init, read again only from deinit; never concurrently
     private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
     private var pushTask: Task<Void, Never>?
 

@@ -18,7 +18,7 @@ script-src 'self' https://hcaptcha.com https://*.hcaptcha.com 'sha256-3zLaO2X2qE
 ```
 
 No `'unsafe-inline'`. A userscript manager runs page-world code by adding an
-inline `<script>` to the page, and this policy refuses it — the console shows
+inline `<script>` to the page, and this policy refuses it; the console shows
 *"Refused to execute a script because its hash, its nonce, or 'unsafe-inline'
 does not appear in the script-src directive"*. The script therefore never starts,
 in any account, on any Fastmail URL.
@@ -32,7 +32,7 @@ content scripts to bypass CSPs in Safari."*
 `scripting.executeScript()` is a different path. It does not add anything to the
 DOM, so there is nothing for the page to refuse, and `world: "MAIN"` puts the
 code in the same context the userscript wanted. The page's CSP is left exactly as
-it is — nothing is stripped or weakened. Only an extension can make that call;
+it is; nothing is stripped or weakened. Only an extension can make that call;
 userscripts have no `browser.scripting`. See
 [quoid/userscripts#954](https://github.com/quoid/userscripts/issues/954).
 
@@ -60,7 +60,7 @@ xcrun safari-web-extension-converter \
 ```
 
 The app project's `Resources` are symlinks back here, so there is nothing to
-copy by hand — but **Xcode resolves them into real files when it builds**, so
+copy by hand; but **Xcode resolves them into real files when it builds**, so
 every edit needs a rebuild before Safari sees it. From the repository root:
 
 ```sh
@@ -122,7 +122,7 @@ window.customMode.isOn()
 ```
 
 The console also logs `Custom mode ready (Shift-I to toggle)` on load. If the CSP
-error still appears, that is the Userscripts copy of the script failing — disable
+error still appears, that is the Userscripts copy of the script failing; disable
 it there, since this extension now delivers it.
 
 ## Identifiers
@@ -132,7 +132,7 @@ inside it `com.mdbraber.fastmail-custom.safari.extension`. They were renamed
 from the converter's `com.yourCompany.Fastmail-Inbox-mode` on 2026-09-07,
 along with the mode itself, and moved a level deeper on 2026-09-08 when the
 shells and the mailto chooser joined them under `com.mdbraber.fastmail-custom`
-— the bare identifier is a prefix the whole family shares rather than one
+the bare identifier is a prefix the whole family shares rather than one
 app's name. Safari keys an extension's enabled state and its stored settings
 to that identifier, so each rename presents this as a new extension: enable
 it again in Safari's settings, and set the options once more.

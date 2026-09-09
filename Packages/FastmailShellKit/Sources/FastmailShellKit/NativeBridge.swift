@@ -20,7 +20,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onNotify: @MainActor (MailNotification) -> Void
     private let onDismissNotifications: @MainActor ([String]) -> Void
     private let onShowWindow: @MainActor () -> Void
-    /// Asked where to put a message, and answers where it put it — so a page
+    /// Asked where to put a message, and answers where it put it; so a page
     /// told "inline" knows to go ahead and open one itself.
     private let onCompose: @MainActor (String) -> String
 

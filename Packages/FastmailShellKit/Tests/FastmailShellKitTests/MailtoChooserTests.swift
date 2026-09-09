@@ -21,8 +21,7 @@ import Testing
 }
 
 // The command travels through iOS as a URL, and the receiving shell reads it
-// with the router it already has. Asserting the round trip rather than the
-// spelling: what matters is that the other app understands it.
+// with the router it already has.
 @Test func aChosenAccountReceivesTheMailtoAsACompose() throws {
     let mailto = URL(string: "mailto:a@b.com?subject=Hi%20there&body=Hello")!
     let work = try #require(MailtoChooser.targets.first { $0.id == "work" })
@@ -38,9 +37,7 @@ import Testing
     #expect(page.absoluteString.contains("/mail/compose?mailto="))
 }
 
-// Anything that is not a mailto is not this app's business. The chooser is
-// reachable by its own scheme too, and an address arriving that way is not to
-// be forwarded into a compose window on trust.
+// Anything that is not a mailto is not this app's business.
 @Test func onlyAMailtoIsForwarded() {
     let personal = MailtoChooser.targets[0]
     #expect(MailtoChooser.compose(URL(string: "https://example.com/")!, in: personal) == nil)
@@ -75,9 +72,7 @@ import Testing
 }
 
 // Until Apple grants the Default Mail App capability, iOS will not hand this
-// app a mailto: tap at all. Its own scheme is the way in meanwhile — from a
-// Shortcut, or from anything else that can open a URL — so it takes a mailto
-// wrapped in the same compose command the shells answer to.
+// app a mailto: tap at all.
 @Test func theChooserTakesAMailtoThroughItsOwnScheme() throws {
     let wrapped = URL(string: "fastmail-mailto://compose?mailto="
         + LinkRouter.percentEncode("mailto:a@b.com?subject=Hi there"))!

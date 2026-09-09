@@ -2,22 +2,10 @@ import Foundation
 import WebKit
 
 /// The Custom mode userscript's settings, mirrored natively.
-///
-/// One catalog drives everything: the macOS Settings form, the keys the iOS
-/// Settings.bundle uses, and the object pushed into the page. Kept in step
-/// with the userscript's DEFAULT_SETTINGS (and the Safari extension's
-/// settings.js/settings.html, which carry the same options and copy).
-///
-/// The userscript reads `window.__customModeSettings` once at startup
-/// and merges it over its own defaults; a running copy accepts changes
-/// through `window.customMode.applySettings(...)`. Both entry points
-/// are fed from here.
 public enum CustomModeSettings {
     /// The section a setting belongs to. One list of settings, shown as a tab
     /// per group on macOS and a headed section per group on the phone, so the
-    /// grouping is decided here once rather than in each screen. `.general`
-    /// is the app-level tab the shell already owns (backend, start page,
-    /// downloads); the one catalog option that lives there is the app badge.
+    /// grouping is decided here once rather than in each screen.
     public enum Group: String, CaseIterable, Sendable {
         case general
         case appearance
@@ -49,7 +37,7 @@ public enum CustomModeSettings {
             }
         }
 
-        /// The custom-mode groups, in display order — everything except the
+        /// The custom-mode groups, in display order; everything except the
         /// app-level General tab, which the shell builds itself and only
         /// borrows `.general` catalog options for.
         public static var inboxGroups: [Group] {
@@ -70,15 +58,6 @@ public enum CustomModeSettings {
         /// The toggle this one is a sub-option of, if any.
         public let parent: String?
         /// Whether an empty text field is an answer rather than an omission.
-        ///
-        /// For most text settings it is an omission: a triage label with no
-        /// name is not something anyone means, so emptying the field asks
-        /// for the default back. But a list of labels has a meaningful
-        /// empty — none of them — and without this there was no way to say
-        /// it: clearing "Labels that are never projects" put Later straight
-        /// back, which is what sent me looking. A hint already promised this
-        /// behaviour ("Empty hands the shell its own fallback") and could
-        /// not deliver it.
         public let clearable: Bool
         public let title: String
         public let hint: String
@@ -114,12 +93,12 @@ public enum CustomModeSettings {
         options.filter { $0.group == group }
     }
 
-    // Grouped in display order. The group decides where a setting is shown —
-    // a macOS tab, a phone section, an iOS Settings.bundle header — while the
+    // Grouped in display order. The group decides where a setting is shown, a
+    // macOS tab, a phone section, an iOS Settings.bundle header; while the
     // key, default and copy stay exactly as the userscript and the parity
     // tests expect.
     public static let options: [Option] = [
-        // General — the app-level tab the shell owns; the badge is its one
+        // General; the app-level tab the shell owns; the badge is its one
         // catalog setting.
         Option(
             "appBadgeLabel",
@@ -130,7 +109,7 @@ public enum CustomModeSettings {
             default: .text("Triage")
         ),
 
-        // Appearance — how the sidebar and rows look, no behaviour.
+        // Appearance; how the sidebar and rows look, no behaviour.
         Option(
             "labelColours",
             group: .appearance,
@@ -183,7 +162,7 @@ public enum CustomModeSettings {
             default: .toggle(true)
         ),
 
-        // Labels & filing — what labels mean and how filing works.
+        // Labels & filing; what labels mean and how filing works.
         Option(
             "triageLabel",
             group: .labelsFiling,
@@ -252,7 +231,7 @@ public enum CustomModeSettings {
             default: .toggle(true)
         ),
 
-        // Snooze — the snooze action and its defaults, kept together.
+        // Snooze; the snooze action and its defaults, kept together.
         Option(
             "snoozeKey",
             group: .snooze,
@@ -275,7 +254,7 @@ public enum CustomModeSettings {
             default: .text("08:00")
         ),
 
-        // Keyboard — the remaining single-key bindings.
+        // Keyboard; the remaining single-key bindings.
         Option(
             "urgentKey",
             group: .keyboard,
@@ -291,7 +270,7 @@ public enum CustomModeSettings {
             default: .toggle(true)
         ),
 
-        // Bottom bar — the action bar's ordered actions.
+        // Bottom bar; the action bar's ordered actions.
         Option(
             "bottomBarSlots",
             group: .bottomBar,
@@ -303,21 +282,6 @@ public enum CustomModeSettings {
 
     /// The settings as the userscript should see them: stored value if one
     /// exists, the default otherwise.
-    ///
-    /// An empty text field means one of two things, and which one depends on
-    /// the setting rather than on the value. For most it is an omission and
-    /// the default comes back. For a `clearable` one it is an answer — none
-    /// of them — and it is passed through as the empty string, which the
-    /// userscript's own merge then lays over its default.
-    ///
-    /// Never set and set-to-empty are told apart by the presence of the key,
-    /// not by the value, so a field nobody has touched still gets the
-    /// default even where empty would have been honoured.
-    /// Until the mode was renamed on 2026-09-07 these lived under an
-    /// `inboxMode.` prefix. Each is carried over once, so nothing anybody
-    /// chose is lost; a value already written under the new name wins, and
-    /// the old key is dropped so this happens exactly once. Cheap enough to
-    /// run at every read: after the first pass there is nothing left to find.
     static func migrateLegacyKeys(in defaults: UserDefaults) {
         for option in options {
             let legacy = "inboxMode.\(option.key)"
@@ -365,7 +329,7 @@ public enum CustomModeSettings {
     }
 
     /// Writes the settings global before anything else runs, so the payload
-    /// finds it when it starts — the WKUserScript counterpart of the Safari
+    /// finds it when it starts; the WKUserScript counterpart of the Safari
     /// extension injecting settings ahead of its payload.
     @MainActor
     public static func bootstrapScript(from defaults: UserDefaults = .standard) -> WKUserScript {

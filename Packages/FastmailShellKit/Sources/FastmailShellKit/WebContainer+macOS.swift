@@ -117,19 +117,6 @@ func configureWindow(_ window: NSWindow) {
 
 /// Set the window buttons into Fastmail's header rather than leaving them in
 /// the title bar the window would otherwise have.
-///
-/// Fastmail's own app draws a 52-point header and puts its buttons in the
-/// middle of it. A plain title bar is 32 points, so ours sat nine points above
-/// and ten points to the left of the icons alongside them, which is what the
-/// gap looked like. A unified toolbar gives the title bar the height that
-/// centres them in the header, and AppKit keeps them there through resizes and
-/// full screen — where setting the frames by hand does not, because it lays
-/// them out again each time.
-///
-/// The toolbar carries nothing and is never seen: with a transparent title bar
-/// over full-size content it draws nothing, the page still receives clicks at
-/// every depth, and the web view keeps the whole window. It has to stay
-/// visible, though — hiding it puts the buttons back.
 @MainActor
 func raiseTitlebar(of window: NSWindow) {
     window.toolbarStyle = .unified
@@ -144,8 +131,7 @@ func raiseTitlebar(of window: NSWindow) {
 func applyTint(_ value: String, isDark: Bool?, to window: NSWindow) {
     guard let rgb = ThemeColor.components(from: value) else { return }
     // Only Fastmail can say whether its theme is dark; a sampled colour cannot
-    // be asked. With no answer the appearance is left alone, so a navy log-in
-    // screen no longer takes the whole app dark with it.
+    // be asked.
     if let isDark {
         window.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
     }
@@ -157,7 +143,7 @@ func applyTint(_ value: String, isDark: Bool?, to window: NSWindow) {
 }
 
 /// What the pages have asked their windows to look like, kept so that a window
-/// with no page of its own — one holding a message being written — can be
+/// with no page of its own; one holding a message being written; can be
 /// dressed to match the rest of the app rather than guessing at a colour.
 @MainActor
 enum PageChrome {
@@ -178,14 +164,9 @@ func contentTopInset(of window: NSWindow) -> CGFloat {
     return max(0, content.bounds.height - window.contentLayoutRect.maxY)
 }
 
-/// How far down the page has to start.
-///
-/// Normally nothing: the header is meant to show through the transparent
-/// title bar, with the window buttons set into it. A tab bar is different —
-/// AppKit draws it over the page rather than moving the page down — so it
-/// covers a strip of the list and leaves a sliver of page showing above
-/// itself. Measured from the window rather than assumed, so it is right
-/// whatever height the bar turns out to be.
+/// How far down the page has to start. Normally nothing: the header is meant
+/// to show through the transparent title bar, with the window buttons set into
+/// it.
 @MainActor
 func tabbedPageInset(of window: NSWindow) -> CGFloat {
     guard window.tabGroup?.isTabBarVisible == true else { return 0 }
@@ -201,17 +182,12 @@ func tabTitle(pageTitle: String?, fallback: String) -> String {
 }
 
 /// The tab bar's own height, and the room AppKit leaves below it inside the
-/// content layout rect. Neither is exposed — the bar is not among the window's
-/// views to ask — so both were measured against its frame: a bar running from
-/// 66 to 94 while the window reported its content beginning at 102.
+/// content layout rect.
 private let tabBarHeight: CGFloat = 28
 let tabBarBottomPadding: CGFloat = 8
 
 /// Where the tab bar starts and ends, worked out from what the window reports
-/// its chrome covers. Nothing here depends on what a particular window has
-/// been through, so every tab in a group arrives at the same answer — reading
-/// the top edge off a spell with no tab bar meant a window born into a group
-/// had never seen one, and its page lost the air its neighbours had.
+/// its chrome covers.
 func tabBarEdges(contentInset: CGFloat) -> (top: CGFloat, bottom: CGFloat)? {
     guard contentInset > 0 else { return nil }
     return (
@@ -221,23 +197,6 @@ func tabBarEdges(contentInset: CGFloat) -> (top: CGFloat, bottom: CGFloat)? {
 }
 
 /// What the page is told, matching the rule in chrome-macos.css.
-///
-/// The header stays where it is, with the window buttons in it: only what sits
-/// below the header moves down, far enough to clear the tab bar. The band left
-/// between the two is painted in the window's background colour, which is
-/// sampled from the header itself, so it reads as one taller header with the
-/// tabs directly beneath the search bar.
-///
-/// The bar is then given the same air below it as above, measured from the
-/// edge of the page's own header rather than from the search box inside it:
-/// the room between the search box and that edge is the header's own padding,
-/// and counting it would leave the bar looking pushed down. The header's edge
-/// is measured in the page rather than assumed here, so it stays right
-/// whatever Fastmail makes it.
-///
-/// That air is handed back, because it is also what a page with no header of
-/// its own — a message being written in a tab — has to be pushed down by to
-/// start where its neighbours do.
 func tabInsetScript(visible: Bool, barTop: CGFloat, barBottom: CGFloat) -> String {
     guard visible else {
         return "document.body.classList.remove('fmshell-tabbed');"
@@ -270,12 +229,6 @@ func observeFullScreen(_ window: NSWindow, webView: WKWebView, model: ShellModel
 final class FullScreenObserver: NSObject {
     /// Joining a tab group keys no window and resizes none, so there is no
     /// notification to hang this on; the group itself has to be watched.
-    ///
-    /// The group is watched directly rather than through the window's
-    /// `tabGroup`. A window swaps groups without announcing it, so an
-    /// observation registered through that property ends up trying to
-    /// unregister from a group that never carried it, and Foundation raises
-    /// rather than shrugging — which closing a tab would then do every time.
     private var tabGroupObservation: NSKeyValueObservation?
     private(set) weak var observedTabGroup: NSWindowTabGroup?
     private var enterToken: NSObjectProtocol?
@@ -339,27 +292,20 @@ final class FullScreenObserver: NSObject {
         Self.sweepTabInsets()
     }
 
-    /// Follows the window from one tab group to the next. Which group a window
-    /// belongs to is only ever read here, never observed, so this is called
-    /// again each time the inset is placed.
+    /// Follows the window from one tab group to the next.
     private func syncTabGroupObservation() {
         let group = window?.tabGroup
         guard group !== observedTabGroup else { return }
         observedTabGroup = group
         // The group reports its old answer while it is still being made, so
-        // this reads the value again rather than taking the one that came
-        // with the change.
+        // this reads the value again rather than taking the one that came with
+        // the change.
         tabGroupObservation = group?.observe(\.isTabBarVisible, options: [.new]) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.placeTabInset() }
         }
     }
 
     /// Watches for anything happening to any window, once for the whole app.
-    ///
-    /// A window is told nothing when it is folded into a tab group, so the
-    /// only reliable moment to re-measure it is when something happened
-    /// somewhere — to any window, not only itself. These are never taken down:
-    /// they belong to the app rather than to a window.
     private static var appTokens: [NSObjectProtocol] = []
 
     private static func watchEveryWindow() {
@@ -372,13 +318,9 @@ final class FullScreenObserver: NSObject {
         }
     }
 
-    /// Re-measures every window there is.
-    ///
-    /// More than once: a group reports no visible tab bar while it is still
-    /// being made, and settles a beat later, so a single look catches the
-    /// state before it is true. A sweep already under way is not doubled —
-    /// resizing a window by hand is a stream of news, and one look each time
-    /// it settles is enough.
+    /// Re-measures every window there is. More than once: a group reports no
+    /// visible tab bar while it is still being made, and settles a beat later,
+    /// so a single look catches the state before it is true.
     static func sweepTabInsets() {
         placeEveryTabInset()
         guard !sweepScheduled else { return }
@@ -402,8 +344,7 @@ final class FullScreenObserver: NSObject {
     }
 
     /// The air a mail page leaves around the tab bar, as the page itself
-    /// measured it. A message being written in a tab has no header to measure
-    /// from, so it is told what its neighbours worked out.
+    /// measured it.
     private(set) static var airAroundTabBar: CGFloat?
 
     fileprivate func placeTabInset() {

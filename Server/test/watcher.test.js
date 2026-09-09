@@ -304,10 +304,9 @@ test('NOTICES=push does not fall back', async () => {
 });
 
 
-// The buttons on a notification. The phone cannot do any of this itself, so
-// it asks here — and each verb has to mean the same thing it means in the
-// app, or the same button does two different things depending on where you
-// press it. A message carrying the Inbox, Triage, a project and a hold.
+// The buttons on a notification. The phone cannot do any of this itself, so it
+// asks here, and each verb has to mean the same thing it means in the app, or
+// the same button does two different things depending on where you press it.
 const decided = (over = {}) => arrival('M1', {
     mailboxIds: { inbox: true, triage: true, kerk: true, later: true },
     keywords: { $seen: true, $flagged: true },
@@ -321,7 +320,7 @@ const patchOf = (t) => {
 
 // Archive: out of the Inbox, no longer waiting for triage, the project label
 // off since it is the live state and this message is no longer live, the pin
-// off, and the hold label left alone — a hold outlives a decision.
+// off, and the hold label left alone, a hold outlives a decision.
 test('archiving from a notification means what archiving means in the app', async () => {
     const t = await setUp({ emails: [decided()] });
 
@@ -349,9 +348,8 @@ test('archiving asks only for the changes the message actually needs', async () 
     });
 });
 
-// Later: a hold is a filing destination like a project, so it replaces —
-// Triage and the project come off. The Inbox stays: a held message is still
-// in the Inbox, and the pin is none of filing's business.
+// Later: a hold is a filing destination like a project, so it replaces, Triage
+// and the project come off.
 test('filing under the hold label replaces the labels but keeps the Inbox', async () => {
     const t = await setUp({ emails: [decided({ mailboxIds: { inbox: true, triage: true, kerk: true } })] });
 
@@ -364,7 +362,7 @@ test('filing under the hold label replaces the labels but keeps the Inbox', asyn
     });
 });
 
-// The history labels — the years, the shelves — are hidden from the sidebar,
+// The history labels; the years, the shelves, are hidden from the sidebar,
 // and nothing here adds, removes or counts them.
 test('a hidden history label is never touched', async () => {
     const t = await setUp({ emails: [decided({ mailboxIds: { inbox: true, y2019: true, kerk: true } })] });

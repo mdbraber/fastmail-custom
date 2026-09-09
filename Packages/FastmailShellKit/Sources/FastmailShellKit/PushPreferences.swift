@@ -1,10 +1,7 @@
 import Foundation
 
-/// The one notification choice the shell offers on the phone: alerts for
-/// new mail on this device, or none. The badge is not part of it; a muted
-/// device still gets its count. The server only hears about the switch
-/// through a registration, so the app also remembers what it last told
-/// the server, and a difference means registering again.
+/// The one notification choice the shell offers on the phone: alerts for new
+/// mail on this device, or none.
 public enum PushPreferences {
     /// Shared with the Settings bundle and the in-app sheet.
     public static let alertsKey = "push.alerts"

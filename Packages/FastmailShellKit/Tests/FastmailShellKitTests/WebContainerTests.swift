@@ -108,11 +108,7 @@ private let nonMatchingHeader = """
 }
 
 // An iPad's default is desktop-class browsing, which makes Fastmail serve the
-// wide layout in a shell built for the touch one. The value is per platform
-// and this suite runs on the Mac, so what is worth pinning here is the wiring:
-// whatever the platform asks for reaches the configuration the view is built
-// with. Without the assignment this reads back as recommended on iOS too, and
-// the iPad goes quietly back to the desktop layout.
+// wide layout in a shell built for the touch one.
 @Test @MainActor func theWebViewCarriesThePlatformsContentMode() {
     let loader = StubLoader(resources: [
         "harness.js": "HARNESS",

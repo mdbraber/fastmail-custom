@@ -15,231 +15,18 @@
 /*
 Fastmail Custom mode
 Maarten den Braber <m@mdbraber.com>
-version 3.11 - 2026-09-08
 
-3.11 — a row keeps its colour, a swipe stays on the list, and archive into
-a hold label. Rows in the Inbox lost their label chips, and with them their
-colour. Fastmail leaves a chip behind when a label is removed, so the mode
-takes the stale ones off — and it asked the wrong record which chips were
-stale. A row is a conversation and its chips are the union of what the
-thread carries, so a label living on the reply shows on the row while the
-message the row was built from has never been in it: measured on a real
-Inbox, a row whose chip read "Nexthealth/HDV" while its own record reported
-nothing but the Inbox, stripped on the next pass and redrawn on the one
-after, which is why it looked random. The question now goes to the whole
-thread, the same union the rest of the model already uses. A record with no
-mailboxes at all is left alone too: none is not the same answer as "they
-have all gone".
+One-label triage for Fastmail: a project label is the live state of a
+message, and archive means the same thing in every list.
 
-Deciding from the list — a swipe, or a key on the focused row — no longer
-opens the next conversation: there was nothing open to move on from, so there is
-nowhere to move on to, and the step now asks whether the message decided on
-is the one being read. Fastmail draws the same line for its own step, which
-is left alone from the list rather than held.
-
-Shift-E, or a long press on Archive where
-there is no Shift to hold, opens the File picker narrowed to the hold labels
-and archives into the one you pick: the label goes on, then Inbox, Triage,
-every project label and the pin come off, and the hold stays — one gesture
-for "done, but keep it there". Only holds are offered because only a hold
-survives an archive; a project reached by typing its name would be stripped
-a moment later, so typing does not widen this list the way it widens the
-File picker's. The label and the archive share one checkpoint, so one undo
-puts both back. The bar's default order is Snooze, Pin, File, Archive,
-Labels, Move, Delete, and Feedbin joins Later as a hold label by default.
-
-3.10 — a project label is a queue, and reads like one. Its list opens on
-Fastmail's own In Inbox filter, which the app offers on a label and then
-forgets the moment you leave; here it is applied on arrival, so turning it
-off in the filter menu still holds for as long as you stay on that label.
-The sidebar badge counts the same set the filtered list shows — the label
-and the Inbox both — rather than everything the label has ever held, which
-on a label older than this model is history rather than work. That number
-is stored nowhere, so it is a query per project label, built the first
-time a badge asks and dropped when the setting or the mode goes off. Both
-are settings: stickyInboxFilter and filteredLabelCounts, on by default,
-and both are about project labels alone. A hold label such as Later is
-left as it was, since a held message is meant to sit outside the queue.
-The bar stops offering Archive twice with the filter on: the contextual
-slot becomes an Archive of Fastmail's own whenever the list is filtered to
-the Inbox, so ours stands down rather than sitting beside it. And on a
-project label, taking the label off archives instead — a swipe, [ and ]
-and Fastmail's own contextual button all ask for that one call, and none
-of them means "leave it in the Inbox with no label". Only the mode's own
-Remove label button still removes the label, which is what it is for.
-Nothing is taken off an action bar that draws no More: the tablet's header
-bar owns one without ever drawing it, so verbs moved there — Labels among
-them — had gone rather than been tidied away. Such a bar is added to and
-never taken from: File, which Fastmail draws no button for anywhere, and
-Archive on a label view, beside the Remove label the slot holds rather
-than instead of it. On a bar that does draw More, a verb is put in its new
-place before it is taken out of the old one, and any verb found in neither
-place is put back into More from the toolbar's own registry.
-
-3.9 — e archives everywhere, and archiving keeps a hold label. With E and Y
-swapped, e used to inherit whatever Fastmail had bound to y, which is one
-contextual toolbar button: it reads Archive while the list is the Inbox and
-Remove from this label anywhere else, and it registers its keys once, on the
-way into the document, never again when its meaning changes. So in a label
-view e ran Remove — it archived nothing and took off the label of the view
-you were standing in, a hold label such as Later included. The mode now
-claims e and calls the archive verb itself, so it means the same thing in
-every list: Inbox, Triage, project label or hold label. Fastmail's own y
-handlers still move to e and sit underneath, which is what answers with the
-mode off. h is claimed the same way and either way, swap or no swap: it was
-bound to that same button, so it archived in the Inbox and did nothing in a
-label view — the desktop had no archive there at all, where the phone's bar
-had been swapping the slot for one since 3.0. Both keys now run the verb,
-which is what carries the rule that archive strips Triage, every project
-label and the pin while a hold label such as Later stays on. The funnel on
-the Triage row takes the label's colour, which the icon it stands in for
-had: Fastmail colours a sidebar icon inline as it draws it, so a stand-in
-inherits nothing and has to be told. And a decision moves to the next
-message rather than the first: the row it moves on from is noted before
-the decision, not after. Archiving takes the row out of the list, and so
-does filing in the triage label's own view, so an index read afterwards
-found nothing — which was read as the top of the list, sending every
-archive to whatever sat there. And v opens the narrowed picker on a
-narrow action bar too: a bar too small to draw every action puts the rest
-under More, and the More menu registers each of their keys against
-itself, burying the stand-in v goes in under. Ours is lifted back on top
-afterwards, the same way the claimed keys are. The bar the verbs are added
-to is now found by asking which one carries the actions, rather than by
-looking for the phone's bottom bar: an iPad loads the same build and then
-calls itself a tablet, hiding that bar and drawing the same actions in the
-page header. Back to the list when the next is triaged is phone-only for
-the same reason — a tablet has the list beside the message already.
-
-3.8 — a decision moves on to the next message, and the Triage label is a
-triage surface of its own. Filing and archiving now go to the next message
-whatever it carries, which is what Fastmail does everywhere else; nothing
-is skipped. Where that step lands is Fastmail's own setting for after an
-action — the mailbox, the next conversation or the previous one — since
-archiving applies it on its own and filing, which leaves the message in
-the Inbox, makes the same step for itself. Both apply in the Triage
-label as well as the Inbox, which hold the same mail. The Triage row in the
-sidebar wears the funnel, the same glyph as the switch above the list. The
-retired v2 filter system is gone rather than dormant: about a thousand
-lines that named a model — Process, qualifiers, the deferred labels — this
-script no longer has.
-
-3.7 — back on the list, the first row takes the focus. When filing or
-archiving finds nothing left to triage and walks back to the list, the
-first row is focused — the one j and k move and Enter opens — rather than
-nothing.
-
-3.6 — Later is somewhere to file. A label named in settings.excludedLabels
-is a hold, not a queue: the File picker offers it beside the projects, and
-filing to it — by File, refile or drag — replaces like a project, taking
-Triage and every other destination off, so refiling works in every
-direction and a message is in one place at a time. A held message counts
-as filed: v keeps it, Triage off, Later on. Carrying a project and Later
-both, keep lets the project win. Archive still leaves a hold label on. The
-L-key Labels menu is unchanged: a hold label picked there is merely added.
-
-3.5 — a decision takes an excluded label off. Later holds mail that has not
-been decided, so deciding removes it: filing a message by any route — key,
-menu, drag or swipe — now strips any label named in settings.excludedLabels
-along with Triage and the other projects, and keeping (v on a filed thread)
-strips it along with Triage. Archive still leaves them alone, so Inbox +
-Triage + Later archives to just Later.
-
-3.4 — archiving moves the view on the same way filing does: to the next
-conversation still waiting for triage, stepping over any already filed, and
-back to the list when none is left. Archive takes the Inbox off, so its own
-step to the next row is held while our walk takes over.
-
-3.3 — filing moves the view on to the next conversation still waiting for
-triage. Filing keeps the message in the Inbox, so nothing leaves the list on
-its own; the walk is explicit — down the list to the next one carrying
-Triage, stepping over any already filed, and back to the list when none is
-left. Only in the Inbox with the mode on. (The 3.1 attempt was gated to the
-retired filtered views and never fired.)
-
-3.2 — Labels is Fastmail's own full picker again: File stays narrowed to the
-projects you file under, while Labels shows every label, helpers included.
-The placing shortcut stays — a project commits and closes, a helper stays
-open — and the filing rules are unchanged.
-
-# The model
-
-A project label is the live state and nothing else. History is search.
-
-| State     | Carries                               | Who put it there            |
-|-----------|---------------------------------------|-----------------------------|
-| Triage    | Inbox + Triage                        | the catch-all rule          |
-| Pre-filed | Inbox + Triage + one project label    | that rule and a sender rule |
-| Filed     | Inbox + exactly one project label     | you                         |
-| Held      | Inbox + one hold label (Later)        | you                         |
-| Done      | neither; hold labels untouched        | you                         |
-
-Snoozed is any of these that Fastmail has taken out of the Inbox for a
-while; it comes back as it was. A project label implies the Inbox; a
-message has at most one project label; Triage and a project coexist only
-when rules put both there. A label named in settings.excludedLabels — Later
-— is a hold, not a queue: a filing destination like a project, so a message
-is in one place at a time, but archive leaves it on where it strips a
-project. Helper labels hidden from the sidebar are never added, removed,
-counted or offered by anything here.
-
-The Inbox's groups (Fastmail's own, a setting on the mailbox) are the
-working surface: `in:Triage OR is:unread` first, then Pinned, then one per
-project, then the catch-all for anything that arrived without passing the
-rule. The script never writes them.
-
-# Verbs
-
-All work on the selection and the whole conversation; each is one undo
-checkpoint under one toast, and `z` reverts it whole.
-
-* `v`       keep — with a destination on the thread: Triage off. Carrying a
-            project and Later both, the project wins and Later comes off too.
-            Without one: the picker, narrowed to projects and hold labels;
-            the pick is an ordinary add.
-* `Shift-V` refile — always the picker.
-* `e` `h`   done — Inbox, Triage, every project label and the pin come off;
-            a hold label such as Later stays on. The same from every list —
-            Inbox, Triage, a project label, Later itself — and it never asks
-            first. `e` only while settings.swapArchiveExpand is on, since
-            without it `e` is Fastmail's thread expander.
-* `s`       pin — a toggle.
-* `w`       snooze — Fastmail's own dialog, on its custom picker, filled in
-            for settings.snoozeDefault at settings.snoozeTime. Enter confirms.
-* `l`       Fastmail's tristate Labels menu, its own full list — every
-            label, helpers included. A project commits and closes; a helper
-            stays open for the next one. A hold label is a helper here: it
-            is added, and files nothing.
-* drag      files to the label — a destination replaces; Option-drag is
-            Fastmail's move.
-
-# The rules under every menu
-
-Every label change in the client goes through five actions on the mail
-controller — add, remove, addremove, copy, move — and the model is enforced
-there, so a key, a menu, a drag and a swipe do the same thing:
-
-1. Archive strips: Inbox, Triage, every project label, the pin.
-2. A destination replaces: a project landing by any route, or a hold label
-   landing by File, refile or drag, takes Triage and every other destination
-   off in the same checkpoint. The Inbox is not touched. From the L-key
-   Labels menu a hold label is merely added.
-3. A label named in settings.contactGroupLabels files the sender into the
-   contact group of that name, from any route.
-
-# Notes
-
-* Nothing here writes to a store record outside a verb, and no verb writes
-  a mailbox setting. Badge counts come from Mailbox.totalThreads.
-* On the phone the message bar is Snooze / Pin / Archive / Labels / More,
-  with File and "Snooze 2 weeks" in More.
+Licensed under the GNU Affero General Public License, version 3 or later.
 */
 
 (function () {
     'use strict';
 
-    // Injection can happen more than once — an injector racing a reload, or a
-    // manual load on top of an existing copy. Patching twice would double-wrap
-    // every method it touches, so stop if we are already here.
+    // Injection can happen more than once, an injector racing a reload, or a
+    // manual load on top of an existing copy.
     if (window.customMode) {
         console.log('Custom mode: already loaded');
         return;
@@ -254,22 +41,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // Keystroke that toggles Custom mode
     const SHORTCUT = 'Shift-I';
     // 1 … 9 and 0 go to the sources listed above the Labels heading.
-    //
-    // Cmd is the one to reach for, but Safari keeps Cmd-1 … Cmd-9 for its tabs
-    // and never lets the page see the number at all — pressing Cmd-1 delivers
-    // the Cmd keydown and nothing else, so there is not even an event to
-    // cancel. It still works in the web apps, which have no tabs, so it stays
-    // bound; Option is bound alongside it, and nothing claims that.
     const SOURCE_SHORTCUT_COUNT = 9;
     const SOURCE_SHORTCUT_MODIFIERS = ['Meta'];
 
     // Option shortcuts are matched on the physical key rather than the
     // character, because Option is what a Mac keyboard uses to reach a second
-    // layer: Option-1 is not "1" but ¡ or similar — nothing a shortcut can be
-    // named after, and the answer would change with the layout. The code
-    // does not.
-    //
-    // Digit0 comes last, so the row reads 1 … 9, 0 as it does on the keyboard.
+    // layer: Option-1 is not "1" but ¡ or similar; nothing a shortcut can be
+    // named after, and the answer would change with the layout.
     const OPTION_SOURCE_CODES = [
         'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
         'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'
@@ -278,8 +56,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // Where the on/off state is remembered across reloads
     const STORAGE_KEY = 'custom-mode';
     // What it was called before the mode was renamed, read once so a mode
-    // switched off stays off. Both this and the early cache's old key are
-    // dropped on the way past.
+    // switched off stays off.
     const LEGACY_STORAGE_KEY = 'custom-inbox-mode';
     // Marks our toolbar button so it can be found again after a redraw
     const INDICATOR_CLASS = 'custom-modeButton';
@@ -291,8 +68,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // Goes on the sidebar when the only section drawn is this account's own
     const LONE_SECTION_CLASS = 'custom-loneSection';
     // Opens the Move to menu: v narrowed to the sidebar and adding rather than
-    // moving, Option-V as it comes. Option-V is matched on the physical key,
-    // because on a Mac the character Option produces is not "v".
+    // moving, Option-V as it comes.
     const MOVE_SHORTCUT = 'v';
     const STOCK_MOVE_CODE = 'KeyV';
     // Id of our stylesheet
@@ -305,9 +81,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // Bumped when remembered answers become untrustworthy, to drop them once
     const EARLY_VERSION = 2;
 
-    // Options, overridable from the extension's settings. The extension writes
-    // them onto the page just before this script is injected; running without
-    // it (pasted into a console, say) simply falls back to these defaults.
+    // Options, overridable from the extension's settings.
     const DEFAULT_SETTINGS = {
         labelColours: true,
         labelColoursSidebarOnly: true,
@@ -321,9 +95,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         labelsSidebarOnly: true,
         labelsAutoSave: true,
         // A project label is a queue, not an archive: its list opens showing
-        // only what is still in the Inbox. Fastmail has the filter already
-        // and forgets it the moment you leave, so it is applied on arrival —
-        // which leaves turning it off working for as long as you stay.
+        // only what is still in the Inbox.
         stickyInboxFilter: true,
         // And the badge counts the same set the filtered list shows, rather
         // than everything the label has ever held.
@@ -331,30 +103,27 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // The label a rule puts on everything incoming. Taken off by keeping
         // or filing; the script never adds it.
         triageLabel: 'Triage',
-        // w opens Fastmail's own snooze dialog filled in for this far ahead —
-        // a count and d, w or m — at this time of day
+        // w opens Fastmail's own snooze dialog filled in for this far ahead,
+        // a count and d, w or m, at this time of day
         snoozeKey: 'w',
         snoozeDefault: '2w',
         snoozeTime: '08:00',
         // The pin-toggle key, in Fastmail's own key spelling.
         urgentKey: 's',
-        // The phone bar's verbs, as one ordered list over all of them: the
-        // bar takes as many leading ones as the screen fits — More always
-        // keeps a slot — and the rest wait inside More, in the same order.
-        // Kinds missing from a saved value join at the end.
+        // The phone bar's verbs, as one ordered list over all of them: the bar
+        // takes as many leading ones as the screen fits; More always keeps a
+        // slot, and the rest wait inside More, in the same order.
         bottomBarSlots: 'Snooze, Pin, File, Archive, Labels, Move, Delete',
         // Shown in the sidebar but worked as piles, not queues: never filed
         // into, never stripped by archive
         excludedLabels: 'Later, Feedbin',
-        // Labels that file the sender as well as the message: adding one —
-        // from any menu, by typing, or by drag — adds from[0] to the contact
-        // group of the same name, making the contact, and the group, if
-        // either is new. Empty by default, because writing to your address
-        // book is not something a mail script should start doing unasked.
+        // Labels that file the sender as well as the message: adding one, from
+        // any menu, by typing, or by drag, adds from[0] to the contact group
+        // of the same name, making the contact, and the group, if either is
+        // new.
         contactGroupLabels: '',
-        // The app icon's badge, for the shell apps: this label's total —
-        // Triage is what is left to decide. An empty label hands the shell
-        // its own fallback.
+        // The app icon's badge, for the shell apps: this label's total, Triage
+        // is what is left to decide.
         appBadgeLabel: 'Triage',
         swapArchiveExpand: true,
         sidebarSeparators: true,
@@ -387,8 +156,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      *
      * This mode is full of places that give up quietly: a view that is not
      * drawn yet, a bar being rebuilt underneath us, a name the app has
-     * stopped answering to. Carrying on is right — half a toolbar is worse
-     * than none — but going quiet about it is not. The Labels button was
+     * stopped answering to. Carrying on is right; half a toolbar is worse
+     * than none; but going quiet about it is not. The Labels button was
      * missing for days, through three wrong diagnoses, and at no point did
      * anything say "I looked for Labels and could not find it". A console
      * warning is no help either: there is no console on a phone.
@@ -451,8 +220,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // Overture collections are sometimes real arrays and sometimes record
-    // arrays. A record array indexes store keys rather than records and has no
-    // own length, so it must be walked with its own map() to get records out.
+    // arrays.
     const toArray = (value) => {
         if (!value) return [];
         if (Array.isArray(value)) return value;
@@ -465,12 +233,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // A user label is a mailbox without a system role
     const isUserLabel = (mailbox) => !!mailbox && !mailbox.get('role');
 
-    // Which class a view is. FastMail.classes is keyed by the Name every
-    // class declares, so the class object itself can be had and asked about
-    // — which beats comparing constructor.name to a string twice over: a
-    // subclass answers yes, and nothing depends on the minifier having kept
-    // the constructor's function name, which is a property nobody promised.
-    // The name comparison stays behind it for a class that is not exported.
+    // Which class a view is. FastMail.classes is keyed by the Name every class
+    // declares, so the class object itself can be had and asked about ; which
+    // beats comparing constructor.name to a string twice over: a subclass
+    // answers yes, and nothing depends on the minifier having kept the
+    // constructor's function name, which is a property nobody promised.
     const isViewOfClass = (view, name) => {
         if (!view || !view.constructor) return false;
 
@@ -480,12 +247,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return view.constructor.name === name;
     };
 
-    // Fastmail names a chip by the mailbox's full path — "Projects/Work", not
-    // "Work" — while the record's name and displayName are only the leaf. Every
-    // rule that selects on a chip, and every comparison against one, has to use
-    // the path or it silently misses every nested label.
-    // A record whose parent has not arrived in the store yet throws on the way
-    // up, and one walk of the tree is no reason to stop the caller
+    // Fastmail names a chip by the mailbox's full path; "Projects/Work", not
+    // "Work"; while the record's name and displayName are only the leaf.
     const parentOf = (mailbox) => {
         if (!mailbox || !mailbox.get) return null;
 
@@ -496,12 +259,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // Mailbox has a pathName of its own — parent's pathName, a slash, this
-    // one's displayName — and the row chips carry it as their title, so
-    // asking for it is both shorter and the only way to be sure the two
-    // agree. The walk below says the same thing by hand, which is one more
-    // place to drift; it stays as the answer for a record that has not got
-    // the property.
+    // Mailbox has a pathName of its own; parent's pathName, a slash, this
+    // one's displayName, and the row chips carry it as their title, so asking
+    // for it is both shorter and the only way to be sure the two agree.
     const mailboxPath = (mailbox) => {
         try {
             const own = mailbox && mailbox.get && mailbox.get('pathName');
@@ -527,7 +287,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // A label nested inside the Inbox is drawn under it, and as far as the
     // sidebar's shape goes it belongs to it: a line between the two would cut
     // the Inbox off from its own children, and a second one below them would
-    // make the system folder that follows look like the start of something new.
+    // make the system folder that follows look like the start of something
+    // new.
     const isUnderInbox = (mailbox) => {
         let node = parentOf(mailbox);
 
@@ -540,10 +301,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return false;
     };
 
-    // Labels struck from the project set by name — Later holds mail, it does
-    // not file it — a rule of yours, so it is named rather than worked out.
-    // Memoized, for the same callers that ask it on every option and every
-    // row.
+    // Labels struck from the project set by name; Later holds mail, it does
+    // not file it, a rule of yours, so it is named rather than worked out.
     let excludedCache = null;
 
     const excludedPaths = () => {
@@ -564,8 +323,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // Visible in the sidebar: bit 1 of Fastmail's own hidden flag is "not in
-    // the folder list" — measured: 0 on sidebar labels, 1 on the archive
-    // shelf, 3 on a label hidden everywhere.
+    // the folder list"; measured: 0 on sidebar labels, 1 on the archive shelf,
+    // 3 on a label hidden everywhere.
     const isSidebarLabel = (mailbox) => !(Number(mailbox.get('hidden')) & 1);
 
     /*
@@ -576,7 +335,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // These are asked on every badge paint and inside computed properties, so
     // they are cached per account and dropped whenever a Mailbox record
-    // changes — the same store event that already rebuilds the stylesheet.
+    // changes; the same store event that already rebuilds the stylesheet.
     const labelCache = new Map();
     const forgetLabelCache = () => labelCache.clear();
 
@@ -588,9 +347,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const mailboxesOf = (accountId) => FastMail.store.getAll(FastMail.classes.Mailbox)
         .filter(m => !accountId || m.get('accountId') === accountId);
 
-    // Matched on the full path, case-insensitively, among every mailbox of
-    // the account — folders as well as labels, since a setting may name
-    // either.
+    // Matched on the full path, case-insensitively, among every mailbox of the
+    // account; folders as well as labels, since a setting may name either.
     const findByPath = (accountId, path) => {
         const wanted = String(path || '').toLowerCase();
         if (!wanted) return null;
@@ -614,7 +372,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         if (settings.triageLabel && !cached.triage && warnedNoTriage !== settings.triageLabel) {
             warnedNoTriage = settings.triageLabel;
             reportFault('no label named "' + settings.triageLabel +
-                '" — v takes nothing off and archive strips no Triage until it exists');
+                '"; v takes nothing off and archive strips no Triage until it exists');
         }
 
         labelCache.set(key, cached);
@@ -628,13 +386,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         mailbox === triageMailbox(mailbox.get('accountId'));
 
     // A project: a user label shown in the sidebar, not struck out by name,
-    // and not Triage. Sidebar membership is the rule — the archive shelf of
-    // hidden labels tags history, it does not queue work.
+    // and not Triage.
     const isProject = (mailbox) => isUserLabel(mailbox) &&
         isSidebarLabel(mailbox) && !isExcludedLabel(mailbox) && !isTriage(mailbox);
 
     // Where a message can be filed: a project, or a hold label named in
-    // settings.excludedLabels — one at a time, and a hold label survives
+    // settings.excludedLabels; one at a time, and a hold label survives
     // archive where a project does not
     const isDestination = (mailbox) => isProject(mailbox) || isExcludedLabel(mailbox);
 
@@ -646,15 +403,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // No scan of loaded messages drives any count here: a badge is its
     // mailbox's own Mailbox.totalThreads, which the server maintains, push
-    // updates, and Fastmail adjusts optimistically before the server
-    // confirms. A project label implies the Inbox, so a label's total is
-    // its queue and nothing has to be intersected to find it.
+    // updates, and Fastmail adjusts optimistically before the server confirms.
 
     /*
      * A project label's badge, counted against the Inbox.
      *
      * The model says a project label implies the Inbox, so its total is its
-     * queue — but only for mail filed under this model. A label that was in
+     * queue; but only for mail filed under this model. A label that was in
      * use before it, or one picked from the L-key menu, holds messages that
      * left the Inbox long ago, and the badge then counts history rather than
      * work. settings.filteredLabelCounts counts what the filtered list shows
@@ -672,16 +427,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // length is all this wants, so the range is the smallest one there is.
     const COUNT_RANGE = { start: 0, end: 1 };
 
-    // How much of a label's Inbox queue one window can hold. Past this the
-    // badge falls back to the label's own total, which is the same number
-    // whenever the model has been kept.
+    // How much of a label's Inbox queue one window can hold.
     const COUNT_WINDOW = 250;
 
     // Overture's Query.AUTO_REFRESH_IF_OBSERVED. A query is told when the data
     // behind it has changed, but it only goes and looks again if it has been
-    // asked to, and the default is never. This one is watched for as long as a
-    // badge is drawn from it, which is exactly when the answer needs to keep
-    // up, and forgetInboxCounts takes the observers away with the feature.
+    // asked to, and the default is never.
     const AUTO_REFRESH_IF_OBSERVED = 1;
 
     const countRangeObserver = { rangeDidChange() {} };
@@ -707,15 +458,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 collapseThreads: true,
                 // A windowed query asks for one window at a time and reports
                 // how much it holds, so a badge reading a default query sees
-                // about thirty of them however many there are. A window wide
-                // enough for the whole queue is answered in one request, and
-                // a request that comes back short of what it asked for is
-                // how the query knows it has everything — which is what
-                // makes the length a count rather than a lower bound.
-                //
-                // The messages behind those ids are fetched with them. They
-                // are Inbox messages, which this account loads anyway, and
-                // the cost is paid once per label rather than per scroll.
+                // about thirty of them however many there are.
                 windowSize: COUNT_WINDOW
             };
 
@@ -759,17 +502,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // What a row's badge reads: the label's own total, or the part of it that
-    // is still in the Inbox. Triage's total is what is left to decide either
-    // way, since everything carrying it is in the Inbox by definition.
-    //
-    // The total stands in until the query lands — it is the same number
-    // whenever the model has been kept — so a badge never sits empty waiting.
-    //
-    // A query's length is only the answer when the query knows it is: either
-    // the server counted the matches, or every id is in hand. Short of that
-    // the length is how much has been loaded plus one, which is a lower
-    // bound wearing a number's clothes, and reading it as a count is what
-    // made every busy label report the same thirty-one.
+    // is still in the Inbox.
     const countKnown = (query) => {
         if (!query) return null;
         if (!query.hasTotal && !query.get('allIdsAreLoaded')) return null;
@@ -809,8 +542,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     /*
      * The app icon's badge, for the shell apps. The harness they inject
-     * exposes window.native — a resolver it pulls on foreground, a setBadge
-     * it forwards to the dock and the home screen — so the whole feature is
+     * exposes window.native, a resolver it pulls on foreground, a setBadge
+     * it forwards to the dock and the home screen; so the whole feature is
      * choosing the number: the total of settings.appBadgeLabel, summed
      * across accounts. In plain Safari there is no window.native and none
      * of this runs.
@@ -844,9 +577,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The resolver is the pull half: the shell asks on foreground, when a
-    // pushed number may be long stale. Installed only while the label
-    // setting names something, so an emptied setting hands the shell its
-    // own fallback reading back.
+    // pushed number may be long stale.
     const installAppBadge = () => {
         if (!window.native) return;
 
@@ -880,8 +611,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // Run fn while our count stands in for the mailbox's badge count.
-    // The write is a raw assignment rather than set(), so nothing is notified,
-    // and the stock value is always put back.
     const withInboxCount = (mailbox, fn) => {
         const stock = mailbox.badgeCount;
         mailbox.badgeCount = countFor(mailbox);
@@ -949,21 +678,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         FastMail.ViewEventsController.kbShortcuts.register(keystroke, { do: fn }, 'do');
     };
 
-    // Go somewhere the way clicking the sidebar would. select() copes with both
-    // mailboxes and saved searches, and routes through goSource, so the sticky
-    // filter is applied on the way.
+    // Go somewhere the way clicking the sidebar would.
     const selectSource = (source) => {
         if (source) controller().sources.select(source);
     };
 
-    // The sources above the Labels heading — Inbox, Snoozed, Drafts and so on.
-    // Fastmail divides the sidebar at the first mailbox without a role and
-    // hands that split back as the first source group.
-    //
-    // That group is empty when a label is ordered ahead of a system folder,
-    // which collapses the entire sidebar under Labels. Fall back to this
-    // account's system mailboxes in sidebar order, so the keys still land
-    // somewhere sensible rather than doing nothing.
+    // The sources above the Labels heading; Inbox, Snoozed, Drafts and so on.
     const sourcesAboveLabels = () => {
         const groups = toArray(controller().sources.sourceGroups());
         const first = groups[0];
@@ -988,15 +708,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      */
 
     // Every row in an inbox-filtered label is in the Inbox by definition, so
-    // the Inbox chip on each row says nothing. Hide it there.
-    //
-    // Done in CSS rather than by patching the row drawing code: rows are drawn
-    // and redrawn constantly as you scroll, and a stylesheet covers every one of
-    // them without a hook. The chip carries the mailbox name as its title, which
-    // is enough to select it. Fastmail's style-src allows inline styles, unlike
-    // its script-src.
-    // A chip's title is the mailbox name, so it has to survive being put in a
-    // selector
+    // the Inbox chip on each row says nothing.
     const cssString = (value) => String(value).replace(/["\\]/g, '\\$&');
 
     const inboxChipRules = () => {
@@ -1012,36 +724,21 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             ' { display: none; }',
 
             // The open message, which draws its labels differently: a .u-badge
-            // holding a link and a remove button. The whole badge goes, not just
-            // the link, or the × would be left behind on its own.
-            //
-            // Matched on the link's href rather than its text, because the text
-            // is what the prefix stripping rewrites — and CSS cannot select on
-            // text anyway. One rule covers every account: the path is the same
-            // in each, only the ?u= differs.
+            // holding a link and a remove button.
             `.${HIDE_INBOX_LABEL_CLASS} .v-ThreadLabels .u-badge` +
             `:has(> a[href*="/mail/${cssString(encodeURIComponent(name))}/"])` +
             ' { display: none; }',
 
-            // The phone's badge is a span with no href, so it is matched on the
-            // name stamped by markBadge instead. Kept alongside the href rule
-            // rather than replacing it: that one needs no script to have run, so
-            // it still holds on the first paint of a reload.
+            // The phone's badge is a span with no href, so it is matched on
+            // the name stamped by markBadge instead.
             `.${HIDE_INBOX_LABEL_CLASS} .v-ThreadLabels` +
             ` .u-badge[${BADGE_NAME}="${cssString(name)}"]` +
             ' { display: none; }'
         ]), []);
     };
 
-    // Mark each row with the colour of a label it carries, as a stripe down its
-    // leading edge. Selecting on the chip Fastmail already draws means this
-    // needs no hook into the row views, which matters because the list recycles
-    // them as you scroll.
-    //
-    // A message carrying two coloured labels matches both rules, and the later
-    // one wins — the labels are emitted in store order, so it is stable rather
-    // than meaningful.
-    // Theme colours, with the values Fastmail ships as a fallback
+    // Mark each row with the colour of a label it carries, as a stripe down
+    // its leading edge.
     const PAGE_BG = 'var(--ui-page-color-bg, #fff)';
     const FOCUSED_BG = 'var(--ui-page-color-bg-focused, #e9ebee)';
     const SELECTED_BG = 'var(--ui-page-color-bg-selected, #f2fafd)';
@@ -1049,22 +746,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // collapses to exactly the stock background on rows without one
     const LABEL = `var(--custom-label-colour, ${PAGE_BG})`;
 
-    // Rules that apply to every row and do nothing until a label colour is set.
-    //
-    // The tint has to be opaque. Fastmail declares `.u-list-link` and the time
-    // and chip containers as `background-color: inherit`, so a translucent tint
-    // gets repainted by each of them and stacks to roughly three times the
-    // intended strength where they overlap. Mixing against the page colour
-    // instead of transparent makes repainting it harmless.
-    //
-    // Hover and selection paint `.u-list-link`, which sits above the row, so
-    // they would otherwise cover the tint entirely. Mixing the label colour
-    // into those two backgrounds lets it show through both states.
-    // The surfaces that make up a row's background. `.u-list-link` is the one
-    // hover and selection paint: it is inset from the row and rounded, so
-    // tinting the row itself would colour outside its edges. The rest declare
-    // `background-color: inherit` and sit above the link, so they have to be
-    // given the same colour or they punch holes in it.
+    // Rules that apply to every row and do nothing until a label colour is
+    // set.
     const TINT_TARGETS = '.u-list-link, .v-MailboxItem-time,' +
         ' .v-MailboxItem-mailboxes, .v-MailboxItem-mailbox, .v-MailboxItem-toolbar';
 
@@ -1074,23 +757,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         `.v-MailboxItem :is(${TINT_TARGETS})` +
         ` { background-color: color-mix(in srgb, ${LABEL} 10%, ${PAGE_BG}); }`,
         // .v-MailboxItem is added to these on purpose, and with no space.
-        // Fastmail paints the focused and selected row with
-        //
-        //     .u-list-item.is-focused .u-list-link { background-color: … }
-        //
-        // which is three classes, and :is() counts only as its most specific
-        // argument, so a plain `.u-list-item.is-focused :is(…)` ties and the
-        // winner comes down to which stylesheet is later. The head start writes
-        // ours before Fastmail's are parsed, so ours lost — for the link but
-        // not for the date, which Fastmail leaves at `inherit`, and the date
-        // came out tinted while the row it sits on did not.
-        //
-        // A fourth class settles it. It has to be part of the same compound
-        // selector: the row element carries both names —
-        // "v-MailboxItem u-list-item …" — so writing them with a space between
-        // asks for a descendant that does not exist, and the rule matches
-        // nothing at all. That leaves the date inheriting, which is the white
-        // patch behind it.
         `.u-list-item.is-focused.v-MailboxItem :is(${TINT_TARGETS})` +
         ` { background-color: color-mix(in srgb, ${LABEL} 12%, ${FOCUSED_BG}); }`,
         `.u-list-item.is-selected.v-MailboxItem :is(${TINT_TARGETS})` +
@@ -1105,10 +771,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         FastMail.store.getAll(FastMail.classes.Mailbox)
             // Triage is on every undecided row, so tinting rows by it would
-            // colour the whole group one shade and say nothing. The colours
-            // are there to show what a message is about. An option, since a
-            // colour you have given the label is a choice.
-            // "Sidebar only" is the labels you actually file into.
+            // colour the whole group one shade and say nothing.
             .filter(m => isUserLabel(m) && m.get('color') &&
                 !(settings.labelColoursSkipTriage && isTriage(m)) &&
                 (!settings.labelColoursSidebarOnly || isSidebarLabel(m)))
@@ -1116,23 +779,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 const name = cssString(mailboxPath(m));
                 const chip = `.v-MailboxItem-mailbox span[title="${name}"]`;
 
-                // Each label only has to declare its colour; the rules above do
-                // the rest, and custom properties inherit to the children that
-                // need them
+                // Each label only has to declare its colour; the rules above
+                // do the rest, and custom properties inherit to the children
+                // that need them
                 rules.push(`.v-MailboxItem:has(${chip})` +
                     ` { --custom-label-colour: ${m.get('color')}; }`);
 
                 // The row is tinted to the chip's own shade, so the chip needs
                 // an edge of its own: a hairline on top, right and bottom,
-                // leaving the left open so it reads as a tag rather than a box.
-                //
-                // The line is the page colour — white in the light theme, and
-                // still the right separating colour in a dark one — so it reads
-                // as a gap between chip and row rather than an outline.
-                //
-                // Drawn as inset shadows rather than a border: the list places
-                // rows at a fixed height, and a real border would add to the
-                // chip's size and nudge the row's contents.
+                // leaving the left open so it reads as a tag rather than a
+                // box.
                 rules.push(`${chip} { box-shadow:` +
                     ` inset 0 1px 0 ${PAGE_BG},` +
                     ` inset -1px 0 0 ${PAGE_BG},` +
@@ -1142,42 +798,17 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return rules;
     };
 
-    // The line above a row that opens a new run. Which rows those are is worked
-    // out in JS — it depends on each mailbox's role, which no selector can see —
-    // and marked with a class, leaving the drawing here.
-    //
-    // The room the line sits in has to be taken, because the list leaves none.
-    // It places every row itself — each carries `position: absolute` and a `top`
-    // of its own, 26px apart and 26px tall — so the rows are packed edge to edge.
-    //
-    // A margin cannot open a gap in that. It slides one row down while every row
-    // below stays at the offset the list gave it, so the row lands on top of the
-    // next one: measured at 6px of margin, the Inbox row ran from 164 to 190
-    // with the row after it fixed at 184. The gap is made with a transform
-    // instead, applied in the marking pass — see markSourceGroups.
-    //
-    // How much room to take. Half of it falls above the line and half below,
-    // which is what puts the line in the middle of the gap rather than against
-    // one of the rows.
+    // The line above a row that opens a new run. Which rows those are is
+    // worked out in JS; it depends on each mailbox's role, which no selector
+    // can see, and marked with a class, leaving the drawing here.
     const SEPARATOR_GAP = 8;
 
     // Drawn on the row and inset by hand, rather than hung off the link and
-    // left to inherit its width. The link is the painted part — rounded,
-    // highlighted, and held this far clear of each edge by a margin of its own —
-    // so following it would have given the right width for free. But it is
-    // `overflow: hidden`, and the line belongs above it, in the gap: drawn there
-    // it was clipped away entirely, and drawn inside the link instead it cuts
-    // across the rounded corners and reads as part of the pill rather than as a
-    // division before it. The row clips nothing.
-    //
-    // So the inset is this script's, and has to match `.app-source`'s margin.
-    // If Fastmail changes that the line is out by the difference — visibly
-    // wrong, but only cosmetically. Measured against a drawn row: the row runs
-    // 200.8px from x=8, the link 184.8px from x=16.
+    // left to inherit its width.
     const SEPARATOR_INSET = 8;
 
-    // The colour is Fastmail's own divider, falling back to a neutral grey that
-    // reads on a light theme or a dark one — the fallback also covers the
+    // The colour is Fastmail's own divider, falling back to a neutral grey
+    // that reads on a light theme or a dark one; the fallback also covers the
     // variable being renamed out from under us.
     const SOURCE_SEPARATOR_RULES = [
         `.${SOURCE_SEPARATOR_CLASS}::before {` +
@@ -1189,25 +820,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     ];
 
     // Fastmail draws the collapse arrow on the Labels heading from
-    //
-    //     showExpando: i.length > 1
-    //
-    // in sourceGroups, where i is every account with mail — so a second account
-    // puts an arrow there whether or not it shows anything in the sidebar. With
-    // no other section to collapse to, the arrow only offers to hide the whole
-    // sidebar. The class says that is the case; the rule does the hiding.
+    // showExpando: i.length > 1 in sourceGroups, where i is every account with
+    // mail; so a second account puts an arrow there whether or not it shows
+    // anything in the sidebar.
     const LONE_SECTION_RULES = [
         `.${LONE_SECTION_CLASS} .v-Sources-expando { display: none; }`
     ];
 
     // The bar's Pin while the open conversation is pinned: the same pair of
-    // theme variables Fastmail's own list rule paints a pinned row's pin
-    // with, so the two read as one state in either theme. The colour sits on
-    // the icon alone; the word under it stays the toolbar's own.
-    //
-    // Keyed on the class this puts there rather than on the bar it sits in: a
-    // tablet draws the same actions in the page header instead of at the
-    // bottom, and a rule naming the bottom bar simply missed them there.
+    // theme variables Fastmail's own list rule paints a pinned row's pin with,
+    // so the two read as one state in either theme.
     const PIN_STATE_RULES = [
         '.v-Button.custom-pinned svg.v-Icon {' +
         ' color: var(--ui-icon-pin-color-stroke);' +
@@ -1223,19 +845,15 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // The Triage row wears the funnel, the same glyph as the switch above the
     // list: what it holds is everything still waiting, not a place mail lives.
-    // The stock label icon is hidden rather than removed, so turning this off —
-    // or renaming the triage label — puts the row back as Fastmail drew it.
     const HIDDEN_SOURCE_ICON_CLASS = 'custom-hiddenSourceIcon';
 
     const TRIAGE_ICON_RULES = [
         '.' + HIDDEN_SOURCE_ICON_CLASS + ' { display: none !important; }'
     ];
 
-    // A pill for passive confirmations — the fallback only: showToast asks
-    // Fastmail's own notification layer first and draws this by hand when
-    // that container is not there to ask. Fixed above the bottom bar, dark
-    // in either theme, gone on its own. pointer-events stays off so a toast
-    // mid-fade never eats a tap meant for what is under it.
+    // A pill for passive confirmations; the fallback only: showToast asks
+    // Fastmail's own notification layer first and draws this by hand when that
+    // container is not there to ask.
     const TOAST_RULES = [
         '.custom-inbox-toast {' +
         ' position: fixed; left: 50%;' +
@@ -1252,9 +870,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         ' opacity: 1; transform: translateX(-50%) translateY(0); }'
     ];
 
-    // The line is the stylesheet's half of the option; the gap it sits in is the
-    // marking pass's, since only that can move a row the list has pinned. Both
-    // are answered when the option changes: applySettings restyles and refreshes.
+    // The line is the stylesheet's half of the option; the gap it sits in is
+    // the marking pass's, since only that can move a row the list has pinned.
     const sourceSeparatorRules = () =>
         (settings.sidebarSeparators ? SOURCE_SEPARATOR_RULES : []);
 
@@ -1265,11 +882,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      */
 
     // None of this can run until Fastmail is ready, and Fastmail paints its
-    // first rows before then, so on a fresh load they appear unstyled: the Inbox
-    // chip shows and then vanishes, and colours arrive late. Neither the
-    // stylesheet nor the body class needs Fastmail once they have been worked
-    // out, so both are remembered here and replayed by the extension's
-    // document_start script, before there is anything on screen to correct.
+    // first rows before then, so on a fresh load they appear unstyled: the
+    // Inbox chip shows and then vanishes, and colours arrive late.
     let early = null;
 
     const loadEarly = () => {
@@ -1309,11 +923,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         saveEarly();
     };
 
-    // Whether to hide the chip depends on the mailbox being a user label, which
-    // needs the store. Remembering the answer per URL sidesteps that: a view you
-    // have opened before is right from the first paint, and any other is
-    // corrected as soon as the store is up. EARLY_KEY_PARTS must stay in step
-    // with the extension's copy of this, or nothing is ever found.
+    // Whether to hide the chip depends on the mailbox being a user label,
+    // which needs the store.
     const earlyUrlKey = () => {
         const params = new URLSearchParams(location.search);
         return [
@@ -1339,10 +950,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         saveEarly();
     };
 
-    // The router writes the URL on the run loop, so reading it as the answer is
-    // worked out keys it to the view being left — which is how an answer meant
-    // for a label ends up filed under the Inbox. Let the navigation settle, and
-    // let the last answer win.
+    // The router writes the URL on the run loop, so reading it as the answer
+    // is worked out keys it to the view being left; which is how an answer
+    // meant for a label ends up filed under the Inbox.
     let hideTimer = null;
 
     const rememberHideSoon = (hide) => {
@@ -1383,8 +993,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             existing.textContent = rules;
 
             // The head start puts this on <html> before Fastmail's own sheets
-            // are parsed. Nothing here should depend on source order, but being
-            // last is the safer place to stand.
+            // are parsed.
             if (existing.parentNode !== document.body) document.body.appendChild(existing);
             return;
         }
@@ -1397,28 +1006,19 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const updateInboxLabelVisibility = () => {
         const mailController = controller();
 
-        // A project list is Inbox-only by the invariant — a project label
-        // implies the Inbox — and so is Triage's, so the chip that says
-        // "Inbox" on every row there says nothing and is hidden.
-        //
-        // Mail filed under a helper label is the exception — it may sit
-        // outside the Inbox — and it needs no exception here, since a chip
-        // it does carry is worth seeing.
+        // A project list is Inbox-only by the invariant, a project label
+        // implies the Inbox, and so is Triage's, so the chip that says "Inbox"
+        // on every row there says nothing and is hidden.
         const mailbox = mailController.get('mailbox');
         const inboxOnly = isInboxSearch() ||
             (!!mailbox && (isTriage(mailbox) || isProject(mailbox)));
 
         const hide = modeIsOn && settings.hideInboxLabel && inboxOnly;
 
-        // On <html>, not <body>. Fastmail rewrites body.className wholesale when
-        // its root view redraws — that is how is-kbmode comes and goes — and any
-        // class of ours on it is dropped without a classList call to observe.
-        // Measured: a marker put on body vanished within seconds of ordinary
-        // use, while the same marker on <html> survived. Nothing rewrites
-        // <html>; Fastmail only touches it through classList for the theme.
-        //
-        // The chips reappeared the moment you started triaging because typing is
-        // exactly what puts the app into keyboard mode.
+        // On <html>, not <body>. Fastmail rewrites body.className wholesale
+        // when its root view redraws; that is how is-kbmode comes and goes,
+        // and any class of ours on it is dropped without a classList call to
+        // observe.
         document.documentElement.classList.toggle(HIDE_INBOX_LABEL_CLASS, hide);
         rememberHideSoon(hide);
     };
@@ -1438,18 +1038,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The phone has no toolbar above the list and no filter control at all, so
-    // the desktop's home for this button does not exist there. Its page header
-    // ends in search and the three dots, and the switch goes between them.
-    //
-    // FastMail.isMobile rather than a width: the layout is chosen at load from
-    // the user agent, so a narrow desktop window is still the desktop one.
+    // the desktop's home for this button does not exist there.
     const headerSearch = () => {
         // The sidebar has a search field of its own, so the header's is picked
-        // out by the header it sits in. This used to test that the icon was near
-        // the top of the viewport, which held in a narrow desktop window and not
-        // on a real phone: the app pads the header by the safe-area inset, so on
-        // a notched device the icon starts some 50px down and the test failed —
-        // no anchor, no button. Structure does not move.
+        // out by the header it sits in.
         const header = Array.from(document.querySelectorAll('.v-PageHeader'))
             .find(node => node.querySelector('svg.i-search'));
 
@@ -1483,14 +1075,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The same funnel the Triage row wears, so the switch and the list it
-    // produces read as one thing. Classes are borrowed from an icon Fastmail
-    // has already drawn — its own filter control by preference, since that sits
-    // right beside this one — so sizing and colour come from the theme rather
-    // than from anything hardcoded here.
+    // produces read as one thing.
     const inboxIcon = () => {
-        // The phone has neither of the first two — it has no filter control at
-        // all, and the sidebar holding the Inbox icon is off screen — so its own
-        // header search icon stands in, which is the icon this one sits beside.
+        // The phone has neither of the first two; it has no filter control at
+        // all, and the sidebar holding the Inbox icon is off screen; so its
+        // own header search icon stands in, which is the icon this one sits
+        // beside.
         const existing = document.querySelector('.v-Toolbar svg.i-filter') ||
             document.querySelector('svg.i-inbox') ||
             document.querySelector('svg.i-search');
@@ -1500,9 +1090,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     const drawnIndicator = () => document.querySelector('.' + INDICATOR_CLASS);
 
-    // Asking only whether the layer is in the document is not enough: insertView
-    // draws on the run loop, so a second call before that lands would see
-    // nothing and insert a duplicate. Check the toolbar's children too.
+    // Asking only whether the layer is in the document is not enough:
+    // insertView draws on the run loop, so a second call before that lands
+    // would see nothing and insert a duplicate.
     const indicatorIsInPlace = () => {
         if (drawnIndicator()) return true;
         if (!indicatorView) return false;
@@ -1512,11 +1102,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return !!children && children.indexOf(indicatorView) !== -1;
     };
 
-    // A button in the bar above the thread list, left of the filter control —
+    // A button in the bar above the thread list, left of the filter control,
     // or, on a phone, in the page header between search and the three dots.
-    // It uses Fastmail's own button classes and its is-active state, so "on"
-    // and "off" are the theme's activated and subtle colours rather than
-    // anything hardcoded here. Clicking it toggles the mode.
     const addIndicator = () => {
         if (indicatorIsInPlace()) return;
 
@@ -1548,8 +1135,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // We sit to the left of the filter control. A view without one — an
-    // in:inbox search — puts the sort control in that same place, so it stands
+    // We sit to the left of the filter control. A view without one, an
+    // in:inbox search; puts the sort control in that same place, so it stands
     // in and the button keeps its position.
     const indicatorAnchor = () => {
         const filter = filterButton();
@@ -1567,9 +1154,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     /*
      * The Inbox filter, made to stick.
      *
-     * Fastmail offers it on a label's list — mailboxFilter, value "inbox",
+     * Fastmail offers it on a label's list; mailboxFilter, value "inbox",
      * offered only for a label with no inherited role while the account has
-     * an Inbox — and forgets it the moment you go somewhere else. Under this
+     * an Inbox, and forgets it the moment you go somewhere else. Under this
      * model a project label is a queue and the rest of what it holds is
      * history, so the queue is what its list should open on.
      *
@@ -1597,28 +1184,19 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // Fastmail's is-active is a faint grey wash behind the icon — enough to
+    // Fastmail's is-active is a faint grey wash behind the icon; enough to
     // separate a pressed button from an unpressed one, not enough for a switch
-    // you want to read at a glance. The accent says it plainly.
-    //
-    // The theme has no custom properties to ask: each one ships concrete
-    // colours. So it is read off the compose button, which is the one thing
-    // always painted in the accent, and follows the theme for free.
+    // you want to read at a glance.
     const accentColour = () => {
-        // The theme keeps its palette here, one set per appearance:
-        // accent5 through accent120, of which accent100 is the accent proper.
-        // Read rather than cached, so following the system into dark and back
-        // needs nothing.
+        // The theme keeps its palette here, one set per appearance: accent5
+        // through accent120, of which accent100 is the accent proper.
         const theme = FastMail.theme;
         const palette = theme && theme.colors &&
             theme.colors[theme.isDark ? 'dark' : 'light'];
 
         if (palette && palette.accent100) return palette.accent100;
 
-        // Sampled from the compose button if the palette ever moves. This was
-        // the only way at first, and it is why it is only the fallback: the
-        // phone draws no button in the accent anywhere on the list screen, so
-        // there was nothing to sample and the switch stayed grey.
+        // Sampled from the compose button if the palette ever moves.
         const cta = document.querySelector('.v-Button--cta');
         const colour = cta && getComputedStyle(cta).backgroundColor;
 
@@ -1628,8 +1206,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // Empty rather than a colour for "off", so it drops back to whatever the
-    // theme gives the other icons around it. Every drawn switch is painted, not
-    // just the first: the phone has one in each of its two page titles.
+    // theme gives the other icons around it.
     const paintIndicator = (active) => {
         Array.from(document.querySelectorAll('.' + INDICATOR_CLASS)).forEach((layer) => {
             const glyph = layer.querySelector('svg');
@@ -1645,41 +1222,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      */
 
     // The phone's message toolbar is Labels / Delete / Remove / Snooze / More.
-    // Remove takes off whichever label you are looking at — in the triage list
-    // that means "not triaged any more", in the Inbox it means archive — so it
-    // is the one button here that cannot file a message anywhere. Move to can,
-    // and it is buried in More. They swap.
-    //
-    // What comes out is Snooze / Labels / Archive / Move to / More: the three
-    // that file a message somewhere in the middle, Snooze — which only defers
-    // one — ahead of them, and everything else a tap further into More.
-    //
-    // Fastmail's own Move to view is moved rather than rebuilt. It anchors its
-    // popover with `alignWithView: this`, so it lines up wherever it is put; and
-    // being the same view the v shortcut already identifies, tapping it opens
-    // the narrowed additive menu rather than the stock one, exactly as v does.
-    // A tablet is the same build as the phone and not the same layout. The
-    // bottom toolbar is built either way, but a tablet leaves it hidden —
-    // measured in the app's own layout, which computes isToolbarVisible from
-    // "not a tablet" — and draws the same actions in the page header instead.
-    // The node is still in the document, so looking for it by name alone
-    // found a bar that is not on screen, dressed it, and left the buttons the
-    // iPad actually shows exactly as Fastmail drew them.
-    //
-    // So the bottom bar is taken only while it is really visible, and
-    // otherwise the bar that answers to the action names is the one to dress.
-    // That is the registry again, which is how every other button here is
-    // found, and it names whichever bar the actions are on without this
-    // having to know which layout drew it.
     const bottomToolbar = () => {
         const bar = document.querySelector('.v-BottomToolbar .v-Toolbar');
         return bar ? FastMail.getViewFromNode(bar) : null;
     };
 
-    // Phone or tablet, decided by width — 768 and up is a tablet — and kept
-    // on the root view, which recomputes it as the window changes. Not the
-    // same question as FastMail.isMobile, which names the build: the mobile
-    // build is what an iPad loads, and it then calls itself a tablet.
+    // Phone or tablet, decided by width; 768 and up is a tablet, and kept on
+    // the root view, which recomputes it as the window changes.
     const isTabletLayout = () => {
         try {
             return !!(FastMail.root && FastMail.root.get('isTablet'));
@@ -1688,10 +1237,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // The bar the message actions are on. The plain question first — which
-    // bar carries its own list of actions — since that is what being this bar
-    // consists of, and it answers on every layout without knowing about any
-    // of them. Where it does not, the older guess by layout stands behind it.
+    // The bar the message actions are on. The plain question first; which bar
+    // carries its own list of actions; since that is what being this bar
+    // consists of, and it answers on every layout without knowing about any of
+    // them.
     const messageToolbar = () => messageActionsBar() ||
         (isTabletLayout() ? actionBar() || bottomToolbar()
             : bottomToolbar() || actionBar());
@@ -1699,25 +1248,25 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     /*
      * A button's real name.
      *
-     * ToolbarView keeps every view it was built with in a registry — the
+     * ToolbarView keeps every view it was built with in a registry; the
      * message bar registers archive, removeLabel, snooze, trash, spam,
      * phishing, labels, move, copy, read, unread, flag, unflag, follow,
      * unfollow and mute, on both platforms, plus overflow for the More
-     * button itself — and getView hands one back by that name. Identical
+     * button itself, and getView hands one back by that name. Identical
      * names on desktop and mobile, measured in the app's own toolbar
      * construction.
      *
      * That name is the sturdiest handle there is. It survives translation,
      * which a label does not. It survives a bar too narrow to draw the
      * button, which a glyph search does not. It survives a platform with no
-     * keyboard, which a shortcut does not — and that last one is the whole
+     * keyboard, which a shortcut does not, and that last one is the whole
      * history of the project picker failing on the phone. So it is asked
      * first everywhere, and the older tests stay behind it for a toolbar
      * that registers nothing under the name.
      */
-    // Which bar answers to a name is remembered, because the predicates
-    // below are called once per view in a filter and a fresh sweep of the
-    // document each time would be paid for on every pass of the bar
+    // Which bar answers to a name is remembered, because the predicates below
+    // are called once per view in a filter and a fresh sweep of the document
+    // each time would be paid for on every pass of the bar
     const registryBars = {};
 
     const toolbarsOnScreen = () =>
@@ -1737,9 +1286,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             // Gone; look for another bar below
         }
 
-        // Every bar on screen, not just the phone's: the desktop registers
-        // the same names on the toolbar it draws beside an open message,
-        // and a bar that has never heard of the name simply says so.
+        // Every bar on screen, not just the phone's: the desktop registers the
+        // same names on the toolbar it draws beside an open message, and a bar
+        // that has never heard of the name simply says so.
         for (const bar of toolbarsOnScreen()) {
             try {
                 const view = bar.getView(name);
@@ -1756,9 +1305,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return null;
     };
 
-    // Every bar's registry, not just the first to answer. A tablet draws two
-    // message actions bars and each has its own Labels button; asking only
-    // the first would say no to the second one's.
+    // Every bar's registry, not just the first to answer.
     const isRegisteredAs = (target, name) => !!target &&
         toolbarsOnScreen().some((bar) => {
             try {
@@ -1768,13 +1315,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             }
         });
 
-    // The bar the message actions are on, whichever layout drew it. Asked by
-    // name for the same reason everything else here is: the names are the
-    // same on every platform, while the bar's place on screen is not.
-    //
-    // Three names rather than one so a bar that happens not to carry the
-    // first still answers. Move and Labels are the ones this dresses around;
-    // archive is there because a bar without either still has it.
+    // The bar the message actions are on, whichever layout drew it.
     const ACTION_BAR_NAMES = ['move', 'labels', 'archive'];
 
     const actionBar = () => {
@@ -1789,15 +1330,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const SNOOZE_SHORTCUT = 'b';
 
     // Our own "Remove label", since Fastmail draws no such button here: the
-    // third slot holds one contextual view that reads Archive while the view is
-    // filtered to the Inbox — which, in this mode, every label view is — and
-    // Remove only otherwise. So the label-removing verb has nowhere to live
-    // unless we give it one.
-    // Fastmail's own i-removelabel, copied shape for shape. Drawn rather than
-    // cloned because the icon is only on screen in the very case this option
-    // exists to cover the absence of: while the view is filtered to the Inbox —
-    // which is every label view here — the button it belongs to reads Archive
-    // and this glyph is nowhere in the document to copy.
+    // third slot holds one contextual view that reads Archive while the view
+    // is filtered to the Inbox; which, in this mode, every label view is, and
+    // Remove only otherwise.
     const REMOVE_LABEL_SHAPES = [
         ['line', { x1: '4.75', y1: '4.75', x2: '19.25', y2: '19.25' }],
         ['circle', { cx: '15.5', cy: '8.5', r: '1.5' }],
@@ -1826,19 +1361,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The app's own glyph, taken from the button that owns it.
-    //
-    // Both shape tables above exist because these options serve exactly the
-    // views where the stock button is not on the bar, so there was no copy
-    // in the document to clone — only a copy in the source to transcribe,
-    // which is what a shape table is, and what stops matching the moment
-    // Fastmail redraws an icon. The registry settles it: it hands over the
-    // button whether or not it is drawn, and the icon element it was built
-    // with comes with it.
-    //
-    // The class is checked rather than assumed, because the slot these
-    // stand in for is contextual — one view reading Archive or Remove by
-    // where you are standing — and a glyph that is not the one asked for is
-    // worse than the transcribed one.
     const borrowedIcon = (name, className) => {
         try {
             const view = registeredToolbarView(name);
@@ -1857,19 +1379,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         standardIcon('i-removelabel', REMOVE_LABEL_SHAPES);
 
     // Set while this button is the one asking, so the redirection below lets
-    // it through. Every other route into "remove the label you are looking
-    // at" — a swipe, the bracket keys, Fastmail's own contextual button —
-    // means leaving the queue, and on a project label that is archiving. This
-    // one says remove the label and means it, which is the whole reason it
-    // exists. Synchronous either side of the call, so nothing else can land
-    // in between and be mistaken for it.
+    // it through.
     let removingLabelOnPurpose = false;
 
     /*
      * A removal the mode is making itself, rather than one to interpret.
      *
      * Taking a project label off is normally a request, and this mode reads
-     * it as "archive" — the label is the queue, so leaving it is done. But
+     * it as "archive"; the label is the queue, so leaving it is done. But
      * archive's own first act is to take the project label off, and read as a
      * request that is archive again: archive called archive until the stack
      * ran out, and archiving anything already filed did nothing at all.
@@ -1897,31 +1414,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         method: 'removeLabel'
     });
 
-    // The phone's spellings of the verbs it has no key for, for More: file
-    // a tick, snooze for a while a clock. Feather glyphs, stroke-drawn like
-    // the rest of the bar.
-    //
-    // Sized to the bar the way the toolbar funnel is, and for the same
-    // reason: Feather draws to the edges of its 24-unit box while Fastmail's
-    // glyphs sit well inside theirs. Measured in that box, the tick covered
-    // 20 units — its circle 2 to 22, its tick reaching past that to the
-    // corner — against the 16.5 of the archive crate beside it and the 14.5
-    // of the remove-label tag, and read a third too big on the bar.
-    //
-    // So each is scaled about the centre by whatever brings it to 15.5,
-    // between those two: the tick by 0.775, the clock by 0.838, which lands
-    // both on an outer radius of 7.75. The geometry is scaled rather than a
-    // transform put over it, so the stroke keeps the weight the rest of the
-    // bar is drawn at.
+    // The phone's spellings of the verbs it has no key for, for More: file a
+    // tick, snooze for a while a clock.
     const STATE_VERB_SHAPES = {
         // An arrow going down into an open tray. It was a tick in a circle,
-        // which is the mark for done — and done is Archive, two buttons
-        // along. Filing is not finishing: the message stays in the Inbox
-        // under one project label, so the glyph says put this away rather
-        // than this is over. The tray is open at the top and shares nothing
-        // with the archive crate, the Labels tag or the Move folder beside
-        // it. Drawn to 13.6 by 15.2, which is the span Fastmail's own icons
-        // keep.
+        // which is the mark for done, and done is Archive, two buttons along.
         file: [
             ['line', { x1: '12', y1: '4.4', x2: '12', y2: '13.6' }],
             ['polyline', { points: '7.6 9.2 12 13.6 16.4 9.2' }],
@@ -1933,8 +1430,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         ]
     };
 
-    // Dispatched a tick later so the More popover has finished closing:
-    // File sends an unfiled conversation to the Labels sheet, and two menus
+    // Dispatched a tick later so the More popover has finished closing: File
+    // sends an unfiled conversation to the Labels sheet, and two menus
     // fighting over the same moment is how taps get eaten
     const stateVerbOption = (label, kind) => {
         const run = kind === 'snooze'
@@ -1956,8 +1453,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     /*
      * How many verbs fit.
      *
-     * The bar can measure its own buttons — it is how the wide layout decides
-     * what to show — and measuring is a request: measureViews draws them once
+     * The bar can measure its own buttons; it is how the wide layout decides
+     * what to show, and measuring is a request: measureViews draws them once
      * off-screen and writes every width down. So the answer can be counted
      * rather than estimated, one real width at a time against the real space,
      * with room kept for More.
@@ -1965,7 +1462,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * A thumb-sized slot is the fallback, for before the measuring has
      * happened or for a name that has no width on file. It is only ever an
      * estimate: these buttons are not all one width, and none of them is this
-     * width — they measure 64 and 75 on the phone this was guessed for. Which
+     * width; they measure 64 and 75 on the phone this was guessed for. Which
      * is why it is the fallback and not the rule.
      */
     const SLOT_WIDTH = 76;
@@ -2022,16 +1519,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * Saying what the bar holds, rather than rearranging what it drew.
      *
      * A ToolbarView does not keep a list of buttons. It keeps a list of
-     * *names* — the account's own action list, the one Settings > Actions
-     * edits — and looks each one up in a registry the bar was built with.
+     * *names*; the account's own action list, the one Settings > Actions
+     * edits, and looks each one up in a registry the bar was built with.
      * Whatever the width cannot take is the tail of that list, and the tail
      * becomes More. Both halves are derived, and both are rebuilt from the
      * names whenever the list changes.
      *
      * So a button moved by hand is a button the next rebuild does not know
-     * about. Everything this mode used to fight — Labels and Delete going
+     * about. Everything this mode used to fight; Labels and Delete going
      * missing, Archive drawn twice, Pin frozen reading Pin on a pinned
-     * conversation — is that one mistake wearing different clothes.
+     * conversation; is that one mistake wearing different clothes.
      *
      * The list is the thing to write, then. Fastmail already puts only the
      * applicable verb in it (Pin or Unpin, never both), already drops what
@@ -2046,9 +1543,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * from the same class, is left completely alone.
      */
 
-    // Each slot, and the name Fastmail's registry knows it by. Pin is two
-    // buttons, not one that toggles — the list carries whichever applies,
-    // and that is why the bar no longer needs a toggle wrapped over it.
+    // Each slot, and the name Fastmail's registry knows it by.
     const SLOT_ACTION_NAMES = {
         snooze: ['snooze'],
         pin: ['flag', 'unflag'],
@@ -2059,9 +1554,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         file: ['file']
     };
 
-    // The verbs that mark a list as the message actions. A mailbox the
-    // account may only read gets a much shorter list, which is not ours to
-    // rewrite; so is an empty one, before a message is open.
+    // The verbs that mark a list as the message actions.
     const ACTION_LIST_MARKS = ['archive', 'labels', 'move', 'trash', 'snooze', 'removeLabel'];
 
     /*
@@ -2072,7 +1565,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      *
      * Remove label, because Fastmail's own button cannot be used here. It
      * runs the plain remove, and this mode reads a plain remove on a project
-     * label as "archive" — that is what keeps a swipe from quietly unfiling
+     * label as "archive"; that is what keeps a swipe from quietly unfiling
      * a message. Removing on purpose has to say so, which is what this one
      * does.
      *
@@ -2084,10 +1577,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const snoozeMenuLabel = () =>
         'Snooze ' + snoozePeriodLabel(settings.snoozeDefault);
 
-    // Registered once per bar and kept: the registry is what a name is
-    // looked up in, and a name it cannot answer for is a verb that is not
-    // there. Re-registering instead would leave the old view owned by
-    // nobody, so the one that exists is updated in place.
+    // Registered once per bar and kept: the registry is what a name is looked
+    // up in, and a name it cannot answer for is a verb that is not there.
     const registerModeViews = (toolbar) => {
         const named = (name, make) => {
             const existing = toolbar.getView(name);
@@ -2098,8 +1589,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         };
 
         // Measured as it is registered, since a bar that decides what fits by
-        // width has no width on file for a button it has never drawn. The
-        // other two are never on the bar, so they need no width.
+        // width has no width on file for a button it has never drawn.
         if (!toolbar.getView('file')) {
             toolbar.registerView('file', stateVerbOption('File', 'file'));
         }
@@ -2150,9 +1640,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
             // File is ours, so it is never in Fastmail's list; and inside a
             // label Fastmail offers Remove label in Archive's place, while
-            // this mode wants the full verb. Both are views the bar knows,
-            // so both can be named whether or not the list mentions them.
-            // Remove label keeps its own place further down.
+            // this mode wants the full verb.
             if (!pick && (slot === 'file' || slot === 'archive')) pick = candidates[0];
             if (pick && wanted.indexOf(pick) === -1) wanted.push(pick);
         });
@@ -2173,8 +1661,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     /*
      * Take the list over, once per bar.
      *
-     * The wrapper keeps the original's own marks — what makes it a computed
-     * property, and which changes it recomputes for — so the bar still
+     * The wrapper keeps the original's own marks; what makes it a computed
+     * property, and which changes it recomputes for; so the bar still
      * redraws itself when the mailbox, the labels mode or the pinned state
      * moves. Only the answer differs.
      */
@@ -2215,9 +1703,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         });
 
         try {
-            // Before the list can name them: a name the registry cannot
-            // answer for is a hole in the drawn bar, and the redraw walks
-            // straight into it.
+            // Before the list can name them: a name the registry cannot answer
+            // for is a hole in the drawn bar, and the redraw walks straight
+            // into it.
             registerModeViews(toolbar);
             // Measured before the list is first asked for, so the cut is
             // counted from real widths rather than the fallback estimate
@@ -2226,7 +1714,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             toolbar.customOwnsConfig = true;
 
             // How many fit is a width, so the list is worth recomputing when
-            // the width moves — a rotation, or the reading pane opening
+            // the width moves, a rotation, or the reading pane opening
             toolbar.addObserverForKey('pxWidth', configWatcher, 'widthDidChange');
             toolbar.computedPropertyDidChange('actionsConfig');
             return true;
@@ -2241,15 +1729,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * The message actions bar, identified by the thing that makes it one.
      *
      * Asking the registry for a verb finds any bar that knows the name, and
-     * the mailbox list's bar knows all of them — it builds its own Actions
+     * the mailbox list's bar knows all of them; it builds its own Actions
      * menu from the same buttons. What only the message actions bar has is a
      * list of its own: the class holds one, and this bar is handed a second
      * that answers for the open message. So that is what to look for.
      */
-    // All of them, not the first. A tablet draws two — the open message's
-    // header and the list's own bar for a selection — and both are message
-    // actions bars with the same list. Dressing one and leaving the other
-    // would put File on one of them and not the other.
+    // All of them, not the first. A tablet draws two; the open message's
+    // header and the list's own bar for a selection, and both are message
+    // actions bars with the same list.
     const messageActionsBars = () => toolbarsOnScreen().filter(toolbar =>
         Object.prototype.hasOwnProperty.call(toolbar, 'actionsConfig'));
 
@@ -2283,9 +1770,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     /*
      * The bar arranges itself.
      *
-     * Everything this used to do — moving buttons between the bar and More,
+     * Everything this used to do; moving buttons between the bar and More,
      * putting back the ones a rebuild dropped, keeping a substitute Archive
-     * and a Pin that could toggle — was work created by writing to the drawn
+     * and a Pin that could toggle; was work created by writing to the drawn
      * bar instead of to the list it is drawn from. Taking the list over left
      * none of it to do.
      */
@@ -2294,10 +1781,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The bar's Pin says nothing about state as Fastmail draws it: one
-    // outline, whatever the thread carries. Painted here instead — filled in
-    // Fastmail's own pin red while the open conversation is pinned — from
-    // the same test the verbs read, and repainted from the same Message
-    // event that already drives every other repaint.
+    // outline, whatever the thread carries.
     const openThreadIsPinned = () => {
         let message = null;
         try {
@@ -2310,9 +1794,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // Pin and Unpin are two buttons in the bar's own registry, not one that
-    // changes its mind, and the list names whichever applies. So both are
-    // asked for by name and whichever is drawn takes the paint — no scanning
-    // the drawn bar for something that looks like a pin.
+    // changes its mind, and the list names whichever applies.
     const PIN_VIEW_NAMES = ['flag', 'unflag'];
 
     const updatePinState = () => {
@@ -2353,27 +1835,21 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         indicatorView = null;
     };
 
-    // A search that starts with in:inbox is an Inbox view by another name — the
-    // saved search listing what has not been triaged yet. Fastmail offers no
-    // filter control there, but the mode still has everything to say about it.
+    // A search that starts with in:inbox is an Inbox view by another name; the
+    // saved search listing what has not been triaged yet.
     const INBOX_SEARCH = /^\s*in:inbox\b/i;
 
     const isInboxSearch = () => INBOX_SEARCH.test(controller().get('search') || '');
 
-    // Whether this screen has a filter for the mode to be about. Settings,
-    // Contacts and the rest are not mail at all; search results are mail, but
-    // Fastmail offers no filter there. Both readings come from the route rather
-    // than from the toolbar, which is still the old one at the point the
-    // observers fire.
+    // Whether this screen has a filter for the mode to be about.
     const modeAppliesHere = () =>
         FastMail.router.get('app') === 'mail' &&
         (!controller().get('search') || isInboxSearch());
 
-    // canFilter says whether the button belongs on this screen, but not whether
-    // there is yet anywhere to put it: the observers run before Overture has
-    // drawn the new bar, so coming back from a search or from Settings there is
-    // no filter control to sit left of. Keep trying for a second, then give up
-    // rather than spin forever on a page that is never going to have one.
+    // canFilter says whether the button belongs on this screen, but not
+    // whether there is yet anywhere to put it: the observers run before
+    // Overture has drawn the new bar, so coming back from a search or from
+    // Settings there is no filter control to sit left of.
     let placeTimer = null;
     let placeTries = 0;
 
@@ -2397,7 +1873,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         placeTimer = setTimeout(placeIndicator, 50);
     };
 
-    // The toolbar is rebuilt as you move around, so re-add when it has gone —
+    // The toolbar is rebuilt as you move around, so re-add when it has gone,
     // and on a screen with no filter of its own, take the button away rather
     // than leave it sitting there alone.
     const updateIndicator = () => {
@@ -2413,10 +1889,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 const active = indicatorIsActive();
                 indicatorView.set('isActive', active);
 
-                // className recomputes correctly but Overture does not write it
-                // back to the layer for a view inserted this way, so apply it by
-                // hand. Go via the drawn node rather than the view's own layer,
-                // so this still works if the toolbar was rebuilt under us.
+                // className recomputes correctly but Overture does not write
+                // it back to the layer for a view inserted this way, so apply
+                // it by hand.
                 const layer = drawnIndicator();
                 if (layer) layer.classList.toggle('is-active', active);
 
@@ -2445,9 +1920,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // Overture's copy drag effect, which is what holding Option asks for
     const DRAG_EFFECT_COPY = 1;
 
-    // Dropping a message on a label adds it, and the rules under every menu
-    // do the rest: a project takes Triage and any other project off, the
-    // Inbox stays. Option restores the stock move.
+    // Dropping a message on a label adds it, and the rules under every menu do
+    // the rest: a project takes Triage and any other project off, the Inbox
+    // stays.
     const patchDrop = () => {
         const proto = FastMail.classes.MailboxSourceView.prototype;
         const original = proto.drop;
@@ -2464,12 +1939,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 const actions = controller().actions;
                 const optionHeld = !!(drag.get('dropEffect') & DRAG_EFFECT_COPY);
 
-                // A drop files: a destination replaces by rule 2 — a hold
-                // label included — and a named one files the sender by rule 3.
+                // A drop files: a destination replaces by rule 2, a hold
+                // label included, and a named one files the sender by rule 3.
                 armDestinationFiling();
                 if (optionHeld) {
                     // Fastmail's move: Inbox off, label on. Asked for with a
-                    // modifier, so left exactly as asked — rule 2 still takes
+                    // modifier, so left exactly as asked; rule 2 still takes
                     // Triage and every other destination off underneath.
                     actions.move(storeKeys, mailbox);
                 } else if (!FastMail.preferences.get('inLabelsMode')) {
@@ -2487,24 +1962,15 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * ----------------------------------------------------------------
      */
 
-    // Move to is the quick one: a plain list with no checkboxes and no Save, so
-    // a message is filed by typing a few letters. What it does at the end is
-    // wrong for triage, though — it moves, taking the message out of the Inbox.
-    //
-    // So v opens it narrowed to the sidebar's labels, taking the last one
-    // standing, and adding the label rather than moving to it. Option-V opens
-    // it as it comes. Labels is untouched.
-    //
-    // True only while the menu about to open is ours. Read as the menu enters
-    // the document, then cleared, so every other way in gets the stock one.
+    // Move to is the quick one: a plain list with no checkboxes and no Save,
+    // so a message is filed by typing a few letters.
     let wantOurMove = false;
-    // True while the File verb is opening the tristate Labels menu — a
-    // multi-selection's picker — so that menu files rather than merely labels
+    // True while the File verb is opening the tristate Labels menu, a
+    // multi-selection's picker; so that menu files rather than merely labels
     let wantOurFile = false;
 
     // The options list is an OptionsProxy, which reports a length and answers
     // getObjectAt but whose map() yields nothing and whose get('[]') is null.
-    // It has to be walked by index; toArray sees the map and returns empty.
     const optionsOf = (menuController) => {
         const options = menuController.get('options');
         if (!options) return [];
@@ -2528,12 +1994,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         optionsOf(menuController)
             .filter(option => option instanceof FastMail.classes.Mailbox);
 
-    // Once typing has left a single label, save it. apply() commits only after
-    // the menu has left the document — it is the on-close handler, not a
-    // button — so closing is what saves, exactly as dismissing it by hand does.
-    //
-    // Never the create-a-label option, though: that would invent labels out of
-    // half-typed words.
+    // Once typing has left a single label, save it.
     const autoSaveWhenAlone = (menuController) => {
         if (menuController.customAutoSave) return;
         menuController.customAutoSave = true;
@@ -2570,26 +2031,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // rolesVisible drops the system mailboxes, but not every label of your own
     // is in the sidebar either, and offering those back defeats the point of
-    // narrowing the list. rolesVisible cannot express that, so it is filtered
-    // here as well.
-    //
-    // Triage goes too, while you are standing in it. Everything listed there
-    // carries the label — that is what the list is — so offering it back only
-    // files a message where it already is. The menu adds rather than moves, so
-    // picking it would not even be a mistake, just a keystroke that does
-    // nothing, and one fewer option is one less thing to type past.
-    //
-    // Not behind a setting of its own: this takes away only an option that
-    // could not have done anything from where you are standing.
-    //
-    // None of it applies once you start typing. Both of those narrowings shape
-    // the list you are handed; neither should stand between you and a label you
-    // have named. Asking for a label by name and being told there is no such
-    // thing, when there is, is worse than a longer list to look at.
-    //
-    // Trash, Archive and Spam stay out either way. Those never reach here:
-    // rolesVisible drops them inside Fastmail's own filtering, which runs
-    // before this and is left alone.
+    // narrowing the list.
     const narrowLabelOptions = (menuController) => {
         if (menuController.customFilter) return;
         menuController.customFilter = true;
@@ -2600,19 +2042,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             const options = originalFilterOptions.apply(this, arguments);
 
             // Archiving into a label: the hold labels and nothing else, since
-            // a hold label is the only kind that survives an archive. Typing
-            // does not widen this one — a project reached by name would be
-            // taken off again by the archive a moment later, which is a
-            // stranger answer than not offering it.
+            // a hold label is the only kind that survives an archive.
             if (this.customHoldsOnly) {
                 return options.filter(option =>
                     option instanceof FastMail.classes.Mailbox && isExcludedLabel(option));
             }
 
-            // The Labels menu is Fastmail's own — the full list, helpers and
-            // all — so it is left as it comes. Only the File picker
-            // (customOurs) is narrowed to where you file — the projects and
-            // the hold labels — and even there typing still reaches anything.
+            // The Labels menu is Fastmail's own; the full list, helpers and
+            // all; so it is left as it comes.
             if (!this.customOurs) return options;
 
             // Typing is asking for something by name
@@ -2630,30 +2067,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // Move to files by moving: measured, its didSelect is a one-shot
     // `actions.move(null, mailbox)`, where null means the current selection.
-    // Swapped for an add, it is this script's picker, and the pick decides
-    // nothing: it is an ordinary add, and the rules under every menu finish
-    // it — a project takes Triage and any other project off, a named label
-    // files the sender, a helper label is simply added.
-    //
-    // didSelect is where the work happens for this menu — there is no apply to
-    // commit, unlike the tristate Labels menu — so it is also where auto-save
-    // and a pick by hand meet, both landing on the same call.
-    // The Labels menu is the tristate one: it adds and removes rather than
-    // moving, and stays open as you pick. Fastmail asks it for both verbs at
-    // once, which is what tells it apart from Move to — measured on a drawn
-    // menu, willAdd and willRemove are both true there and neither is here.
     const isLabelsMenu = (menu) => !!menu.get('willAdd') && !!menu.get('willRemove');
 
-    // Picking a helper label leaves the menu open: there is likely another
-    // one coming, and selectFocused has already cleared what you typed.
-    // Picking a project is the placing decision — a message carries at most
-    // one — so it commits: done() hides the menu, and this menu applies what
-    // you chose on the way out.
-    //
-    // Wrapped around select rather than around the key or the tap, because both
-    // of those arrive here: keydown routes Enter to selectFocused, which selects,
-    // and the option view's toggle selects too. One hook, and typing and tapping
-    // cannot drift apart.
+    // Picking a helper label leaves the menu open: there is likely another one
+    // coming, and selectFocused has already cleared what you typed.
     const submitAfterPlacing = (menuController, menu) => {
         if (menuController.customSubmit) return;
         menuController.customSubmit = true;
@@ -2685,11 +2102,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         const menuController = menu.get('controller');
         if (!menuController) return;
 
-        // The list is left stock — Labels is Fastmail's full picker. Only the
-        // placing behaviour is kept: a project commits and closes, a helper
-        // stays open for the next one. The one exception is archiving into a
-        // label, where this menu is the multi-selection's picker and is
-        // narrowed to the holds like the single-selection one.
+        // The list is left stock; Labels is Fastmail's full picker.
         submitAfterPlacing(menuController, menu);
         narrowLabelOptions(menuController);
         menuController.customHoldsOnly = archiveIntoArmed();
@@ -2713,7 +2126,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * contact group of the same name, making the contact, and the group,
      * if either is new.
      *
-     * Contacts are ordinary records in the same store the mail lives in —
+     * Contacts are ordinary records in the same store the mail lives in,
      * measured in a running app: ten thousand of them, resident without the
      * Contacts app ever being opened, which is what makes this a lookup
      * rather than a fetch. A group is a contact too: kind "group", with a
@@ -2721,8 +2134,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * the record itself. Fastmail's own VIPs feature is the same shape, and
      * its find-or-create is the pattern followed here.
      *
-     * The contact is created the way the Contacts app creates one — isShared
-     * and a uid, then saveToStore — with the address book set explicitly,
+     * The contact is created the way the Contacts app creates one; isShared
+     * and a uid, then saveToStore; with the address book set explicitly,
      * because a group only holds members of its own account and the picker
      * can be standing in either one.
      */
@@ -2736,9 +2149,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return contactGroupPaths().some(named => named.toLowerCase() === path);
     };
 
-    // The book a new contact goes in: the account's default one, or any it
-    // may write to. Set rather than left to work itself out, because the
-    // group is in one account and the message may be in the other.
+    // The book a new contact goes in: the account's default one, or any it may
+    // write to.
     const addressBookFor = (accountId) => {
         const AddressBook = FastMail.classes.AddressBook;
         if (!AddressBook) return null;
@@ -2753,7 +2165,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // Group names live on the record as name.full; a person's name is a
     // components list instead, which is why this reads the raw data rather
-    // than the computed property — getOne hands over stored data, not records.
+    // than the computed property; getOne hands over stored data, not records.
     const contactGroupNamed = (accountId, name) => {
         const Contact = FastMail.classes.Contact;
         if (!Contact) return null;
@@ -2805,8 +2217,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // A group is a contact with kind "group", so making one is the same call
-    // with the kind set and no email — the shape the Contacts app's own
-    // new-group flow builds before handing it to its edit dialog.
+    // with the kind set and no email; the shape the Contacts app's own new-
+    // group flow builds before handing it to its edit dialog.
     const makeContactGroup = (accountId, name) => {
         const Contact = FastMail.classes.Contact;
         const book = addressBookFor(accountId);
@@ -2824,11 +2236,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // What the next undo takes back. One deep and cleared on use, the same
-    // shape the return-to-message stamp uses: the membership is undone
-    // because it was this pick that added it, and the contact is left alone
-    // because a contact that now exists is not a mistake. The adds ride the
-    // checkpoint they belong to — promoted from pending to last when its
-    // didAction fires — and are forgotten by the next.
+    // shape the return-to-message stamp uses: the membership is undone because
+    // it was this pick that added it, and the contact is left alone because a
+    // contact that now exists is not a mistake.
     let pendingGroupAdds = null;
     let lastGroupAdds = null;
 
@@ -2853,10 +2263,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             const accountId = mailbox.get('accountId');
             const leaf = mailbox.get('displayName');
 
-            // Found by the label's own name — its leaf first, then its full
-            // path — and made under the leaf when neither turns one up. A
-            // label named here that has no group yet is a group waiting to
-            // be made, not a mistake to warn about.
+            // Found by the label's own name; its leaf first, then its full
+            // path, and made under the leaf when neither turns one up.
             const group = contactGroupNamed(accountId, leaf) ||
                 contactGroupNamed(accountId, mailboxPath(mailbox)) ||
                 makeContactGroup(accountId, leaf);
@@ -2873,15 +2281,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
             messagesFrom(keys).forEach((message) => {
                 // Only a label that was not there already. Re-picking a label
-                // a conversation is filed under is a correction or a
-                // no-op — the sender was dealt with the first time, and
-                // filing them again on every pass is how a group fills up
-                // with people you only meant to add once.
-                //
-                // The whole conversation is asked, the way every other verb
-                // here asks it: a label counts wherever it sits in one. And
-                // it is asked now, before the branches below apply anything,
-                // which is the only moment the answer means what it says.
+                // a conversation is filed under is a correction or a no-op;
+                // the sender was dealt with the first time, and filing them
+                // again on every pass is how a group fills up with people you
+                // only meant to add once.
                 if (carriesMailbox(message, mailbox)) return;
 
                 const from = message.get('from');
@@ -2905,9 +2308,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
             pendingGroupAdds = added.length ? added : null;
             if (added.length) {
-                // Fastmail's own toast, and Fastmail's own precedence with
-                // it: a verb's undo toast lands after this one and takes the
-                // corner from it, which is the right way round — the button
+                // Fastmail's own toast, and Fastmail's own precedence with it:
+                // a verb's undo toast lands after this one and takes the
+                // corner from it, which is the right way round; the button
                 // that undoes an archive matters more than a line saying a
                 // contact was filed.
                 const who = names.length === 1
@@ -2939,9 +2342,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 return;
             }
 
-            // A pick is an add. Rule 2 takes Triage and every other destination
-            // off underneath, rule 3 files the sender; nothing is decided here.
-            // This is the File picker, so a hold label files too.
+            // A pick is an add. Rule 2 takes Triage and every other
+            // destination off underneath, rule 3 files the sender; nothing is
+            // decided here.
             armDestinationFiling();
             const actions = controller().actions;
             if (FastMail.preferences.get('inLabelsMode')) {
@@ -2954,9 +2357,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // The menu is built once and reused, so none of this can live in its
     // construction: opened by Option-V after being opened by v, it would still
-    // be carrying our narrowing. Applying it as the menu enters the document
-    // instead means each opening gets exactly what it asked for — which is also
-    // what leaves Labels alone, since nothing ever asks for it.
+    // be carrying our narrowing.
     const applyMoveMode = (menu, ours) => {
         const menuController = menu.get('controller');
         if (!menuController) return;
@@ -2972,9 +2373,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // dismissed without one has to leave it to time out
         menuController.customHoldsOnly = ours && archiveIntoArmed();
 
-        // filterOptions keeps a mailbox when rolesVisible has a truthy entry for
-        // its inherited role, so this leaves the labels you gave names to and
-        // drops Trash, Archive, Spam and the rest — which are one mistyped
+        // filterOptions keeps a mailbox when rolesVisible has a truthy entry
+        // for its inherited role, so this leaves the labels you gave names to
+        // and drops Trash, Archive, Spam and the rest; which are one mistyped
         // letter away in a menu you drive by typing.
         const roles = ours && settings.labelsSidebarOnly ? { none: true } : null;
 
@@ -2988,17 +2389,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     /*
      * ----------------------------------------------------------------
-     * Snooze for a while — `w`
+     * Snooze for a while; `w`
      * ----------------------------------------------------------------
      */
 
     // Fastmail's Snooze button is a MenuButtonView whose menu is a
-    // FutureTimeMenuView: the presets, and a custom option that swaps them
-    // for a FutureCustomTimeView — a date picker and a time field bound to
-    // that view's `date`, a preview line, Save and Cancel, Enter to save.
-    // So w presses the button, switches the menu to the custom picker, and
-    // proposes a date. Nothing is snoozed until the dialog is confirmed, and
-    // from there it is Fastmail's own code, toast and all.
+    // FutureTimeMenuView: the presets, and a custom option that swaps them for
+    // a FutureCustomTimeView, a date picker and a time field bound to that
+    // view's `date`, a preview line, Save and Cancel, Enter to save.
 
     // "2w", "14d", "1m": a count and a unit. Anything unreadable is two weeks.
     const parseSnoozePeriod = (text) => {
@@ -3028,9 +2426,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // FutureCustomTimeView keeps `date` as the local wall-clock time written
-    // as if it were UTC — its drawCustom subtracts the timezone offset and
-    // its localDate adds it back — so the same shift is applied here, or the
-    // dialog shows the right day at the wrong hour.
+    // as if it were UTC; its drawCustom subtracts the timezone offset and its
+    // localDate adds it back; so the same shift is applied here, or the dialog
+    // shows the right day at the wrong hour.
     const asPickerDate = (local) =>
         new Date(local.getTime() - local.getTimezoneOffset() * 60000);
 
@@ -3042,10 +2440,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // A view that is drawn: its layer is in the document and has a size.
-    // The message list keeps a bulk-selection bar in the document at no
-    // size while nothing is selected, and it registers the same names as
-    // the reading pane's bar, so a name alone can answer with a button
-    // nobody can see.
     const isDrawn = (view) => {
         try {
             const layer = view.get('layer');
@@ -3058,9 +2452,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The Snooze button on whichever bar is drawn: by its registered name
-    // first, which survives translation and a bar too narrow to draw it;
-    // by its shortcut behind that. Every bar on screen is asked, and the
-    // first drawn answer wins; an undrawn one is only a last resort.
+    // first, which survives translation and a bar too narrow to draw it; by
+    // its shortcut behind that.
     const snoozeButtonView = () => {
         const candidates = [];
         for (const bar of toolbarsOnScreen()) {
@@ -3079,8 +2472,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // The menu that is drawn. The button's menuView property makes a fresh,
     // undrawn menu on every read, so it is no use; the one on screen is an
-    // ancestor of the popover's list, and it is the one whose preset list
-    // can be swapped for the custom picker.
+    // ancestor of the popover's list, and it is the one whose preset list can
+    // be swapped for the custom picker.
     const drawnSnoozeMenu = () => {
         const roots = document.querySelectorAll('.v-Menu, .v-PopOver, .v-Sheet');
         for (const root of Array.from(roots)) {
@@ -3134,23 +2527,18 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * ----------------------------------------------------------------
      */
 
-    // Every label change in the client passes through these actions —
-    // whichever menu, key, drag or swipe asked for it — so the model is
-    // enforced here rather than inside any one picker. add, copy and move
-    // take one label as their second argument; addremove takes a list.
+    // Every label change in the client passes through these actions, whichever
+    // menu, key, drag or swipe asked for it; so the model is enforced here
+    // rather than inside any one picker.
     const LABEL_ACTIONS = ['add', 'copy', 'addremove', 'move'];
 
     // True while a rule is issuing its own addremove, so the wrapper does
     // not read that call as one more request to apply the rules to
     let applyingLabelRules = false;
 
-    // Rule 2 — a destination replaces. What comes off the selected threads
-    // when `adds` lands on them: Triage and every other destination, project
-    // or hold label alike, so a message is in one place at a time. A project
-    // landing counts from any route; a hold label counts only when `filing`
-    // — the File verb's picker or a drop — since from the L-key Labels menu
-    // it is a helper and merely added. The Inbox is not touched — an add
-    // leaves it on, a move took it off on purpose.
+    // Rule 2, a destination replaces. What comes off the selected threads when
+    // `adds` lands on them: Triage and every other destination, project or
+    // hold label alike, so a message is in one place at a time.
     const replacedBy = (storeKeys, adds, filing) => {
         const landed = adds.some(m => isProject(m) || (filing && isExcludedLabel(m)));
         if (!landed) return [];
@@ -3184,7 +2572,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     ? toArray(arguments[1])
                     : [arguments[1]].filter(Boolean);
 
-                // Rule 3 — a named label files the sender, from any route
+                // Rule 3, a named label files the sender, from any route
                 adds.forEach(mailbox => fileSendersIntoGroup(mailbox, keys));
 
                 // One-shot: the File verb's picker or a drop armed it for this add
@@ -3202,7 +2590,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                         // The caller's own selection argument goes through
                         // untouched: null means the focused conversation to
                         // Fastmail, and resolving it here would move the focus
-                        // afterwards. The resolved keys served the rule only.
+                        // afterwards.
                         const advance = takeFileAdvance();
                         const result = original.call(this, storeKeys, adds, merged);
                         // A File verb waiting on this pick moves the view on
@@ -3212,18 +2600,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     }
 
                     // The removals go first and silenced, so the add's own
-                    // didAction is the one that cuts the checkpoint — and
+                    // didAction is the one that cuts the checkpoint, and
                     // everything queued before it joins that checkpoint.
-                    //
-                    // On purpose, because these are the rule's own removals
-                    // rather than anything asked for. Fastmail's addremove
-                    // hands a lone removal with nothing added straight to
-                    // remove — `if (1 === removes.length && !adds.length)
-                    // return this.remove(keys, removes[0])` — and a project
-                    // label arriving at remove is read as "archive". Refiling
-                    // a message that already had one label under another
-                    // therefore archived it: the label swapped and the Inbox
-                    // came off with it.
                     const self = this;
                     const args = arguments;
                     silencingDidAction(this, () => {
@@ -3247,14 +2625,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      */
 
     // Archive in labels mode is `move(messages, null, Inbox, true)` against
-    // the account's Inbox by role — it never touches the label being viewed —
+    // the account's Inbox by role; it never touches the label being viewed,
     // plus a mark-read and a not-spam report, expanded to the whole thread.
-    // What it does not do is retire the dispositions: Triage, every project
-    // label and the pin all survive it — helper labels stay too — so `e`
-    // adds those removals, and `v` and `s` are built from the same parts.
-    //
-    // Everything here works through controller().actions, so every route in is
-    // covered at once: keys, toolbar, swipes, the context menu, a future one.
 
     // A verb works on whole conversations, so a label counts wherever it sits
     // in one. Falls back to the message itself for a message without a thread.
@@ -3293,19 +2665,18 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const triageAmong = (storeKeys) =>
         Array.from(mailboxesAmong(storeKeys)).filter(isTriage);
 
-    // The excluded labels the selection carries — Later and its kind — which
+    // The excluded labels the selection carries; Later and its kind; which
     // come off with Triage when a conversation is kept
     const excludedAmong = (storeKeys) =>
         Array.from(mailboxesAmong(storeKeys)).filter(isExcludedLabel);
 
     // The keep rule's question: does every selected conversation carry a
-    // destination — a project or a hold label? Those that do not are asked
-    // where they go.
+    // destination, a project or a hold label?
     const unfiledAmong = (storeKeys) => messagesFrom(storeKeys)
         .filter(message => !threadOf(message).some(other =>
             toArray(other.get('mailboxes')).some(isDestination)));
 
-    // Those with no project at all — held under Later, or filed nowhere — for
+    // Those with no project at all; held under Later, or filed nowhere; for
     // the keep rule's tie-break: a hold label comes off with Triage only where
     // every conversation also carries a project, which then wins.
     const withoutProject = (storeKeys) => messagesFrom(storeKeys)
@@ -3316,8 +2687,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * Keeping the open list honest after a change.
      *
      * Fastmail keeps a list up to date after a local change by working out
-     * which mailbox the list is filed under — the first inMailbox reachable
-     * through AND nodes — and reading only the changes filed under that one.
+     * which mailbox the list is filed under; the first inMailbox reachable
+     * through AND nodes, and reading only the changes filed under that one.
      * A verb here moves mail between labels, so a change filed under another
      * mailbox goes unread and the row stays. The same pass falls back to
      * setObsolete for a query whose filter has no such mailbox, which is why
@@ -3354,12 +2725,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // Marked obsolete rather than struck out by hand: it is what Fastmail
     // marks when it cannot work a change out locally, and an observed obsolete
-    // query refetches — with its total, once primed.
-    //
-    // The filed-under skip is reserved for Fastmail's own lists: those get
-    // removals filed under their mailbox applied natively. Our registered
-    // queries did not on the phone — an archived row sat in the triage view
-    // until a reload — so anything we primed always refetches instead.
+    // query refetches; with its total, once primed.
     const staleAfter = (query, mailbox) => {
         if (!query || typeof query.get !== 'function') return;
 
@@ -3383,8 +2749,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // Run `work` with didAction replaced. The replacement is handed the real
     // one first, then whatever arguments Fastmail passed, so it can drop the
-    // call or pass it on changed. Restored on the first call as well as at
-    // the end.
+    // call or pass it on changed.
     const withDidAction = (actions, replacement, work) => {
         const original = actions.didAction;
         let restored = false;
@@ -3414,9 +2779,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // Swallow every didAction inside `work`, however many calls make one.
-    // Each action queues its undo data before didAction runs, so everything
-    // swallowed here joins the checkpoint the *next* unswallowed didAction
-    // cuts — one toast, one press of z for the whole verb.
     const silencingDidAction = (actions, work) => {
         const original = actions.didAction;
         actions.didAction = function () { return this; };
@@ -3430,13 +2792,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     /*
      * Filing and archiving both move the view on to the next conversation
-     * still waiting for triage. Filing keeps the message in the Inbox — Filed
-     * is Inbox plus one project — so nothing leaves the list on its own;
+     * still waiting for triage. Filing keeps the message in the Inbox; Filed
+     * is Inbox plus one project; so nothing leaves the list on its own;
      * archiving takes the Inbox off, so Fastmail would step to the next row
      * (often a filed one) unless held. Either way the walk is explicit: down
      * the list to the next one carrying Triage, stepping over any already
      * filed, and back to the list when none is left rather than opening a
-     * filed one — with its first row focused, so the keyboard has somewhere
+     * filed one; with its first row focused, so the keyboard has somewhere
      * to be. Only in the Inbox with the mode on, the triage surface.
      */
     // The same conversation however the two records were reached: the list
@@ -3450,8 +2812,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The two lists a decision is made in: the Inbox and the triage label's
-    // own view. They hold the same mail — Triage implies the Inbox — so what
-    // works in one works in the other, the picker and this walk included.
+    // own view.
     const onTriageSurface = () => {
         if (!modeIsOn) return false;
         const mailbox = controller().get('mailbox');
@@ -3460,8 +2821,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // Where a conversation sits in the list, read before the decision lands.
-    // Filing keeps the row and archiving takes it out, so the index is what
-    // tells the two apart afterwards. -1 when the list has not fetched it.
     const rowIndexOf = (message) => {
         const list = controller().get('mailboxMessageList');
         if (!message || !list || typeof list.getObjectAt !== 'function') return -1;
@@ -3481,7 +2840,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      *
      * Afterwards there may be nothing to look up. Archiving takes the row out
      * of the list, the query goes back to the server for the rest, and a list
-     * mid-refetch answers for no row at all — so a step to the next message
+     * mid-refetch answers for no row at all; so a step to the next message
      * read a blank and became a step back to the mailbox instead. The records
      * themselves do not go anywhere, so holding on to them is enough.
      *
@@ -3489,7 +2848,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * or leaves (archiving), the message after this one is the message that
      * was after it, and the message before is the one that was before.
      *
-     * An index of -1 — the row was never found — has no neighbours rather
+     * An index of -1; the row was never found; has no neighbours rather
      * than the first and last rows of the list.
      */
     // The conversation on screen, or nothing when the list is all there is.
@@ -3506,9 +2865,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * reading. Moving on to the next conversation only means anything if you
      * were in one: a swipe on a row, or a key on the focused row, is made
      * from the list, and the list is where it should leave you. Fastmail
-     * draws the same line — its own step is gated on isActioningFocused,
+     * draws the same line; its own step is gated on isActioningFocused,
      * which asks whether the conversation is visible and whether the message
-     * acted on is the one selected — and a mode that stepped anyway turned a
+     * acted on is the one selected, and a mode that stepped anyway turned a
      * swipe in the list into a conversation opening in your face.
      *
      * Read before the decision lands, like the neighbours either side.
@@ -3538,8 +2897,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     /*
      * Where to go after a decision: Fastmail's own answer.
      *
-     * It is a preference — Settings, Mail, after moving, deleting or
-     * archiving — with three values: back to the mailbox, on to the next
+     * It is a preference; Settings, Mail, after moving, deleting or
+     * archiving; with three values: back to the mailbox, on to the next
      * conversation, back to the previous one. Archiving, deleting and moving
      * take a message out of the list, so Fastmail applies it on its own.
      * Filing does not: the message keeps its place in the Inbox, so the step
@@ -3555,8 +2914,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // The current mailbox's list URL, built from a message in it — Fastmail
-    // has no getUrlForMailbox — by dropping the message id off the end.
+    // The current mailbox's list URL, built from a message in it; Fastmail
+    // has no getUrlForMailbox; by dropping the message id off the end.
     const listURLFrom = (message) => {
         const url = urlForMessage(message);
         if (!url) return null;
@@ -3574,22 +2933,22 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      *
      * Archiving, deleting and moving take the message out of the list, so
      * Fastmail applies its own after-an-action setting and nothing is needed
-     * here. Filing does not — the message keeps its place in the Inbox under
-     * one project label — so no step happens unless this one makes it, and
+     * here. Filing does not; the message keeps its place in the Inbox under
+     * one project label; so no step happens unless this one makes it, and
      * the step to make is the one that setting names.
      *
      * It used to be a rule of its own: on the phone, landing on a message
      * already triaged meant the run was over and the view went back to the
      * list. That reads as the setting being ignored once the Inbox has
      * nothing left to triage in it, because then every decision ends the run.
-     * Fastmail's own setting says all three of these things already — back to
-     * the mailbox, on to the next, back to the previous — so it decides.
+     * Fastmail's own setting says all three of these things already; back to
+     * the mailbox, on to the next, back to the previous; so it decides.
      *
      * Run a tick after the decision, so the store has taken Triage off the
      * one just decided and the list has settled.
      *
      * `step` holds the neighbours as they were before the decision, and the
-     * caller takes it before making one — which is the whole point of it.
+     * caller takes it before making one; which is the whole point of it.
      * Reading them here instead finds a list still refetching, and a list
      * refetching answers for no row at all.
      */
@@ -3609,7 +2968,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                     (list && typeof list.getObjectAt === 'function' && list.getObjectAt(0));
                 const listUrl = listURLFrom(anchor);
                 if (listUrl) goToUrl(listUrl);
-                // Back on the list — or already there — the first row takes the
+                // Back on the list; or already there; the first row takes the
                 // focus rather than nothing. A tick later, so the route has landed.
                 setTimeout(focusFirstRow, 0);
             };
@@ -3619,9 +2978,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 : where === 'next' ? plan.next
                     : null;
 
-            // Nothing that way is the end of the list, and the mailbox is
-            // what Fastmail answers that with — rather than staying on the
-            // message the decision has just finished with.
+            // Nothing that way is the end of the list, and the mailbox is what
+            // Fastmail answers that with; rather than staying on the message
+            // the decision has just finished with.
             const url = target && urlForMessage(target);
             if (url) goToUrl(url);
             else backToList();
@@ -3629,9 +2988,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The row the keyboard is on: Fastmail's focus is a single-selection
-    // controller over the list, and index 0 is its first row — it waits for
-    // the row itself if the list is still loading. Measured: setting it moves
-    // the highlight without opening the conversation.
+    // controller over the list, and index 0 is its first row; it waits for the
+    // row itself if the list is still loading.
     const focusFirstRow = () => {
         try {
             const focused = controller().get('focused');
@@ -3642,16 +3000,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The picker path finishes a tick later, after the pick, so the File verb
-    // arms a one-shot flag — carrying the conversation it acted on — that the
-    // filing add takes when it cuts its checkpoint. Armed only by the File
-    // verb opening the picker, taken the moment it is used, and timed out so a
-    // picker dismissed without a pick cannot hand the advance to some later,
-    // unrelated label add.
+    // arms a one-shot flag; carrying the conversation it acted on; that the
+    // filing add takes when it cuts its checkpoint.
     let pendingFileAdvance = false;
     let pendingFileFrom = null;
-    // Its neighbours when the picker opened. Taken at arming time for the
-    // same reason every other caller takes them early: the pick may take the
-    // row out of the list it was in, and by then there is nothing to find.
+    // Its neighbours when the picker opened. Taken at arming time for the same
+    // reason every other caller takes them early: the pick may take the row
+    // out of the list it was in, and by then there is nothing to find.
     let pendingFileStep = null;
     let pendingFileAdvanceTimer = null;
 
@@ -3675,8 +3030,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The remembered conversation and what sat either side of it, wrapped in
-    // an object when a File verb is waiting on this pick, or null when
-    // nothing is. One-shot.
+    // an object when a File verb is waiting on this pick, or null when nothing
+    // is.
     const takeFileAdvance = () => {
         if (!pendingFileAdvance) return null;
         const from = pendingFileFrom;
@@ -3688,11 +3043,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return { from: from, step: step };
     };
 
-    // Whether the label add about to land is a filing — the File verb's
-    // picker or a drop — which is what lets a hold label replace like a
-    // project. Armed by those routes, taken once by the add, and timed out
-    // like the advance above, so a picker dismissed without a pick cannot
-    // hand it to some later, unrelated add.
+    // Whether the label add about to land is a filing; the File verb's picker
+    // or a drop; which is what lets a hold label replace like a project.
     let pendingFiling = false;
     let pendingFilingTimer = null;
 
@@ -3716,7 +3068,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     /*
-     * Archive into a hold label — Shift-E, or a long press on Archive.
+     * Archive into a hold label; Shift-E, or a long press on Archive.
      *
      * Armed while the picker opens, which is what narrows that picker to the
      * hold labels and what turns the pick into a decision rather than a
@@ -3771,10 +3123,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // button is, so the tristate picker can be opened programmatically
     let labelsButton = null;
 
-    // A drawn control, found by its icon the way the ⋯ button is. Visibility
-    // is the test rather than mere presence: a button parked in the bar's
-    // More menu is in the document and has no rectangle, and pressing one
-    // that is not on screen opens nothing.
+    // A drawn control, found by its icon the way the ⋯ button is.
     const visibleViewForIcon = (selector) => {
         const icons = document.querySelectorAll(selector);
         for (const icon of icons) {
@@ -3786,18 +3135,15 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The Labels control: the message toolbar draws it as an i-label
-    // ButtonView. Pressing it opens the stock tristate — a MailboxMenuView,
-    // so the verb hooks below adopt it like any other picker.
+    // ButtonView.
     const mobileLabelsButtonView = () =>
         visibleViewForIcon('svg.v-Icon.i-label');
 
     const pressButtonView = (view) => {
         try {
-            // activate() is the button's own press, and the only route
-            // that reliably opens a menu-owning button — calling its bare
-            // target method skips the presentation and strands the verb.
-            // Pressed by code, released by nobody: without a touch-up the
-            // button keeps its active tint, so it is let go by hand.
+            // activate() is the button's own press, and the only route that
+            // reliably opens a menu-owning button; calling its bare target
+            // method skips the presentation and strands the verb.
             if (typeof view.activate === 'function') {
                 view.activate();
                 try {
@@ -3819,12 +3165,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return false;
     };
 
-    // A captured registration is only as good as the view behind it. The
-    // shortcut is registered when a button enters the document and is never
-    // taken back here when it leaves, so what is captured can be a view that
-    // has since been destroyed — or nothing at all, if the button has not
-    // been drawn this session, which is the ordinary case on the phone and
-    // on a desktop that has not opened a message yet.
+    // A captured registration is only as good as the view behind it.
     const capturedIsLive = (entry) => {
         if (!entry || !entry.target || typeof entry.target.get !== 'function') {
             return false;
@@ -3852,8 +3193,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     /*
      * The Labels button, asked for by name.
      *
-     * Its place is the bar's business — on the bar when the width allows,
-     * under More when it does not — and a button waiting in a closed menu is
+     * Its place is the bar's business; on the bar when the width allows,
+     * under More when it does not, and a button waiting in a closed menu is
      * drawn nowhere, so looking for it on screen used to miss it and hand the
      * verb the bare archive dialog instead of the picker. The registry knows
      * it either way, and knows it in every language.
@@ -3877,11 +3218,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return found.filter(isDrawn)[0] || found[0] || null;
     };
 
-    // Anything that opens a label menu. The Labels control is the one to
-    // want: it opens the tristate, which serves as the picker on either
-    // platform. Found by what is drawn and by what the bar is holding,
-    // rather than by a registration, so a button in the More menu — or one
-    // whose shortcut never reached the registry — is still reachable.
+    // Anything that opens a label menu. The Labels control is the one to want:
+    // it opens the tristate, which serves as the picker on either platform.
     const drawnPickerView = () => mobileLabelsButtonView() ||
         toolbarLabelsView() ||
         visibleViewForIcon('svg.v-Icon.i-folder');
@@ -3891,17 +3229,17 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      *
      * Pressing a button is only ever a way of asking Fastmail to construct
      * its label menu and show it. Every failure so far has been in the
-     * finding — no shortcut to name the button by, no glyph to match, not on
-     * the bar, not even in the More menu — and none of them in the menu. So
+     * finding; no shortcut to name the button by, no glyph to match, not on
+     * the bar, not even in the More menu, and none of them in the menu. So
      * the last resort drops the button and asks for the menu directly. It is
      * still Fastmail's menu: its class, its search field, its Create label,
-     * its icons and colours, and — because our hooks sit on the prototype —
+     * its icons and colours, and; because our hooks sit on the prototype,
      * the same didEnterDocument, the same narrowing and the same commit that
      * a menu opened by a button gets.
      *
      * Read out of the app bundle rather than guessed. MailboxMenuView takes
      * willAdd, willRemove and accountId, builds its controller lazily, and
-     * that controller's select() ends in didSelect on the view — so the
+     * that controller's select() ends in didSelect on the view; so the
      * caller supplies the handler and no button need exist. Showing it is
      * PopOverView.show({view, alignWithView, …}), which is what the app's own
      * swipe actions do for exactly this menu.
@@ -3920,12 +3258,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     const viewForNode = (node) => (node ? FastMail.getViewFromNode(node) : null);
 
-    // Something drawn to hang the menu off. show() measures the anchor's
-    // layer and inserts the popover into the root view the anchor belongs
-    // to, so this has to be a view that is on screen: not the root itself,
-    // which is nobody's child and would leave the popover unparented, and
-    // not a button parked in a closed menu, which has no rectangle. The
-    // toolbars come first because that is where the verb was pressed.
+    // Something drawn to hang the menu off. show() measures the anchor's layer
+    // and inserts the popover into the root view the anchor belongs to, so
+    // this has to be a view that is on screen: not the root itself, which is
+    // nobody's child and would leave the popover unparented, and not a button
+    // parked in a closed menu, which has no rectangle.
     const pickerAnchor = () => {
         const candidates = [
             messageToolbar(),
@@ -3941,8 +3278,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // One popover, reused. show() hides whatever it was holding first and
-    // detaches itself on hide, which is how the app's own singleton behaves;
-    // a fresh one per opening would leak a view every time.
+    // detaches itself on hide, which is how the app's own singleton behaves; a
+    // fresh one per opening would leak a view every time.
     let pickerPopOver = null;
 
     const popOverForPicker = () => {
@@ -4011,17 +3348,13 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // Open the filing picker for these conversations — the projects and the
-    // hold labels. Nothing waits on the pick: it is an add like any other,
-    // and the rules underneath finish it. Move to is the quick one and suits
-    // a single conversation; the tristate is what a multi-selection needs.
-    // Either will do when the preferred one is not on screen.
+    // Open the filing picker for these conversations; the projects and the
+    // hold labels.
     const openProjectPicker = (keys) => {
         // The pick lands a tick later, through the label-rule patch; arm the
-        // advance now — with the conversation being filed — so the add, when it
+        // advance now; with the conversation being filed; so the add, when it
         // files, moves on to the next one waiting for triage, and mark the add
-        // a filing so a hold label replaces like a project. A picker that
-        // opens nothing leaves both flags to time out.
+        // a filing so a hold label replaces like a project.
         armFileAdvance(messagesFrom(keys)[0]);
         armDestinationFiling();
         const single = keys.length === 1;
@@ -4050,8 +3383,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     /*
      * The verbs proper. Each resolves its keys once, silences the didActions
      * of its preparatory moves, and lets exactly one didAction through at the
-     * end — the archive's for `e`, the addremove's for `v`, the flag's for
-     * `s` — so the whole verb is one checkpoint and one toast.
+     * end; the archive's for `e`, the addremove's for `v`, the flag's for
+     * `s`; so the whole verb is one checkpoint and one toast.
      */
 
     const resolveKeys = (actions, storeKeys) => {
@@ -4061,16 +3394,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return keys && keys.length ? keys : null;
     };
 
-    // done — `e`. `finish` runs the stock archive, which takes the Inbox off
-    // and marks the thread read; everything else comes off first, silenced,
-    // so the archive's own didAction cuts the one checkpoint: Triage, every
-    // project label and the pin. Helper labels stay.
+    // done; `e`. `finish` runs the stock archive, which takes the Inbox off
+    // and marks the thread read; everything else comes off first, silenced, so
+    // the archive's own didAction cuts the one checkpoint: Triage, every
+    // project label and the pin.
     const runDone = (actions, keys, finish) => {
         const from = messagesFrom(keys)[0];
-        // Before anything moves. In the triage label's own view the very
-        // first thing this does — take Triage off — is what takes the row out
-        // of the list, so neighbours read after it are already gone and the
-        // step becomes a step back to the mailbox.
+        // Before anything moves. In the triage label's own view the very first
+        // thing this does; take Triage off; is what takes the row out of the
+        // list, so neighbours read after it are already gone and the step
+        // becomes a step back to the mailbox.
         const step = stepFrom(from);
 
         silencingDidAction(actions, () => {
@@ -4079,8 +3412,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 if (isTriage(mailbox) || isProject(mailbox)) dropped.push(mailbox);
             });
             // The mode's own removal, not a request to read back: the labels
-            // coming off here are what archive means, and a project among
-            // them would otherwise be understood as asking to archive again.
+            // coming off here are what archive means, and a project among them
+            // would otherwise be understood as asking to archive again.
             if (dropped.length) {
                 removingOnPurpose(() => actions.addremove(keys, [], dropped));
             }
@@ -4089,7 +3422,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         });
 
         /*
-         * Fastmail applies its own after-an-action setting when it archives —
+         * Fastmail applies its own after-an-action setting when it archives,
          * but only in the Inbox. Its own test is
          *
          *     stayHere = !inbox || !actioningFocused ||
@@ -4105,10 +3438,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
          * Fastmail's own is held so it cannot also happen. Anywhere else the
          * stock behaviour stands.
          */
-        // Only when the decision was made on the conversation you are
-        // reading. From the list — a swipe, or a key on the focused row —
-        // Fastmail's own behaviour is left exactly as it is, which is to
-        // stay put, and nothing here is held or stepped.
+        // Only when the decision was made on the conversation you are reading.
         if (onTriageSurface() && step.reading) {
             withDidAction(actions, stayHereAfter, finish);
             advanceAfterDecision(from, step);
@@ -4117,12 +3447,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // keep — `v`. A thread that already has a destination is kept by taking
-    // Triage off it. Held under Later, that is all: the hold is its filing.
-    // Carrying a project as well — rules can put both there — the project
-    // wins and Later comes off with Triage. One that carries neither is
-    // asked where it goes, and the pick is an ordinary add that rule 2
-    // finishes.
+    // keep; `v`. A thread that already has a destination is kept by taking
+    // Triage off it.
     const runKeep = (actions, keys) => {
         const projectWins = !withoutProject(keys).length;
         const removes = triageAmong(keys)
@@ -4135,32 +3461,31 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // Nothing to take off is not nothing to do. A message already filed
         // and already past Triage is a decision that has been made, and the
         // answer to being asked again is the same as the first time: move on.
-        // Stopping here left the view sitting on it.
         if (removes.length) actions.addremove(keys, [], removes);
         // Kept in place; the view moves on to where the setting says, or back
-        // to the list — first row focused — when there is nothing that way.
+        // to the list; first row focused; when there is nothing that way.
         advanceAfterDecision(from, step);
     };
 
-    // pin — `s`. A toggle over the selection: all pinned, unpin; else pin.
+    // pin; `s`. A toggle over the selection: all pinned, unpin; else pin.
     const runUrgent = (actions, keys) => {
         if (allFlagged(keys)) actions.unflag(keys);
         else actions.flag(keys);
     };
 
     /*
-     * Archive into a hold label — what the picker opened by Shift-E, or by a
+     * Archive into a hold label; what the picker opened by Shift-E, or by a
      * long press on Archive, commits to.
      *
      * Two things in one gesture, and one undo: the label goes on with its own
      * didAction silenced, so the archive's checkpoint carries both, the way
      * the archive verb already carries its own removals. The label is put on
-     * by the ordinary route, so the rules under every menu still apply — the
+     * by the ordinary route, so the rules under every menu still apply; the
      * hold replaces Triage and any project label, and a label that names a
      * contact group still files the sender.
      *
      * Then the archive verb, unchanged: Inbox off, Triage off, every project
-     * label off, the pin off, and hold labels left alone — which is what
+     * label off, the pin off, and hold labels left alone; which is what
      * leaves the one just chosen standing, and the whole point of the verb.
      *
      * The advance the picker armed is dropped first. Filing moves the view on
@@ -4208,9 +3533,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * message it just restored.
      */
 
-    // Set by the verb the moment before its didAction fires; stamped onto
-    // the checkpoint by the wrapper in patchArchive. Every other action's
-    // checkpoint stamps null, so a stale URL cannot outlive its checkpoint.
+    // Set by the verb the moment before its didAction fires; stamped onto the
+    // checkpoint by the wrapper in patchArchive.
     let pendingUndoReturn = null;
     let lastUndoReturn = null;
 
@@ -4229,8 +3553,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // Navigation the way the router itself does it on back and forward:
-    // restore the app state the URL encodes, and the URL — and a history
-    // entry — follow from the state change on their own.
+    // restore the app state the URL encodes, and the URL, and a history entry;
+    // follow from the state change on their own.
     const goToUrl = (url) => {
         try {
             const router = FastMail.router;
@@ -4249,10 +3573,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // The one undo everything routes through — the toast's button and the
-    // keyboard's z alike. Found by shape rather than pinned by name: the
-    // object on the FastMail namespace that carries undo and redo, or,
-    // failing that, whatever registers itself under the z key.
+    // The one undo everything routes through; the toast's button and the
+    // keyboard's z alike.
     let undoTarget = null;
     let warnedNoUndo = false;
 
@@ -4269,9 +3591,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             lastUndoReturn = null;
 
             // Fastmail's undo knows nothing about the address book, so the
-            // group membership is taken back here. Only the membership: a
-            // contact that did not exist before now does, and that is not
-            // the part anyone means to undo.
+            // group membership is taken back here.
             undoGroupAdds();
 
             const result = original.apply(this, arguments);
@@ -4326,15 +3646,15 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     /*
      * Two primitives mean archive, and they are patched rather than any of
      * the routes into them. `archive` is the plain verb. `remove` becomes one
-     * when the mailbox coming off is the Inbox: removeCurrent — the [ and ]
-     * keys, the Remove-from-Inbox button, a swipe — is measured to be
+     * when the mailbox coming off is the Inbox: removeCurrent; the [ and ]
+     * keys, the Remove-from-Inbox button, a swipe; is measured to be
      * `remove(keys, whichever mailbox you are looking at)`.
      *
      * On a project label that same call is redirected to archive rather than
      * treated as one, since removing the label would leave the message in the
      * Inbox. So a swipe, [ and ] and Fastmail's contextual button all archive
      * there, and only the mode's own Remove label button still takes the
-     * label off — it is the one route that asks for that and means it.
+     * label off; it is the one route that asks for that and means it.
      */
     const ARCHIVE_VERBS = ['archive', 'remove'];
 
@@ -4343,12 +3663,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             args[1].get('role') === 'inbox');
 
     // The other two verbs that take a message off the mailbox you are looking
-    // at, and so run into the same update blind spot. Wrapped for the refresh
-    // alone. `move` takes the current mailbox off on the way; addremove is
-    // handed the labels it adds and removes as its second and third
-    // arguments — both directions matter, because a label's own list gains a
-    // row by filing into it just as surely as it loses one by filing it back
-    // out.
+    // at, and so run into the same update blind spot.
     const REMOVED_BY = {
         move: () => [controller().get('mailbox')],
         addremove: (args) => toArray(args[1]).concat(toArray(args[2]))
@@ -4378,17 +3693,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             actions[verb] = function (storeKeys, goTo) {
                 const mailbox = arguments[1];
 
-                // Taking the label you are looking at off is what a swipe,
-                // the bracket keys and Fastmail's contextual button all ask
-                // for, and on a project label it is not what any of them
-                // mean: the label is the queue, so leaving it is archiving.
-                // Removing the label alone would leave the message in the
-                // Inbox, which is the opposite of done.
-                //
-                // Handed to archive rather than done here, so the whole verb
-                // — Triage, every project label, the pin, the Inbox — runs
-                // once, in one place. A hold label such as Later is not a
-                // project and keeps coming off as asked.
+                // Taking the label you are looking at off is what a swipe, the
+                // bracket keys and Fastmail's contextual button all ask for,
+                // and on a project label it is not what any of them mean: the
+                // label is the queue, so leaving it is archiving.
                 if (verb === 'remove' && modeIsOn && !removingLabelOnPurpose &&
                         mailbox && typeof mailbox.get === 'function' &&
                         mailbox.get('role') !== 'inbox' && isProject(mailbox)) {
@@ -4424,11 +3732,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         patchFiling(actions);
 
-        // The stamp rides the checkpoint: whichever didAction cuts one
-        // takes the pending return with it — the archive verbs set it the
-        // moment before, everything else stamps null. Discovery retries
-        // here too: the manager may not exist yet when the patch first
-        // runs, and a stamp nobody can use deserves a loud word once.
+        // The stamp rides the checkpoint: whichever didAction cuts one takes
+        // the pending return with it; the archive verbs set it the moment
+        // before, everything else stamps null.
         const originalDidAction = actions.didAction;
         actions.didAction = function () {
             lastUndoReturn = pendingUndoReturn;
@@ -4457,9 +3763,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         const originalDidEnterDocument = proto.didEnterDocument;
 
         // Enter with nothing typed commits: what you have ticked is ticked,
-        // and the tristate applies it as it closes. With something typed it
-        // still picks out what the typing has focused, which is Fastmail's
-        // own behaviour.
+        // and the tristate applies it as it closes.
         const originalKeydown = proto.keydown;
 
         proto.keydown = function (event) {
@@ -4489,16 +3793,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         };
     };
 
-    // Fastmail gives the Move to button "m v" — two keys in one space-separated
-    // property, measured. Identifying the button by its keys rather than by its
-    // label keeps this working in a translated UI, but it has to be read as the
-    // list it is: comparing the whole string to "v" matches nothing, which is
-    // how the menu came up unnarrowed.
-    //
-    // Only the v registration is taken over, so m still opens Move to as it
-    // comes, alongside Option-V.
-    // The Labels button, told apart the same way Move to is: by the key it
-    // answers to rather than by a translated word.
+    // Fastmail gives the Move to button "m v"; two keys in one space-separated
+    // property, measured.
     const LABELS_SHORTCUT = 'l';
 
     const hasShortcut = (target, key) => {
@@ -4511,11 +3807,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }
     };
 
-    // The name the bar knows it by, then the key it answers to. The glyph
-    // used to be a third way of asking, matching the CSS class Fastmail's
-    // icons carry — but a class name is Fastmail's to change, and the
-    // registry is the button itself. The name answers wherever the button
-    // is, drawn or waiting in a closed menu, keyboard or none.
+    // The name the bar knows it by, then the key it answers to.
     const isLabelsButton = (target) => isRegisteredAs(target, 'labels') ||
         hasShortcut(target, LABELS_SHORTCUT);
 
@@ -4526,15 +3818,10 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // looked up, so whatever Fastmail bound is what we call.
     let moveButton = null;
 
-    // v goes in under a stand-in of ours calling openMove, not under the button
-    // calling activate — and the button takes its shortcut back off under its
-    // own name, which matches nothing, so each registration stayed behind. The
-    // same asymmetry the swapped keys had.
-    //
-    // Held against the button it stands for so the removal can find it again,
-    // and reused rather than replaced, so a button that enters twice does not
-    // leave a stand-in behind it. Weakly: a destroyed view should not be kept
-    // alive here by its own shortcut.
+    // v goes in under a stand-in of ours calling openMove, not under the
+    // button calling activate, and the button takes its shortcut back off
+    // under its own name, which matches nothing, so each registration stayed
+    // behind.
     const moveHandlers = new WeakMap();
 
     const moveHandlerFor = (target) => {
@@ -4551,7 +3838,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     const ourMoveWanted = () => modeIsOn && settings.labelsShortcut;
 
     // v is keep: on a filed selection it takes Triage off directly, and only
-    // an unfiled one opens the picker — the same narrowed menu, opened with
+    // an unfiled one opens the picker; the same narrowed menu, opened with
     // nothing waiting on it.
     const openMove = () => {
         if (!ourMoveWanted()) {
@@ -4564,9 +3851,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         runVerb('keep', null);
     };
 
-    // Shift-V: the picker, whatever the selection carries — the same menu v
-    // opens for an unfiled conversation. A pick is an add, and rule 2 takes
-    // the label it replaces off underneath.
+    // Shift-V: the picker, whatever the selection carries; the same menu v
+    // opens for an unfiled conversation.
     const openLabelPicker = () => {
         const actions = controller().actions;
         const keys = resolveKeys(actions, null);
@@ -4575,8 +3861,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The hold labels this account has, by the same names the setting gives.
-    // Asked before the picker opens: a picker with nothing in it is a worse
-    // answer than being told there is nothing to archive into.
     const holdLabelsHere = () => {
         const accountId = controller().get('accountId');
         return mailboxesOf(accountId).filter(isExcludedLabel);
@@ -4590,7 +3874,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         if (!keys) return;
 
         if (!holdLabelsHere().length) {
-            reportFault('no hold label to archive into — name one in "' +
+            reportFault('no hold label to archive into; name one in "' +
                 'Labels that are never projects"');
             return;
         }
@@ -4668,11 +3952,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // A shortcut and the button it stands for should not disagree, so clicking
-    // Move to opens what v opens, and Option-clicking opens what Option-V does.
-    //
-    // Read on the way down, before the menu is built. Every mousedown sets the
-    // flag, so one that misses the button clears it — otherwise a press that
-    // never opened a menu would leave it set for whatever opened next.
+    // Move to opens what v opens, and Option-clicking opens what Option-V
+    // does.
     const watchMoveClick = () => {
         document.addEventListener('mousedown', (event) => {
             const layer = moveButton && moveButton.target.get('layer');
@@ -4683,40 +3964,18 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // Fastmail archives with y (and with h, which is left alone) and expands a
-    // thread with e. Gmail archives with e, and that muscle memory does not
-    // unlearn, so the two trade places.
+    // thread with e.
     const SWAPPED_KEYS = { e: 'y', y: 'e' };
 
-    // The key that archives once the two have traded places. The mode claims
-    // it outright rather than inheriting whatever Fastmail bound to y, because
-    // y's toolbar slot holds one contextual button: it reads Archive while the
-    // list is the Inbox and Remove from this label anywhere else. That button
-    // registers its keys once, as it enters the document, and never registers
-    // them again when its meaning changes — so a key bound to the button
-    // follows the toolbar rather than the verb. That is what was reported: in
-    // a label view e stripped the label of the view you were standing in,
-    // Later included, and archived nothing.
-    //
-    // Claiming the key ends the guesswork. The verb is called directly, so e
-    // archives the same way in every list, and no reading of the button's
-    // shortcut string decides anything. Fastmail's own y handlers still move
-    // here and sit underneath, which is what answers with the mode off.
+    // The key that archives once the two have traded places.
     const ARCHIVE_KEY = 'e';
 
     // Fastmail's own archive key, claimed for the same reason and whether or
-    // not the two have traded places. It is bound to that same contextual
-    // button, so it archives in the Inbox and — the slot now reading Remove
-    // label — does nothing in a label view, where the phone's bar already
-    // replaces the slot with an Archive running the full verb. Claiming it
-    // gives the desktop the same thing: h archives everywhere, which is what
-    // the setting has always promised, and a hold label such as Later comes
-    // through it because the verb is what decides, not the toolbar.
+    // not the two have traded places.
     const ARCHIVE_ALT_KEY = 'h';
 
     // Registrations made before the patch below was installed keep the stock
-    // binding, so move those across once. Appending is enough, since
-    // getHandlerForKey takes the last registration — but both have to be read
-    // before either is written, or the second read sees the first write.
+    // binding, so move those across once.
     const swapExistingKeys = (kb, register) => {
         const moves = Object.keys(SWAPPED_KEYS)
             .map((key) => {
@@ -4731,17 +3990,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         });
     };
 
-    // The verb keys the mode owns outright. Fastmail's own registrations —
-    // the list's star on s, the conversation view's expandAll on Shift-E —
-    // land underneath and answer again the moment the mode is off. Ours are
-    // re-lifted after every later registration, because the registry answers
-    // to whichever went in last, and the conversation view registers its keys
-    // each time it enters the document.
+    // The verb keys the mode owns outright. Fastmail's own registrations, the
+    // list's star on s, the conversation view's expandAll on Shift-E, land
+    // underneath and answer again the moment the mode is off.
     const claimedHandlers = {};
 
-    // key -> verb, filled by reclaimKeys from the key settings — the
-    // handlers look their verb up here on every press, so a rebuilt map
-    // retargets keys already claimed
+    // key -> verb, filled by reclaimKeys from the key settings; the handlers
+    // look their verb up here on every press, so a rebuilt map retargets keys
+    // already claimed
     const claimedRun = {};
 
     const sanitizedKey = (value, fallback) => {
@@ -4757,11 +4013,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             'Shift-E': () => openArchiveIntoPicker()
         };
 
-        // null is the caller's selection untouched — the focused conversation
-        // to Fastmail — and the wrapper in patchArchive turns it into the
-        // verb: Triage, every project label and the pin come off, a hold
-        // label such as Later stays, and that holds in every list because
-        // nothing here asks the toolbar what it currently means.
+        // null is the caller's selection untouched; the focused conversation
+        // to Fastmail, and the wrapper in patchArchive turns it into the verb:
+        // Triage, every project label and the pin come off, a hold label such
+        // as Later stays, and that holds in every list because nothing here
+        // asks the toolbar what it currently means.
         const archive = () => controller().actions.archive(null);
 
         // h is Fastmail's own archive key and is claimed either way; e only
@@ -4781,10 +4037,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     let reclaimKeys = () => {};
 
     // A button registers its shortcut on entering the document and ignores
-    // later changes to the property — setting it afterwards leaves the old
-    // binding in place, which is measurable. The swap therefore has to happen
-    // as the registration goes in. Registering ours in the same breath also
-    // keeps it last, and getHandlerForKey takes the last one registered.
+    // later changes to the property; setting it afterwards leaves the old
+    // binding in place, which is measurable.
     const patchShortcuts = () => {
         const kb = FastMail.ViewEventsController.kbShortcuts;
         const originalRegister = kb.register;
@@ -4794,7 +4048,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 go: (event) => {
                     if (modeIsOn) return claimedRun[key](event);
 
-                    // Mode off: behave as if we were not here — hand the key
+                    // Mode off: behave as if we were not here; hand the key
                     // to whatever Fastmail has registered underneath
                     const list = kb._shortcuts[key] || [];
                     for (let i = list.length - 1; i >= 0; i -= 1) {
@@ -4826,15 +4080,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         // goes in where the Move button registers, and anything registering
         // the key afterwards buries it, because the registry answers to
         // whichever went in last.
-        //
-        // The one that does is the More menu. A toolbar too narrow to draw
-        // every action puts the rest in there, and OverflowMenuView registers
-        // each of their keys against itself — so on a bar where Move has
-        // overflowed, v reaches Fastmail's own activate and opens the full
-        // menu. That is the iPad's action bar, which is narrow and puts Move
-        // under More; a desktop toolbar wide enough to draw it never does.
-        // Clicking Move to still went through the button, and so still came
-        // up narrowed, which is exactly how the two disagreed.
         const liftMove = (key) => {
             if (key !== MOVE_SHORTCUT || !moveButton) return;
 
@@ -4850,8 +4095,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         kb.register = function (key, target, method, priority) {
             // Decided as the registration goes in rather than at the keypress,
-            // because the key itself is what dispatches. Turning the setting
-            // off takes hold as views re-register, or on the next reload.
+            // because the key itself is what dispatches.
             if (settings.swapArchiveExpand && SWAPPED_KEYS[key]) {
                 const moved = SWAPPED_KEYS[key];
                 const swapped = originalRegister.call(
@@ -4866,16 +4110,16 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 return swapped;
             }
 
-            // The tristate picker is opened programmatically for a
-            // multi-select verb, so the button that owns it is captured from
-            // its registration the way the Move button is
+            // The tristate picker is opened programmatically for a multi-
+            // select verb, so the button that owns it is captured from its
+            // registration the way the Move button is
             if (key === LABELS_SHORTCUT && isLabelsButton(target)) {
                 labelsButton = { target: target, method: method };
             }
 
-            // z's owner is the undo route worth wrapping — the same object
-            // the toast's button presses — so its registration is another
-            // way to find what the namespace scan may have missed
+            // z's owner is the undo route worth wrapping; the same object the
+            // toast's button presses; so its registration is another way to
+            // find what the namespace scan may have missed
             if (key === 'z' && !undoTarget && target &&
                     typeof target === 'object' &&
                     typeof target[method] === 'function') {
@@ -4899,14 +4143,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         };
 
         // A view takes its shortcut back off under the key it thinks it holds,
-        // so a registration that moved has to be taken off the key it moved to,
-        // or it is never taken off at all: measured, six handlers on e and nine
-        // on y for two buttons and one thread-expander. Since the key answers to
-        // whichever registered last, a pile of stale ones is not just untidy —
-        // it is the toolbar as it stood several redraws ago still deciding.
-        //
-        // The same rule as registering, so the two stay in step: everything
-        // that moved comes off where it moved to.
+        // so a registration that moved has to be taken off the key it moved
+        // to, or it is never taken off at all: measured, six handlers on e and
+        // nine on y for two buttons and one thread-expander.
         const originalDeregister = kb.deregister;
 
         kb.deregister = function (key, target, method) {
@@ -4916,9 +4155,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 );
             }
 
-            // Ours went in under a stand-in, so it comes off as one. Looked up
-            // rather than asked of the button, so only the registrations we
-            // actually substituted are answered for here.
+            // Ours went in under a stand-in, so it comes off as one.
             const handler = key === MOVE_SHORTCUT && target && typeof target === 'object'
                 ? moveHandlers.get(target)
                 : null;
@@ -4935,8 +4172,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         if (settings.swapArchiveExpand) swapExistingKeys(kb, originalRegister);
 
         // Claim the verb keys last, so they sit on top of anything already
-        // registered when the script starts. Rerun on a settings change: a
-        // key no longer wanted is handed back, a new one claimed.
+        // registered when the script starts.
         reclaimKeys = () => {
             const wanted = wantedClaims();
 
@@ -4987,7 +4223,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * just the one the row holds.
      *
      * A row is a conversation, and its chips are the union of what the thread
-     * carries — a label on the reply shows on the row even though the message
+     * carries, a label on the reply shows on the row even though the message
      * the row was built from has never been in it. Read against that one
      * message, such a chip looks stale, and rows were losing labels they
      * really had: measured, a row whose chips read "Nexthealth/HDV" while its
@@ -5001,26 +4237,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // Fastmail draws a row's label chips and adds to them when a label is
-    // added, but does not take one away when a label is removed — the chip
-    // stays behind. That is its own display bug, and it becomes ours as well,
-    // because the row colours are selected on those chips: the colour outlives
-    // the label, which is what you see.
-    //
-    // redrawLayer() does not rebuild them, so the stale chip is taken out
-    // directly. Fastmail draws the row from the record whenever it does redraw
-    // — recycling it as you scroll, or reopening the view — so nothing has to
-    // be put back.
+    // added, but does not take one away when a label is removed; the chip
+    // stays behind.
 
     // A chip reads "Projects/Work" because that is the mailbox's path, but the
-    // container is scaffolding — it is on every label and says nothing. Only
-    // the text is rewritten: the title keeps the full path, so the tooltip
-    // still says where the label lives and every rule that selects on it goes
-    // on working.
-    //
-    // Safari will not do this in CSS. `content` on an ordinary element is
-    // ignored — measured, the chip's width did not budge — and the
-    // alternatives either need the font size hardcoded or leave the chip the
-    // width of the text it is no longer showing.
+    // container is scaffolding; it is on every label and says nothing.
     const stripChipPrefix = (chip) => {
         const span = chip.querySelector('span[title]');
         if (!span) return;
@@ -5034,9 +4255,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // An open message lists its labels as badges rather than chips, and there
-    // the path is the text and nothing else — no title to read it back from.
-    // So the path moves into the title, which both keeps the tooltip and makes
-    // this safe to run again: the leaf is left alone the second time round.
+    // the path is the text and nothing else; no title to read it back from.
     const stripBadgePrefix = (badge) => {
         const text = badge.textContent;
         const cut = text.lastIndexOf('/');
@@ -5061,12 +4280,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // a plain span, and asking for the link left the phone's badges unstripped.
     const BADGE_SELECTOR = '.v-ThreadLabels .u-badge-text';
 
-    // A badge on the phone is `<div class="u-badge"><span>Inbox</span></div>` —
-    // no href, no title, nothing but the text, which CSS cannot select on. So
-    // the name is stamped where a rule can reach it, and the rules go on doing
-    // the hiding. Cheaper and steadier than hiding from script: the answer stops
-    // depending on when this last ran, and turning the mode off puts every badge
-    // back without walking anything.
+    // A badge on the phone is `<div class="u-badge"><span>Inbox</span></div>`,
+    // no href, no title, nothing but the text, which CSS cannot select on.
     const BADGE_NAME = 'data-custom-mailbox';
 
     const markBadge = (badge) => {
@@ -5100,10 +4315,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // Rows are recycled as you scroll and the open message is redrawn whenever
     // you move to another one, so both have to be caught as they are drawn.
-    // Watching the whole mail app covers the two without having to know when
-    // the reading pane gets built; only nodes it adds are looked at, so the
-    // cost is a walk of whatever just appeared. Rewriting text replaces a text
-    // node, and those are turned away at the top, so this cannot feed itself.
     let labelObserver = null;
 
     const watchLabels = () => {
@@ -5115,11 +4326,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         const SOURCE_ROW = '.v-MailboxSource';
 
         // A row arriving, and anything redrawn inside one that is already
-        // there. Recolouring a label rebuilds only the row's icon, and the
-        // icon that comes back is a stock one with nothing said about it: the
-        // funnel standing in for it keeps the shade it had, and the icon it
-        // hides is visible again beside it. Both are put right by dressing
-        // the rows again, which only happens if a redraw this small counts.
+        // there.
         const drawsSourceRow = (node) =>
             !!node.querySelector &&
             ((node.matches && node.matches(SOURCE_ROW)) ||
@@ -5152,10 +4359,6 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             }
 
             // Placement gives up after a second of the header not being there.
-            // That is generous on a desktop and not necessarily on a phone
-            // starting cold, so the header turning up is itself a reason to try
-            // again. Guarded on the timer so this joins the existing attempt
-            // rather than starting a second chain alongside it.
             if (headerDrawn && !placeTimer) placeIndicator();
 
             // A row appearing or leaving moves where one kind gives way to
@@ -5181,15 +4384,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     // Lucide's filter glyph, drawn in the SVG namespace and given the classes
     // and inline style of the icon it replaces, so Fastmail's sizing and
-    // colouring carry on applying. The toolbar indicator wears it.
+    // colouring carry on applying.
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const FILTER_ICON_CLASS = 'custom-filterIcon';
     // Lucide draws to the edges of its 24-unit box; Fastmail's icons sit well
-    // inside theirs. Measured in the same viewBox, its own glyphs cover about
-    // 15.5 units against the funnel's 20, so the funnel read a third too big
-    // beside them. The points are scaled by 0.775 about the centre — geometry
-    // rather than the viewBox, so the stroke keeps its weight — which brings it
-    // to 15.5 x 14, between Fastmail's filter and label icons.
+    // inside theirs.
     const FILTER_ICON_POINTS = '19.75 5.03 4.25 5.03 10.45 12.36 10.45 17.43' +
         ' 13.55 18.98 13.55 12.36 19.75 5.03';
 
@@ -5203,7 +4402,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         svg.setAttribute('stroke-linecap', 'round');
         svg.setAttribute('stroke-linejoin', 'round');
         svg.setAttribute('role', 'presentation');
-        // The sizing classes are worth having; the glyph identifier is not —
+        // The sizing classes are worth having; the glyph identifier is not,
         // i-inbox and friends are what Fastmail hangs each icon's own styling
         // off, and this is no longer that icon.
         const classes = (existing.getAttribute('class') || '')
@@ -5220,15 +4419,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The Triage row wears the funnel too, so the sidebar and the switch above
-    // the list say the same thing about the same set. The row's own icon is
-    // hidden rather than replaced and the funnel put beside it, so a row that
-    // stops being Triage — the setting renamed, the label gone — goes back to
-    // what Fastmail drew without needing to know what that was.
-    //
-    // Run on every sidebar redraw: Fastmail rebuilds these rows freely, and a
-    // rebuilt one comes back with its stock icon.
-    // The row's own icon, told from anything else drawn in it by Fastmail's
-    // own naming: every one of its glyphs carries an i- class.
+    // the list say the same thing about the same set.
     const sourceIcon = (el) => toArray(el.querySelectorAll('svg')).filter((svg) => {
         const names = (svg.getAttribute('class') || '').split(/\s+/);
         return names.indexOf(FILTER_ICON_CLASS) === -1 &&
@@ -5238,18 +4429,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // A sidebar row's own icon is coloured inline from the label, not by any
     // rule a stylesheet could carry: measured, Fastmail's redrawIcon sets
     // style.color from the label's foreground colour and style.fill from its
-    // background one, on a glyph it has just built. A stand-in for that icon
-    // inherits none of it and comes out in the theme's ink unless it is told.
-    //
-    // The funnel is stroke-drawn on currentColor and filled with nothing, so
-    // colour is the property that shows and the label's own colour is the
-    // value to give it — the shade the row rules tint with, not the
-    // contrasting foreground Fastmail strokes a filled tag with.
-    //
-    // Not gated on the colour settings. Those decide whether message rows are
-    // tinted, and skip Triage there on purpose, because every undecided row
-    // carries it and the whole group would go one shade. This is a different
-    // claim: the icon was replaced, so it owes what it replaced.
+    // background one, on a glyph it has just built.
     const labelColour = (mailbox) => {
         if (!mailbox || typeof mailbox.get !== 'function') return '';
 
@@ -5288,36 +4468,22 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
             if (stock) stock.classList.add(HIDDEN_SOURCE_ICON_CLASS);
 
-            // Painted on every pass rather than only as it goes in: recolouring
-            // the label redraws the row, and a funnel already in place would
-            // otherwise keep the old shade until something removed it.
+            // Painted on every pass rather than only as it goes in:
+            // recolouring the label redraws the row, and a funnel already in
+            // place would otherwise keep the old shade until something removed
+            // it.
             paintFilterGlyph(funnel, mailbox);
         });
     };
 
     // The sidebar runs the system folders, the labels and the saved searches
-    // together in one list. Where one kind gives way to another, a line: the
-    // first row of each new run is marked, and the rule above draws it.
-    //
-    // Anything under an Inbox counts as a system folder for this, so a label you
-    // keep in there stays part of the Inbox rather than being fenced off from it
-    // — and the folder after it does not read as the start of something new.
-    //
-    // The class and the offset are written onto every row on every pass, not
-    // only onto the ones that changed. Collapsing a parent takes rows out of the
-    // list, which moves the boundary; a stale mark left behind would draw the
-    // line, and open the gap, in the wrong place.
+    // together in one list.
     const sourceKind = (mailbox) =>
         (isUserLabel(mailbox) && !isUnderInbox(mailbox) ? 'label' : 'system');
 
     // A saved search is a source like the others and belongs to no mailbox, so
-    // it is a third kind rather than part of whatever run it happens to follow.
-    // That is what gathers the searches into a block of their own.
-    //
-    // Matched on the row's own class rather than on the absence of a mailbox: a
-    // row this script does not recognise says nothing about where a run starts,
-    // and is better carried along with the rows around it than made to open a
-    // block it has no business opening.
+    // it is a third kind rather than part of whatever run it happens to
+    // follow.
     const SEARCH_ROW = '.v-SearchSource';
 
     const rowKind = (el, mailbox) => {
@@ -5327,8 +4493,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     // The lists holding sidebar rows, and the mailbox behind each row that has
-    // one. Not every row does: a saved search is a row in the same list with no
-    // mailbox behind it, and Fastmail places it alongside the rest.
+    // one.
     const sourceLists = () => {
         const mailboxes = new Map();
         const lists = new Set();
@@ -5342,28 +4507,20 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     };
 
     const markSourceGroups = () => {
-        // With the option off the rows go back where Fastmail put them. The
-        // class is left alone: without the rule above it draws nothing, so
-        // turning the option back on costs a restyle rather than another walk.
+        // With the option off the rows go back where Fastmail put them.
         const gap = settings.sidebarSeparators ? SEPARATOR_GAP : 0;
         const { mailboxes, lists } = sourceLists();
 
-        // Each list is walked on its own. A second account's sources are a list
-        // of their own, positioned from their own origin, so an offset carried
-        // over from the list above would push them all down; and its first row
-        // already has the group's heading above it, which says the same thing a
-        // line would.
+        // Each list is walked on its own. A second account's sources are a
+        // list of their own, positioned from their own origin, so an offset
+        // carried over from the list above would push them all down; and its
+        // first row already has the group's heading above it, which says the
+        // same thing a line would.
         lists.forEach((list) => {
             let previous = null;
             let offset = 0;
 
-            // Every child, not just the rows with a mailbox behind them. A row
-            // this script cannot place still has to be given a place, or it is
-            // left behind underneath one of the others.
-            //
-            // The list writes each row's place into the row's own style, so the
-            // slots are read back as they are rather than measured — nothing
-            // forces layout on a path that runs at every sidebar redraw.
+            // Every child, not just the rows with a mailbox behind them.
             const rows = toArray(list.children).map((el) => ({
                 el,
                 kind: rowKind(el, mailboxes.get(el)),
@@ -5393,21 +4550,17 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 row.el.style.transform = shift ? `translateY(${shift}px)` : '';
             });
 
-            // The rows now end lower than the list knows about — its height is
+            // The rows now end lower than the list knows about; its height is
             // written inline by Fastmail and would only be overwritten again.
-            // The group around it has no height of its own, so padding there
-            // grows it, and anything below is pushed clear rather than sat on.
             const group = list.parentElement;
             if (group) group.style.paddingBottom = offset ? `${offset}px` : '';
         });
     };
 
     // Only a group with a title draws a header, and every one that has a title
-    // draws one — so a second account showing sources of its own is a second
+    // draws one; so a second account showing sources of its own is a second
     // header, and one header means there is nothing else on screen to collapse
-    // to. Counted here rather than asked for in a selector: saying it in CSS
-    // needs a :has() inside a :has(), which is invalid, and Safari throws out
-    // the whole rule.
+    // to.
     const dressSourceSections = () => {
         const sources = document.querySelector('.v-Sources');
         if (!sources) return;
@@ -5435,11 +4588,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
             // A record whose mailboxes have not arrived yet reports none, and
             // none is not the same answer as "every one of these labels is
-            // gone". Read as the latter it took every chip off the row — the
-            // colour with them — and nothing put them back: Fastmail redraws a
-            // row from its record when the record changes, and a record that
-            // was merely still loading never changed. A row with chips and no
-            // known mailboxes is a row this cannot speak for.
+            // gone".
             if (!actual.length) return;
 
             chips.forEach((chip) => {
@@ -5476,9 +4625,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }, 150);
     };
 
-    // Message changes arrive in bursts — a bulk action, or the initial preload
-    // of an Inbox — so coalesce them into one repaint. No counting happens
-    // here any more; this is chips and dressing.
+    // Message changes arrive in bursts, a bulk action, or the initial preload
+    // of an Inbox; so coalesce them into one repaint.
     let refreshTimer = null;
 
     const scheduleRefresh = () => {
@@ -5537,10 +4685,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
      * ----------------------------------------------------------------
      */
 
-    // Overture's registry is keyed on the character a key produces, which is no
-    // use for Option, so these are handled here instead. preventDefault matters
-    // for more than tidiness: without it the dead key stays pending and accents
-    // the next thing typed.
+    // Overture's registry is keyed on the character a key produces, which is
+    // no use for Option, so these are handled here instead.
     const isTypingTarget = (node) => {
         if (!node) return false;
         if (node.isContentEditable) return true;
@@ -5573,21 +4719,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     const addObservers = () => {
         // The store fires an event keyed by record type whenever records of
-        // that type change; this is the same signal LocalQuery subscribes to in
-        // monitorForChanges. Watching the Inbox query's membership is not
-        // enough: adding or removing a label leaves a message in the Inbox, so
-        // membership never changes and the counts would go stale.
+        // that type change; this is the same signal LocalQuery subscribes to
+        // in monitorForChanges.
         FastMail.store.on(FastMail.classes.Message, { go: scheduleRefresh }, 'go');
 
         // The stylesheet names labels and their colours, so it goes stale when
-        // one is recoloured, renamed, added or removed. Reorganising labels —
-        // renesting a dozen of them under a parent, say — changes them one at a
-        // time, so this is coalesced the same way message changes are, rather
-        // than rebuilding the sheet once per record.
-        //
-        // The same event is when the state-label cache goes stale, and when a
-        // badge needs repainting: totalThreads lives on the Mailbox record,
-        // and Fastmail adjusts it optimistically on every action.
+        // one is recoloured, renamed, added or removed.
         FastMail.store.on(FastMail.classes.Mailbox, {
             go: () => {
                 forgetLabelCache();
@@ -5597,8 +4734,7 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         }, 'go');
 
         // Moving between sources rebuilds the toolbar, taking the indicator
-        // with it. This runs whether the mode is on or off, because the button
-        // stays visible either way — grey when off.
+        // with it.
         controller().addObserverForKey('mailbox', { go: refreshToolbar }, 'go');
 
         // Arriving at a project label is when the Inbox filter goes on, so
@@ -5654,8 +4790,8 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     /*
      * Copy link, in the message ⋯ menu.
      *
-     * The menu is recognised the way the shells' Share item recognises it —
-     * options carrying both a reply and a forward action — and the injection
+     * The menu is recognised the way the shells' Share item recognises it,
+     * options carrying both a reply and a forward action, and the injection
      * point is the same measured one: MenuView draw, the only dispatch the
      * render pipeline makes dynamically. The URL is the canonical one the
      * mail controller itself hands out for the open message, u= and filter
@@ -5683,12 +4819,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
     const currentMessageLink = () => urlForMessage(controller().get('message'));
 
-    // Fastmail's own notification layer. The container view is built with
-    // the root view at boot and inserted right after it, on desktop and on
-    // the phone alike, so its drawn node is always there to ask for the
-    // instance. Its show() wraps a bare string in the same NotificationView
-    // every stock toast is — same corner, same look, same close button —
-    // and manages the queue of them itself.
+    // Fastmail's own notification layer. The container view is built with the
+    // root view at boot and inserted right after it, on desktop and on the
+    // phone alike, so its drawn node is always there to ask for the instance.
     const TOAST_MS = 5000;
 
     const notificationContainer = () => {

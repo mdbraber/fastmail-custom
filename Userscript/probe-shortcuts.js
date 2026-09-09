@@ -14,7 +14,7 @@
  * That gap is why the mode claims e rather than inheriting y.
  *
  * Run it once in the Inbox and once inside a label. In both, e should win
- * for a plain handler — the mode's own claim — rather than for a ButtonView.
+ * for a plain handler; the mode's own claim; rather than for a ButtonView.
  */
 (function probeShortcuts() {
     const kb = FastMail.ViewEventsController.kbShortcuts;
@@ -26,7 +26,7 @@
         bits.push('.' + method);
 
         if (typeof target.get !== 'function') {
-            bits.push('(plain handler — the mode’s own)');
+            bits.push('(plain handler; the mode’s own)');
             return bits.join(' ');
         }
 

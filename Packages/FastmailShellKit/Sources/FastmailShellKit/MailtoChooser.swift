@@ -24,22 +24,8 @@ public struct MailtoTarget: Identifiable, Equatable, Sendable {
 
 /// The chooser app: a mailto link arrives, you say which account it is from,
 /// and it goes to that shell's compose window.
-///
-/// The app holds no mail and signs in to nothing. Everything it needs already
-/// exists on the other side — both shells answer `compose?mailto=` and turn it
-/// into Fastmail's compose page with the recipient, subject and body carried
-/// across — so this only has to ask the question and forward the answer.
-///
-/// Note that iOS hands mailto: links to the default mail app and to nothing
-/// else, and an app can only be that with Apple's `com.apple.developer.
-/// mail-client` capability, which is granted by review. Until then this app is
-/// reachable by its own scheme and from Shortcuts, and everything downstream
-/// of the tap already works.
 public enum MailtoChooser {
-    /// The two shells, in the order the buttons are drawn. The schemes are the
-    /// profiles' own: a rename on one side that did not reach the other would
-    /// send mail into nowhere, so they are read from there rather than spelled
-    /// out again here.
+    /// The two shells, in the order the buttons are drawn.
     public static let targets: [MailtoTarget] = [
         MailtoTarget(
             id: "personal",
@@ -56,10 +42,6 @@ public enum MailtoChooser {
     ]
 
     /// The command that opens this message in that shell's compose window.
-    ///
-    /// Only a mailto is forwarded. The app is reachable by its own scheme as
-    /// well, and an address arriving that way is not to be pushed into a
-    /// compose window on trust.
     public static func compose(_ mailto: URL, in target: MailtoTarget) -> URL? {
         guard mailto.scheme?.lowercased() == "mailto" else { return nil }
         let command = "\(target.scheme)://compose?mailto=" + LinkRouter.percentEncode(mailto.absoluteString)
@@ -70,13 +52,6 @@ public enum MailtoChooser {
     public static let scheme = "fastmail-mailto"
 
     /// The message a URL arriving at this app is asking to write, or nothing.
-    ///
-    /// A mailto: is itself the answer. Until Apple grants the Default Mail App
-    /// capability iOS will not deliver one, though, so the app's own scheme is
-    /// the way in meanwhile — from a Shortcut, or anything else that can open
-    /// a URL — carrying the message in the same `compose?mailto=` command the
-    /// shells answer to. Anything else arriving there is refused: an address
-    /// that is not a mailto is not a message to write.
     public static func incoming(_ url: URL) -> URL? {
         if url.scheme?.lowercased() == "mailto" { return url }
         guard
@@ -89,13 +64,7 @@ public enum MailtoChooser {
         return URL(string: raw)
     }
 
-    /// What the link is about, for the chooser to show while it asks. A tap on
-    /// a link you did not mean is caught here rather than in a compose window
-    /// in the wrong account.
-    ///
-    /// Recipients live either after the colon or in a `to` field, and a link
-    /// may carry several; both spellings are read, and what comes back is
-    /// decoded for a person to look at rather than for a machine to parse.
+    /// What the link is about, for the chooser to show while it asks.
     public static func summary(of mailto: URL) -> MailtoSummary? {
         guard
             mailto.scheme?.lowercased() == "mailto",

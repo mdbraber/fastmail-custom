@@ -29,10 +29,7 @@ public struct AppShell: View {
     public var body: some View {
         ZStack(alignment: .top) {
             // Keyed on the backend so choosing the other server builds a new
-            // web view rather than steering the old one there. The scripts are
-            // gated to the host they were injected for and the bridge only
-            // answers that host, both fixed when the view is made — so the
-            // page has to be rebuilt, not merely sent somewhere else.
+            // web view rather than steering the old one there.
             WebContainer(profile: live, model: model, loadURL: live.startURL(readingFrom: .standard))
                 .ignoresSafeArea()
                 .id(backendName)
@@ -70,9 +67,9 @@ public struct AppShell: View {
             MobileSettingsSheet(profile: profile)
         }
         .onAppear {
-            // The registrar asks for permission at launch; this puts the
-            // last badge back once the app is on screen, and opens the
-            // notification that launched it, if one did.
+            // The registrar asks for permission at launch; this puts the last
+            // badge back once the app is on screen, and opens the notification
+            // that launched it, if one did.
             BadgeController.shared.reapply()
             // The push names production; the page is on whichever server is selected
             if let url = pendingLinks.take() { handle(live.backend.rehost(url)) }
@@ -110,8 +107,7 @@ public struct AppShell: View {
         }
         // Without this the window group treats every URL handed to the app as
         // grounds for a new window, so a mailto arrived with a second copy of
-        // the whole shell behind it. The window already open says it will take
-        // them.
+        // the whole shell behind it.
         .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         #endif
     }

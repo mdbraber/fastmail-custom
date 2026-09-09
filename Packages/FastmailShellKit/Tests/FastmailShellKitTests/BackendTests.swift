@@ -18,8 +18,6 @@ import Testing
 }
 
 // Both shells run against beta, so that is what an unset backend means.
-// Named here rather than spelled out, so the day it changes this test says
-// so once instead of in every address a default reaches.
 @Test func theStandardBackendIsBeta() {
     #expect(Backend.standard == .beta)
 }
@@ -59,9 +57,7 @@ import Testing
 }
 
 // A link that leaves the app names the production host whatever server this
-// shell is talking to. Both shells run against beta, so without this every
-// address handed to Shortcuts or a share sheet was a beta address: it opens
-// for nobody else, and it is not the address of the message anywhere but here.
+// shell is talking to.
 @Test func canonicalNamesTheProductionHost() {
     let beta = URL(string: "https://app.beta.fastmail.com/mail/Inbox/T1.M1?u=abc#x")!
     #expect(Backend.canonical(beta) == URL(string: "https://app.fastmail.com/mail/Inbox/T1.M1?u=abc#x")!)

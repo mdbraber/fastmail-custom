@@ -21,12 +21,6 @@ public enum IntentSupport {
     public nonisolated static let actionNamesKey = "automation.actionNames"
 
     /// The page an action reads from or runs against.
-    ///
-    /// Every action but Open Fastmail runs without bringing the app forward,
-    /// which means it runs against whatever is already loaded. If the app has
-    /// been quit or was never opened since the phone started, there is no page
-    /// and no window, and saying so is the whole of what can be done: an
-    /// action cannot open the app it is running inside.
     public static func webView() throws -> WKWebView {
         guard let view = WebViewRegistry.shared.active else {
             throw IntentSupportError("No Fastmail window is open. Open the app once, then run this again.")
@@ -84,9 +78,7 @@ public enum IntentSupport {
             throw IntentSupportError("No message is open.")
         }
         // The page's own address names whichever server this shell talks to,
-        // and both shells talk to beta. What leaves the app is the production
-        // address — the one that opens for anyone, on any device — with the
-        // markdown rebuilt around it rather than the one the page wrote.
+        // and both shells talk to beta.
         let canonical = Backend.canonical(url)
         let link = MailLink()
         link.url = canonical

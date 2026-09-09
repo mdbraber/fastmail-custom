@@ -1,8 +1,7 @@
 import { createCipheriv, createECDH, hkdfSync, randomBytes } from 'node:crypto';
 
 // The sending half of RFC 8291 + RFC 8188, as Fastmail runs it: encrypts a
-// message to a subscription's keys. Test-only; the server never encrypts.
-// `senderPrivate` and `salt` pin the output for the RFC's worked example.
+// message to a subscription's keys.
 export function encrypt(plaintext, { publicKey, auth }, { senderPrivate, salt = randomBytes(16), recordSize = 4096 } = {}) {
     const sender = createECDH('prime256v1');
     if (senderPrivate) sender.setPrivateKey(senderPrivate); else sender.generateKeys();

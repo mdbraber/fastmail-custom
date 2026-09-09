@@ -1,9 +1,8 @@
 import http2 from 'node:http2';
 import { createPrivateKey, sign } from 'node:crypto';
 
-// Apple Push Notification service over HTTP/2 with token-based auth: a
-// short-lived ES256 JWT signed with the .p8 key from the developer portal.
-// One session per process, reopened when it closes.
+// Apple Push Notification service over HTTP/2 with token-based auth: a short-
+// lived ES256 JWT signed with the .p8 key from the developer portal.
 
 export const HOSTS = Object.freeze({
     sandbox: 'https://api.sandbox.push.apple.com',

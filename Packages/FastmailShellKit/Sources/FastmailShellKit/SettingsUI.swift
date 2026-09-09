@@ -2,8 +2,7 @@ import SwiftUI
 
 // The Custom mode form is generated from CustomModeSettings.options, the same
 // catalog the page injection reads, so the screen and the userscript cannot
-// drift apart. Changes land in UserDefaults; the pusher picks them up from
-// there and applies them to any open window live.
+// drift apart.
 public struct CustomModeSettingsForm: View {
     @StateObject private var model = CustomModeSettingsModel()
     private let group: CustomModeSettings.Group
@@ -22,10 +21,8 @@ public struct CustomModeSettingsForm: View {
         }
     }
 
-    // The bar order is dragged, not typed: one row per verb, reordered
-    // with onMove and written back as the same comma string the userscript
-    // reads. The embedded list stays in edit mode permanently on iOS, so
-    // the grips are simply always there — no mode to toggle.
+    // The bar order is dragged, not typed: one row per verb, reordered with
+    // onMove and written back as the same comma string the userscript reads.
     @ViewBuilder
     private func barOrderRows(for option: CustomModeSettings.Option) -> some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -60,11 +57,10 @@ public struct CustomModeSettingsForm: View {
                 Toggle(option.title, isOn: model.toggleBinding(for: option))
             case .text(let fallback):
                 Text(option.title)
-                // A clearable field shows its default as text rather than as
-                // a placeholder, because for those two an empty box is
-                // ambiguous — never touched, or emptied on purpose — and
-                // they mean opposite things. Written out, the box always
-                // says what is in force, and clearing it says none.
+                // A clearable field shows its default as text rather than as a
+                // placeholder, because for those two an empty box is
+                // ambiguous; never touched, or emptied on purpose, and they
+                // mean opposite things.
                 TextField(
                     option.title,
                     text: model.textBinding(for: option),
@@ -89,7 +85,7 @@ public struct CustomModeSettingsForm: View {
 
 // The in-app settings screen for the phone: the same catalog form the macOS
 // Settings window shows, opened from the page's App settings menu item, so
-// nothing lives an app-switch away. Changes apply to the open page live.
+// nothing lives an app-switch away.
 public struct MobileSettingsSheet: View {
     private let profile: Profile
     @AppStorage(StartView.defaultsKey) private var startView = ""
@@ -141,8 +137,8 @@ public struct MobileSettingsSheet: View {
                 }
 
                 // Notifications are not here: on the phone they belong to
-                // Settings → the app, beside iOS's own alert controls, and
-                // the Settings bundle carries the same switch.
+                // Settings → the app, beside iOS's own alert controls, and the
+                // Settings bundle carries the same switch.
 
                 ForEach(CustomModeSettings.Group.inboxGroups, id: \.self) { group in
                     Section(group.title) {
@@ -175,11 +171,7 @@ public struct MobileSettingsSheet: View {
 final class CustomModeSettingsModel: ObservableObject {
     private let defaults = UserDefaults.standard
 
-    // The verbs the reorder list offers, in the catalog's own order. Drawn
-    // from the bottomBarSlots default rather than repeated here, so the screen
-    // cannot drift from the verbs the userscript knows — which is exactly how
-    // it once kept offering Keep, Waiting and Someday after the one-label model
-    // retired them and renamed the state verb to File.
+    // The verbs the reorder list offers, in the catalog's own order.
     static let barSlotNames: [String] = {
         guard
             let option = CustomModeSettings.options.first(where: { $0.key == "bottomBarSlots" }),
@@ -225,8 +217,8 @@ final class CustomModeSettingsModel: ObservableObject {
     }
 
     // A suboption only means anything while the option above it is on, so it
-    // follows its parent rather than sitting there looking available — the
-    // same rule the extension popup applies.
+    // follows its parent rather than sitting there looking available; the same
+    // rule the extension popup applies.
     func parentIsOn(of option: CustomModeSettings.Option) -> Bool {
         guard
             let parentKey = option.parent,

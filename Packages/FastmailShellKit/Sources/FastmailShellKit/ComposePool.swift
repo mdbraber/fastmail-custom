@@ -2,9 +2,7 @@ import Foundation
 
 public enum ComposeURL {
     // The compose window is its own window, so it gets Fastmail's minimal
-    // chrome: no sidebar, no list, just the message — ui=minimal. Built
-    // from components rather than pasted, so the account and the flag are
-    // encoded the same way whichever is present.
+    // chrome: no sidebar, no list, just the message; ui=minimal.
     public static func url(for profile: Profile) -> URL {
         var components = URLComponents()
         components.scheme = "https"
@@ -114,8 +112,8 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         })
     }
 
-    /// Where a compose tab can go. A compose window will not host one — they
-    /// refuse tabs — so a message asked for from inside one opens on its own.
+    /// Where a compose tab can go. A compose window will not host one; they
+    /// refuse tabs; so a message asked for from inside one opens on its own.
     static func tabHost(_ window: NSWindow?) -> NSWindow? {
         guard let window, window.tabbingMode != .disallowed else { return nil }
         return window
@@ -123,24 +121,20 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
 
     /// Compose windows are reused, so being a tab is undone before one goes
     /// back to the pool: it leaves the group and refuses tabs again, or the
-    /// next message would turn up somewhere nobody put it. The chrome stays —
-    /// every message wears it — and is re-fitted for a window standing alone.
+    /// next message would turn up somewhere nobody put it.
     static func readyForPool(_ window: NSWindow) {
         window.tabGroup?.removeWindow(window)
         window.tabbingMode = .disallowed
     }
 
     /// A message wears the same chrome as a mailbox, whether it is a tab, a
-    /// window pulled out of one, or a window that was never anything else:
-    /// the same title bar height, so the tab bar does not jump from tab to
-    /// tab, and the same colour behind it, so the band above the message
-    /// matches the band above a mailbox. Joining a window it takes the colour
-    /// from there; on its own, from whatever the pages last asked for.
+    /// window pulled out of one, or a window that was never anything else: the
+    /// same title bar height, so the tab bar does not jump from tab to tab,
+    /// and the same colour behind it, so the band above the message matches
+    /// the band above a mailbox.
     static func dress(_ window: NSWindow, like host: NSWindow?) {
         // Only a window joining a group needs the taller title bar, to keep
-        // the tab bar from jumping between tabs. On its own it keeps an
-        // ordinary one, so the band is no deeper than it has to be to hold
-        // the window buttons.
+        // the tab bar from jumping between tabs.
         if host == nil {
             window.toolbar = nil
             window.toolbarStyle = .automatic
@@ -148,7 +142,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
             raiseTitlebar(of: window)
         }
         // The page is placed by hand from here on, so it is given the whole
-        // window to be placed in — including the strip the chrome sits over.
+        // window to be placed in; including the strip the chrome sits over.
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -179,9 +173,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     }
 
     /// How big a message's own window is, and how far it stands off from the
-    /// window it was asked from. Smaller than a mailbox window, because a
-    /// message is a smaller thing; offset from it, because a window sitting
-    /// exactly on top of another looks like the only window there is.
+    /// window it was asked from.
     nonisolated static let ownSize = NSSize(width: 780, height: 840)
     private static let standOff: CGFloat = 36
 
@@ -202,10 +194,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     }
 
     /// The window to take a colour and appearance from: the one this window
-    /// has joined, if it has joined one. Standing alone there is nobody to
-    /// match, and the colour the pages last asked for is used instead — a
-    /// mailbox window's own colour is not it, since a mailbox paints its own
-    /// header and leaves the window beneath it plain.
+    /// has joined, if it has joined one.
     static func chromeSource(for window: NSWindow) -> NSWindow? {
         window.tabGroup?.windows.first { $0 !== window }
     }
@@ -216,9 +205,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     }
 
     /// The band the window buttons sit in: as deep as it takes to leave as
-    /// much room under them as over them. It comes out at the height of the
-    /// header a mailbox page keeps above itself, which is why a message pulled
-    /// out into its own window still starts on the same line as one.
+    /// much room under them as over them.
     static func band(of window: NSWindow) -> CGFloat? {
         window.layoutIfNeeded()
         guard
@@ -240,8 +227,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
 
     /// Keeps every compose window wearing a mail window's chrome lined up,
     /// whether it is still a tab or has been pulled out into a window of its
-    /// own. Called whenever any window's page is measured, since that is when
-    /// the answer can have changed.
+    /// own.
     func fitTabbedWindows() {
         for window in NSApp.windows
         where Self.isDressed(window) && Self.webView(of: window) != nil {
@@ -287,7 +273,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
 
     /// Where the recipients are written: level with the window buttons, well
     /// clear of them, and centred in the window rather than in what is left of
-    /// it — the room taken on the left is taken on the right as well.
+    /// it; the room taken on the left is taken on the right as well.
     static func labelFrame(
         in bounds: NSRect,
         band: CGFloat,
@@ -318,10 +304,9 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         )
     }
 
-    /// What the band says: whoever the message is being written to, or — for
-    /// a message being read rather than written — what the page calls itself,
-    /// which is its subject. A message addressed to no one yet says what it
-    /// is, rather than the page's own name for a blank one.
+    /// What the band says: whoever the message is being written to, or; for a
+    /// message being read rather than written; what the page calls itself,
+    /// which is its subject.
     static func bandTitle(composing: Bool, recipients: String, pageTitle: String) -> String {
         let text = (composing ? recipients : pageTitle)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -329,9 +314,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         return text
     }
 
-    /// What the window is called in the Window menu. A message being written
-    /// is a new message however far along it is; one being read is named
-    /// after itself.
+    /// What the window is called in the Window menu.
     static func windowTitle(composing: Bool, pageTitle: String) -> String {
         let subject = pageTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         return composing || subject.isEmpty ? "New Message" : subject
@@ -353,9 +336,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
             .first { $0.identifier == recipientsID }
     }
 
-    /// Watches the To line and says when it changes. The field is found by the
-    /// input Fastmail hangs its "To" label on, and read together with the
-    /// names already entered beside it, so the band says the same as the row.
+    /// Watches the To line and says when it changes.
     private static let recipientScript = """
     (function(){
       var sawCompose=false,goneSince=null;
@@ -392,8 +373,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
       }
       var last=null,pending=false;
       // A message that has been sent, saved or discarded takes its window with
-      // it. Given a beat first: the view flickers out and back during its own
-      // redraws, and a window closed on that would vanish mid-sentence.
+      // it.
       function gone(){
         if(!sawCompose){return false;}
         if(document.querySelector('input[id$="-to-input"]')){return false;}
@@ -483,15 +463,8 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         NSApp.activate()
     }
 
-    /// The same window, opened on a message someone asked to write — a mailto
-    /// link clicked anywhere on the Mac. The pooled window was preloaded blank,
-    /// so this one has a page to fetch before it can be typed in.
-    ///
-    /// The profile comes with the message rather than being remembered from
-    /// setup: a mailto can be what launched the app, arriving before the shell
-    /// has appeared and configured anything, and a message that quietly went
-    /// nowhere would be the worst way to find that out. Configuring twice is
-    /// free — it returns on the second call.
+    /// The same window, opened on a message someone asked to write, a mailto
+    /// link clicked anywhere on the Mac.
     public func compose(mailto: String, profile: Profile) {
         configure(profile: profile)
         guard let pool else { return }
@@ -505,13 +478,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     }
 
     /// A window for a page Fastmail asked to open on its own: a draft or a
-    /// message opened with "Open in new window". It is the same kind of window
-    /// a message is written in, so it arrives wearing the same chrome.
-    ///
-    /// The view is built on the configuration the page was given and handed
-    /// straight back, so the page's request is answered rather than refused —
-    /// a refusal only sends it looking for another way, and it finds one, and
-    /// then there are two windows.
+    /// message opened with "Open in new window".
     public func window(for configuration: WKWebViewConfiguration, size: NSSize) -> WKWebView {
         Self.watchRecipients(in: configuration.userContentController, reportingTo: self)
         let view = WKWebView(frame: .zero, configuration: configuration)
@@ -524,7 +491,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         )
         window.title = "New Message"
         // Closed windows are AppKit's to release by default, and this one is
-        // already owned here — left to both, it is freed twice, which is a
+        // already owned here; left to both, it is freed twice, which is a
         // crash on Command-W rather than a closed window.
         window.isReleasedWhenClosed = false
         window.contentView = Self.contents(around: view, size: size)
@@ -541,9 +508,6 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     }
 
     /// The same message, written in a tab of the window it was asked from.
-    /// The page is Fastmail's minimal one either way, and the window keeps its
-    /// ordinary title bar, so the message sits below the tab bar rather than
-    /// behind it.
     public func compose(inTabOf host: NSWindow?) {
         guard let pool else { return }
         guard let host = Self.tabHost(host) else {
@@ -593,9 +557,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         let configuration = WKWebViewConfiguration()
         #if os(macOS)
         // Its service worker takes its user agent from whichever client
-        // started it. Without this token a compose window can restart
-        // Fastmail's worker into the branch that hands the main window's
-        // notifications to a WKWebView that never shows them.
+        // started it.
         configuration.applicationNameForUserAgent = WebContainer.electronUserAgentToken
         #endif
         configuration.websiteDataStore = .default()

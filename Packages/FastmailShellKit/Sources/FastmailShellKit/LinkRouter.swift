@@ -3,9 +3,7 @@ import Foundation
 public enum LinkRouter {
     public enum Route: Equatable, Sendable {
         case load(URL)
-        /// A message to write, carried as the mailto it arrived as. Where it
-        /// gets written is the platform's business: a window of its own on the
-        /// Mac, the window already open on a phone.
+        /// A message to write, carried as the mailto it arrived as.
         case compose(String)
         case handoff(URL)
         case refuse(String)
@@ -135,8 +133,7 @@ public enum LinkRouter {
 
     // Either server counts, not just the selected one: a link to the other
     // side is still a Fastmail link, and the page it opens is one the shell
-    // knows how to run. Which server new addresses are built on is a separate
-    // question, and that one does follow the setting.
+    // knows how to run.
     static func isFastmailHost(_ host: String?) -> Bool {
         guard var host = host?.lowercased() else { return false }
         if host.hasSuffix(".") {

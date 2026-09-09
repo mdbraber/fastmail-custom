@@ -2,16 +2,13 @@
 import UIKit
 import UserNotifications
 
-/// The phone's side of pushes: asks for permission, hands the device token
-/// to the push server, and turns a tapped banner into a link for the shell.
-/// The server writes the words; this only registers and routes. As the app's
-/// one delegate it also keeps the home screen's long-press menu in step with
-/// the settings, and turns a chosen entry into the same kind of link.
+/// The phone's side of pushes: asks for permission, hands the device token to
+/// the push server, and turns a tapped banner into a link for the shell.
 @MainActor
 public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
-    /// The one the app installed. With scenes, the delegate is not told
-    /// about activation; AppShell is, through scenePhase, and reaches the
-    /// registrar here.
+    /// The one the app installed. With scenes, the delegate is not told about
+    /// activation; AppShell is, through scenePhase, and reaches the registrar
+    /// here.
     public private(set) static weak var current: PushRegistrar?
 
     private let config = PushConfig.from(bundle: .main)
@@ -29,10 +26,8 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         )
     }
 
-    /// The notification's thread is not promised, so the work hops to the
-    /// main actor. The acknowledgement written after a registration lands
-    /// here too; by then the switch and the acknowledged value agree, so
-    /// nothing is due and the chain ends.
+    /// The notification's thread is not promised, so the work hops to the main
+    /// actor.
     @objc private func defaultsChanged() {
         Task { @MainActor in
             // The badge label is one of these settings, and it names a shortcut
@@ -58,9 +53,7 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     }
 
     /// SwiftUI runs in a scene, and a scene's quick action goes to the scene's
-    /// delegate rather than to this one. Naming a delegate class here is how a
-    /// SwiftUI app is given one; the rest of the configuration is left as the
-    /// session already has it, so SwiftUI's own window setup is untouched.
+    /// delegate rather than to this one.
     public func application(
         _ application: UIApplication,
         configurationForConnecting connectingSceneSession: UISceneSession,
@@ -83,7 +76,7 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         completionHandler(HomeShortcuts.open(shortcutItem))
     }
 
-    /// One prompt for everything the shell wants — alerts, sound and badge —
+    /// One prompt for everything the shell wants, alerts, sound and badge,
     /// then the badge that waited on it, and Apple's token if pushes are in.
     private func ask() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
@@ -97,13 +90,8 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
 
     /// The buttons a banner carries. Registered at launch and not when one
     /// arrives: iOS matches the category the notification names against what
-    /// the app has already declared, and draws no buttons at all for a name
-    /// it does not know.
-    ///
-    /// None of them opens the app — that is the whole point of them — so none
-    /// is `.foreground`, and none is `.destructive` either: a red button is
-    /// for something you cannot undo, and archiving, filing and pinning are
-    /// all a keystroke away from being put back.
+    /// the app has already declared, and draws no buttons at all for a name it
+    /// does not know.
     private func registerCategories() {
         let message = UNNotificationCategory(
             identifier: PushAction.category,
@@ -116,10 +104,8 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         UNUserNotificationCenter.current().setNotificationCategories([message])
     }
 
-    /// Apple's device token, asked for only when there is a server to give
-    /// it to and none has arrived yet. Asked again on every activation until
-    /// it comes: a launch without network gets none, and Apple does not
-    /// retry on the app's behalf.
+    /// Apple's device token, asked for only when there is a server to give it
+    /// to and none has arrived yet.
     private func requestToken() {
         guard config != nil, account != nil, deviceToken == nil else { return }
         UIApplication.shared.registerForRemoteNotifications()
@@ -229,13 +215,8 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     }
 
     /// A button, done by the push server: this device has no Fastmail
-    /// credentials and the few seconds a background action gets are enough
-    /// for one request and not for a sign-in. What each verb means to labels
-    /// and keywords is the server's business; this only asks.
-    ///
-    /// A failure is said out loud. The banner is gone by the time this runs,
-    /// so a press that silently did nothing would leave the message exactly
-    /// as it was with nothing to show for it.
+    /// credentials and the few seconds a background action gets are enough for
+    /// one request and not for a sign-in.
     private func perform(_ button: PushAction, on emailId: String?) async {
         guard let config, let account, let emailId else {
             return announce(button)
@@ -257,8 +238,7 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     }
 
     /// Said as a notification of our own, since there is no app on screen to
-    /// say it in. No sound: the failure is worth knowing about, not worth
-    /// being interrupted for a second time.
+    /// say it in.
     private func announce(_ failed: PushAction) {
         let content = UNMutableNotificationContent()
         content.title = failed.failureTitle

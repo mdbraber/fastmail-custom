@@ -111,12 +111,7 @@
     }
 
     // Fastmail's own answer, and the only reliable one: whether a theme is
-    // dark is not a question a colour can be asked. The Work account's header
-    // is a sky blue that measures darker than a luminance cut allows, and the
-    // log-in screen is navy while no theme has been chosen at all.
-    //
-    // Null means unknown rather than light, and is what a page reports before
-    // the app has booted.
+    // dark is not a question a colour can be asked.
     function pageIsDark() {
         var app = window.FastMail;
         var theme = app && app.theme;
@@ -127,8 +122,8 @@
         var meta = document.querySelector('meta[name="theme-color"]');
         var color = headerColor() || (meta ? meta.getAttribute('content') : null);
         if (!color) return;
-        // The answer can change while the colour stays put — the app booting
-        // behind an already-painted header — so both make up what is new.
+        // The answer can change while the colour stays put; the app booting
+        // behind an already-painted header; so both make up what is new.
         var isDark = pageIsDark();
         var reported = color + '|' + isDark;
         if (reported === lastTheme) return;
@@ -137,7 +132,7 @@
     }
 
     // Fastmail swaps the stylesheet in the head when its theme changes, so the
-    // head is worth watching — once there is one.
+    // head is worth watching; once there is one.
     function watchHead(observer) {
         var watch = function () {
             if (document.head) {
@@ -159,8 +154,7 @@
             reportTheme();
             attempts += 1;
             // Keep looking until the header is painted and Fastmail has a
-            // theme to ask. The log-in screen has neither, and settling for
-            // its navy is what used to take the window dark.
+            // theme to ask.
             if ((!headerColor() || pageIsDark() === null) && attempts < 40) {
                 window.setTimeout(poll, 250);
             }
@@ -212,14 +206,7 @@
     }
 
     // Asking for a message: the C key, and Fastmail's own Compose button,
-    // which read the same way. Fastmail writes the message over the mailbox
-    // you are looking at; here it can also open a tab or a window, and which
-    // one a plain press or click gives you is the app's setting to answer.
-    // Holding Option always means Fastmail's own, Command and Option together
-    // always a tab.
-    //
-    // The key is read from the physical key rather than the letter, because
-    // Option-C types "ç".
+    // which read the same way.
     var handingOver = false;
 
     function composeAsk(event) {
@@ -412,9 +399,9 @@
         return null;
     }
 
-    // When neither fingerprint matches, say what the menu was made of —
-    // once per shape — so a missed menu can be identified from the log
-    // instead of guessed at.
+    // When neither fingerprint matches, say what the menu was made of, once
+    // per shape; so a missed menu can be identified from the log instead of
+    // guessed at.
     var loggedMenuShapes = {};
 
     function logMenuShape(options) {
@@ -510,16 +497,12 @@
         })();
     }
 
-    // The shell's own settings live in Fastmail's Settings screen, as a
-    // Device settings row between Custom swipes and Offline. That screen is a
-    // sidebar of app-source links (ul.v-Sources-list) on both desktop and
-    // mobile — the account menus differ by platform and Fastmail redraws
-    // them, so one row in the shared Settings list is the steady home.
+    // The shell's own settings live in Fastmail's Settings screen, as a Device
+    // settings row between Custom swipes and Offline.
     function dressSettingsList() {
-        // On the Mac the shell's own settings open from the app menu and ⌘,
-        // so the Settings screen needs no row for them — the row belongs only
-        // where there is no native way in, the phone and iPad. The Electron
-        // user-agent token, set only by the macOS build, marks the Mac.
+        // On the Mac the shell's own settings open from the app menu and ⌘, so
+        // the Settings screen needs no row for them; the row belongs only
+        // where there is no native way in, the phone and iPad.
         if (/Electron\//.test(navigator.userAgent)) return;
         var lists = document.querySelectorAll('ul.v-Sources-list');
         var list, swipes, offline;
@@ -540,11 +523,9 @@
             }
         }
         if (!list) return;
-        // Fastmail sizes the list with an inline pixel height for its
-        // collapse animation (row count times a fixed row height); an extra
-        // row overflows it and the next section's header laps the last row.
-        // Recompute it from the current children, and do so on every pass —
-        // a redraw can reset the height while keeping our row.
+        // Fastmail sizes the list with an inline pixel height for its collapse
+        // animation (row count times a fixed row height); an extra row
+        // overflows it and the next section's header laps the last row.
         if (list.querySelector('.fmshell-device-settings')) {
             fixListHeight(list, swipes);
             return;
@@ -584,10 +565,7 @@
         fixListHeight(list, swipes);
     }
 
-    // Grow the list's inline height to fit the added row. Only touch a list
-    // that Fastmail is sizing in pixels (its collapse animation); a list left
-    // at auto height flows on its own and needs no help. The row height comes
-    // from a real sibling so it tracks whatever Fastmail renders.
+    // Grow the list's inline height to fit the added row.
     function fixListHeight(list, sample) {
         if (!/px\s*$/.test(list.style.height)) return;
         var rowHeight = sample ? sample.offsetHeight : 0;
@@ -598,8 +576,7 @@
 
     // The Settings screen is a page, not a popup, and Fastmail redraws its
     // sidebar as sections change, so the row is re-added whenever the DOM
-    // settles rather than on a single click. dressSettingsList is cheap and
-    // idempotent, so a debounced observer is enough.
+    // settles rather than on a single click.
     function watchSettingsList() {
         var scheduled = false;
         function run() { scheduled = false; dressSettingsList(); }
@@ -812,25 +789,14 @@
     });
 
     // Fastmail's desktop-app hook. Its service worker decides and formats
-    // every notification — fed by the page's own live connection, so no
-    // push is needed — and, when it believes it is inside Fastmail's
-    // Electron app, hands it to the page, which calls
-    // window.electron.showNotification. The page decides "inside Electron"
-    // by `typeof electron == "object"`; the worker by "Electron/" in the
-    // user agent, which the macOS shell adds. Being that object is how the
-    // shell gets Fastmail's own notifications, preferences and all. Only
-    // where the token is present, so the phone is untouched.
-    //
-    // Everything Fastmail's bundles call on the object unguarded is here;
-    // showContextMenu and printToPDF are checked for before use and are
-    // left undefined on purpose, so Fastmail keeps its own context menu.
+    // every notification; fed by the page's own live connection, so no push is
+    // needed, and, when it believes it is inside Fastmail's Electron app,
+    // hands it to the page, which calls window.electron.showNotification.
     if (/Electron\//.test(navigator.userAgent) && typeof window.electron !== 'object') {
         var pendingNotifications = [];
 
         // A sound, if wanted, is asked for right after the notification and
         // synchronously, so the send waits a tick and the two travel as one.
-        // Fastmail can fire several in the same tick, so this is a queue,
-        // not a single slot — a single slot kept only the last of them.
         var flushNotifications = function () {
             var queued = pendingNotifications;
             pendingNotifications = [];
@@ -862,9 +828,8 @@
                     pendingNotifications[pendingNotifications.length - 1].sound = true;
                 }
             },
-            // Read, archived or deleted: Fastmail says which notifications
-            // are stale. Its badge is an unread count and is not the
-            // shell's, which shows Triage; it is ignored here.
+            // Read, archived or deleted: Fastmail says which notifications are
+            // stale.
             updateNotifications: function (options) {
                 var ids = (options && options.dismissEmailIds) || [];
                 if (ids.length) post('dismissNotifications', { ids: ids.map(String) });

@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-/// A link handed in from outside the view tree — a tapped notification —
+/// A link handed in from outside the view tree, a tapped notification,
 /// for AppShell to route as if it had arrived through onOpenURL.
 @MainActor
 public final class PendingLinks: ObservableObject {

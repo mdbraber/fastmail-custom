@@ -28,7 +28,7 @@ import Testing
     #expect(BadgeController.move(authorization: .allowed, count: 0) == .proceed)
 }
 
-// Denied is denied — nothing to do until the user changes it, which the live
+// Denied is denied; nothing to do until the user changes it, which the live
 // read will see on the next badge.
 @Test func deniedSkips() {
     #expect(BadgeController.move(authorization: .denied, count: 9) == .skip)

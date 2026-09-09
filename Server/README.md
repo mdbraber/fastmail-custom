@@ -15,27 +15,27 @@ of the Inbox, off the triage label and off its project label, unpins it and
 leaves any hold label on; Later files it under the first `HOLD_LABELS`
 name, replacing the triage and project labels but keeping the Inbox; Pin
 flags it and moves nothing. Labels are read fresh on every press, and the
-ones hidden from Fastmail's folder list — the history shelves — are never
+ones hidden from Fastmail's folder list; the history shelves, are never
 touched. A press that fails says so on the phone rather than going quiet,
 so the tokens have to be able to write.
 
 ## One-time setup
 
-1. **APNs key** — developer portal → Certificates, Identifiers & Profiles →
+1. **APNs key**; developer portal → Certificates, Identifiers & Profiles →
    Keys → +, tick *Apple Push Notifications service (APNs)*, download the
    `.p8` (only offered once), note the Key ID. Put the file in `secrets/`.
-2. **Fastmail tokens** — in each account: Settings → Privacy & Security →
+2. **Fastmail tokens**; in each account: Settings → Privacy & Security →
    Manage API tokens → New API token, scope *Mail*. Not read-only: the
    buttons on a notification write, and a read-only token fails them with
    `accountReadOnly` at the moment you press one.
-3. **Configure** — `cp .env.example .env` and fill it in. `DEVICE_SECRET`
+3. **Configure**; `cp .env.example .env` and fill it in. `DEVICE_SECRET`
    is any long random string (`openssl rand -hex 32`); the same value goes
    into the app repo's `Config/Local.xcconfig` as `PUSH_DEVICE_SECRET`.
    `APNS_TEAM_ID` is the `DEVELOPMENT_TEAM` from that same file.
-4. **Run** — `docker compose up -d --build`. Put the reverse proxy in front
+4. **Run**; `docker compose up -d --build`. Put the reverse proxy in front
    of `127.0.0.1:8080` at the address you gave as `PUBLIC_URL`; Fastmail
    calls back there over HTTPS.
-5. **Check** — `curl "$PUBLIC_URL/healthz"` lists each account with
+5. **Check**; `curl "$PUBLIC_URL/healthz"` lists each account with
    `notices` (`"push"`, or `"eventsource"` if Fastmail refused the push
    subscription for an API token; either works, push is quicker),
    `verified` (true once Fastmail's verification round-trip is done),
@@ -43,7 +43,7 @@ so the tokens have to be able to write.
    the Settings app and still gets the badge. If `verified` stays `false`
    for more than a minute, run `docker compose restart`; the subscription
    is recreated at every start.
-6. **Apps** — add `PUSH_SERVER_HOST` (the host, no `https://`) and
+6. **Apps**, add `PUSH_SERVER_HOST` (the host, no `https://`) and
    `PUSH_DEVICE_SECRET` to `Config/Local.xcconfig`, then `make deploy`.
    On the first launch the app asks for notification permission and
    registers its device token; `healthz` shows `devices` counting up.

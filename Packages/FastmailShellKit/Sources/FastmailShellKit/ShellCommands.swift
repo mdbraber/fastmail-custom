@@ -7,9 +7,7 @@ import SwiftUI
 @MainActor
 public enum ShellWindows {
     /// Set just before a window is asked for, and taken by the first window
-    /// set up afterwards. A window told it prefers tabs joins the group as it
-    /// is ordered in, so nothing is ever seen standing on its own — the fold
-    /// below is only the fallback for when that does not take.
+    /// set up afterwards.
     private static var wantsTab = false
 
     static func takeTabPreference() -> Bool {
@@ -18,8 +16,8 @@ public enum ShellWindows {
     }
 
     /// The window that appeared, if one did. A compose window opening at the
-    /// same moment must not be taken for it, and those refuse to be tabs, which
-    /// is the difference worth reading.
+    /// same moment must not be taken for it, and those refuse to be tabs,
+    /// which is the difference worth reading.
     public static func opened(before: [NSWindow], after: [NSWindow]) -> NSWindow? {
         let known = Set(before.map(ObjectIdentifier.init))
         return after.first {
@@ -28,11 +26,6 @@ public enum ShellWindows {
     }
 
     /// Open one and make it a tab of the window in front.
-    ///
-    /// Asking for a window does not produce one straight away, so the joining
-    /// waits and looks again a few times rather than once. If the window in
-    /// front is one that refuses tabs — a compose window — the new one is left
-    /// standing on its own rather than forced somewhere it does not belong.
     public static func openAsTab(host: NSWindow?, open: () -> Void) {
         guard let host, host.tabbingMode != .disallowed else {
             open()

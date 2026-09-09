@@ -70,7 +70,7 @@ export class JMAPClient {
     async call(method, args, using) {
         const [[name, result]] = await this.request([[method, args, 'c0']], using);
         if (name === 'error') {
-            const detail = result.description ? ` — ${result.description}` : '';
+            const detail = result.description ? `; ${result.description}` : '';
             throw new JMAPError(`${method}: ${result.type}${detail}`, { type: result.type });
         }
         return result;
@@ -79,10 +79,10 @@ export class JMAPClient {
     async mailboxes() {
         // Every property rather than a named few. The buttons on a
         // notification need `hidden`, Fastmail's own flag whose bit 1 is "not
-        // in the folder list" — 0 on the labels you file under, 1 on the
-        // history shelves — and it is an extension property: it comes back
-        // with everything else, but naming it in `properties` is refused as
-        // invalidArguments. A mailbox list is small; this costs nothing.
+        // in the folder list"; 0 on the labels you file under, 1 on the
+        // history shelves, and it is an extension property: it comes back with
+        // everything else, but naming it in `properties` is refused as
+        // invalidArguments.
         const result = await this.call('Mailbox/get', { accountId: this.accountId, ids: null });
         return result.list;
     }
@@ -123,13 +123,13 @@ export class JMAPClient {
     }
 
     // The one write this makes. A patch rather than whole maps of mailboxes
-    // and keywords, so anything the server has no opinion about — a label a
-    // rule put on, a keyword another client keeps — is left exactly as it was.
+    // and keywords, so anything the server has no opinion about, a label a
+    // rule put on, a keyword another client keeps; is left exactly as it was.
     async patchEmail(id, patch) {
         const result = await this.call('Email/set', { accountId: this.accountId, update: { [id]: patch } });
         const problem = result.notUpdated?.[id];
         if (problem) {
-            const detail = problem.description ? ` — ${problem.description}` : '';
+            const detail = problem.description ? `; ${problem.description}` : '';
             throw new JMAPError(`Email/set: ${problem.type}${detail}`, { type: problem.type });
         }
         return id;
@@ -147,7 +147,7 @@ export class JMAPClient {
         const created = result.created?.sub;
         if (created) return { id: created.id, expires: created.expires ?? expires };
         const problem = result.notCreated?.sub;
-        const detail = problem?.description ? ` — ${problem.description}` : '';
+        const detail = problem?.description ? `; ${problem.description}` : '';
         throw new JMAPError(`PushSubscription/set: ${problem?.type ?? 'not created'}${detail}`, { type: problem?.type ?? null });
     }
 
@@ -155,7 +155,7 @@ export class JMAPClient {
         const result = await this.call('PushSubscription/set', { update: { [id]: { verificationCode } } }, [CORE]);
         const problem = result.notUpdated?.[id];
         if (!problem) return;
-        const detail = problem.description ? ` — ${problem.description}` : '';
+        const detail = problem.description ? `; ${problem.description}` : '';
         throw new JMAPError(`PushSubscription/set: ${problem.type}${detail}`, { type: problem.type });
     }
 
@@ -218,10 +218,8 @@ const delay = (ms, signal) => new Promise((resolve) => {
     signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
 });
 
-// Keeps one event source connection open until `signal` aborts, handing
-// every StateChange to `onStateChange`, reconnecting with backoff. A
-// connection that stops saying even ping is dropped after two ping periods:
-// a socket the far end has forgotten looks exactly like a quiet mailbox.
+// Keeps one event source connection open until `signal` aborts, handing every
+// StateChange to `onStateChange`, reconnecting with backoff.
 export async function runEventSource({ url, headers, onStateChange, signal, fetch: fetchImpl = globalThis.fetch, log = console, ping = 300 }) {
     const idleMs = 2 * ping * 1000;
     let backoff = 1000;

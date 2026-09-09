@@ -3,7 +3,7 @@ Fastmail Custom Mode injector
 
 Fastmail serves `script-src 'self' …` with no 'unsafe-inline'. A userscript
 manager runs page-world code by adding an inline <script> to the page, which
-that policy refuses — so Custom mode never starts.
+that policy refuses; so Custom mode never starts.
 
 scripting.executeScript() does not go through the DOM, so it is not the page's
 script to refuse. Injecting with world "MAIN" therefore lands in the same
@@ -21,9 +21,7 @@ reload.
 const api = globalThis.browser || globalThis.chrome;
 
 // The beta site is the same app on its own origin, so it gets the same
-// treatment. Both are named outright rather than matched with a subdomain
-// wildcard, which would take in the marketing site and everything else on
-// fastmail.com along with them.
+// treatment.
 const TARGETS = ['https://app.fastmail.com/*', 'https://app.beta.fastmail.com/*'];
 const TARGET_PATTERN = /^https:\/\/app\.(beta\.)?fastmail\.com\//;
 const PAYLOAD = 'fastmail-custom-mode.js';
@@ -60,11 +58,8 @@ const getSettings = async () => {
     return Object.assign({}, DEFAULT_SETTINGS, stored.settings || {});
 };
 
-// Settings saved under 2.x keep keys 3.0 no longer has, and two whose
-// default moved: the badge label was Inbox, the bar had nine slots. Once,
-// on the first run of 3.0, a stored value still equal to its 2.x default
-// takes the 3.0 default and unknown keys are dropped; anything the user
-// set on purpose stays. The version mark keeps this from running twice.
+// Settings saved under 2.x keep keys 3.0 no longer has, and two whose default
+// moved: the badge label was Inbox, the bar had nine slots.
 const SETTINGS_VERSION = 3;
 const LEGACY_DEFAULTS = {
     appBadgeLabel: 'Inbox',

@@ -14,7 +14,7 @@ TRIES=${FASTMAIL_DEPLOY_TRIES:-60}
 
 # Build BOTH platforms before touching anything. A relaunched macOS shell or
 # an "OK" line printed before the iOS build ran once masked an iOS build
-# failure as a successful deploy — the phone kept the old build while the
+# failure as a successful deploy; the phone kept the old build while the
 # output read like everything shipped. So both builds must succeed here, and
 # only then does anything get installed or relaunched.
 echo "=== build macOS ==="
@@ -82,17 +82,17 @@ device_name () {
 
 # Why an install failed, in one line. A locked device and a sleeping one both
 # refuse in the same place, and only the second is worth waiting out in
-# silence — so the difference has to be said rather than retried blindly.
+# silence; so the difference has to be said rather than retried blindly.
 failure_reason () {
   case "$1" in
     *DeviceLocked*|*"device is locked"*|*"The device is locked"*)
-      print -r -- "locked — unlock it and this will go through" ;;
+      print -r -- "locked; unlock it and this will go through" ;;
     *"developer mode"*|*"Developer Mode"*)
-      print -r -- "Developer Mode is off — Settings › Privacy & Security" ;;
+      print -r -- "Developer Mode is off; Settings › Privacy & Security" ;;
     *"not paired"*|*"pairing"*|*"trust"*|*"Trust"*)
-      print -r -- "not trusted — accept the trust prompt on the device" ;;
+      print -r -- "not trusted, accept the trust prompt on the device" ;;
     *"could not be found"*|*"not connected"*|*Unavailable*|*unavailable*)
-      print -r -- "not reachable — asleep or off the network" ;;
+      print -r -- "not reachable, asleep or off the network" ;;
     *)
       # The first ERROR: line the tool printed, which is the useful one.
       # Split into an array first: subscripting the expansion inline indexes
@@ -103,12 +103,12 @@ failure_reason () {
   esac
 }
 
-# Keyed "$udid:$index" — one entry per app per device, so adding an app to
+# Keyed "$udid:$index"; one entry per app per device, so adding an app to
 # APPS is the whole change rather than another pair of maps.
 typeset -A installed seen last_error told
 
 # Install, keeping the error rather than discarding it, and say why the first
-# time a device's reason changes — once per reason, not once per attempt, so a
+# time a device's reason changes; once per reason, not once per attempt, so a
 # long wait stays readable.
 install_to () {
   local udid=$1 app=$2 out reason
@@ -154,7 +154,7 @@ for try in $(seq 1 $TRIES); do
       # "installed everywhere" are not the same claim, and reading one as
       # the other is how a device goes a long time without a build.
       #
-      # Skipped means "never installed to", read against what actually was —
+      # Skipped means "never installed to", read against what actually was,
       # not against the listing's state column, which reads `connected`
       # rather than `available (paired)` for a device just installed to, and
       # so reported every success as a skip.
@@ -176,13 +176,13 @@ done
 
 # Whatever landed still landed, so say which: a device that never woke up
 # should read as a missing device rather than as a failed build. The reason
-# goes with it — without one, a device that only needed unlocking is
+# goes with it; without one, a device that only needed unlocking is
 # indistinguishable from a broken build, which is a long way to look for a
 # short answer.
 for udid in ${(k)seen}; do
   state=""
   for i in {1..${#APPS}}; do state+="${NAMES[$i]}=${installed[$udid:$i]:-0} "; done
-  echo "$(device_name $udid) ($udid): ${state}— ${last_error[$udid]:-no error recorded}"
+  echo "$(device_name $udid) ($udid): ${state},  ${last_error[$udid]:-no error recorded}"
 done
 [ ${#seen} -eq 0 ] && echo "no paired devices found"
 echo "IOS INSTALL TIMED OUT"

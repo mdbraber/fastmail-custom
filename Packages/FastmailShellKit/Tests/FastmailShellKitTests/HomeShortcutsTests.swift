@@ -8,19 +8,14 @@ import Testing
     #expect(shortcuts.map(\.path) == ["/mail/Triage", "/mail/Inbox"])
     #expect(shortcuts.map(\.type) == [HomeShortcuts.labelType, HomeShortcuts.inboxType])
     #expect(Set(shortcuts.map(\.icon)).count == 2, "the two are told apart at a glance")
-    // The funnel, the same glyph the sidebar row and the switch above the
-    // list wear for this label, rather than the tag a label would otherwise
-    // get. It is a drawing of ours rather than one of Apple's, because Apple
-    // has no funnel: its filter symbol is three shortening lines.
+    // The funnel, the same glyph the sidebar row and the switch above the list
+    // wear for this label, rather than the tag a label would otherwise get.
     #expect(shortcuts.first?.icon == .template(HomeShortcuts.funnelImageName))
     #expect(shortcuts.last?.icon == .system("tray"))
 }
 
 // An icon that does not resolve draws a blank rather than complaining, and a
-// blank says nothing about which of the two was wrong. So both are checked:
-// the symbol against Apple's catalog, which is shared across platforms and so
-// answers for the phone from a suite running on the Mac, and the drawing
-// against the asset catalog both shells compile in.
+// blank says nothing about which of the two was wrong.
 #if canImport(AppKit)
 import AppKit
 

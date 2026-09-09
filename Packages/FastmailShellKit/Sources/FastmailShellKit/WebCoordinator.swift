@@ -12,9 +12,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
     private let model: ShellModel
     private var lastURL: URL
     private let openExternally: @MainActor (URL) -> Void
-    /// Whether the app is the one you are looking at. Asked when the web
-    /// content process dies, which reads very differently depending on the
-    /// answer.
+    /// Whether the app is the one you are looking at.
     private let isInFront: @MainActor () -> Bool
     // Keeps the settings observer alive exactly as long as the view exists
     var settingsPusher: CustomModeSettingsPusher?
@@ -54,8 +52,8 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         case cancel
         case cancelAndOpenExternally
         case cancelWithBanner
-        /// A page asking for a window of its own — "Open in new window" on a
-        /// message or a draft — which is given one rather than being made to
+        /// A page asking for a window of its own; "Open in new window" on a
+        /// message or a draft; which is given one rather than being made to
         /// take over the window it was asked from.
         case openInWindow
     }
@@ -75,8 +73,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
 
     /// Fastmail's own windows are always given one: it asks for them in more
     /// ways than a link click, and "Open in new window" is the app being used
-    /// rather than a page springing something on you. Anywhere else the old
-    /// rule stands — a window nobody clicked for is a pop-up.
+    /// rather than a page springing something on you.
     nonisolated static func windowOpenOutcome(
         navigationType: WKNavigationType,
         decision: NavigationDecision
@@ -218,13 +215,6 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
 
     /// The page's own process has gone. Reload either way; say so only when
     /// you were looking at it.
-    ///
-    /// iOS reclaims the web content process of a backgrounded app whenever it
-    /// wants the memory, and Fastmail's page is a large tenant. Coming back to
-    /// an app that has quietly reloaded is ordinary, and a banner about it
-    /// says nothing anyone can act on — it just greets you on the way in.
-    /// A process that dies while the page is in front of you is the other
-    /// case: something you were reading vanished, and that is worth a line.
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         if isInFront() {
             model.banner = "The page stopped responding and was reloaded."
@@ -262,7 +252,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
 
     // MARK: JavaScript dialogs
     //
-    // Fastmail asks through alert/confirm/prompt in a handful of flows —
+    // Fastmail asks through alert/confirm/prompt in a handful of flows,
     // deleting a rule confirms first, for one. WKWebView renders none of
     // them unless the UI delegate presents them itself; without these, a
     // confirm() silently answers "no" and the action looks like it simply

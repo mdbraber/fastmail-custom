@@ -68,10 +68,7 @@ test('thread ids are url-encoded', () => {
 });
 
 // Fastmail reads the last path segment as "<thread id>.<message id>", and a
-// segment with no dot in it as a message id on its own. So a bare thread id
-// is not a short way of naming the conversation — it is a message id that
-// matches no message, and the app falls back to showing the mailbox. That is
-// what a tapped notification did: it opened the list instead of the message.
+// segment with no dot in it as a message id on its own.
 test('the link names the message inside the thread, not the thread alone', () => {
     const url = threadURL(email());
     assert.equal(url, 'https://app.fastmail.com/mail/Inbox/T1.M1');
@@ -114,9 +111,8 @@ test('a label whose name needs encoding still makes one path segment', () => {
 });
 
 
-// Buttons on a notification come from a category the app registers under
-// this name. Without it iOS draws the banner with no buttons at all, so the
-// name has to travel with every alert and has to stay what the app expects.
+// Buttons on a notification come from a category the app registers under this
+// name.
 test('an alert names the category whose buttons the app registered', () => {
     const payload = alertPayload(email(), { badge: 1 });
     assert.equal(payload.aps.category, 'message');

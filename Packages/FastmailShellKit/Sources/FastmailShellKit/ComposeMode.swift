@@ -1,13 +1,7 @@
 import Foundation
 
-/// Where a message opens when you ask for one.
-///
-/// Fastmail's own C key writes the message in the page you are looking at.
-/// The Mac can do better than that when you want it: a tab beside the mailbox,
-/// or a window of its own. Which one you get is a setting, and the other two
-/// are always at hand — hold Option for the page, Command and Option for a
-/// tab — so the setting picks a habit rather than shutting a door. The C key
-/// and Fastmail's own Compose button both read the same way.
+/// Where a message opens when you ask for one. Fastmail's own C key writes the
+/// message in the page you are looking at.
 public enum ComposeMode: String, CaseIterable, Sendable {
     case inline
     case tab
@@ -51,9 +45,7 @@ public enum ComposeMode: String, CaseIterable, Sendable {
     }
 
     /// What a press of the C key, or a click of the Compose button, is asking
-    /// for. Plain follows the setting, so it asks for "default" and is told
-    /// where the message went; the other two name the place themselves.
-    /// Shift is Fastmail's own business, and Command on its own is Copy.
+    /// for.
     public static func asked(alt: Bool, command: Bool, shift: Bool) -> String? {
         if shift { return nil }
         if alt { return command ? tab.rawValue : inline.rawValue }
@@ -73,8 +65,6 @@ import AppKit
 @MainActor
 public enum ComposeCommands {
     /// Opens a message where the page asked for it, and says where it went.
-    /// "inline" is not something the app can do — it is Fastmail's own
-    /// compose — so it is handed back for the page to open itself.
     @discardableResult
     public static func open(asked: String, setting: ComposeMode = .stored()) -> String {
         guard let mode = ComposeMode.resolve(asked: asked, setting: setting) else {

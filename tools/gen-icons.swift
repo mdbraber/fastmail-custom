@@ -2,22 +2,6 @@ import AppKit
 import Foundation
 
 // Draws the shell apps' icons as vectors, in every iOS 18 appearance.
-//
-// The design is Fastmail's own: a two-tone diagonal field, a white disc, and
-// the "M" mark — two triangles. The old icons were rasters lifted from the
-// macOS apps (extract-icons.swift), soft at the edges and with no way to make
-// a dark variant; this draws the same geometry crisply from a palette.
-//
-// Light is the icon as it always was. Dark follows Fastmail's own dark icon:
-// a circle three quarters the icon wide — iOS paints its own dark background
-// behind the transparent corners — with the two-tone field inside it and the
-// mark, scaled up, straight on the halves. Tinted is grayscale on
-// transparency, for iOS to colour with the user's tint.
-//
-//   swift tools/gen-icons.swift preview <outdir>     every variant + preview.png
-//   swift tools/gen-icons.swift install              writes the app icon sets
-//
-// The Mac icon (icon-mac.png) is left alone: this is about the phone.
 
 struct Palette {
     let fieldDark: NSColor
@@ -26,9 +10,7 @@ struct Palette {
     // everywhere, and in the dark variant the large one goes white
     let markDark: NSColor
     // Tinted is grayscale and iOS colours every icon the same, so two apps
-    // sharing the mark would be twins. Both stay light on transparency — a
-    // dark fill all but vanishes on iOS's dark background — and one draws
-    // its disc as a ring rather than a fill, to stay telling apart.
+    // sharing the mark would be twins.
     let tintedRing: Bool
 }
 
@@ -56,7 +38,6 @@ let apps: [(name: String, target: String, palette: Palette)] = [
 // Geometry, in unit coordinates with y down. The mark is a box: a light
 // triangle on its left half with the apex at the centre, and a dark triangle
 // whose hypotenuse runs from the bottom-left corner to the top-right one.
-// The field's split runs along that same line, extended to the edges.
 struct Mark { let x0, x1, y0, y1: CGFloat }
 struct Geometry {
     let split: (left: CGFloat, right: CGFloat)  // where the split meets each edge
@@ -72,12 +53,12 @@ let onDisc = Geometry(split: (0.81, 0.185), mark: Mark(x0: 0.322, x1: 0.676, y0:
 let circleRadius: CGFloat = 0.375
 let inCircle = Geometry(split: (0.835, 0.165), mark: Mark(x0: 0.285, x1: 0.715, y0: 0.356, y1: 0.644))
 
-// The light icon is opaque — iOS wants the primary icon without an alpha
-// channel — while the dark and tinted ones are drawn on transparency.
+// The light icon is opaque; iOS wants the primary icon without an alpha
+// channel; while the dark and tinted ones are drawn on transparency.
 func bitmap(_ size: Int, alpha: Bool = true) -> NSBitmapImageRep {
     // Always 32 bits a pixel: an opaque icon is RGB with a padding byte, the
-    // one alpha-free layout a drawing context accepts, and its PNG still
-    // comes out without an alpha channel.
+    // one alpha-free layout a drawing context accepts, and its PNG still comes
+    // out without an alpha channel.
     NSBitmapImageRep(
         bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
         bitsPerSample: 8, samplesPerPixel: alpha ? 4 : 3, hasAlpha: alpha, isPlanar: false,
@@ -95,11 +76,9 @@ func draw(into rep: NSBitmapImageRep, _ body: (CGFloat) -> Void) {
     NSGraphicsContext.restoreGraphicsState()
 }
 
-/// One icon. `field` nil leaves the background transparent; a field fills
-/// the icon, which is then opaque and rendered without an alpha channel,
-/// unless `clipRadius` cuts it to a circle on transparency. `disc` nil draws
-/// the mark straight on the field; `ring` draws the disc as an outline
-/// rather than a fill.
+/// One icon. `field` nil leaves the background transparent; a field fills the
+/// icon, which is then opaque and rendered without an alpha channel, unless
+/// `clipRadius` cuts it to a circle on transparency.
 func icon(size: Int, field: (NSColor, NSColor)?, clipRadius: CGFloat? = nil, disc: NSColor?,
           geometry: Geometry, markLight: NSColor, markDark: NSColor, ring: Bool = false) -> NSBitmapImageRep {
     let rep = bitmap(size, alpha: field == nil || clipRadius != nil)
@@ -240,7 +219,7 @@ func preview(to path: String) {
                 img.draw(in: rect)
                 if column.variant == .tinted {
                     // What iOS makes of the grayscale: white takes the tint,
-                    // the grays a darker tint — a multiply with a sample blue
+                    // the grays a darker tint, a multiply with a sample blue
                     hex("#6C8CFF").setFill()
                     rect.fill(using: .multiply)
                 }

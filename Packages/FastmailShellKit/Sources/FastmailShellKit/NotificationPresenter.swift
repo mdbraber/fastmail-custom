@@ -2,9 +2,8 @@
 import AppKit
 import UserNotifications
 
-/// Shows the notifications Fastmail's own page hands over, and routes a
-/// click back to it. Fastmail decides what to notify and writes the words;
-/// this only presents them, the way its desktop app would.
+/// Shows the notifications Fastmail's own page hands over, and routes a click
+/// back to it.
 @MainActor
 public final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     public static let shared = NotificationPresenter()
@@ -37,7 +36,7 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
         guard authorizationGranted else {
             // Every notification that arrives while authorization is still
             // undetermined waits here, not just the one that triggered the
-            // request — otherwise a second or third notification in the same
+            // request; otherwise a second or third notification in the same
             // burst falls through to deliver() before the prompt resolves.
             waiting.append(notification)
             guard !authorizationPending else { return }

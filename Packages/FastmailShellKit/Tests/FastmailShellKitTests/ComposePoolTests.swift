@@ -113,9 +113,8 @@ private final class FakeWindow {}
     #expect(ComposeMode.stored(in: ["composeMode": "sideways"]) == .window)
 }
 
-// What the page watches for — the C key, and the Compose button — and what
-// each combination asks for. Plain follows the setting; the other two say
-// where they want it, whatever the setting is.
+// What the page watches for; the C key, and the Compose button, and what each
+// combination asks for.
 @Test func theComposeKeysSayWhereTheyWantIt() {
     #expect(ComposeMode.asked(alt: false, command: false, shift: false) == "default")
     #expect(ComposeMode.asked(alt: true, command: false, shift: false) == "inline")
@@ -149,7 +148,7 @@ private func makePlainWindow() -> NSWindow {
 }
 
 // A message can be written in a tab of the window it was asked from, but a
-// compose window will not host one — those refuse tabs — so from inside one it
+// compose window will not host one; those refuse tabs; so from inside one it
 // opens on its own instead.
 @Test @MainActor func aComposeTabNeedsAWindowThatTakesTabs() {
     let main = makePlainWindow()
@@ -190,7 +189,7 @@ private func makePlainWindow() -> NSWindow {
 }
 
 // Pulled out into a window of its own it keeps the colour but loses the bar,
-// so it falls back to the band that holds the window buttons — the same height
+// so it falls back to the band that holds the window buttons; the same height
 // as the header a mailbox page keeps above itself.
 @Test @MainActor func aComposeWindowOnItsOwnKeepsOnlyTheButtonsBand() {
     #expect(ComposeWindows.pageTop(barBottom: nil, air: 14, band: 52) == 52)
@@ -243,7 +242,7 @@ private func makePlainWindow() -> NSWindow {
 
 // The band carries who the message is going to, level with the window buttons
 // and clear of them, and centred in the window rather than in what is left of
-// it — the room taken on the left is taken on the right too.
+// it; the room taken on the left is taken on the right too.
 @Test @MainActor func theRecipientsSitLevelWithTheButtonsAndCentredInTheWindow() {
     let bounds = NSRect(x: 0, y: 0, width: 760, height: 640)
     let frame = ComposeWindows.labelFrame(in: bounds, band: 52, buttonsRight: 78, height: 18)
@@ -252,7 +251,7 @@ private func makePlainWindow() -> NSWindow {
     #expect(bounds.width - frame.maxX == frame.minX)
 }
 
-// Nothing addressed yet, nothing to say — unless the window is holding a
+// Nothing addressed yet, nothing to say; unless the window is holding a
 // message being read rather than written, which is named by its subject.
 @Test @MainActor func theBandNamesWhoeverItIsForOrWhatItIsAbout() {
     #expect(ComposeWindows.bandTitle(

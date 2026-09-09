@@ -3,8 +3,6 @@ import path from 'node:path';
 
 // What an account remembers between runs: where in Fastmail's change log it
 // is, which messages it already announced, and the last badge it sent.
-// Written whole and renamed into place, so a crash mid-write leaves the
-// old file rather than half of the new one.
 
 export const NOTIFIED_CAP = 500;
 

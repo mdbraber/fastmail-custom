@@ -44,7 +44,7 @@ private let fallback = URL(string: "https://app.fastmail.com/")!
 }
 
 // A pasted full address is tolerated but reduced to its path, and moved onto
-// the selected backend — the host that was typed never survives.
+// the selected backend; the host that was typed never survives.
 @Test func aFullAddressIsReducedToItsPath() {
     #expect(StartView.resolve("https://app.fastmail.com/mail/Archive", default: fallback, backend: .production)
         == URL(string: "https://app.fastmail.com/mail/Archive")!)
@@ -62,7 +62,7 @@ private let fallback = URL(string: "https://app.fastmail.com/")!
 }
 
 // The host on a pasted address is replaced, not compared, so a shouted one
-// comes back in the backend's own spelling — and a trailing dot is not it.
+// comes back in the backend's own spelling, and a trailing dot is not it.
 @Test func aPastedHostIsCaseInsensitiveButATrailingDotIsRejected() {
     #expect(StartView.resolve("https://APP.FASTMAIL.COM/mail/Inbox", default: fallback, backend: .production)
         == URL(string: "https://app.fastmail.com/mail/Inbox")!)

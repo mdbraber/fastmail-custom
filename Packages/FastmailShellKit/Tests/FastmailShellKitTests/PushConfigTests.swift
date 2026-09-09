@@ -60,8 +60,7 @@ import Testing
 
 // The Archive button asks the push server to do the work: the phone holds no
 // Fastmail credentials, and a background action has seconds rather than the
-// time a whole sign-in would take. It vouches for itself with the same secret
-// it registers with, since it is the same device.
+// time a whole sign-in would take.
 @Test func theArchiveRequestNamesTheMessageAndCarriesTheSecret() throws {
     let config = try #require(PushConfig(host: "push.example.net/base", secret: "s3cret"))
     let request = config.action("archive", account: "personal", emailId: "M1")
@@ -83,9 +82,8 @@ import Testing
     #expect(PushAction.category == "message")
 }
 
-// Three buttons, in the order they are drawn — iOS shows them in the order
-// they are registered, so the order is the whole of the priority. The names
-// are the ones the server's own list of actions accepts.
+// Three buttons, in the order they are drawn; iOS shows them in the order they
+// are registered, so the order is the whole of the priority.
 @Test func theNotificationCarriesTheThreeVerbsInOrder() {
     #expect(PushAction.allCases.map(\.rawValue) == ["archive", "later", "pin"])
     #expect(PushAction.allCases.map(\.title) == ["Archive", "Later", "Pin"])

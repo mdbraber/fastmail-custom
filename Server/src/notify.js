@@ -15,22 +15,9 @@ export function senderName(email) {
     return (from.name || '').trim() || from.email || 'Unknown sender';
 }
 
-// Where the message is opened. A banner should land on the message in the
-// list it is worked from: one still carrying the badge label opens in that
-// label, where the triage verbs act on the list behind it. Anything else —
-// already triaged, or no badge label configured — opens in the Inbox.
-//
-// The last segment names both the conversation and the message in it,
-// separated by a dot, because that is how the app reads it back:
-//
-//     const at = segment.indexOf('.');
-//     thread  = at > -1 ? segment.slice(0, at) : '';
-//     message = at > -1 ? segment.slice(at + 1) : segment;
-//
-// A segment with no dot is therefore a message id on its own, not a short
-// way of naming the conversation. Sending the thread id alone meant sending
-// a message id that matches no message, and the app answers that by showing
-// the mailbox — which is what a tapped notification used to do.
+// Where the message is opened. A banner should land on the message in the list
+// it is worked from: one still carrying the badge label opens in that label,
+// where the triage verbs act on the list behind it.
 export function threadURL(email, { badge } = {}) {
     const inTriage = badge?.id && email.mailboxIds?.[badge.id] === true;
     const list = inTriage ? badge.label : 'Inbox';
@@ -41,9 +28,6 @@ export function threadURL(email, { badge } = {}) {
 // The APNs payload for one new message. `badge` is the conversation count to
 // show, or null when there is no badge label to count; `context` is that
 // label's id and name, so the link can open the message where it is worked.
-// The category whose buttons the app registers under this name. iOS draws no
-// buttons at all on a notification whose category it does not know, so the
-// two spellings — here and in the app — have to stay the same.
 export const ALERT_CATEGORY = 'message';
 
 export function alertPayload(email, { badge, context = null }) {

@@ -9,9 +9,9 @@ public struct Profile: Equatable, Sendable {
     public let accountID: String?
     public let handoffScheme: String?
     /// Which server this profile is pointed at. Carried rather than looked up
-    /// so the pieces that build addresses — compose, link routing, the host
-    /// the bridge expects — cannot disagree with the page that is actually
-    /// loaded, whatever the defaults say by the time they are asked.
+    /// so the pieces that build addresses; compose, link routing, the host the
+    /// bridge expects; cannot disagree with the page that is actually loaded,
+    /// whatever the defaults say by the time they are asked.
     public let backend: Backend
 
     public init(
@@ -49,8 +49,7 @@ public struct Profile: Equatable, Sendable {
     }
 
     /// The address to open, which is two settings at once: the backend says
-    /// which server, the start view says which page on it. `startURL` is the
-    /// profile's own default and stands in for the second when it is unset.
+    /// which server, the start view says which page on it.
     public func startURL(readingFrom defaults: UserDefaults) -> URL {
         let backend = Backend.current(defaults)
         return StartView.resolve(

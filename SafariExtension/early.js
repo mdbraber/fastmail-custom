@@ -1,5 +1,5 @@
 /*
-Fastmail Custom Mode — head start
+Fastmail Custom Mode; head start
 
 The payload runs in the page world, which means waiting for the document to be
 complete and then for Fastmail itself to be ready. Fastmail paints its first
@@ -8,12 +8,12 @@ chip appears and then vanishes, and label colours turn up late.
 
 Neither the stylesheet nor the body class needs Fastmail once the payload has
 worked them out, so it leaves both in localStorage and this replays them at
-document_start — before there is anything on screen to correct. A content
+document_start; before there is anything on screen to correct. A content
 script is enough: only the JavaScript world is isolated, while localStorage is
 scoped to the origin and therefore shared with the page.
 
-Anything replayed wrongly — a view opened for the first time, a label recoloured
-in another tab — is corrected by the payload a moment later. The worst case is
+Anything replayed wrongly, a view opened for the first time, a label recoloured
+in another tab; is corrected by the payload a moment later. The worst case is
 the flash this exists to remove, which is where we started.
 */
 
@@ -69,10 +69,6 @@ const shouldHide = storedMode() !== '0' &&
 
 // On <html>, which also means there is nothing to wait for: at document_start
 // <body> may not exist yet, but the document element always does.
-//
-// It has to be <html> in any case. Fastmail rewrites body.className wholesale
-// whenever its root view redraws — entering keyboard mode is enough — and takes
-// any class of ours with it.
 if (shouldHide) {
     document.documentElement.classList.add(HIDE_CLASS);
 }

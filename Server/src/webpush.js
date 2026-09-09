@@ -1,10 +1,8 @@
 import { createDecipheriv, createECDH, hkdfSync, randomBytes } from 'node:crypto';
 
-// Web Push message encryption (RFC 8291) over the aes128gcm content
-// encoding (RFC 8188): what Fastmail applies to every callback once a push
-// subscription carries keys. We are the "user agent" of those RFCs; Fastmail
-// is the "application server", and puts its own ephemeral public key in the
-// keyid field of each message.
+// Web Push message encryption (RFC 8291) over the aes128gcm content encoding
+// (RFC 8188): what Fastmail applies to every callback once a push subscription
+// carries keys.
 
 const CURVE = 'prime256v1';
 const PUBLIC_KEY_LENGTH = 65; // uncompressed P-256 point
@@ -71,9 +69,9 @@ function deriveKeys({ privateKey, publicKey, auth }, senderPublic, salt) {
     };
 }
 
-// The sequence number is a 96-bit big-endian integer XORed into the nonce
-// (RFC 8188 §2.3); only its low 32 bits can ever be set here, since the
-// HTTP body cap (http.js) keeps a message to a few thousand records at most.
+// The sequence number is a 96-bit big-endian integer XORed into the nonce (RFC
+// 8188 §2.3); only its low 32 bits can ever be set here, since the HTTP body
+// cap (http.js) keeps a message to a few thousand records at most.
 function nonceFor(base, sequence) {
     const nonce = Buffer.from(base);
     nonce.writeUInt32BE((nonce.readUInt32BE(8) ^ sequence) >>> 0, 8);

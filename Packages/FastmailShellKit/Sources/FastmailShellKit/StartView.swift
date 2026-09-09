@@ -3,13 +3,8 @@ import Foundation
 public enum StartView {
     public static let defaultsKey = "startView"
 
-    /// The setting is a path — which view to open — not a server: the server
-    /// is the backend's question. The path is placed on the selected backend,
-    /// so the two settings compose instead of contradicting each other. Empty
-    /// means the default view. A full web address is tolerated but reduced to
-    /// its path, and rejected if it names another host or an insecure scheme,
-    /// so a stale full URL cannot smuggle in a page the native bridge refuses
-    /// to talk to.
+    /// The setting is a path; which view to open; not a server: the server is
+    /// the backend's question.
     public static func resolve(
         _ raw: String?,
         default fallback: URL,

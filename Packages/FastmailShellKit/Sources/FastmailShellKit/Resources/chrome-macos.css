@@ -9,8 +9,8 @@ body.fmshell-fullscreen {
 
 /* A tab bar is drawn over the page rather than moving it, so what sits below
    the header is moved down to clear it. The header itself stays put, window
-   buttons and all, and the band left behind it is the window's own colour —
-   taken from the header — so the tabs read as sitting under the search bar. */
+   buttons and all, and the band left behind it is the window's own colour,
+   taken from the header; so the tabs read as sitting under the search bar. */
 body.fmshell-tabbed .v-Page-main {
     margin-top: var(--fmshell-tab-inset, 0px) !important;
 }

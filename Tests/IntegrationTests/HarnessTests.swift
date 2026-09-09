@@ -348,8 +348,7 @@ final class HarnessTests: XCTestCase {
     }
 
     // A page with no theme to ask reports no answer, rather than one inferred
-    // from whatever colour it happens to be painted. The colour is unchanged
-    // here, so this only reports if the flag counts as part of what is new.
+    // from whatever colour it happens to be painted.
     func testAPageWithNoThemeToAskReportsNoDarkFlag() async throws {
         webView = try makeWebView(userScript: "", metadata: Self.meta())
         try await load(webView)
@@ -546,8 +545,7 @@ final class HarnessTests: XCTestCase {
     }
 
     // On the Mac the shell's settings open from the app menu and Cmd-comma, so
-    // the Settings screen carries no Device settings row. The Electron token in
-    // the user agent — set only by the macOS build — is the mark it gates on.
+    // the Settings screen carries no Device settings row.
     func testDeviceSettingsRowIsAbsentInTheMacBuild() async throws {
         webView = try makeWebView(
             userScript: "",

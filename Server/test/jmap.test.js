@@ -133,7 +133,7 @@ test('a push subscription is created without an account id, verified, or refused
 
     await client.verifyPushSubscription('ps1', 'code');
     assert.deepEqual(calls.at(-1).body.methodCalls[0][1], { update: { ps1: { verificationCode: 'code' } } });
-    await assert.rejects(client.verifyPushSubscription('ps1', 'stale'), /invalidProperties — wrong code/);
+    await assert.rejects(client.verifyPushSubscription('ps1', 'stale'), /invalidProperties; wrong code/);
 
     await assert.rejects(
         client.createPushSubscription({ deviceClientId: 'd', url: 'https://x/z', types: ['Email'], expires: null }),

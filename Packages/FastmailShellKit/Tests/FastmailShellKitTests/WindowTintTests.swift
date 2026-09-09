@@ -4,11 +4,7 @@ import AppKit
 @testable import FastmailShellKit
 
 // The window's light-or-dark trim follows what Fastmail says its theme is,
-// never what colour happens to be under the sampler. Judging by luminance put
-// the Work account's sky blue at 0.4903 — a hair under the old 0.5 cut — and
-// Fastmail's navy log-in screen at 0.2151, so both dragged the window into
-// dark mode, and with it the page, since a web view reads its colour scheme
-// from the window it sits in.
+// never what colour happens to be under the sampler.
 
 @Test @MainActor func theWindowFollowsFastmailsOwnDarkTheme() {
     let window = NSWindow()

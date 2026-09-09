@@ -49,7 +49,7 @@ export class DeviceRegistry {
 
     // One write at a time: a registration and a prune arriving together would
     // otherwise share the one .tmp file, and the loser renames a file that is
-    // already gone. A save that failed does not stop the next one.
+    // already gone.
     save() {
         this.saving = this.saving.catch(() => {}).then(() => this.write());
         return this.saving;

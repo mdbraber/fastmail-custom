@@ -9,10 +9,10 @@ public struct HomeShortcut: Equatable, Sendable {
     public enum Icon: Hashable, Sendable {
         /// A name from Apple's own symbol catalog.
         case system(String)
-        /// A template image in the app's asset catalog. Needed for the
-        /// funnel, which Apple has no symbol for: its filter glyph is three
-        /// shortening lines, and the funnel is what this label wears
-        /// everywhere else it is drawn.
+        /// A template image in the app's asset catalog. Needed for the funnel,
+        /// which Apple has no symbol for: its filter glyph is three shortening
+        /// lines, and the funnel is what this label wears everywhere else it
+        /// is drawn.
         case template(String)
     }
 
@@ -24,8 +24,7 @@ public struct HomeShortcut: Equatable, Sendable {
 }
 
 /// The home screen's long-press menu: the badge label's own view and the
-/// Inbox, the two lists worth opening straight into. The badge label is a
-/// setting, so the menu is rebuilt whenever it changes.
+/// Inbox, the two lists worth opening straight into.
 public enum HomeShortcuts {
     public static let labelType = "shell.open.badgeLabel"
     public static let inboxType = "shell.open.inbox"
@@ -35,9 +34,9 @@ public enum HomeShortcuts {
     static let inboxTitle = "Inbox"
     static let inboxPath = "/mail/Inbox"
 
-    /// The funnel, drawn from the same geometry the sidebar row and the
-    /// switch above the list use, and carried in the apps' shared asset
-    /// catalog because Apple's catalog has no funnel in it.
+    /// The funnel, drawn from the same geometry the sidebar row and the switch
+    /// above the list use, and carried in the apps' shared asset catalog
+    /// because Apple's catalog has no funnel in it.
     public static let funnelImageName = "TriageFunnel"
 
     public static func shortcuts(badgeLabel: String?) -> [HomeShortcut] {
@@ -51,8 +50,7 @@ public enum HomeShortcuts {
         guard !label.isEmpty, label.lowercased() != inboxTitle.lowercased() else { return [inbox] }
         // The funnel, not a tag. Everywhere else this label is drawn it wears
         // that glyph, because what it names is the mail still waiting rather
-        // than a label like any other. The long-press menu was the one place
-        // still showing a tag.
+        // than a label like any other.
         let shortcut = HomeShortcut(
             type: labelType,
             title: label,
@@ -73,8 +71,7 @@ public enum HomeShortcuts {
 
     /// The address a shortcut opens. A shortcut carries a path and nothing
     /// else: anything that is not one is refused rather than opened, so a
-    /// stale entry cannot name another host. The production host is used;
-    /// the shell rehosts to the selected backend as it does for a push.
+    /// stale entry cannot name another host.
     public static func url(path: String, backend: Backend = .standard) -> URL? {
         guard path.hasPrefix("/"), !path.hasPrefix("//"), !path.contains("://") else { return nil }
         var components = URLComponents()
@@ -101,9 +98,9 @@ extension CharacterSet {
 
 #if canImport(UIKit)
 extension HomeShortcuts {
-    /// A template image is looked up in the main bundle's asset catalog,
-    /// which is the app's own — the shared catalog these live in is compiled
-    /// into both shells, so the name resolves in either.
+    /// A template image is looked up in the main bundle's asset catalog, which
+    /// is the app's own; the shared catalog these live in is compiled into
+    /// both shells, so the name resolves in either.
     static func icon(for icon: HomeShortcut.Icon) -> UIApplicationShortcutIcon {
         switch icon {
         case .system(let name):

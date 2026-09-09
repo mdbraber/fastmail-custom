@@ -1,8 +1,7 @@
 import Foundation
 
-/// The one thing the app reads out of a push: the thread's address the
-/// server put in `url`. Only https is taken here; LinkRouter still gets to
-/// refuse anything that is not Fastmail's.
+/// The one thing the app reads out of a push: the thread's address the server
+/// put in `url`.
 public enum PushPayload {
     public static func url(from userInfo: [AnyHashable: Any]) -> URL? {
         guard
@@ -23,13 +22,7 @@ public enum PushPayload {
 
 /// The buttons a notification carries, named the same here as in the push
 /// server, which does the work: each raw value is one of the names its
-/// `/actions` route accepts. iOS draws no buttons at all on a notification
-/// whose category it does not know, so the spellings have to stay in step.
-///
-/// The order is the order they are drawn, and that is the whole of the
-/// priority — iOS shows the first four and nothing else, and the buttons only
-/// appear once a banner is pulled down, so a long list is a menu to read
-/// rather than a tap saved. Three verbs, and the commonest first.
+/// `/actions` route accepts.
 public enum PushAction: String, CaseIterable {
     case archive
     case later
@@ -47,9 +40,7 @@ public enum PushAction: String, CaseIterable {
         }
     }
 
-    /// Said as a notification of its own when the press does not land. The
-    /// banner is gone by then, so a failure that said nothing would look
-    /// exactly like a success.
+    /// Said as a notification of its own when the press does not land.
     public var failureTitle: String {
         switch self {
         case .archive: return "Not archived"

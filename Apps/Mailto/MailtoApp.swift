@@ -3,9 +3,6 @@ import FastmailShellKit
 
 /// The chooser. A mailto link arrives, it asks which account the message is
 /// from, and hands the link to that shell's compose window.
-///
-/// It holds no mail and signs in to nothing: both shells already answer
-/// `compose?mailto=`, so this only asks the question and forwards the answer.
 @main
 struct MailtoApp: App {
     @State private var mailto: URL?
@@ -15,9 +12,6 @@ struct MailtoApp: App {
             ChooserView(mailto: mailto)
                 // A link that arrives while the app is already open replaces
                 // the one on screen; the newest tap is the one you meant.
-                // A mailto arrives either as itself or wrapped in this app's
-                // own scheme, which is how Shortcuts can reach it while iOS
-                // still gives mailto taps to the default mail app.
                 .onOpenURL { url in
                     if let arrived = MailtoChooser.incoming(url) { mailto = arrived }
                 }
@@ -94,9 +88,8 @@ struct ChooserView: View {
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            // iOS gives mailto taps to the default mail app, which this
-            // cannot be until Apple grants the capability. Until then the
-            // way in is a Shortcut opening this address.
+            // iOS gives mailto taps to the default mail app, which this cannot
+            // be until Apple grants the capability.
             Text("\(MailtoChooser.scheme)://compose?mailto=…")
                 .font(.footnote.monospaced())
                 .foregroundStyle(.tertiary)
@@ -105,9 +98,7 @@ struct ChooserView: View {
     }
 
     /// A colour each, so the answer is a glance rather than a read: green is
-    /// personal, blue is work. Anything the chooser learns to offer later
-    /// falls back to the system's own accent rather than borrowing one of
-    /// these two, which mean something.
+    /// personal, blue is work.
     private func tint(_ target: MailtoTarget) -> Color {
         switch target.id {
         case "personal": return .green

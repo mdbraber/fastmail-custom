@@ -35,8 +35,8 @@ import WebKit
     #expect(WebCoordinator.windowOpenOutcome(navigationType: .linkActivated, decision: .refuse) == .cancelWithBanner)
 }
 
-// Fastmail asks for a window of its own in more ways than a link click —
-// "Open in new window" on a message is one — and all of them get a window.
+// Fastmail asks for a window of its own in more ways than a link click,
+// "Open in new window" on a message is one, and all of them get a window.
 @Test func aFastmailWindowIsGivenOneHoweverItWasAskedFor() {
     #expect(WebCoordinator.windowOpenOutcome(navigationType: .other, decision: .allow) == .openInWindow)
     #expect(WebCoordinator.windowOpenOutcome(navigationType: .formSubmitted, decision: .allow) == .openInWindow)
@@ -75,9 +75,7 @@ import WebKit
 }
 
 // The system reclaims a backgrounded app's web content process routinely, and
-// coming back to a page that reloaded itself is ordinary. Saying so there is
-// noise about something nobody can act on; saying so when the page vanished
-// while you were reading it is an explanation.
+// coming back to a page that reloaded itself is ordinary.
 @MainActor
 @Test func aTerminationInTheBackgroundReloadsWithoutSayingSo() {
     let model = ShellModel()
