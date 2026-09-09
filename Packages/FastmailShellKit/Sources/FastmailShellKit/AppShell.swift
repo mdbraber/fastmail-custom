@@ -117,6 +117,7 @@ public struct AppShell: View {
         .onAppear {
             ComposeWindows.shared.configure(profile: live)
             NotificationPresenter.shared.install()
+            TabSwitcher.install()
             NotificationPresenter.shared.onClick = { data in
                 // Hand the click to the page's service worker, which wrote the
                 // payload and knows how to open the message

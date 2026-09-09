@@ -26,6 +26,12 @@ public enum ShellWindows {
     }
 
     /// Open one and make it a tab of the window in front.
+    ///
+    /// The preference is left standing until a window takes it: SwiftUI builds
+    /// one when it gets round to it, sometimes seconds later, and clearing it
+    /// on the next line meant the window that finally arrived was never told
+    /// it was meant to be a tab. It is dropped after a while in case no window
+    /// ever comes, so an unrelated one later cannot pick it up.
     public static func openAsTab(host: NSWindow?, open: () -> Void) {
         guard let host, host.tabbingMode != .disallowed else {
             open()
@@ -34,10 +40,15 @@ public enum ShellWindows {
         let before = NSApplication.shared.windows
         wantsTab = true
         open()
-        wantsTab = false
-        join(host: host, before: before, tries: 8)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+            MainActor.assumeIsolated { _ = takeTabPreference() }
+        }
+        join(host: host, before: before, tries: 60)
     }
 
+    /// The window is waited for rather than assumed: SwiftUI takes its time
+    /// building one, and the first of a session can take seconds, which used
+    /// to run the wait out and leave the tab standing as a window of its own.
     private static func join(host: NSWindow, before: [NSWindow], tries: Int) {
         guard tries > 0 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {

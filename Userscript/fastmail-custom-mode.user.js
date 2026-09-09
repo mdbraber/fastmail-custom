@@ -40,9 +40,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // Keystroke that toggles Custom mode
     const SHORTCUT = 'Shift-I';
-    // 1 … 9 and 0 go to the sources listed above the Labels heading.
-    const SOURCE_SHORTCUT_COUNT = 9;
-    const SOURCE_SHORTCUT_MODIFIERS = ['Meta'];
+    // Option-Command and 1 … 9 or 0 go to the sources listed above the Labels
+    // heading. Command and a number used to do the same; it belongs to the
+    // window's tabs in the shell apps, and to the browser's tabs elsewhere.
 
     // Option shortcuts are matched on the physical key rather than the
     // character, because Option is what a Mac keyboard uses to reach a second
@@ -100,6 +100,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // And the badge counts the same set the filtered list shows, rather
         // than everything the label has ever held.
         filteredLabelCounts: true,
+        // Filing steps on to the next message only while that message is
+        // still in triage; the run is over otherwise, and the list is where
+        // it ends.
+        backToListAfterTriage: true,
         // The label a rule puts on everything incoming. Taken off by keeping
         // or filing; the script never adds it.
         triageLabel: 'Triage',
@@ -2979,7 +2983,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
             // The run ends where the triage label does. With no triage label
             // set there is no run to end, and the setting has the last word.
-            const triage = target && triageMailbox(target.get('accountId'));
+            const triage = settings.backToListAfterTriage && target &&
+                triageMailbox(target.get('accountId'));
             const stillTriage = !triage || carriesMailbox(target, triage);
 
             // Nothing that way is the end of the list, and the mailbox is what
@@ -4701,17 +4706,21 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const bindOptionShortcuts = () => {
         document.addEventListener('keydown', (event) => {
-            if (!event.altKey || event.metaKey || event.ctrlKey) return;
+            if (!event.altKey || event.ctrlKey) return;
             if (isTypingTarget(event.target)) return;
 
             // Move to as Fastmail ships it. Matched on the physical key: on a
             // Mac, Option-V arrives as "√", so there is no name to register.
-            if (event.code === STOCK_MOVE_CODE && moveButton) {
+            if (!event.metaKey && event.code === STOCK_MOVE_CODE && moveButton) {
                 event.preventDefault();
                 wantOurMove = false;
                 moveButton.target[moveButton.method]();
                 return;
             }
+
+            // The sources above Labels take Command as well, so that Command
+            // and a number on its own is free for the window's tabs.
+            if (!event.metaKey) return;
 
             const source = OPTION_SOURCE_CODES.indexOf(event.code);
             if (source === -1) return;
@@ -5003,12 +5012,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 updateIndicator();
             }, 150);
         });
-
-        for (let i = 1; i <= SOURCE_SHORTCUT_COUNT; i += 1) {
-            SOURCE_SHORTCUT_MODIFIERS.forEach((modifier) => {
-                shortcut(`${modifier}-${i}`, () => goToSourceAt(i - 1));
-            });
-        }
 
         bindOptionShortcuts();
         addObservers();
