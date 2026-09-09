@@ -64,7 +64,7 @@ private func makeWindow() -> NSWindow {
     defer { NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window) }
     observeFullScreen(window, webView: webView, model: model)
     #expect(window.backgroundColor != NSColor(srgbRed: 214.0 / 255, green: 216.0 / 255, blue: 218.0 / 255, alpha: 1))
-    model.tint = "#d6d8da"
+    model.tint = PageTint(color: "#d6d8da", isDark: false)
     #expect(window.backgroundColor == NSColor(srgbRed: 214.0 / 255, green: 216.0 / 255, blue: 218.0 / 255, alpha: 1))
     #expect(window.appearance?.name == .aqua)
 }
@@ -76,7 +76,7 @@ private func makeWindow() -> NSWindow {
     defer { NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window) }
     observeFullScreen(window, webView: webView, model: model)
     let before = window.backgroundColor
-    model.tint = "not-a-color"
+    model.tint = PageTint(color: "not-a-color", isDark: false)
     #expect(window.backgroundColor == before)
 }
 
@@ -86,7 +86,7 @@ private func makeWindow() -> NSWindow {
     let model = ShellModel()
     observeFullScreen(window, webView: webView, model: model)
     NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window)
-    model.tint = "#000000"
+    model.tint = PageTint(color: "#000000", isDark: true)
     #expect(window.backgroundColor != NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
 }
 

@@ -110,9 +110,14 @@ func configureWindow(_ window: NSWindow) {
 }
 
 @MainActor
-func applyTint(_ value: String, to window: NSWindow) {
+func applyTint(_ value: String, isDark: Bool?, to window: NSWindow) {
     guard let rgb = ThemeColor.components(from: value) else { return }
-    window.appearance = NSAppearance(named: ThemeColor.isDark(rgb) ? .darkAqua : .aqua)
+    // Only Fastmail can say whether its theme is dark; a sampled colour cannot
+    // be asked. With no answer the appearance is left alone, so a navy log-in
+    // screen no longer takes the whole app dark with it.
+    if let isDark {
+        window.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
+    }
     window.backgroundColor = NSColor(
         srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: 1
     )
@@ -168,9 +173,9 @@ final class FullScreenObserver {
                 onClose()
             }
         }
-        tintCancellable = model.$tint.sink { [weak window] color in
-            guard let color, let window else { return }
-            applyTint(color, to: window)
+        tintCancellable = model.$tint.sink { [weak window] tint in
+            guard let tint, let window else { return }
+            applyTint(tint.color, isDark: tint.isDark, to: window)
         }
     }
 

@@ -11,7 +11,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let expectedHost: String
     private let onLog: (String) async -> Void
     private let onError: (String) async -> Void
-    private let onTheme: (String) async -> Void
+    private let onTheme: (String, Bool?) async -> Void
     private let onDragRegions: (CGRect, [CGRect]) async -> Void
     private let onShare: @MainActor (ShareRequest) -> Void
     private let onBadge: @MainActor (Int) -> Void
@@ -25,7 +25,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         expectedHost: String,
         onLog: @escaping (String) async -> Void,
         onError: @escaping (String) async -> Void,
-        onTheme: @escaping (String) async -> Void = { _ in },
+        onTheme: @escaping (String, Bool?) async -> Void = { _, _ in },
         onDragRegions: @escaping (CGRect, [CGRect]) async -> Void = { _, _ in },
         onShare: @escaping @MainActor (ShareRequest) -> Void = { $0.completion() },
         onBadge: @escaping @MainActor (Int) -> Void = { _ in },
@@ -90,7 +90,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             guard let color = payload["color"] as? String else {
                 return BridgeReply(value: nil, error: "theme payload missing color")
             }
-            await onTheme(color)
+            // isDark is Fastmail's own answer. It is absent on pages that
+            // have no theme to ask, and absent means unknown, not light.
+            await onTheme(color, payload["isDark"] as? Bool)
             return BridgeReply(value: nil, error: nil)
         case "dragRegions":
             guard let values = payload["drag"] as? [Double], let drag = Self.rect(from: values) else {

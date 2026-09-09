@@ -24,18 +24,6 @@ import Testing
     #expect(ThemeColor.components(fromHex: "rgb(1,2,3)") == nil)
 }
 
-@Test func judgesLightnessByLuminance() {
-    #expect(ThemeColor.isDark((0, 0, 0)))
-    #expect(!ThemeColor.isDark((1, 1, 1)))
-    #expect(!ThemeColor.isDark((214.0 / 255, 216.0 / 255, 218.0 / 255)))
-    #expect(ThemeColor.isDark((0.1, 0.1, 0.12)))
-}
-
-@Test func weightsGreenMoreThanBlue() {
-    #expect(ThemeColor.isDark((0, 0, 1)))
-    #expect(!ThemeColor.isDark((0, 1, 0)))
-}
-
 @Test func parsesFunctionalRGBAsGetComputedStyleReturnsIt() throws {
     let rgb = try #require(ThemeColor.components(from: "rgb(124, 179, 66)"))
     #expect(abs(rgb.0 - 124.0 / 255.0) < 0.001)
@@ -55,7 +43,7 @@ import Testing
 
 @Test func stillAcceptsHexThroughTheCommonEntryPoint() throws {
     let rgb = try #require(ThemeColor.components(from: "#f4f5f5"))
-    #expect(!ThemeColor.isDark(rgb))
+    #expect(abs(rgb.0 - 244.0 / 255.0) < 0.001)
 }
 
 @Test func rejectsMalformedFunctionalValues() {

@@ -328,6 +328,38 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(reported, "rgb(124, 179, 66)")
     }
 
+    // The window's light-or-dark trim follows Fastmail's own answer, not a
+    // guess at the header's luminance: the Work account's sky blue measures
+    // darker than the old threshold allowed, and the navy log-in screen took
+    // the whole app dark with it.
+    func testThemeReportCarriesFastmailsOwnDarkFlag() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await waitUntil { self.received.contains { $0["action"] as? String == "theme" } }
+        let payload = received.last { $0["action"] as? String == "theme" }?["payload"] as? [String: Any]
+        XCTAssertEqual(payload?["color"] as? String, "rgb(124, 179, 66)")
+        XCTAssertEqual(payload?["isDark"] as? Bool, false)
+    }
+
+    // A page with no theme to ask reports no answer, rather than one inferred
+    // from whatever colour it happens to be painted. The colour is unchanged
+    // here, so this only reports if the flag counts as part of what is new.
+    func testAPageWithNoThemeToAskReportsNoDarkFlag() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await waitUntil { self.received.contains { $0["action"] as? String == "theme" } }
+        _ = try await evaluate(
+            webView,
+            "delete window.FastMail; document.head.appendChild(document.createElement('meta')); true"
+        )
+        try await waitUntil {
+            self.received.filter { $0["action"] as? String == "theme" }.count >= 2
+        }
+        let payload = received.last { $0["action"] as? String == "theme" }?["payload"] as? [String: Any]
+        XCTAssertEqual(payload?["color"] as? String, "rgb(124, 179, 66)")
+        XCTAssertNil(payload?["isDark"])
+    }
+
     func testChromeInsetDropsToZeroInFullscreen() async throws {
         let chromeCSS = try XCTUnwrap(BundleResourceLoader().string(named: "chrome-macos.css"))
         webView = try makeWebView(userScript: "", metadata: Self.meta(), chromeCSS: chromeCSS)

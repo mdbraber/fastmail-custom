@@ -110,12 +110,47 @@
             paintedColor(document.body);
     }
 
+    // Fastmail's own answer, and the only reliable one: whether a theme is
+    // dark is not a question a colour can be asked. The Work account's header
+    // is a sky blue that measures darker than a luminance cut allows, and the
+    // log-in screen is navy while no theme has been chosen at all.
+    //
+    // Null means unknown rather than light, and is what a page reports before
+    // the app has booted.
+    function pageIsDark() {
+        var app = window.FastMail;
+        var theme = app && app.theme;
+        return theme && typeof theme.isDark === 'boolean' ? theme.isDark : null;
+    }
+
     function reportTheme() {
         var meta = document.querySelector('meta[name="theme-color"]');
         var color = headerColor() || (meta ? meta.getAttribute('content') : null);
-        if (!color || color === lastTheme) return;
-        lastTheme = color;
-        post('theme', { color: color });
+        if (!color) return;
+        // The answer can change while the colour stays put — the app booting
+        // behind an already-painted header — so both make up what is new.
+        var isDark = pageIsDark();
+        var reported = color + '|' + isDark;
+        if (reported === lastTheme) return;
+        lastTheme = reported;
+        post('theme', isDark === null ? { color: color } : { color: color, isDark: isDark });
+    }
+
+    // Fastmail swaps the stylesheet in the head when its theme changes, so the
+    // head is worth watching — once there is one.
+    function watchHead(observer) {
+        var watch = function () {
+            if (document.head) {
+                observer.observe(document.head, {
+                    attributes: true, childList: true, subtree: true
+                });
+            }
+        };
+        if (document.head) {
+            watch();
+            return;
+        }
+        document.addEventListener('DOMContentLoaded', watch, { once: true });
     }
 
     function watchTheme() {
@@ -123,14 +158,17 @@
         (function poll() {
             reportTheme();
             attempts += 1;
-            if (!headerColor() && attempts < 40) {
+            // Keep looking until the header is painted and Fastmail has a
+            // theme to ask. The log-in screen has neither, and settling for
+            // its navy is what used to take the window dark.
+            if ((!headerColor() || pageIsDark() === null) && attempts < 40) {
                 window.setTimeout(poll, 250);
             }
         })();
         var observer = new MutationObserver(reportTheme);
-        if (document.head) {
-            observer.observe(document.head, { attributes: true, childList: true, subtree: true });
-        }
+        // This runs at document-start, where there is no head yet to watch, so
+        // the head observer waited on a null and was never installed at all.
+        watchHead(observer);
         observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     }
 

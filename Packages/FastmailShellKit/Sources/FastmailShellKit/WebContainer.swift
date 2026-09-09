@@ -6,10 +6,26 @@ import WebKit
 import UIKit
 #endif
 
+/// What the page says it looks like: the colour to paint the window with,
+/// and whether Fastmail calls its own theme dark.
+///
+/// The flag is Fastmail's answer rather than ours. It is absent on a page that
+/// has no theme to ask — the log-in screen — and absent means unknown, so the
+/// window is left as it is rather than judged from the colour.
+public struct PageTint: Equatable, Sendable {
+    public let color: String
+    public let isDark: Bool?
+
+    public init(color: String, isDark: Bool?) {
+        self.color = color
+        self.isDark = isDark
+    }
+}
+
 @MainActor
 public final class ShellModel: ObservableObject {
     @Published public var banner: String?
-    @Published public var tint: String?
+    @Published public var tint: PageTint?
     @Published public var dragRect: CGRect = .zero
     @Published public var noDragRects: [CGRect] = []
     @Published public var shareRequest: ShareRequest?
@@ -99,7 +115,9 @@ public struct WebContainer {
             expectedHost: loadURL.host ?? "",
             onLog: { message in print("[userscript] \(message)") },
             onError: { [model] message in model.show(message) },
-            onTheme: { [model] color in Task { @MainActor in model.tint = color } },
+            onTheme: { [model] color, isDark in
+                Task { @MainActor in model.tint = PageTint(color: color, isDark: isDark) }
+            },
             onDragRegions: { [model] drag, noDrag in
                 Task { @MainActor in
                     model.dragRect = drag

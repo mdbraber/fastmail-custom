@@ -38,8 +38,4 @@ public enum ThemeColor {
             Double(number & 0xff) / 255.0
         )
     }
-
-    public static func isDark(_ rgb: (Double, Double, Double)) -> Bool {
-        0.2126 * rgb.0 + 0.7152 * rgb.1 + 0.0722 * rgb.2 < 0.5
-    }
 }

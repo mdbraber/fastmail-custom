@@ -21,11 +21,40 @@ import Foundation
         expectedHost: "app.fastmail.com",
         onLog: { _ in },
         onError: { _ in },
-        onTheme: { await recorded.appendTheme($0) }
+        onTheme: { await recorded.appendTheme($0, $1) }
     )
     let reply = await bridge.handle(body: ["action": "theme", "payload": ["color": "#d6d8da"]])
     #expect(reply.error == nil)
     #expect(await recorded.themes == ["#d6d8da"])
+}
+
+@Test func themeActionCarriesFastmailsOwnDarkFlag() async {
+    let recorded = Recorder()
+    let bridge = await NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onTheme: { await recorded.appendTheme($0, $1) }
+    )
+    let reply = await bridge.handle(body: [
+        "action": "theme", "payload": ["color": "#1c1c1e", "isDark": true],
+    ])
+    #expect(reply.error == nil)
+    #expect(await recorded.darkFlags == [true])
+}
+
+// Fastmail's log-in screen carries no theme object to ask, and its navy
+// background used to be read as a dark theme. Nothing is claimed for it.
+@Test func themeActionWithoutADarkFlagClaimsNothing() async {
+    let recorded = Recorder()
+    let bridge = await NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onTheme: { await recorded.appendTheme($0, $1) }
+    )
+    await bridge.handle(body: ["action": "theme", "payload": ["color": "rgb(36, 57, 89)"]])
+    #expect(await recorded.darkFlags == [nil])
 }
 
 @Test func themeActionWithoutColorProducesAnError() async {
@@ -129,9 +158,13 @@ actor Recorder {
     var logs: [String] = []
     var errors: [String] = []
     var themes: [String] = []
+    var darkFlags: [Bool?] = []
     func appendLog(_ value: String) { logs.append(value) }
     func appendError(_ value: String) { errors.append(value) }
-    func appendTheme(_ value: String) { themes.append(value) }
+    func appendTheme(_ value: String, _ isDark: Bool?) {
+        themes.append(value)
+        darkFlags.append(isDark)
+    }
 }
 
 @Test @MainActor func notifyRoutesAParsedNotification() async {
