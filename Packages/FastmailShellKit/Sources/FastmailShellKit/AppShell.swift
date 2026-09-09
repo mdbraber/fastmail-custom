@@ -108,6 +108,11 @@ public struct AppShell: View {
         .onChange(of: backendName) {
             ComposeWindows.shared.configure(profile: live)
         }
+        // Without this the window group treats every URL handed to the app as
+        // grounds for a new window, so a mailto arrived with a second copy of
+        // the whole shell behind it. The window already open says it will take
+        // them.
+        .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         #endif
     }
 
