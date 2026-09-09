@@ -56,6 +56,7 @@ targets:
         PRODUCT_NAME: mdbraber.com
         INFOPLIST_FILE: Apps/Personal/Info.plist
         "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": Apps/Personal/iOS.entitlements
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": Apps/Personal/macOS.entitlements
 
   Work:
     templates: [ShellApp]
@@ -72,6 +73,7 @@ targets:
         PRODUCT_NAME: nexthealth.nl
         INFOPLIST_FILE: Apps/Work/Info.plist
         "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": Apps/Work/iOS.entitlements
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": Apps/Work/macOS.entitlements
 
   # The mailto chooser: iPhone only, no web view, no account of its own. It
   # asks which shell a mailto belongs to and hands the link over. iOS gives

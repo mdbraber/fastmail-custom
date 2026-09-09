@@ -20,8 +20,8 @@ test: generate
 	for f in SafariExtension/*.js; do node --check "$$f" || exit 1; done
 
 build-macos: generate
-	xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release build
-	xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release build
+	xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release -allowProvisioningUpdates build
+	xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release -allowProvisioningUpdates build
 
 install-macos: build-macos
 	rm -rf "/Applications/mdbraber.com.app" "/Applications/nexthealth.nl.app"
