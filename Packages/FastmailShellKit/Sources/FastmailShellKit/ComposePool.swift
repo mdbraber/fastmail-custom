@@ -178,6 +178,29 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         )
     }
 
+    /// How big a message's own window is, and how far it stands off from the
+    /// window it was asked from. Smaller than a mailbox window, because a
+    /// message is a smaller thing; offset from it, because a window sitting
+    /// exactly on top of another looks like the only window there is.
+    nonisolated static let ownSize = NSSize(width: 780, height: 840)
+    private static let standOff: CGFloat = 36
+
+    /// Where a message's window puts its top-left corner: down and to the
+    /// right of the window it came from.
+    static func topLeft(offsetFrom host: NSRect, by offset: CGFloat) -> NSPoint {
+        NSPoint(x: host.minX + offset, y: host.maxY - offset)
+    }
+
+    /// Stands the window off from whichever window it was asked from, and
+    /// centres it when there is nothing to stand off from.
+    static func place(_ window: NSWindow) {
+        guard let host = NSApp.keyWindow ?? NSApp.mainWindow, host !== window else {
+            window.center()
+            return
+        }
+        window.setFrameTopLeftPoint(topLeft(offsetFrom: host.frame, by: standOff))
+    }
+
     /// The window to take a colour and appearance from: the one this window
     /// has joined, if it has joined one. Standing alone there is nobody to
     /// match, and the colour the pages last asked for is used instead — a
@@ -454,6 +477,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     public func compose() {
         guard let pool else { return }
         let window = pool.take()
+        Self.place(window)
         fitTabbedWindows()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
@@ -474,6 +498,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         let window = pool.take()
         Self.webView(of: window)?
             .load(URLRequest(url: ComposeURL.url(for: profile, mailto: mailto)))
+        Self.place(window)
         fitTabbedWindows()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
@@ -504,10 +529,12 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         window.isReleasedWhenClosed = false
         window.contentView = Self.contents(around: view, size: size)
         window.tabbingMode = .disallowed
-        window.center()
         hold(window)
         Self.dress(window, like: Self.chromeSource(for: window))
         fitTabbedWindows()
+        // Placed once it is dressed: the chrome it borrows changes its height,
+        // and a corner set before that lands somewhere else.
+        Self.place(window)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
         return view
@@ -578,7 +605,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.isInspectable = true
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 640),
+            contentRect: NSRect(origin: .zero, size: Self.ownSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -586,10 +613,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.title = "New Message"
-        window.contentView = Self.contents(
-            around: view,
-            size: NSSize(width: 760, height: 640)
-        )
+        window.contentView = Self.contents(around: view, size: Self.ownSize)
         window.delegate = self
         Self.dress(window, like: nil)
         window.center()

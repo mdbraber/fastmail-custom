@@ -173,6 +173,16 @@ private func makePlainWindow() -> NSWindow {
     #expect(compose.tabGroup == nil)
 }
 
+// A message opens offset from the window it was asked from, so the window
+// underneath is visible behind it rather than hidden exactly beneath.
+@Test @MainActor func aMessageStandsOffFromTheWindowBelowIt() {
+    let host = NSRect(x: 100, y: 100, width: 1000, height: 900)
+    let corner = ComposeWindows.topLeft(offsetFrom: host, by: 36)
+    #expect(corner.x == 136)
+    // Down, in a coordinate space that counts upwards.
+    #expect(corner.y == 964)
+}
+
 // A message written in a tab starts where its neighbours' pages start: below
 // the bar, with the same band of window colour above it.
 @Test @MainActor func aComposeTabStartsWhereAMailPageStarts() {

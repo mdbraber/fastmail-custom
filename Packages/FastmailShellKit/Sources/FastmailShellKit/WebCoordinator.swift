@@ -379,8 +379,8 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
     /// message reads comfortably at where it did not.
     nonisolated static func windowSize(_ features: WKWindowFeatures) -> NSSize {
         NSSize(
-            width: features.width?.doubleValue ?? 760,
-            height: features.height?.doubleValue ?? 640
+            width: features.width?.doubleValue ?? ComposeWindows.ownSize.width,
+            height: features.height?.doubleValue ?? ComposeWindows.ownSize.height
         )
     }
     #endif
