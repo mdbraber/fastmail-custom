@@ -672,6 +672,11 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // A WindowedQuery fetches nothing until a range is observed, and the
     // length is all this wants, so the range is the smallest one there is.
     const COUNT_RANGE = { start: 0, end: 1 };
+
+    // How much of a label's Inbox queue one window can hold. Past this the
+    // badge falls back to the label's own total, which is the same number
+    // whenever the model has been kept.
+    const COUNT_WINDOW = 250;
     const countRangeObserver = { rangeDidChange() {} };
     const countLengthObserver = { go: () => scheduleBadgeRepaint() };
 
@@ -693,13 +698,18 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 },
                 sort: [{ property: 'receivedAt', isAscending: false }],
                 collapseThreads: true,
-                // A windowed query's length is the window it has loaded —
-                // thirty-odd rows — not how many there are. Asking for a
-                // total makes the server count them, and length then means
-                // what a badge needs. Without this, every label with more
-                // than a window's worth in the Inbox reads the same wrong
-                // number.
-                hasTotal: true
+                // A windowed query asks for one window at a time and reports
+                // how much it holds, so a badge reading a default query sees
+                // about thirty of them however many there are. A window wide
+                // enough for the whole queue is answered in one request, and
+                // a request that comes back short of what it asked for is
+                // how the query knows it has everything — which is what
+                // makes the length a count rather than a lower bound.
+                //
+                // The messages behind those ids are fetched with them. They
+                // are Inbox messages, which this account loads anyway, and
+                // the cost is paid once per label rather than per scroll.
+                windowSize: COUNT_WINDOW
             };
 
             // The id has to come from getQueryId: the source resolves a
@@ -741,13 +751,23 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     //
     // The total stands in until the query lands — it is the same number
     // whenever the model has been kept — so a badge never sits empty waiting.
-    // A query that has not loaded reports a null length, which is what makes
-    // that stand-in happen rather than a flash of zero.
+    //
+    // A query's length is only the answer when the query knows it is: either
+    // the server counted the matches, or every id is in hand. Short of that
+    // the length is how much has been loaded plus one, which is a lower
+    // bound wearing a number's clothes, and reading it as a count is what
+    // made every busy label report the same thirty-one.
+    const countKnown = (query) => {
+        if (!query) return null;
+        if (!query.hasTotal && !query.get('allIdsAreLoaded')) return null;
+        const length = query.get('length');
+        return typeof length === 'number' ? length : null;
+    };
+
     const countFor = (mailbox) => {
         if (settings.filteredLabelCounts && modeIsOn && isProject(mailbox)) {
-            const query = countQueryFor(mailbox);
-            const length = query && query.get('length');
-            if (typeof length === 'number') return length;
+            const known = countKnown(countQueryFor(mailbox));
+            if (known !== null) return known;
         }
 
         return mailbox.get('totalThreads') || 0;
