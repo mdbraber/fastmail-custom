@@ -5115,9 +5115,17 @@ there, so a key, a menu, a drag and a swipe do the same thing:
 
         const SOURCE_ROW = '.v-MailboxSource';
 
+        // A row arriving, and anything redrawn inside one that is already
+        // there. Recolouring a label rebuilds only the row's icon, and the
+        // icon that comes back is a stock one with nothing said about it: the
+        // funnel standing in for it keeps the shade it had, and the icon it
+        // hides is visible again beside it. Both are put right by dressing
+        // the rows again, which only happens if a redraw this small counts.
         const drawsSourceRow = (node) =>
             !!node.querySelector &&
-            ((node.matches && node.matches(SOURCE_ROW)) || !!node.querySelector(SOURCE_ROW));
+            ((node.matches && node.matches(SOURCE_ROW)) ||
+                !!node.querySelector(SOURCE_ROW) ||
+                (!!node.closest && !!node.closest(SOURCE_ROW)));
 
         const draws = (node, selector) =>
             !!node.querySelector &&
