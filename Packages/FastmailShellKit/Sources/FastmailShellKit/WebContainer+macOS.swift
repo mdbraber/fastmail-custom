@@ -173,11 +173,25 @@ func tabbedPageInset(of window: NSWindow) -> CGFloat {
     return contentTopInset(of: window)
 }
 
-/// AppKit leaves a little room below the tab bar inside the content layout
-/// rect — measured at eight points against the bar's own frame — and offers no
-/// way to ask where the bar itself ends, so this is the one number taken on
-/// measurement rather than from the window.
+/// The tab bar's own height, and the room AppKit leaves below it inside the
+/// content layout rect. Neither is exposed — the bar is not among the window's
+/// views to ask — so both were measured against its frame: a bar running from
+/// 66 to 94 while the window reported its content beginning at 102.
+private let tabBarHeight: CGFloat = 28
 private let tabBarBottomPadding: CGFloat = 8
+
+/// Where the tab bar starts and ends, worked out from what the window reports
+/// its chrome covers. Nothing here depends on what a particular window has
+/// been through, so every tab in a group arrives at the same answer — reading
+/// the top edge off a spell with no tab bar meant a window born into a group
+/// had never seen one, and its page lost the air its neighbours had.
+func tabBarEdges(contentInset: CGFloat) -> (top: CGFloat, bottom: CGFloat)? {
+    guard contentInset > 0 else { return nil }
+    return (
+        top: max(0, contentInset - tabBarBottomPadding - tabBarHeight),
+        bottom: max(0, contentInset - tabBarBottomPadding)
+    )
+}
 
 /// What the page is told, matching the rule in chrome-macos.css.
 ///
@@ -226,10 +240,6 @@ final class FullScreenObserver: NSObject {
     /// notification to hang this on; the group itself has to be watched.
     private static let tabPaths = ["tabGroup", "tabGroup.isTabBarVisible"]
     private var watchingTabs = false
-    /// The chrome's reach with no tab bar showing — the title bar and its
-    /// toolbar — which is where a tab bar starts when one appears. Recorded
-    /// rather than assumed, and there is always a spell without one first.
-    private var barlessInset: CGFloat = 0
     private var enterToken: NSObjectProtocol?
     private var exitToken: NSObjectProtocol?
     private var closeToken: NSObjectProtocol?
@@ -321,12 +331,11 @@ final class FullScreenObserver: NSObject {
 
     private func placeTabInset() {
         guard let window, let webView else { return }
-        let visible = window.tabGroup?.isTabBarVisible == true
-        if !visible { barlessInset = contentTopInset(of: window) }
+        let edges = tabBarEdges(contentInset: tabbedPageInset(of: window))
         webView.evaluateJavaScript(tabInsetScript(
-            visible: visible,
-            barTop: barlessInset,
-            barBottom: max(0, tabbedPageInset(of: window) - tabBarBottomPadding)
+            visible: edges != nil,
+            barTop: edges?.top ?? 0,
+            barBottom: edges?.bottom ?? 0
         ))
     }
 

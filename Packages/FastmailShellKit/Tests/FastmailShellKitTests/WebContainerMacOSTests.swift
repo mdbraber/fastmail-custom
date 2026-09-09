@@ -239,4 +239,18 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     #expect(ShellWindows.opened(before: [existing], after: [existing, compose]) == nil)
 }
 
+// Both edges of the tab bar come from what the window reports, so every tab
+// works them out the same way. Reading one of them off a spell without a tab
+// bar meant a window born into a group had never seen one, and its page lost
+// the air above the bar that its neighbours had.
+@Test @MainActor func theBarsEdgesDoNotDependOnWhatAWindowHasSeen() {
+    let edges = tabBarEdges(contentInset: 102)
+    #expect(edges?.top == 66)
+    #expect(edges?.bottom == 94)
+}
+
+@Test @MainActor func thereAreNoEdgesWithoutABar() {
+    #expect(tabBarEdges(contentInset: 0) == nil)
+}
+
 #endif
