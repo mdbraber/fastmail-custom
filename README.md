@@ -19,27 +19,51 @@ anything that goes wrong here instead.
 
 ## Features
 
-- 🏷️ **One label per message**: the project label is the message's state.
-- 📥 **Triage queue**: undecided mail keeps the triage label until it is filed.
-- 📦 **Consistent archive**: strips the triage and project labels, keeps hold labels.
-- ⌨️ **Single-key actions**: file, snooze, pin; E and Y swappable.
-- ⏰ **Snooze defaults**: period and time of day.
-- 🎯 **Filing**: the picker files instead of moving, dragging adds a label.
-- 👥 **Contact groups**: chosen labels add the sender to a group.
-- 🗂️ **Grouped sidebar**: folders, labels and saved searches in separate runs.
-- 🔻 **Triage icon**: a funnel in the label's colour.
-- 🔢 **Inbox-only counts**: labels count what is waiting.
-- 🎨 **Label colours**: on message rows, or in the sidebar only.
-- 🪟 **Native windows and tabs**: the page fits around the tab bar.
-- ✉️ **Compose target**: the page, a tab or a window.
-- ↗️ **Pop-out windows**: messages and drafts, titled by recipient or subject.
-- 🖨️ **Printing**: from any message window.
-- ⬇️ **Downloads**: chosen folder, optional auto-open.
-- 📤 **Share extension**: pages and links to the app.
-- 📮 **mailto handling**: with an iOS account picker.
-- 🔔 **Push notifications**: Archive, Later and Pin; tokens stay on the server.
-- 🤖 **Shortcuts and AppleScript**: open a path, read the link, run JavaScript.
-- ⚙️ **Shared settings**: macOS, iOS and the extension.
+Fastmail lets a message carry any number of labels. That is flexible, but it
+leaves the Inbox as a pile: nothing on a message says whether you have dealt
+with it. Custom mode uses a label as the message's state instead. Every
+message belongs to one project, anything undecided sits under a triage label
+until you file it, and archiving means the same thing wherever you do it. The
+point is an Inbox you can empty and a queue you can trust.
+
+The web app pieces do that work. The Mac and iPhone apps add what a web page
+cannot reach on its own: real windows, notifications, downloads and links.
+
+**Triage**
+
+- 🏷️ **One label per message**: each message belongs to a single project.
+- 📥 **Triage queue**: everything undecided waits in one place.
+- 📦 **Consistent archive**: archiving does the same thing wherever you do it.
+- 🎯 **Filing**: pick a label, or drag the message onto one.
+- 👥 **Contact groups**: filing under chosen labels adds the sender to a group.
+
+**Keyboard**
+
+- ⌨️ **Single-key actions**: file, snooze or pin with one keystroke.
+- ⏰ **Snooze defaults**: set when snoozed mail comes back.
+
+**Sidebar and colours**
+
+- 🗂️ **Grouped sidebar**: folders, labels and saved searches kept apart.
+- 🔻 **Triage icon**: the triage label is a funnel, so the queue stands out.
+- 🔢 **Inbox-only counts**: a label counts its Inbox mail, not everything filed under it.
+- 🎨 **Label colours**: on the message rows, or in the sidebar only.
+
+**Windows and writing**
+
+- 🪟 **Native windows and tabs**: Fastmail in real windows you can tab together.
+- ✉️ **Compose target**: write in the page, a tab or a window of its own.
+- ↗️ **Pop-out windows**: open any message or draft in its own window.
+- 🖨️ **Printing**: print a message from its window.
+
+**Around the system**
+
+- ⬇️ **Downloads**: attachments go to a folder you choose.
+- 📤 **Share extension**: send a page or a link to Fastmail from any app.
+- 📮 **mailto handling**: mail links open in the right account.
+- 🔔 **Push notifications**: new mail arrives with Archive, Later and Pin on it.
+- 🤖 **Shortcuts and AppleScript**: drive the app from your own scripts.
+- ⚙️ **Shared settings**: the same settings on Mac, iPhone and in Safari.
 
 ## What is in here
 
