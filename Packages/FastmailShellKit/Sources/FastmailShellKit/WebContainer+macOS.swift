@@ -149,11 +149,25 @@ func applyTint(_ value: String, isDark: Bool?, to window: NSWindow) {
     if let isDark {
         window.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
     }
-    window.backgroundColor = NSColor(
-        srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: 1
-    )
+    let color = NSColor(srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: 1)
+    window.backgroundColor = color
+    PageChrome.record(color: color, appearance: window.appearance)
     window.contentView?.superview?.needsDisplay = true
     window.invalidateShadow()
+}
+
+/// What the pages have asked their windows to look like, kept so that a window
+/// with no page of its own — one holding a message being written — can be
+/// dressed to match the rest of the app rather than guessing at a colour.
+@MainActor
+enum PageChrome {
+    private(set) static var color: NSColor?
+    private(set) static var appearance: NSAppearance?
+
+    static func record(color: NSColor, appearance: NSAppearance?) {
+        self.color = color
+        self.appearance = appearance
+    }
 }
 
 /// How far the window's chrome reaches down over the content: the title bar

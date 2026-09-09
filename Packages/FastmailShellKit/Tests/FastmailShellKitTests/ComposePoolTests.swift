@@ -141,35 +141,78 @@ private func makePlainWindow() -> NSWindow {
 }
 
 // A message written in a tab starts where its neighbours' pages start: below
-// the bar, with the same band of window colour above it. The window's own
-// content already begins under the bar, so only the band is left to add.
+// the bar, with the same band of window colour above it.
 @Test @MainActor func aComposeTabStartsWhereAMailPageStarts() {
-    #expect(ComposeWindows.topInset(air: 14) == 6)
-    #expect(ComposeWindows.topInset(air: 40) == 32)
-    // Nothing measured yet, or no air at all: the page keeps the whole window.
-    #expect(ComposeWindows.topInset(air: nil) == 0)
-    #expect(ComposeWindows.topInset(air: 4) == 0)
+    #expect(ComposeWindows.pageTop(barBottom: 94, air: 14, band: 52) == 108)
 }
 
-// Dressed as a tab it borrows the window it joined: the same title bar height,
-// so the tab bar does not jump, and the same colour behind it. Going back to
-// the pool it is a plain window again, title and all.
-@Test @MainActor func aComposeWindowBorrowsItsHostsChromeAndGivesItBack() {
+// Pulled out into a window of its own it keeps the colour but loses the bar,
+// so it falls back to the band that holds the window buttons — the same height
+// as the header a mailbox page keeps above itself.
+@Test @MainActor func aComposeWindowOnItsOwnKeepsOnlyTheButtonsBand() {
+    #expect(ComposeWindows.pageTop(barBottom: nil, air: 14, band: 52) == 52)
+    // Nothing measured from a page yet: the band is all there is to go on.
+    #expect(ComposeWindows.pageTop(barBottom: 94, air: nil, band: 52) == 52)
+}
+
+// That band is exactly deep enough to hold the window buttons with as much
+// room under them as over them.
+@Test @MainActor func theBandHoldsTheWindowButtonsEvenly() throws {
+    let window = makePlainWindow()
+    ComposeWindows.dress(window, like: makePlainWindow())
+    window.layoutIfNeeded()
+    let close = try #require(window.standardWindowButton(.closeButton))
+    let container = try #require(close.superview)
+    let fromTop = window.frame.height - container.convert(close.frame, to: nil).maxY
+    let band = try #require(ComposeWindows.band(of: window))
+    #expect(band - (fromTop + close.frame.height) == fromTop)
+}
+
+// Joining a window it takes that window's chrome: the same title bar height,
+// so the tab bar does not jump, and the same colour behind it.
+@Test @MainActor func aComposeWindowTakesTheChromeOfTheWindowItJoins() {
     let host = makePlainWindow()
     host.backgroundColor = .systemGreen
     let compose = makePlainWindow()
-    compose.title = "New Message"
 
-    ComposeWindows.dress(compose, asTabOf: host)
+    ComposeWindows.dress(compose, like: host)
     #expect(compose.toolbar != nil)
     #expect(compose.titlebarAppearsTransparent)
     #expect(compose.titleVisibility == .hidden)
     #expect(compose.backgroundColor == host.backgroundColor)
+    #expect(ComposeWindows.isDressed(compose))
+}
+
+// Going back to the pool it gives up only its place in the group: every
+// message wears the chrome, so the next one to be written keeps it.
+@Test @MainActor func aComposeWindowGivesUpItsGroupButKeepsItsChrome() {
+    let host = makePlainWindow()
+    let compose = makePlainWindow()
+    ComposeWindows.dress(compose, like: host)
+    compose.tabbingMode = .preferred
+    host.addTabbedWindow(compose, ordered: .above)
 
     ComposeWindows.readyForPool(compose)
-    #expect(compose.toolbar == nil)
-    #expect(!compose.titlebarAppearsTransparent)
-    #expect(compose.titleVisibility == .visible)
+    #expect(compose.tabGroup == nil)
     #expect(compose.tabbingMode == .disallowed)
+    #expect(ComposeWindows.isDressed(compose))
+}
+
+// The band carries who the message is going to, level with the window buttons
+// and clear of them, and centred in the window rather than in what is left of
+// it — the room taken on the left is taken on the right too.
+@Test @MainActor func theRecipientsSitLevelWithTheButtonsAndCentredInTheWindow() {
+    let bounds = NSRect(x: 0, y: 0, width: 760, height: 640)
+    let frame = ComposeWindows.labelFrame(in: bounds, band: 52, buttonsRight: 78, height: 18)
+    #expect(bounds.height - frame.midY == 26)
+    #expect(frame.minX > 78)
+    #expect(bounds.width - frame.maxX == frame.minX)
+}
+
+// Nothing addressed yet, nothing to say.
+@Test @MainActor func anUnaddressedMessageSaysNothingInItsBand() {
+    #expect(ComposeWindows.bandTitle(recipients: "") == "")
+    #expect(ComposeWindows.bandTitle(recipients: "  ") == "")
+    #expect(ComposeWindows.bandTitle(recipients: " Anne  Marie ") == "Anne  Marie")
 }
 #endif
