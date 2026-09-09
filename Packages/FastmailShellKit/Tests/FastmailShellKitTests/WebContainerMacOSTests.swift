@@ -254,4 +254,17 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     #expect(tabBarEdges(contentInset: 0) == nil)
 }
 
+// A tab is only as useful as its name, and the page already names itself
+// after whatever mailbox or label is open.
+@Test @MainActor func aTabIsNamedAfterWhateverThePageIsShowing() {
+    #expect(tabTitle(pageTitle: "Inbox", fallback: "mdbraber.com") == "Inbox")
+    #expect(tabTitle(pageTitle: "SIDNfonds", fallback: "mdbraber.com") == "SIDNfonds")
+}
+
+@Test @MainActor func aTabWithNothingToGoOnKeepsTheAccountName() {
+    #expect(tabTitle(pageTitle: nil, fallback: "mdbraber.com") == "mdbraber.com")
+    #expect(tabTitle(pageTitle: "", fallback: "mdbraber.com") == "mdbraber.com")
+    #expect(tabTitle(pageTitle: "   ", fallback: "mdbraber.com") == "mdbraber.com")
+}
+
 #endif

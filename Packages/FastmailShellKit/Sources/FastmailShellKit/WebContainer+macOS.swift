@@ -173,6 +173,14 @@ func tabbedPageInset(of window: NSWindow) -> CGFloat {
     return contentTopInset(of: window)
 }
 
+/// What a tab is called. The page names itself after whatever mailbox or label
+/// is open, which is exactly what a tab wants to say; with nothing to go on it
+/// keeps the account's name rather than showing an empty tab.
+func tabTitle(pageTitle: String?, fallback: String) -> String {
+    let named = (pageTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    return named.isEmpty ? fallback : named
+}
+
 /// The tab bar's own height, and the room AppKit leaves below it inside the
 /// content layout rect. Neither is exposed — the bar is not among the window's
 /// views to ask — so both were measured against its frame: a bar running from
@@ -247,6 +255,7 @@ final class FullScreenObserver: NSObject {
     private var tabToken: NSObjectProtocol?
     private var resizeToken: NSObjectProtocol?
     private var tintCancellable: AnyCancellable?
+    private var titleCancellable: AnyCancellable?
     private weak var window: NSWindow?
     private weak var webView: WKWebView?
 
@@ -299,6 +308,15 @@ final class FullScreenObserver: NSObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.applyTabInset() }
         }
+        // The title is hidden in the title bar but it is what a tab is called,
+        // so it follows the page rather than staying the account's name.
+        let accountName = window.title
+        titleCancellable = webView.publisher(for: \.title).sink { [weak window] title in
+            MainActor.assumeIsolated {
+                window?.title = tabTitle(pageTitle: title, fallback: accountName)
+            }
+        }
+
         for path in Self.tabPaths {
             window.addObserver(self, forKeyPath: path, options: [.new], context: nil)
         }
@@ -355,6 +373,8 @@ final class FullScreenObserver: NSObject {
         resizeToken = nil
         tintCancellable?.cancel()
         tintCancellable = nil
+        titleCancellable?.cancel()
+        titleCancellable = nil
         if watchingTabs, let window {
             for path in Self.tabPaths { window.removeObserver(self, forKeyPath: path) }
         }
