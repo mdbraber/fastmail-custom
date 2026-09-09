@@ -107,6 +107,32 @@ func configureWindow(_ window: NSWindow) {
     window.styleMask.insert(.fullSizeContentView)
     window.titlebarAppearsTransparent = true
     window.titleVisibility = .hidden
+    raiseTitlebar(of: window)
+}
+
+/// Set the window buttons into Fastmail's header rather than leaving them in
+/// the title bar the window would otherwise have.
+///
+/// Fastmail's own app draws a 52-point header and puts its buttons in the
+/// middle of it. A plain title bar is 32 points, so ours sat nine points above
+/// and ten points to the left of the icons alongside them, which is what the
+/// gap looked like. A unified toolbar gives the title bar the height that
+/// centres them in the header, and AppKit keeps them there through resizes and
+/// full screen — where setting the frames by hand does not, because it lays
+/// them out again each time.
+///
+/// The toolbar carries nothing and is never seen: with a transparent title bar
+/// over full-size content it draws nothing, the page still receives clicks at
+/// every depth, and the web view keeps the whole window. It has to stay
+/// visible, though — hiding it puts the buttons back.
+@MainActor
+private func raiseTitlebar(of window: NSWindow) {
+    window.toolbarStyle = .unified
+    guard window.toolbar == nil else { return }
+    let toolbar = NSToolbar(identifier: "fmshell.titlebar")
+    toolbar.showsBaselineSeparator = false
+    toolbar.allowsUserCustomization = false
+    window.toolbar = toolbar
 }
 
 @MainActor

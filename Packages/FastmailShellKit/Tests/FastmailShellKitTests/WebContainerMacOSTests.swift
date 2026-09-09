@@ -143,4 +143,43 @@ private let gear = CGRect(x: 1120, y: 14, width: 24, height: 24)
     ))
 }
 
+// Fastmail's own app draws a 52-point header and sets its window buttons into
+// it; ours kept the standard title bar, which left them nine points high and
+// ten points left of the icons beside them. Measured against an untouched
+// window rather than against fixed numbers, since the exact metrics are
+// AppKit's to choose.
+@MainActor
+private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: CGFloat)? {
+    window.layoutIfNeeded()
+    guard
+        let close = window.standardWindowButton(.closeButton),
+        let container = close.superview
+    else { return nil }
+    let frame = container.convert(close.frame, to: nil)
+    return (frame.minX, window.frame.height - frame.maxY)
+}
+
+@Test @MainActor func theWindowButtonsSitLowerAndFurtherInThanAPlainTitleBarPutsThem() throws {
+    let plain = makeWindow()
+    let configured = makeWindow()
+    configureWindow(configured)
+
+    let before = try #require(closeButtonPlacement(plain))
+    let after = try #require(closeButtonPlacement(configured))
+
+    #expect(after.fromTop > before.fromTop)
+    #expect(after.x > before.x)
+}
+
+@Test @MainActor func theTitleBarIsGivenItsHeightByAToolbarThatCarriesNothing() {
+    let window = makeWindow()
+    configureWindow(window)
+
+    #expect(window.toolbarStyle == .unified)
+    #expect(window.toolbar != nil)
+    #expect(window.toolbar?.items.isEmpty == true)
+    // Hiding it puts the buttons back where they were, so it has to stay.
+    #expect(window.toolbar?.isVisible == true)
+}
+
 #endif
