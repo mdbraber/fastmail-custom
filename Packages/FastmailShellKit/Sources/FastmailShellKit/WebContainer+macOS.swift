@@ -131,7 +131,7 @@ func configureWindow(_ window: NSWindow) {
 /// every depth, and the web view keeps the whole window. It has to stay
 /// visible, though — hiding it puts the buttons back.
 @MainActor
-private func raiseTitlebar(of window: NSWindow) {
+func raiseTitlebar(of window: NSWindow) {
     window.toolbarStyle = .unified
     guard window.toolbar == nil else { return }
     let toolbar = NSToolbar(identifier: "fmshell.titlebar")
@@ -191,7 +191,7 @@ func tabTitle(pageTitle: String?, fallback: String) -> String {
 /// views to ask — so both were measured against its frame: a bar running from
 /// 66 to 94 while the window reported its content beginning at 102.
 private let tabBarHeight: CGFloat = 28
-private let tabBarBottomPadding: CGFloat = 8
+let tabBarBottomPadding: CGFloat = 8
 
 /// Where the tab bar starts and ends, worked out from what the window reports
 /// its chrome covers. Nothing here depends on what a particular window has
@@ -214,11 +214,16 @@ func tabBarEdges(contentInset: CGFloat) -> (top: CGFloat, bottom: CGFloat)? {
 /// sampled from the header itself, so it reads as one taller header with the
 /// tabs directly beneath the search bar.
 ///
-/// The bar is then given half as much air below it as it has above: the room
-/// above is macOS's to decide, since it puts the bar a fixed distance down and
-/// Fastmail centres the search box in its header, so only the room below is
-/// ours to set. Both edges are measured in the page rather than assumed here,
-/// so they stay right whatever Fastmail makes them.
+/// The bar is then given the same air below it as above, measured from the
+/// edge of the page's own header rather than from the search box inside it:
+/// the room between the search box and that edge is the header's own padding,
+/// and counting it would leave the bar looking pushed down. The header's edge
+/// is measured in the page rather than assumed here, so it stays right
+/// whatever Fastmail makes it.
+///
+/// That air is handed back, because it is also what a page with no header of
+/// its own — a message being written in a tab — has to be pushed down by to
+/// start where its neighbours do.
 func tabInsetScript(visible: Bool, barTop: CGFloat, barBottom: CGFloat) -> String {
     guard visible else {
         return "document.body.classList.remove('fmshell-tabbed');"
@@ -227,12 +232,11 @@ func tabInsetScript(visible: Bool, barTop: CGFloat, barBottom: CGFloat) -> Strin
     return "(function(){"
         + "var h=document.querySelector('.v-PageHeader');"
         + "var header=h?h.getBoundingClientRect().bottom:0;"
-        + "var s=document.querySelector('.v-PageHeader input,.v-PageHeader .v-TextInput');"
-        + "var searchBottom=s?s.getBoundingClientRect().bottom:header;"
-        + "var above=Math.max(0,\(Int(barTop.rounded()))-searchBottom);"
-        + "var gap=Math.max(0,\(Int(barBottom.rounded()))-header+Math.round(above/2));"
+        + "var above=Math.max(0,\(Int(barTop.rounded()))-header);"
+        + "var gap=Math.max(0,\(Int(barBottom.rounded()))-header+above);"
         + "document.body.classList.add('fmshell-tabbed');"
         + "document.body.style.setProperty('--fmshell-tab-inset',gap+'px');"
+        + "return above;"
         + "})();"
 }
 
@@ -380,7 +384,13 @@ final class FullScreenObserver: NSObject {
 
     private static func placeEveryTabInset() {
         for observer in fullScreenObservers.values { observer.placeTabInset() }
+        ComposeWindows.shared.fitTabbedWindows()
     }
+
+    /// The air a mail page leaves around the tab bar, as the page itself
+    /// measured it. A message being written in a tab has no header to measure
+    /// from, so it is told what its neighbours worked out.
+    private(set) static var airAroundTabBar: CGFloat?
 
     fileprivate func placeTabInset() {
         syncTabGroupObservation()
@@ -390,7 +400,13 @@ final class FullScreenObserver: NSObject {
             visible: edges != nil,
             barTop: edges?.top ?? 0,
             barBottom: edges?.bottom ?? 0
-        ))
+        )) { value, _ in
+            MainActor.assumeIsolated {
+                guard let air = value as? Double else { return }
+                Self.airAroundTabBar = CGFloat(air)
+                ComposeWindows.shared.fitTabbedWindows()
+            }
+        }
     }
 
     var isActive: Bool {

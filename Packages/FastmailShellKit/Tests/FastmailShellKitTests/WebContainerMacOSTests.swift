@@ -202,11 +202,12 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     // Both edges are measured in the page: the header, which is what moves,
     // and the search box, which sets how much air the bar gets.
     #expect(showing.contains("v-PageHeader"))
-    #expect(showing.contains("searchBottom"))
-    // The room below the bar is half the room above it, which is the only
-    // half of the pair that is ours to choose.
-    #expect(showing.contains("66-searchBottom"))
-    #expect(showing.contains("94-header+Math.round(above/2)"))
+    // The room above the bar, and the room below it, are the same measurement
+    // — taken from the header's edge, not from the search box inside it — and
+    // that measurement is handed back for a page that has to match it.
+    #expect(showing.contains("66-header"))
+    #expect(showing.contains("94-header+above"))
+    #expect(showing.contains("return above;"))
 
     let gone = tabInsetScript(visible: false, barTop: 0, barBottom: 0)
     #expect(gone.contains("remove('fmshell-tabbed')"))
