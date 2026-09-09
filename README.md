@@ -19,27 +19,27 @@ anything that goes wrong here instead.
 
 ## Features
 
-- 🏷️ **One label at a time**: a project label is the message's live state, not a folder it sits in.
-- 📥 **A triage queue**: undecided mail carries the triage label; filing swaps it for a project one.
-- 📦 **Archive means one thing**: out of the Inbox, off the triage and project labels, hold labels kept.
-- ⌨️ **Single-key actions**: file, snooze, pin; E and Y can be swapped.
-- ⏰ **Snooze your way**: your own default period and time of day.
-- 🎯 **Labels that behave**: dragging adds instead of moves, and a lone match can apply itself.
-- 👥 **Contact groups**: a label can add its sender to one.
-- 🗂️ **A readable sidebar**: folders, labels and searches in separate runs.
-- 🔻 **Triage funnel**: the triage row wears a funnel in the label's own colour.
-- 🔢 **Inbox-only counts**: a label counts what is waiting, not everything it holds.
-- 🎨 **Colour by label**: tint the rows, or just the sidebar.
-- 🪟 **Native windows and tabs**: window buttons set into Fastmail's header, page fitted around the tab bar.
-- ✉️ **Compose anywhere**: in the page, a tab or a window, whichever you set.
-- ↗️ **Messages pop out**: drafts and mail open in their own window, titled by recipient or subject.
-- 🖨️ **Printing**: works from any message window.
-- ⬇️ **Downloads**: to a folder you choose, safe attachments opening on their own.
-- 📤 **Share extension**: send a page or a link to the app.
-- 📮 **mailto links**: with an iOS app that asks which account takes them.
-- 🔔 **Push with actions**: Archive, Later and Pin on the notification, no credentials on the phone.
-- 🤖 **Shortcuts and AppleScript**: open a path, read the current link, run JavaScript.
-- ⚙️ **Settings everywhere**: one catalog drives macOS, iOS and the extension.
+- 🏷️ **One label per message**: the project label is the message's state.
+- 📥 **Triage queue**: undecided mail keeps the triage label until it is filed.
+- 📦 **Consistent archive**: strips the triage and project labels, keeps hold labels.
+- ⌨️ **Single-key actions**: file, snooze, pin; E and Y swappable.
+- ⏰ **Snooze defaults**: period and time of day.
+- 🎯 **Filing**: the picker files instead of moving, dragging adds a label.
+- 👥 **Contact groups**: chosen labels add the sender to a group.
+- 🗂️ **Grouped sidebar**: folders, labels and saved searches in separate runs.
+- 🔻 **Triage icon**: a funnel in the label's colour.
+- 🔢 **Inbox-only counts**: labels count what is waiting.
+- 🎨 **Label colours**: on message rows, or in the sidebar only.
+- 🪟 **Native windows and tabs**: the page fits around the tab bar.
+- ✉️ **Compose target**: the page, a tab or a window.
+- ↗️ **Pop-out windows**: messages and drafts, titled by recipient or subject.
+- 🖨️ **Printing**: from any message window.
+- ⬇️ **Downloads**: chosen folder, optional auto-open.
+- 📤 **Share extension**: pages and links to the app.
+- 📮 **mailto handling**: with an iOS account picker.
+- 🔔 **Push notifications**: Archive, Later and Pin; tokens stay on the server.
+- 🤖 **Shortcuts and AppleScript**: open a path, read the link, run JavaScript.
+- ⚙️ **Shared settings**: macOS, iOS and the extension.
 
 ## What is in here
 
