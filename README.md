@@ -74,8 +74,16 @@ the example file shows the shape.
 | `docs/superpowers/specs/` | Design notes for the larger pieces |
 | `tools/` | Build and deploy helpers |
 
+## Licence
+
+GNU Affero General Public License, version 3 or later. The full text is in
+[LICENSE](LICENSE).
+
+In short: use it, change it and pass it on, as long as what you pass on stays
+under the same licence and its source stays available — including to people who
+only reach it over a network.
+
 ## Status
 
 Written for one person's mailbox and offered as-is, in case it is useful to
-someone else. No licence has been chosen yet, so all rights are reserved for
-now; ask if you would like to use any of it.
+someone else.
