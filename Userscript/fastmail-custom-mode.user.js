@@ -17,8 +17,6 @@ Fastmail Custom mode
 Maarten den Braber <m@mdbraber.com>
 version 3.11 - 2026-09-08
 
-Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
-
 3.11 — a row keeps its colour, a swipe stays on the list, and archive into
 a hold label. Rows in the Inbox lost their label chips, and with them their
 colour. Fastmail leaves a chip behind when a label is removed, so the mode

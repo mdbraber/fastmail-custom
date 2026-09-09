@@ -3,9 +3,7 @@
 New-mail pushes for the shell apps on iOS. A Fastmail token per account
 lives here, never on the phone; the service watches each mailbox over JMAP
 and sends an APNs alert for every message that lands in the Inbox, with the
-number of conversations carrying the Triage label as the badge. Design and
-payload contract:
-`docs/superpowers/specs/2026-09-07-ios-push-notifications-design.md`.
+number of conversations carrying the Triage label as the badge.
 
 ## The buttons on a notification
 

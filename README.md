@@ -71,7 +71,6 @@ the example file shows the shape.
 | `Packages/FastmailShellKit/` | The shared shell: web view, windows, links, settings |
 | `Server/` | The push server |
 | `Tests/` | Integration tests that run the real scripts in a web view |
-| `docs/superpowers/specs/` | Design notes for the larger pieces |
 | `tools/` | Build and deploy helpers |
 
 ## Licence
