@@ -212,4 +212,31 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     #expect(!gone.contains("v-PageHeader"))
 }
 
+// New Tab opens a window and folds it into the one in front. Which window
+// appeared has to be worked out after the fact, since opening one hands back
+// nothing, and a compose window opening at the same moment must not be
+// mistaken for it — those refuse to be tabs.
+
+@Test @MainActor func theWindowThatAppearedIsTheOneThatCanBeATab() {
+    let existing = makeWindow()
+    let compose = makeWindow()
+    compose.tabbingMode = .disallowed
+    let fresh = makeWindow()
+
+    let picked = ShellWindows.opened(before: [existing], after: [existing, compose, fresh])
+    #expect(picked === fresh)
+}
+
+@Test @MainActor func nothingIsPickedWhenNoWindowAppeared() {
+    let existing = makeWindow()
+    #expect(ShellWindows.opened(before: [existing], after: [existing]) == nil)
+}
+
+@Test @MainActor func aWindowThatRefusesTabsIsNeverPicked() {
+    let existing = makeWindow()
+    let compose = makeWindow()
+    compose.tabbingMode = .disallowed
+    #expect(ShellWindows.opened(before: [existing], after: [existing, compose]) == nil)
+}
+
 #endif
