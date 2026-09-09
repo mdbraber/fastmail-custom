@@ -20,11 +20,17 @@ Spec: docs/superpowers/specs/2026-09-04-fastmail-one-label-triage-design.md
 
 3.11 — a row keeps its colour, a swipe stays on the list, and archive into
 a hold label. Rows in the Inbox lost their label chips, and with them their
-colour, and never got them back: Fastmail leaves a chip behind when a label
-is removed, so the mode takes the stale ones off, and it read a record whose
-mailboxes had not loaded yet — which reports none — as a record whose labels
-had all gone. A row with chips and no known mailboxes is now left alone,
-since nothing redraws a row whose record never changed.
+colour. Fastmail leaves a chip behind when a label is removed, so the mode
+takes the stale ones off — and it asked the wrong record which chips were
+stale. A row is a conversation and its chips are the union of what the
+thread carries, so a label living on the reply shows on the row while the
+message the row was built from has never been in it: measured on a real
+Inbox, a row whose chip read "Nexthealth/HDV" while its own record reported
+nothing but the Inbox, stripped on the next pass and redrawn on the one
+after, which is why it looked random. The question now goes to the whole
+thread, the same union the rest of the model already uses. A record with no
+mailboxes at all is left alone too: none is not the same answer as "they
+have all gone".
 
 Deciding from the list — a swipe, or a key on the focused row — no longer
 opens the next conversation: there was nothing open to move on from, so there is
@@ -4934,6 +4940,24 @@ there, so a key, a menu, a drag and a swipe do the same thing:
         return names;
     };
 
+    /*
+     * The mailboxes a row's chips answer to: every message of the thread, not
+     * just the one the row holds.
+     *
+     * A row is a conversation, and its chips are the union of what the thread
+     * carries — a label on the reply shows on the row even though the message
+     * the row was built from has never been in it. Read against that one
+     * message, such a chip looks stale, and rows were losing labels they
+     * really had: measured, a row whose chips read "Nexthealth/HDV" while its
+     * own record reported nothing but the Inbox.
+     */
+    const threadMailboxPaths = (message) => {
+        const names = new Set();
+        threadOf(message).forEach(other =>
+            mailboxPaths(other).forEach(name => names.add(name)));
+        return Array.from(names);
+    };
+
     // Fastmail draws a row's label chips and adds to them when a label is
     // added, but does not take one away when a label is removed — the chip
     // stays behind. That is its own display bug, and it becomes ours as well,
@@ -5355,7 +5379,9 @@ there, so a key, a menu, a drag and a swipe do the same thing:
             const message = view && view.get ? view.get('content') : null;
             if (!message) return;
 
-            const actual = mailboxPaths(message);
+            // Every message of the thread, because that is what the chips
+            // answer to; the row's own message is one voice among them
+            const actual = threadMailboxPaths(message);
 
             // A record whose mailboxes have not arrived yet reports none, and
             // none is not the same answer as "every one of these labels is
