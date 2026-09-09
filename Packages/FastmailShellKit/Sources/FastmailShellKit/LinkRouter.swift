@@ -3,6 +3,10 @@ import Foundation
 public enum LinkRouter {
     public enum Route: Equatable, Sendable {
         case load(URL)
+        /// A message to write, carried as the mailto it arrived as. Where it
+        /// gets written is the platform's business: a window of its own on the
+        /// Mac, the window already open on a phone.
+        case compose(String)
         case handoff(URL)
         case refuse(String)
     }
@@ -22,11 +26,7 @@ public enum LinkRouter {
             return routeCommand(components, profile: profile)
         }
         if scheme == "mailto" {
-            return .load(composeURL(
-                mailto: url.absoluteString,
-                accountID: profile.accountID,
-                backend: profile.backend
-            ))
+            return .compose(url.absoluteString)
         }
         if scheme == "https" {
             return routeWebLink(url, profile: profile, arrivedViaHandoff: false)
@@ -54,11 +54,7 @@ public enum LinkRouter {
             else {
                 return .refuse("The link had no message to compose.")
             }
-            return .load(composeURL(
-                mailto: raw,
-                accountID: profile.accountID,
-                backend: profile.backend
-            ))
+            return .compose(raw)
         default:
             return .refuse("Unknown link command “\(command)”.")
         }
@@ -95,15 +91,21 @@ public enum LinkRouter {
         return .handoff(handoff)
     }
 
+    /// Built by hand rather than through URLComponents, which leaves `&` and
+    /// `+` unescaped in a query value and would tear a subject in half.
     static func composeURL(
         mailto: String,
         accountID: String?,
-        backend: Backend = .standard
+        backend: Backend = .standard,
+        minimalChrome: Bool = false
     ) -> URL {
         let base = composeBase(for: backend)
         var query = "mailto=" + percentEncode(mailto)
         if let accountID {
             query += "&u=" + percentEncode(accountID)
+        }
+        if minimalChrome {
+            query += "&ui=minimal"
         }
         return URL(string: base + "?" + query) ?? URL(string: base)!
     }

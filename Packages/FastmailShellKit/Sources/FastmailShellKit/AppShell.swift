@@ -119,6 +119,16 @@ public struct AppShell: View {
             model.banner = message
         case .handoff(let target):
             openInOtherApp(target)
+        case .compose(let mailto):
+            #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+            // A message gets a window of its own rather than displacing
+            // whatever you were reading.
+            ComposeWindows.shared.compose(mailto: mailto, profile: live)
+            #else
+            model.pendingLoad = LinkRouter.composeURL(
+                mailto: mailto, accountID: live.accountID, backend: live.backend
+            )
+            #endif
         }
     }
 

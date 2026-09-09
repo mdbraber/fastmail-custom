@@ -138,27 +138,36 @@ private func fastmailComposeFields(of composeURL: URL) -> [String: String] {
     #expect(LinkRouter.route(foreign, profile: profile(handoffScheme: nil)) == .load(foreign))
 }
 
-@Test func aRawMailtoTranslatesThroughThePinnedTemplate() {
+// A mailto is a message to write, not a page to go to. The route says so and
+// leaves it to each platform: a window of its own on the Mac, the window
+// there already on a phone.
+@Test func aRawMailtoIsAMessageToCompose() {
     let mailto = url("mailto:a%40b.com?subject=Hi%20there")
-    guard case .load(let compose) = LinkRouter.route(mailto, profile: profile()) else {
-        Issue.record("mailto did not load")
+    guard case .compose(let raw) = LinkRouter.route(mailto, profile: profile()) else {
+        Issue.record("mailto was not routed to compose")
         return
     }
+    #expect(raw == "mailto:a%40b.com?subject=Hi%20there")
+}
+
+@Test func theComposeCommandCarriesItsMailtoThrough() {
+    let inner = "mailto:a@b.com?subject=Hi%20there"
+    let command = url("fastmail-personal://compose?mailto=" + LinkRouter.percentEncode(inner))
+    guard case .compose(let raw) = LinkRouter.route(command, profile: profile()) else {
+        Issue.record("compose command was not routed to compose")
+        return
+    }
+    #expect(raw == inner)
+}
+
+// The template itself is unchanged, and still what a phone loads in place.
+@Test func theComposeTemplateStillCarriesTheMessageAndTheAccount() {
+    let compose = LinkRouter.composeURL(
+        mailto: "mailto:a%40b.com?subject=Hi%20there", accountID: "f00dcafe", backend: .production
+    )
     #expect(compose.absoluteString.hasPrefix("https://app.fastmail.com/mail/compose?mailto="))
     let items = URLComponents(url: compose, resolvingAgainstBaseURL: false)?.queryItems ?? []
     #expect(items.first(where: { $0.name == "u" })?.value == "f00dcafe")
-    let fields = fastmailComposeFields(of: compose)
-    #expect(fields["to"] == "a@b.com")
-    #expect(fields["subject"] == "Hi there")
-}
-
-@Test func theComposeCommandTranslatesItsMailtoParameter() {
-    let inner = "mailto:a@b.com?subject=Hi%20there"
-    let command = url("fastmail-personal://compose?mailto=" + LinkRouter.percentEncode(inner))
-    guard case .load(let compose) = LinkRouter.route(command, profile: profile()) else {
-        Issue.record("compose command did not load")
-        return
-    }
     let fields = fastmailComposeFields(of: compose)
     #expect(fields["to"] == "a@b.com")
     #expect(fields["subject"] == "Hi there")
@@ -237,11 +246,12 @@ private func fastmailComposeFields(of composeURL: URL) -> [String: String] {
 }
 
 @Test func aMailtoLinkComposesOnTheProfilesBackend() {
-    guard case .load(let target) = LinkRouter.route(url("mailto:a@b.com"), profile: profile().on(.beta)) else {
+    let onBeta = profile().on(.beta)
+    guard case .compose(let mailto) = LinkRouter.route(url("mailto:a@b.com"), profile: onBeta) else {
         Issue.record("a mailto link did not compose")
         return
     }
-    #expect(target.host == "app.beta.fastmail.com")
+    #expect(ComposeURL.url(for: onBeta, mailto: mailto).host == "app.beta.fastmail.com")
 }
 
 @Test func aProfileMovedToAnotherBackendKeepsEverythingElse() {

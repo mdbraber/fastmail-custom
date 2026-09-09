@@ -29,13 +29,13 @@ import Testing
     let command = try #require(MailtoChooser.compose(mailto, in: work))
 
     #expect(command.scheme == "fastmail-work")
-    guard case .load(let page) = LinkRouter.route(command, profile: .work(accountID: nil)) else {
+    guard case .compose(let raw) = LinkRouter.route(command, profile: .work(accountID: nil)) else {
         Issue.record("the work shell did not read the command as a compose")
         return
     }
+    #expect(raw == mailto.absoluteString)
+    let page = ComposeURL.url(for: .work(accountID: nil), mailto: raw)
     #expect(page.absoluteString.contains("/mail/compose?mailto="))
-    let fields = URLComponents(url: page, resolvingAgainstBaseURL: false)?.queryItems ?? []
-    #expect(fields.first { $0.name == "mailto" }?.value == mailto.absoluteString)
 }
 
 // Anything that is not a mailto is not this app's business. The chooser is

@@ -20,6 +20,20 @@ public enum ComposeURL {
     }
 }
 
+extension ComposeURL {
+    // A window opened for a mailto takes the path that is known to carry a
+    // message, with the minimal chrome a window of its own wants: no sidebar,
+    // no list, just what you are writing.
+    public static func url(for profile: Profile, mailto: String) -> URL {
+        LinkRouter.composeURL(
+            mailto: mailto,
+            accountID: profile.accountID,
+            backend: profile.backend,
+            minimalChrome: true
+        )
+    }
+}
+
 @MainActor
 public final class ComposePool<Window: AnyObject> {
     private(set) var pooled: Window?
@@ -100,6 +114,25 @@ public final class ComposeWindows: NSObject, NSWindowDelegate {
     public func compose() {
         guard let pool else { return }
         let window = pool.take()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+    }
+
+    /// The same window, opened on a message someone asked to write — a mailto
+    /// link clicked anywhere on the Mac. The pooled window was preloaded blank,
+    /// so this one has a page to fetch before it can be typed in.
+    ///
+    /// The profile comes with the message rather than being remembered from
+    /// setup: a mailto can be what launched the app, arriving before the shell
+    /// has appeared and configured anything, and a message that quietly went
+    /// nowhere would be the worst way to find that out. Configuring twice is
+    /// free — it returns on the second call.
+    public func compose(mailto: String, profile: Profile) {
+        configure(profile: profile)
+        guard let pool else { return }
+        let window = pool.take()
+        (window.contentView as? WKWebView)?
+            .load(URLRequest(url: ComposeURL.url(for: profile, mailto: mailto)))
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }

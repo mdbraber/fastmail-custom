@@ -80,3 +80,24 @@ private final class FakeWindow {}
     #expect(ComposeURL.url(for: with).absoluteString == "https://app.fastmail.com/mail/Inbox/compose?u=f00dcafe&ui=minimal")
     #expect(ComposeURL.url(for: without).absoluteString == "https://app.fastmail.com/mail/Inbox/compose?ui=minimal")
 }
+
+// A compose window opened for a mailto carries the message, on the path that
+// is known to accept one, with the same minimal chrome a blank one gets.
+@Test func aComposeWindowForAMailtoCarriesTheMessage() {
+    let profile = Profile(
+        id: "personal",
+        displayName: "Test",
+        startURL: URL(string: "https://app.fastmail.com/")!,
+        overlayScriptName: nil,
+        urlScheme: "fastmail-personal",
+        accountID: "f00dcafe",
+        backend: .production
+    )
+    let composed = ComposeURL.url(for: profile, mailto: "mailto:a@b.com?subject=Tea & biscuits")
+    #expect(composed.absoluteString.hasPrefix("https://app.fastmail.com/mail/compose?mailto="))
+    let query = composed.query ?? ""
+    #expect(query.contains("u=f00dcafe"))
+    #expect(query.contains("ui=minimal"))
+    // The ampersand belongs to the subject, so it must not read as a separator.
+    #expect(query.contains("%26"))
+}
