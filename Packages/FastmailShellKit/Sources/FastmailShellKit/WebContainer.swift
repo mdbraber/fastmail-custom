@@ -144,6 +144,15 @@ public struct WebContainer {
                 #if os(macOS)
                 NotificationPresenter.shared.showWindow()
                 #endif
+            },
+            onCompose: { asked in
+                #if os(macOS)
+                return ComposeCommands.open(asked: asked)
+                #else
+                // A phone has one window and no tabs; every message is written
+                // in the page.
+                return ComposeMode.inline.rawValue
+                #endif
             }
         )
         configuration.userContentController.addScriptMessageHandler(

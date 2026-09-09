@@ -211,6 +211,98 @@
         else document.addEventListener('DOMContentLoaded', observe);
     }
 
+    // Asking for a message: the C key, and Fastmail's own Compose button,
+    // which read the same way. Fastmail writes the message over the mailbox
+    // you are looking at; here it can also open a tab or a window, and which
+    // one a plain press or click gives you is the app's setting to answer.
+    // Holding Option always means Fastmail's own, Command and Option together
+    // always a tab.
+    //
+    // The key is read from the physical key rather than the letter, because
+    // Option-C types "ç".
+    var handingOver = false;
+
+    function composeAsk(event) {
+        if (event.ctrlKey || event.shiftKey) return null;
+        if (event.altKey) return event.metaKey ? 'tab' : 'inline';
+        return event.metaKey ? null : 'default';
+    }
+
+    function askCompose(asked, handOver) {
+        if (asked === 'inline') {
+            handOver();
+            return;
+        }
+        post('compose', { mode: asked }).then(function (answer) {
+            if (answer === 'inline') handOver();
+        });
+    }
+
+    function isTyping(element) {
+        if (!element) return false;
+        if (element.isContentEditable) return true;
+        var tag = String(element.tagName || '').toLowerCase();
+        return tag === 'input' || tag === 'textarea' || tag === 'select';
+    }
+
+    function handOverC(event) {
+        var target = event.target && !isTyping(event.target) ? event.target : document.body;
+        if (!target) return;
+        handingOver = true;
+        try {
+            target.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'c',
+                code: 'KeyC',
+                bubbles: true,
+                cancelable: true
+            }));
+        } finally {
+            handingOver = false;
+        }
+    }
+
+    function composeButton(target) {
+        if (!target || typeof target.closest !== 'function') return null;
+        return target.closest('.s-new-message');
+    }
+
+    function handOverClick(button) {
+        handingOver = true;
+        try {
+            button.dispatchEvent(new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                view: window
+            }));
+        } finally {
+            handingOver = false;
+        }
+    }
+
+    function watchComposeKey() {
+        document.addEventListener('keydown', function (event) {
+            if (handingOver || event.repeat) return;
+            if (event.code !== 'KeyC') return;
+            if (isTyping(event.target)) return;
+            var asked = composeAsk(event);
+            if (!asked) return;
+            event.preventDefault();
+            event.stopPropagation();
+            askCompose(asked, function () { handOverC(event); });
+        }, true);
+
+        document.addEventListener('click', function (event) {
+            if (handingOver || event.button) return;
+            var button = composeButton(event.target);
+            if (!button) return;
+            var asked = composeAsk(event);
+            if (!asked) return;
+            event.preventDefault();
+            event.stopPropagation();
+            askCompose(asked, function () { handOverClick(button); });
+        }, true);
+    }
+
     window.__fmshell = {
         onRoute: function (callback) {
             routeCallbacks.push(callback);
@@ -828,6 +920,7 @@
 
     installRouteHooks();
     watchTheme();
+    watchComposeKey();
     watchDragRegions();
     watchMenus();
     watchSettingsList();

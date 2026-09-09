@@ -200,3 +200,36 @@ actor Recorder {
     #expect(dismissed == ["a", "b"])
     #expect(shown == 1)
 }
+
+// The page asks for a message; the app says where it put it, so that a page
+// told "inline" can go ahead and open one itself.
+@Test @MainActor func composeAsksTheAppAndIsToldWhereItWent() async {
+    var asked: [String] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onCompose: { mode in
+            asked.append(mode)
+            return mode == "default" ? "window" : mode
+        }
+    )
+    let reply = await bridge.handle(body: [
+        "action": "compose",
+        "payload": ["mode": "default"]
+    ])
+    #expect(asked == ["default"])
+    #expect(reply.value == "window")
+    #expect(reply.error == nil)
+}
+
+@Test @MainActor func composeWithoutAModeIsRefused() async {
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onCompose: { _ in "window" }
+    )
+    let reply = await bridge.handle(body: ["action": "compose", "payload": [:]])
+    #expect(reply.error != nil)
+}

@@ -20,6 +20,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onNotify: @MainActor (MailNotification) -> Void
     private let onDismissNotifications: @MainActor ([String]) -> Void
     private let onShowWindow: @MainActor () -> Void
+    /// Asked where to put a message, and answers where it put it — so a page
+    /// told "inline" knows to go ahead and open one itself.
+    private let onCompose: @MainActor (String) -> String
 
     public init(
         expectedHost: String,
@@ -33,7 +36,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onOpenSettings: @escaping @MainActor () -> Void = {},
         onNotify: @escaping @MainActor (MailNotification) -> Void = { _ in },
         onDismissNotifications: @escaping @MainActor ([String]) -> Void = { _ in },
-        onShowWindow: @escaping @MainActor () -> Void = {}
+        onShowWindow: @escaping @MainActor () -> Void = {},
+        onCompose: @escaping @MainActor (String) -> String = { _ in ComposeMode.inline.rawValue }
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
@@ -47,6 +51,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onNotify = onNotify
         self.onDismissNotifications = onDismissNotifications
         self.onShowWindow = onShowWindow
+        self.onCompose = onCompose
     }
 
     static func rect(from values: [Double]) -> CGRect? {
@@ -144,6 +149,11 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             let ids = (payload["ids"] as? [Any] ?? []).compactMap { $0 as? String }
             onDismissNotifications(ids)
             return BridgeReply(value: nil, error: nil)
+        case "compose":
+            guard let mode = payload["mode"] as? String, !mode.isEmpty else {
+                return BridgeReply(value: nil, error: "compose has no mode")
+            }
+            return BridgeReply(value: onCompose(mode), error: nil)
         case "showWindow":
             onShowWindow()
             return BridgeReply(value: nil, error: nil)

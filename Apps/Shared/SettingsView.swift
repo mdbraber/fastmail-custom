@@ -25,6 +25,7 @@ private struct GeneralSettingsView: View {
     @AppStorage(Backend.defaultsKey) private var backendName = Backend.production.rawValue
     @AppStorage(AttachmentOpener.autoOpenDefaultsKey) private var autoOpen = false
     @AppStorage(DownloadManager.folderDefaultsKey) private var downloadFolder = ""
+    @AppStorage(ComposeMode.defaultsKey) private var composeMode = ComposeMode.fallback.rawValue
 
     var body: some View {
         Form {
@@ -55,6 +56,22 @@ private struct GeneralSettingsView: View {
                     .foregroundStyle(.secondary)
             }
             #if os(macOS)
+            Section {
+                Picker("New message opens", selection: $composeMode) {
+                    ForEach(ComposeMode.allCases, id: \.rawValue) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                }
+                Text(ComposeMode(rawValue: composeMode)?.hint ?? "")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Compose")
+            } footer: {
+                Text("What the C key and the Compose button do. Hold Option for Fastmail's own compose in the page, Command and Option for a tab.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section {
                 LabeledContent("Download folder") {
                     Text(downloadFolder.isEmpty ? "~/Downloads" : downloadFolder)

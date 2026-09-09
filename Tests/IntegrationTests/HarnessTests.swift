@@ -6,16 +6,20 @@ import WebKit
 final class HarnessTests: XCTestCase {
     private var webView: WKWebView!
     private var received: [[String: Any]] = []
+    private var recorder: Recorder?
+    private var replies: (([String: Any]) -> Any?)?
 
     private final class Recorder: NSObject, WKScriptMessageHandlerWithReply {
         var onMessage: (([String: Any]) -> Void)?
+        var reply: (([String: Any]) -> Any?)?
         func userContentController(
             _ userContentController: WKUserContentController,
             didReceive message: WKScriptMessage,
             replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void
         ) {
-            if let body = message.body as? [String: Any] { onMessage?(body) }
-            replyHandler(nil, nil)
+            let body = message.body as? [String: Any] ?? [:]
+            onMessage?(body)
+            replyHandler(reply?(body), nil)
         }
     }
 
@@ -70,6 +74,8 @@ final class HarnessTests: XCTestCase {
         }
         let recorder = Recorder()
         recorder.onMessage = { [weak self] body in self?.received.append(body) }
+        recorder.reply = { [weak self] body in self?.replies?(body) }
+        self.recorder = recorder
         configuration.userContentController.addScriptMessageHandler(
             recorder,
             contentWorld: .page,
@@ -629,5 +635,170 @@ final class HarnessTests: XCTestCase {
         try await waitUntil { self.received.contains { $0["action"] as? String == "openSettings" } }
         let navigated = try await evaluate(webView, "location.href !== window.__before") as? Bool
         XCTAssertEqual(navigated, false)
+    }
+
+    // MARK: The C key
+
+    private func pressC(
+        alt: Bool = false,
+        command: Bool = false,
+        shift: Bool = false,
+        on target: String = "document.body"
+    ) async throws {
+        _ = try await evaluate(webView, """
+        \(target).dispatchEvent(new KeyboardEvent('keydown', {
+            code: 'KeyC', key: '\(alt ? "ç" : "c")',
+            altKey: \(alt), metaKey: \(command), shiftKey: \(shift),
+            bubbles: true, cancelable: true
+        }));
+        """)
+    }
+
+    private func plantComposeButton() async throws {
+        _ = try await evaluate(webView, """
+        var button = document.createElement('a');
+        button.className = 's-new-message';
+        button.href = '#compose';
+        button.textContent = 'Compose';
+        document.body.appendChild(button);
+        window.__compose = button;
+        window.__clicks = [];
+        button.addEventListener('click', function (event) {
+            window.__clicks.push({ alt: event.altKey, meta: event.metaKey });
+            event.preventDefault();
+        });
+        true;
+        """)
+    }
+
+    private func clickCompose(alt: Bool = false, command: Bool = false) async throws {
+        _ = try await evaluate(webView, """
+        window.__compose.dispatchEvent(new MouseEvent('click', {
+            altKey: \(alt), metaKey: \(command),
+            bubbles: true, cancelable: true
+        }));
+        """)
+    }
+
+    private func composeAsks() -> [String] {
+        received
+            .filter { $0["action"] as? String == "compose" }
+            .compactMap { ($0["payload"] as? [String: Any])?["mode"] as? String }
+    }
+
+    private func watchKeys() async throws {
+        _ = try await evaluate(webView, """
+        window.__keys = [];
+        document.addEventListener('keydown', function (event) {
+            if (event.code !== 'KeyC') return;
+            window.__keys.push({ alt: event.altKey, shift: event.shiftKey });
+        });
+        """)
+    }
+
+    // Plain C is the one the setting speaks for, so it asks the app where the
+    // message should go rather than deciding, and Fastmail never sees the key.
+    func testPlainCAsksTheAppWhereTheMessageGoes() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await watchKeys()
+        try await pressC()
+        try await waitUntil { self.composeAsks() == ["default"] }
+        let seen = try await evaluate(webView, "window.__keys.length") as? Int
+        XCTAssertEqual(seen, 0)
+    }
+
+    // Command-Option-C names its own place, whatever the setting says.
+    func testCommandOptionCAsksForATab() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await pressC(alt: true, command: true)
+        try await waitUntil { self.composeAsks() == ["tab"] }
+    }
+
+    // Command on its own is Copy, and Shift is Fastmail's own.
+    func testCommandCAndShiftCAreLeftAlone() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await watchKeys()
+        try await pressC(command: true)
+        try await pressC(shift: true)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(composeAsks(), [])
+        let seen = try await evaluate(webView, "window.__keys.length") as? Int
+        XCTAssertEqual(seen, 2)
+    }
+
+    // The Compose button reads the same as the key it stands for.
+    func testComposeButtonAsksTheAppTheSameWay() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await plantComposeButton()
+        try await clickCompose()
+        try await waitUntil { self.composeAsks() == ["default"] }
+        try await clickCompose(alt: true, command: true)
+        try await waitUntil { self.composeAsks() == ["default", "tab"] }
+        let ownClicks = try await evaluate(webView, "window.__clicks.length") as? Int
+        XCTAssertEqual(ownClicks, 0)
+    }
+
+    // Option-click means Fastmail's own compose, which is Fastmail's to open:
+    // the button is clicked again, plainly, and the app is not asked.
+    func testOptionClickHandsFastmailThePlainClick() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await plantComposeButton()
+        try await clickCompose(alt: true)
+        try await waitUntil {
+            (try await self.evaluate(self.webView, "window.__clicks.length") as? Int ?? 0) == 1
+        }
+        let alt = try await evaluate(webView, "window.__clicks[0].alt") as? Bool
+        XCTAssertEqual(alt, false)
+        XCTAssertEqual(composeAsks(), [])
+    }
+
+    // Option-C means Fastmail's own compose, which is Fastmail's to open: the
+    // app is not asked, and the page is handed the plain key it understands.
+    func testOptionCHandsFastmailThePlainKey() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await watchKeys()
+        try await pressC(alt: true)
+        try await waitUntil {
+            (try await self.evaluate(self.webView, "window.__keys.length") as? Int ?? 0) == 1
+        }
+        let alt = try await evaluate(webView, "window.__keys[0].alt") as? Bool
+        XCTAssertEqual(alt, false)
+        XCTAssertEqual(composeAsks(), [])
+    }
+
+    // Told the message belongs in the page after all, the page opens it there.
+    func testBeingToldInlineHandsFastmailThePlainKey() async throws {
+        replies = { body in
+            guard body["action"] as? String == "compose" else { return nil }
+            return "inline"
+        }
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        try await watchKeys()
+        try await pressC()
+        try await waitUntil {
+            (try await self.evaluate(self.webView, "window.__keys.length") as? Int ?? 0) == 1
+        }
+    }
+
+    // A C typed into a field is a letter, not a command.
+    func testCTypedIntoAFieldIsJustALetter() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, """
+        var field = document.createElement('input');
+        document.body.appendChild(field);
+        window.__field = field;
+        true;
+        """)
+        try await pressC(on: "window.__field")
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(composeAsks(), [])
     }
 }

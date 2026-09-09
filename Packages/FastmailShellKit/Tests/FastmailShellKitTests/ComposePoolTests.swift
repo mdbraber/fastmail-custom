@@ -102,6 +102,39 @@ private final class FakeWindow {}
     #expect(query.contains("%26"))
 }
 
+// Where a message opens when you ask for one without saying where: in the
+// page, in a tab, or in a window of its own.
+@Test func aMessageOpensInAWindowUnlessToldOtherwise() {
+    #expect(ComposeMode.stored(in: [:]) == .window)
+    #expect(ComposeMode.stored(in: ["composeMode": "inline"]) == .inline)
+    #expect(ComposeMode.stored(in: ["composeMode": "tab"]) == .tab)
+    #expect(ComposeMode.stored(in: ["composeMode": "window"]) == .window)
+    // Something unreadable is not an answer.
+    #expect(ComposeMode.stored(in: ["composeMode": "sideways"]) == .window)
+}
+
+// What the page watches for — the C key, and the Compose button — and what
+// each combination asks for. Plain follows the setting; the other two say
+// where they want it, whatever the setting is.
+@Test func theComposeKeysSayWhereTheyWantIt() {
+    #expect(ComposeMode.asked(alt: false, command: false, shift: false) == "default")
+    #expect(ComposeMode.asked(alt: true, command: false, shift: false) == "inline")
+    #expect(ComposeMode.asked(alt: true, command: true, shift: false) == "tab")
+    // Command alone is Copy, and Shift is Fastmail's own business.
+    #expect(ComposeMode.asked(alt: false, command: true, shift: false) == nil)
+    #expect(ComposeMode.asked(alt: false, command: false, shift: true) == nil)
+    #expect(ComposeMode.asked(alt: true, command: true, shift: true) == nil)
+}
+
+// What a request from the page comes to, once the setting has had its say.
+@Test func plainCFollowsTheSettingAndTheOthersDoNot() {
+    #expect(ComposeMode.resolve(asked: "default", setting: .tab) == .tab)
+    #expect(ComposeMode.resolve(asked: "default", setting: .inline) == .inline)
+    #expect(ComposeMode.resolve(asked: "tab", setting: .inline) == .tab)
+    #expect(ComposeMode.resolve(asked: "inline", setting: .window) == .inline)
+    #expect(ComposeMode.resolve(asked: "sideways", setting: .window) == nil)
+}
+
 #if canImport(AppKit) && !targetEnvironment(macCatalyst)
 import AppKit
 
