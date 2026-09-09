@@ -677,6 +677,14 @@ there, so a key, a menu, a drag and a swipe do the same thing:
     // badge falls back to the label's own total, which is the same number
     // whenever the model has been kept.
     const COUNT_WINDOW = 250;
+
+    // Overture's Query.AUTO_REFRESH_IF_OBSERVED. A query is told when the data
+    // behind it has changed, but it only goes and looks again if it has been
+    // asked to, and the default is never. This one is watched for as long as a
+    // badge is drawn from it, which is exactly when the answer needs to keep
+    // up, and forgetInboxCounts takes the observers away with the feature.
+    const AUTO_REFRESH_IF_OBSERVED = 1;
+
     const countRangeObserver = { rangeDidChange() {} };
     const countLengthObserver = { go: () => scheduleBadgeRepaint() };
 
@@ -720,6 +728,12 @@ there, so a key, a menu, a drag and a swipe do the same thing:
                 FastMail.classes.MessageList,
                 params
             );
+
+            // Without this the badge keeps serving the number it had when the
+            // query first landed: a label added to a message marks the query
+            // obsolete and nothing refetches it, while allIdsAreLoaded stays
+            // true, so countKnown reports the stale length as a certainty.
+            query.autoRefresh = AUTO_REFRESH_IF_OBSERVED;
 
             query.addObserverForRange(COUNT_RANGE, countRangeObserver, 'rangeDidChange');
             query.getObjectAt(0);
