@@ -281,6 +281,26 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     #expect(fullScreenObservers[ObjectIdentifier(joiner)] == nil)
 }
 
+// A window joining a tab group is told nothing about it, so news from any
+// window is taken as news for all of them.
+@Test @MainActor func anyWindowsNewsReMeasuresEveryWindow() throws {
+    let host = makeWindow()
+    let quiet = makeWindow()
+    let noisy = makeWindow()
+    defer {
+        for window in [host, quiet, noisy] {
+            NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window)
+        }
+    }
+    observeFullScreen(quiet, webView: WKWebView(), model: ShellModel())
+    let observer = try #require(fullScreenObservers[ObjectIdentifier(quiet)])
+    #expect(observer.observedTabGroup == nil)
+
+    host.addTabbedWindow(quiet, ordered: .above)
+    NotificationCenter.default.post(name: NSWindow.didResizeNotification, object: noisy)
+    #expect(observer.observedTabGroup === quiet.tabGroup)
+}
+
 // A tab is only as useful as its name, and the page already names itself
 // after whatever mailbox or label is open.
 @Test @MainActor func aTabIsNamedAfterWhateverThePageIsShowing() {

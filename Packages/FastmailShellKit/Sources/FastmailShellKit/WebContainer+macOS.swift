@@ -263,8 +263,6 @@ final class FullScreenObserver: NSObject {
     private var enterToken: NSObjectProtocol?
     private var exitToken: NSObjectProtocol?
     private var closeToken: NSObjectProtocol?
-    private var tabToken: NSObjectProtocol?
-    private var resizeToken: NSObjectProtocol?
     private var tintCancellable: AnyCancellable?
     private var titleCancellable: AnyCancellable?
     private weak var window: NSWindow?
@@ -307,18 +305,7 @@ final class FullScreenObserver: NSObject {
 
         self.window = window
         self.webView = webView
-        // Merging into a tab group, and leaving one, both key and resize the
-        // window; there is no notification for the tab bar itself.
-        tabToken = center.addObserver(
-            forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.applyTabInset() }
-        }
-        resizeToken = center.addObserver(
-            forName: NSWindow.didResizeNotification, object: window, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.applyTabInset() }
-        }
+        Self.watchEveryWindow()
         // The title is hidden in the title bar but it is what a tab is called,
         // so it follows the page rather than staying the account's name.
         let accountName = window.title
@@ -328,7 +315,10 @@ final class FullScreenObserver: NSObject {
             }
         }
 
-        applyTabInset()
+        // Itself first: it is not in the register until this returns, so a
+        // sweep would pass it by.
+        placeTabInset()
+        Self.sweepTabInsets()
     }
 
     /// Follows the window from one tab group to the next. Which group a window
@@ -342,23 +332,57 @@ final class FullScreenObserver: NSObject {
         // this reads the value again rather than taking the one that came
         // with the change.
         tabGroupObservation = group?.observe(\.isTabBarVisible, options: [.new]) { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.applyTabInset() }
+            MainActor.assumeIsolated { self?.placeTabInset() }
         }
     }
 
-    /// More than once: a group reports no visible tab bar while it is still
-    /// being made, and settles a beat later, so a single look catches the
-    /// state before it is true.
-    private func applyTabInset() {
-        placeTabInset()
-        for delay in [0.3, 1.2] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                MainActor.assumeIsolated { self?.placeTabInset() }
+    /// Watches for anything happening to any window, once for the whole app.
+    ///
+    /// A window is told nothing when it is folded into a tab group, so the
+    /// only reliable moment to re-measure it is when something happened
+    /// somewhere — to any window, not only itself. These are never taken down:
+    /// they belong to the app rather than to a window.
+    private static var appTokens: [NSObjectProtocol] = []
+
+    private static func watchEveryWindow() {
+        guard appTokens.isEmpty else { return }
+        let center = NotificationCenter.default
+        appTokens = [NSWindow.didBecomeKeyNotification, NSWindow.didResizeNotification].map {
+            center.addObserver(forName: $0, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { sweepTabInsets() }
             }
         }
     }
 
-    private func placeTabInset() {
+    /// Re-measures every window there is.
+    ///
+    /// More than once: a group reports no visible tab bar while it is still
+    /// being made, and settles a beat later, so a single look catches the
+    /// state before it is true. A sweep already under way is not doubled —
+    /// resizing a window by hand is a stream of news, and one look each time
+    /// it settles is enough.
+    static func sweepTabInsets() {
+        placeEveryTabInset()
+        guard !sweepScheduled else { return }
+        sweepScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            MainActor.assumeIsolated { placeEveryTabInset() }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            MainActor.assumeIsolated {
+                placeEveryTabInset()
+                sweepScheduled = false
+            }
+        }
+    }
+
+    private static var sweepScheduled = false
+
+    private static func placeEveryTabInset() {
+        for observer in fullScreenObservers.values { observer.placeTabInset() }
+    }
+
+    fileprivate func placeTabInset() {
         syncTabGroupObservation()
         guard let window, let webView else { return }
         let edges = tabBarEdges(contentInset: tabbedPageInset(of: window))
@@ -375,13 +399,11 @@ final class FullScreenObserver: NSObject {
 
     func tearDown() {
         let center = NotificationCenter.default
-        [enterToken, exitToken, closeToken, tabToken, resizeToken]
+        [enterToken, exitToken, closeToken]
             .compactMap { $0 }.forEach(center.removeObserver)
         enterToken = nil
         exitToken = nil
         closeToken = nil
-        tabToken = nil
-        resizeToken = nil
         tintCancellable?.cancel()
         tintCancellable = nil
         titleCancellable?.cancel()
