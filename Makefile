@@ -1,7 +1,8 @@
 PROJECT = FastmailShell.xcodeproj
+LSREGISTER = /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/ available/ {print $$3; exit}')
 
-.PHONY: generate test build-macos install-macos build-ios install-ios build-extension install-extension install deploy settings-bundle clean
+.PHONY: generate test build-macos install-macos forget-builds build-ios install-ios build-extension install-extension install deploy settings-bundle clean
 
 generate:
 	xcodegen generate
@@ -26,6 +27,19 @@ install-macos: build-macos
 	rm -rf "/Applications/mdbraber.com.app" "/Applications/nexthealth.nl.app"
 	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/mdbraber.com.app" /Applications/
 	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/nexthealth.nl.app" /Applications/
+	$(MAKE) forget-builds
+
+# Building an app registers it, so the copy in Xcode's build folder claims the
+# same bundle identifier as the installed one. Then a Fastmail link, or a page
+# handed over from another device, can open the build instead of the app.
+forget-builds:
+	@for scheme in Personal Work; do \
+		dir="$$(xcodebuild -project $(PROJECT) -scheme $$scheme -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')"; \
+		for app in "$$dir"/*.app; do \
+			[ -d "$$app" ] && $(LSREGISTER) -u "$$app" >/dev/null 2>&1 || true; \
+		done; \
+	done
+	@echo "Only /Applications now claims the apps' bundle identifiers"
 
 build-ios: generate
 	xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release -allowProvisioningUpdates build

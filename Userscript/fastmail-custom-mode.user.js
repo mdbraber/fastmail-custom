@@ -4891,14 +4891,44 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
+    /*
+     * The message the menu is about. Fastmail's own actions in this menu work
+     * on the focused row, so the link follows the same rule: the row the menu
+     * was opened on, and the message the pane has open only when there is no
+     * row to read, as in a menu raised from the message itself.
+     */
+    const focusedRowMessage = () => {
+        try {
+            const node = document.querySelector('.v-MailboxItem.is-focused');
+            const view = node && FastMail.getViewFromNode(node);
+            const content = view && typeof view.get === 'function' ?
+                view.get('content') : null;
+            return content instanceof FastMail.classes.Message ? content : null;
+        } catch (error) {
+            return null;
+        }
+    };
+
+    /*
+     * The action hangs off a target rather than the button: a button whose
+     * target is null runs nothing when it is pressed, however well the method
+     * it names is defined on it. Read when pressed, not when the menu is
+     * drawn, so the link is the one for the row that is focused by then.
+     */
     const copyLinkOption = () => {
         const option = new FastMail.classes.ButtonView({
             label: 'Copy link',
             icon: linkIcon(),
-            method: 'chooseItem',
-            chooseItem() {
-                const url = currentMessageLink();
-                if (url) copyText(url);
+            method: 'copyLink',
+            target: {
+                copyLink() {
+                    const url = urlForMessage(focusedRowMessage()) || currentMessageLink();
+                    if (url) {
+                        copyText(url);
+                    } else {
+                        showToast('No link for this message');
+                    }
+                }
             }
         });
 
