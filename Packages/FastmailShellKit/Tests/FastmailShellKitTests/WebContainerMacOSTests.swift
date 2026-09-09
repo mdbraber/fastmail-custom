@@ -262,6 +262,25 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     #expect(ShellWindows.takeTabPreference() == false)
 }
 
+@Test @MainActor func theTabBarIsWatchedOnTheGroupItselfNotThroughTheWindow() throws {
+    let host = makeWindow()
+    let joiner = makeWindow()
+    defer {
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: host)
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: joiner)
+    }
+    host.addTabbedWindow(joiner, ordered: .above)
+    observeFullScreen(joiner, webView: WKWebView(), model: ShellModel())
+    let observer = try #require(fullScreenObservers[ObjectIdentifier(joiner)])
+    // A window hands its tab group over without saying so, so the group is
+    // watched directly; watching it through the window leaves a registration
+    // that cannot be undone, and undoing it is what closing a tab does.
+    #expect(observer.observedTabGroup === joiner.tabGroup)
+    NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: joiner)
+    #expect(observer.observedTabGroup == nil)
+    #expect(fullScreenObservers[ObjectIdentifier(joiner)] == nil)
+}
+
 // A tab is only as useful as its name, and the page already names itself
 // after whatever mailbox or label is open.
 @Test @MainActor func aTabIsNamedAfterWhateverThePageIsShowing() {

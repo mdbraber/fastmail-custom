@@ -252,8 +252,14 @@ func observeFullScreen(_ window: NSWindow, webView: WKWebView, model: ShellModel
 final class FullScreenObserver: NSObject {
     /// Joining a tab group keys no window and resizes none, so there is no
     /// notification to hang this on; the group itself has to be watched.
-    private static let tabPaths = ["tabGroup", "tabGroup.isTabBarVisible"]
-    private var watchingTabs = false
+    ///
+    /// The group is watched directly rather than through the window's
+    /// `tabGroup`. A window swaps groups without announcing it, so an
+    /// observation registered through that property ends up trying to
+    /// unregister from a group that never carried it, and Foundation raises
+    /// rather than shrugging — which closing a tab would then do every time.
+    private var tabGroupObservation: NSKeyValueObservation?
+    private(set) weak var observedTabGroup: NSWindowTabGroup?
     private var enterToken: NSObjectProtocol?
     private var exitToken: NSObjectProtocol?
     private var closeToken: NSObjectProtocol?
@@ -322,23 +328,22 @@ final class FullScreenObserver: NSObject {
             }
         }
 
-        for path in Self.tabPaths {
-            window.addObserver(self, forKeyPath: path, options: [.new], context: nil)
-        }
-        watchingTabs = true
         applyTabInset()
     }
 
-    /// The group reports its old answer while it is still being made, so this
-    /// reads the value again rather than taking the one that came with the
-    /// change.
-    nonisolated override func observeValue(
-        forKeyPath keyPath: String?,
-        of object: Any?,
-        change: [NSKeyValueChangeKey: Any]?,
-        context: UnsafeMutableRawPointer?
-    ) {
-        MainActor.assumeIsolated { self.applyTabInset() }
+    /// Follows the window from one tab group to the next. Which group a window
+    /// belongs to is only ever read here, never observed, so this is called
+    /// again each time the inset is placed.
+    private func syncTabGroupObservation() {
+        let group = window?.tabGroup
+        guard group !== observedTabGroup else { return }
+        observedTabGroup = group
+        // The group reports its old answer while it is still being made, so
+        // this reads the value again rather than taking the one that came
+        // with the change.
+        tabGroupObservation = group?.observe(\.isTabBarVisible, options: [.new]) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.applyTabInset() }
+        }
     }
 
     /// More than once: a group reports no visible tab bar while it is still
@@ -354,6 +359,7 @@ final class FullScreenObserver: NSObject {
     }
 
     private func placeTabInset() {
+        syncTabGroupObservation()
         guard let window, let webView else { return }
         let edges = tabBarEdges(contentInset: tabbedPageInset(of: window))
         webView.evaluateJavaScript(tabInsetScript(
@@ -380,10 +386,9 @@ final class FullScreenObserver: NSObject {
         tintCancellable = nil
         titleCancellable?.cancel()
         titleCancellable = nil
-        if watchingTabs, let window {
-            for path in Self.tabPaths { window.removeObserver(self, forKeyPath: path) }
-        }
-        watchingTabs = false
+        tabGroupObservation?.invalidate()
+        tabGroupObservation = nil
+        observedTabGroup = nil
     }
 }
 #endif
