@@ -225,8 +225,60 @@ final class LinkLoader {
 
     private func load(_ url: URL) {
         model.pendingLoad = nil
-        webView?.load(URLRequest(url: url))
+        guard let webView else { return }
+        guard let step = Self.step(from: webView.url, to: url) else {
+            webView.load(URLRequest(url: url))
+            return
+        }
+        webView.callAsyncJavaScript(
+            Self.stepScript,
+            arguments: ["path": step],
+            in: nil,
+            in: .page
+        ) { result in
+            // The page answers false when it is not the mail app: a login
+            // screen, or an app that has not started yet. Then it is loaded.
+            let steered = (try? result.get()) as? Bool ?? false
+            guard !steered else { return }
+            MainActor.assumeIsolated {
+                webView.load(URLRequest(url: url))
+            }
+        }
     }
+
+    /// The step inside the page that reaches `target`, or nothing when the
+    /// page has to be loaded. Fastmail's router takes a pushed address and
+    /// swaps the view, exactly as it does for a link clicked in the page;
+    /// loading throws away the running app and builds it again.
+    nonisolated static func step(from current: URL?, to target: URL) -> String? {
+        guard
+            let current,
+            let here = URLComponents(url: current, resolvingAgainstBaseURL: false),
+            let there = URLComponents(url: target, resolvingAgainstBaseURL: false),
+            here.scheme?.lowercased() == "https",
+            there.scheme?.lowercased() == "https",
+            let host = there.host,
+            LinkRouter.isFastmailHost(host),
+            here.host?.caseInsensitiveCompare(host) == .orderedSame,
+            // A message to write is handed over whole; the router opens no
+            // window for a pushed compose address.
+            !(there.queryItems ?? []).contains(where: { $0.name == "mailto" })
+        else { return nil }
+        var step = there.path.isEmpty ? "/" : there.path
+        if let query = there.query, !query.isEmpty { step += "?" + query }
+        if let fragment = there.fragment, !fragment.isEmpty { step += "#" + fragment }
+        return step
+    }
+
+    /// Pushed rather than assigned to `location`, which would load the page.
+    /// The popstate is what the router listens for, the same event the back
+    /// button sends.
+    nonisolated static let stepScript = """
+    if (!window.FastMail || !window.FastMail.store) { return false; }
+    history.pushState(null, '', path);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    return true;
+    """
 }
 
 /// Fastmail moves between mailboxes and messages without loading anything, so

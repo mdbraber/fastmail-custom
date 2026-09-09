@@ -155,3 +155,46 @@ private let nonMatchingHeader = """
     #expect(model.pageURL?.absoluteString == "https://app.fastmail.com/mail/Inbox")
     withExtendedLifetime(watcher) {}
 }
+
+// A link that lands on the page already open is a step inside it. Fastmail
+// swaps the view for a pushed address, which is what clicking a link in the
+// page does; loading it afresh throws the whole app away and rebuilds it.
+@Test func aLinkOnTheSameSiteIsAStepInsideThePage() {
+    #expect(
+        LinkLoader.step(
+            from: URL(string: "https://app.fastmail.com/mail/Inbox/?u=a1"),
+            to: URL(string: "https://app.fastmail.com/mail/Archive/T7?u=a1")!
+        ) == "/mail/Archive/T7?u=a1"
+    )
+    #expect(
+        LinkLoader.step(
+            from: URL(string: "https://app.beta.fastmail.com/mail/Inbox/"),
+            to: URL(string: "https://app.beta.fastmail.com/mail/Inbox/T7#reply")!
+        ) == "/mail/Inbox/T7#reply"
+    )
+}
+
+@Test func anythingElseIsLoaded() {
+    // Nothing on screen yet, so there is no page to steer.
+    #expect(LinkLoader.step(from: nil, to: URL(string: "https://app.fastmail.com/mail/Inbox/")!) == nil)
+    #expect(
+        LinkLoader.step(
+            from: URL(string: "about:blank"),
+            to: URL(string: "https://app.fastmail.com/mail/Inbox/")!
+        ) == nil
+    )
+    // The other server is a different app entirely.
+    #expect(
+        LinkLoader.step(
+            from: URL(string: "https://app.fastmail.com/mail/Inbox/"),
+            to: URL(string: "https://app.beta.fastmail.com/mail/Inbox/")!
+        ) == nil
+    )
+    // A message to write is handed over whole, as it always was.
+    #expect(
+        LinkLoader.step(
+            from: URL(string: "https://app.fastmail.com/mail/Inbox/"),
+            to: URL(string: "https://app.fastmail.com/mail/compose?mailto=mailto:a@b.com&u=a1")!
+        ) == nil
+    )
+}
