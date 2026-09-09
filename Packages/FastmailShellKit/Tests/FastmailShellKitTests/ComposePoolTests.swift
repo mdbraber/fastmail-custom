@@ -209,10 +209,24 @@ private func makePlainWindow() -> NSWindow {
     #expect(bounds.width - frame.maxX == frame.minX)
 }
 
-// Nothing addressed yet, nothing to say.
-@Test @MainActor func anUnaddressedMessageSaysNothingInItsBand() {
-    #expect(ComposeWindows.bandTitle(recipients: "") == "")
-    #expect(ComposeWindows.bandTitle(recipients: "  ") == "")
-    #expect(ComposeWindows.bandTitle(recipients: " Anne  Marie ") == "Anne  Marie")
+// Nothing addressed yet, nothing to say — unless the window is holding a
+// message being read rather than written, which is named by its subject.
+@Test @MainActor func theBandNamesWhoeverItIsForOrWhatItIsAbout() {
+    #expect(ComposeWindows.bandTitle(
+        composing: true, recipients: " Anne  Marie ", pageTitle: "Compose message"
+    ) == "Anne  Marie")
+    // Being written, addressed to no one: it says what it is.
+    #expect(ComposeWindows.bandTitle(
+        composing: true, recipients: "", pageTitle: "Compose message"
+    ) == "New message")
+    #expect(ComposeWindows.bandTitle(
+        composing: false, recipients: "", pageTitle: "Lunch"
+    ) == "Lunch")
+}
+
+@Test @MainActor func aMessageBeingWrittenKeepsItsNameInTheWindowMenu() {
+    #expect(ComposeWindows.windowTitle(composing: true, pageTitle: "Compose message") == "New Message")
+    #expect(ComposeWindows.windowTitle(composing: false, pageTitle: "Lunch") == "Lunch")
+    #expect(ComposeWindows.windowTitle(composing: false, pageTitle: "") == "New Message")
 }
 #endif

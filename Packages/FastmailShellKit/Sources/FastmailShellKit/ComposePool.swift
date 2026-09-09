@@ -79,6 +79,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     public static let shared = ComposeWindows()
 
     private var pool: ComposePool<NSWindow>?
+    private var opened: [NSWindow] = []
     private var configuredURL: URL?
     private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
 
@@ -136,7 +137,16 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     /// matches the band above a mailbox. Joining a window it takes the colour
     /// from there; on its own, from whatever the pages last asked for.
     static func dress(_ window: NSWindow, like host: NSWindow?) {
-        raiseTitlebar(of: window)
+        // Only a window joining a group needs the taller title bar, to keep
+        // the tab bar from jumping between tabs. On its own it keeps an
+        // ordinary one, so the band is no deeper than it has to be to hold
+        // the window buttons.
+        if host == nil {
+            window.toolbar = nil
+            window.toolbarStyle = .automatic
+        } else {
+            raiseTitlebar(of: window)
+        }
         // The page is placed by hand from here on, so it is given the whole
         // window to be placed in — including the strip the chrome sits over.
         window.styleMask.insert(.fullSizeContentView)
@@ -146,6 +156,35 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
             window.backgroundColor = color
         }
         window.appearance = host?.appearance ?? PageChrome.appearance
+    }
+
+    /// Keeps a window that was opened for a page alive for as long as it is
+    /// open, and lets go the moment it closes.
+    private func hold(_ window: NSWindow) {
+        opened.append(window)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(openedWindowWillClose(_:)),
+            name: NSWindow.willCloseNotification,
+            object: window
+        )
+    }
+
+    @objc private func openedWindowWillClose(_ note: Notification) {
+        guard let window = note.object as? NSWindow else { return }
+        opened.removeAll { $0 === window }
+        NotificationCenter.default.removeObserver(
+            self, name: NSWindow.willCloseNotification, object: window
+        )
+    }
+
+    /// The window to take a colour and appearance from: the one this window
+    /// has joined, if it has joined one. Standing alone there is nobody to
+    /// match, and the colour the pages last asked for is used instead — a
+    /// mailbox window's own colour is not it, since a mailbox paints its own
+    /// header and leaves the window beneath it plain.
+    static func chromeSource(for window: NSWindow) -> NSWindow? {
+        window.tabGroup?.windows.first { $0 !== window }
     }
 
     /// Whether a window is wearing a mail window's chrome rather than its own.
@@ -182,11 +221,11 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     /// the answer can have changed.
     func fitTabbedWindows() {
         for window in NSApp.windows
-        where window.delegate === self && Self.isDressed(window) {
+        where Self.isDressed(window) && Self.webView(of: window) != nil {
             // The colour is asked for again every time: a window is built
             // before any page has said what colour it is, and a window that
             // has joined a group should match the one it joined.
-            Self.dress(window, like: window.tabGroup?.windows.first { $0 !== window })
+            Self.dress(window, like: Self.chromeSource(for: window))
             guard let band = Self.band(of: window) else { continue }
             let hasBar = window.tabGroup?.isTabBarVisible == true
             Self.setTopInset(
@@ -241,10 +280,38 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         )
     }
 
-    /// What the band says: whoever the message is addressed to, and nothing
-    /// at all while it is addressed to no one.
-    static func bandTitle(recipients: String) -> String {
-        recipients.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Prints what the window is showing, as a sheet on that window.
+    static func print(_ view: WKWebView, in window: NSWindow) {
+        let info = NSPrintInfo.shared
+        info.horizontalPagination = .fit
+        info.isHorizontallyCentered = false
+        let operation = view.printOperation(with: info)
+        operation.view?.frame = view.bounds
+        operation.runModal(
+            for: window,
+            delegate: nil,
+            didRun: nil,
+            contextInfo: nil
+        )
+    }
+
+    /// What the band says: whoever the message is being written to, or — for
+    /// a message being read rather than written — what the page calls itself,
+    /// which is its subject. A message addressed to no one yet says what it
+    /// is, rather than the page's own name for a blank one.
+    static func bandTitle(composing: Bool, recipients: String, pageTitle: String) -> String {
+        let text = (composing ? recipients : pageTitle)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if composing, text.isEmpty { return "New message" }
+        return text
+    }
+
+    /// What the window is called in the Window menu. A message being written
+    /// is a new message however far along it is; one being read is named
+    /// after itself.
+    static func windowTitle(composing: Bool, pageTitle: String) -> String {
+        let subject = pageTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return composing || subject.isEmpty ? "New Message" : subject
     }
 
     private static func buttonsRight(of window: NSWindow) -> CGFloat {
@@ -268,9 +335,20 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     /// names already entered beside it, so the band says the same as the row.
     private static let recipientScript = """
     (function(){
+      var sawCompose=false,goneSince=null;
+      // WebKit does nothing at all with a page's own print(), so the ask is
+      // passed out to the window, which knows how to print its view.
+      window.print=function(){
+        window.webkit.messageHandlers.fmshellRecipients.postMessage({print:true});
+      };
+      // Everything below is the page's own business, and a frame inside it
+      // has no say in what the window is called or when it closes.
+      if(window.top!==window){return;}
       function line(){
         var i=document.querySelector('input[id$="-to-input"]');
-        if(!i){return '';}
+        if(!i){return null;}
+        sawCompose=true;
+        goneSince=null;
         var w=i.closest('.v-EmailInput');
         var tokens=w?w.querySelector('ul.v-EmailInput-tokens'):null;
         // Each recipient carries its own Remove button; the band wants the
@@ -290,15 +368,33 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         return [names,typed].filter(Boolean).join(' ');
       }
       var last=null,pending=false;
+      // A message that has been sent, saved or discarded takes its window with
+      // it. Given a beat first: the view flickers out and back during its own
+      // redraws, and a window closed on that would vanish mid-sentence.
+      function gone(){
+        if(!sawCompose){return false;}
+        if(document.querySelector('input[id$="-to-input"]')){return false;}
+        if(goneSince===null){goneSince=Date.now();setTimeout(send,700);return false;}
+        return Date.now()-goneSince>600;
+      }
       function send(){
         if(pending){return;}
         pending=true;
         requestAnimationFrame(function(){
           pending=false;
-          var text=line();
-          if(text===last){return;}
-          last=text;
-          window.webkit.messageHandlers.fmshellRecipients.postMessage(text);
+          var to=line();
+          var meta=document.querySelector('meta[name="theme-color"]');
+          var state={
+            color:meta?(meta.content||''):'',
+            composing:to!==null,
+            to:to===null?'':to,
+            title:(document.title||'').trim(),
+            gone:gone()
+          };
+          var key=[state.color,state.composing,state.to,state.title,state.gone].join('|');
+          if(key===last){return;}
+          last=key;
+          window.webkit.messageHandlers.fmshellRecipients.postMessage(state);
         });
       }
       ['input','keyup','click','focusout'].forEach(function(name){
@@ -315,14 +411,33 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         _ controller: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        let text = message.body as? String ?? ""
+        let state = message.body as? [String: Any] ?? [:]
+        let recipients = state["to"] as? String ?? ""
+        let composing = state["composing"] as? Bool ?? false
+        let title = state["title"] as? String ?? ""
+        let finished = state["gone"] as? Bool ?? false
+        let printing = state["print"] as? Bool ?? false
         let view = message.webView
         MainActor.assumeIsolated {
             guard let window = view?.window ?? NSApp.windows.first(where: {
                 Self.webView(of: $0) === view
             }) else { return }
+            if printing, let view {
+                Self.print(view, in: window)
+                return
+            }
+            if finished {
+                window.performClose(nil)
+                return
+            }
+            // The colour comes from the page in this very window, which is
+            // the same place a mailbox window gets its own.
+            if let color = state["color"] as? String, !color.isEmpty {
+                applyTint(color, isDark: nil, to: window)
+            }
             Self.recipientsLabel(of: window)?.stringValue =
-                Self.bandTitle(recipients: text)
+                Self.bandTitle(composing: composing, recipients: recipients, pageTitle: title)
+            window.title = Self.windowTitle(composing: composing, pageTitle: title)
         }
     }
 
@@ -364,6 +479,40 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         NSApp.activate()
     }
 
+    /// A window for a page Fastmail asked to open on its own: a draft or a
+    /// message opened with "Open in new window". It is the same kind of window
+    /// a message is written in, so it arrives wearing the same chrome.
+    ///
+    /// The view is built on the configuration the page was given and handed
+    /// straight back, so the page's request is answered rather than refused —
+    /// a refusal only sends it looking for another way, and it finds one, and
+    /// then there are two windows.
+    public func window(for configuration: WKWebViewConfiguration, size: NSSize) -> WKWebView {
+        Self.watchRecipients(in: configuration.userContentController, reportingTo: self)
+        let view = WKWebView(frame: .zero, configuration: configuration)
+        view.isInspectable = true
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "New Message"
+        // Closed windows are AppKit's to release by default, and this one is
+        // already owned here — left to both, it is freed twice, which is a
+        // crash on Command-W rather than a closed window.
+        window.isReleasedWhenClosed = false
+        window.contentView = Self.contents(around: view, size: size)
+        window.tabbingMode = .disallowed
+        window.center()
+        hold(window)
+        Self.dress(window, like: Self.chromeSource(for: window))
+        fitTabbedWindows()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        return view
+    }
+
     /// The same message, written in a tab of the window it was asked from.
     /// The page is Fastmail's minimal one either way, and the window keeps its
     /// ordinary title bar, so the message sits below the tab bar rather than
@@ -383,6 +532,36 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         NSApp.activate()
     }
 
+    /// The page, held in a plain view with room above it for the band.
+    private static func contents(around view: WKWebView, size: NSSize) -> NSView {
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
+        view.frame = container.bounds
+        view.autoresizingMask = [.width, .height]
+        container.addSubview(view)
+        let label = NSTextField(labelWithString: "")
+        label.identifier = recipientsID
+        label.alignment = .center
+        label.lineBreakMode = .byTruncatingTail
+        label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        label.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(label)
+        return container
+    }
+
+    private static func watchRecipients(
+        in controller: WKUserContentController,
+        reportingTo handler: ComposeWindows
+    ) {
+        controller.add(handler, name: "fmshellRecipients")
+        // Every frame, not only the page's own: a message's body is shown in
+        // one of its own, and printing is asked for from in there.
+        controller.addUserScript(WKUserScript(
+            source: recipientScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: false
+        ))
+    }
+
     private func makeWindow() -> NSWindow {
         let configuration = WKWebViewConfiguration()
         #if os(macOS)
@@ -394,12 +573,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         #endif
         configuration.websiteDataStore = .default()
         let controller = WKUserContentController()
-        controller.add(self, name: "fmshellRecipients")
-        controller.addUserScript(WKUserScript(
-            source: Self.recipientScript,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: true
-        ))
+        Self.watchRecipients(in: controller, reportingTo: self)
         configuration.userContentController = controller
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.isInspectable = true
@@ -412,18 +586,10 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.title = "New Message"
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: 640))
-        view.frame = container.bounds
-        view.autoresizingMask = [.width, .height]
-        container.addSubview(view)
-        let label = NSTextField(labelWithString: "")
-        label.identifier = Self.recipientsID
-        label.alignment = .center
-        label.lineBreakMode = .byTruncatingTail
-        label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        label.autoresizingMask = [.width, .minYMargin]
-        container.addSubview(label)
-        window.contentView = container
+        window.contentView = Self.contents(
+            around: view,
+            size: NSSize(width: 760, height: 640)
+        )
         window.delegate = self
         Self.dress(window, like: nil)
         window.center()
