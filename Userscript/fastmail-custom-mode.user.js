@@ -4007,7 +4007,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // Move to opens what v opens, and Option-clicking opens what Option-V
     // does.
     const watchMoveClick = () => {
-        document.addEventListener('mousedown', (event) => {
+        // Watched on the press that opens the menu. The button opens it on
+        // pointerdown, which comes before mousedown, so a mousedown watch set
+        // the intent one press too late: the first menu of a session showed
+        // everything, and every menu after it carried the answer from the
+        // press before.
+        const press = typeof window.PointerEvent === 'function' ?
+            'pointerdown' : 'mousedown';
+
+        document.addEventListener(press, (event) => {
             const layer = moveButton && moveButton.target.get('layer');
             const onButton = !!layer && !!event.target && layer.contains(event.target);
 
