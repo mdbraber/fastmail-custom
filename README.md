@@ -61,7 +61,8 @@ cannot reach on its own: real windows, notifications, downloads and links.
 - ⬇️ **Downloads**: attachments go to a folder you choose.
 - 📤 **Share extension**: send a page or a link to Fastmail from any app.
 - 📮 **mailto handling**: mail links open in the right account.
-- 🤝 **Handoff**: carry on with the same message on your other device.
+- 🤝 **Handoff**: carry on with the same message on your other device, or in
+  its browser.
 - 🔔 **Push notifications**: new mail arrives with Archive, Later and Pin on it.
 - 🤖 **Shortcuts and AppleScript**: drive the app from your own scripts.
 - ⚙️ **Shared settings**: the same settings on Mac, iPhone and in Safari.
@@ -83,9 +84,9 @@ than just enabled.
 **Shell apps** (`Apps/`, `Packages/FastmailShellKit/`) are native wrappers around
 the web app for macOS and iOS, one per account, sharing a Swift package. They
 add the things a website cannot: proper windows and tabs, a compose window,
-notifications, downloads, share extensions, mailto handling and AppleScript
-support. `Apps/Mailto` is a small iOS app that sends mailto links to whichever
-account you pick.
+notifications, downloads, share extensions, mailto handling, Handoff between
+devices and AppleScript support. `Apps/Mailto` is a small iOS app that sends
+mailto links to whichever account you pick.
 
 **Push server** (`Server/`) sends new-mail pushes to the iOS apps. It watches
 each mailbox over JMAP and sends an Apple Push Notification for what lands in
