@@ -2872,6 +2872,35 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
+     * Put the open conversation down, which the URL cannot say on its own.
+     *
+     * Fastmail writes the conversation into the address only in its own
+     * full-screen view. With a reading pane the address is the mailbox's and
+     * nothing more, and the pane draws whatever the controller still calls
+     * the open message; so walking to the list URL moves the address and
+     * leaves the message standing. Without a pane that message is behind the
+     * list and out of sight, which is why Fastmail can leave it there. With
+     * one it is the conversation just archived, still filling half the
+     * window.
+     *
+     * Putting it down is also what lets the focus land. Fastmail's focus and
+     * the open message are bound to each other: closing the message empties
+     * the focus too, so the first row is then somewhere the focus has to
+     * move to rather than where it already sits, and a reading pane follows
+     * its focus. Which is the whole of "back to the list" in that layout:
+     * the list never left, so ending a run there means the pane stops
+     * showing what you have finished with and shows the row the keyboard is
+     * on instead.
+     */
+    const closeOpenMessage = () => {
+        try {
+            controller().set('message', null);
+        } catch (error) {
+            reportFault('could not put down the message the pane had open', error);
+        }
+    };
+
+    /*
      * Whether a decision on this message is a decision on what you are
      * reading. Moving on to the next conversation only means anything if you
      * were in one: a swipe on a row, or a key on the focused row, is made
@@ -2978,6 +3007,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     (list && typeof list.getObjectAt === 'function' && list.getObjectAt(0));
                 const listUrl = listURLFrom(anchor);
                 if (listUrl) goToUrl(listUrl);
+                // The URL is only half the step: it says which list, and with
+                // a reading pane the list was never the thing that moved. So
+                // the conversation is put down too, and before the focus is
+                // placed, since that is what leaves the first row somewhere to
+                // move to.
+                closeOpenMessage();
                 // Back on the list; or already there; the first row takes the
                 // focus rather than nothing. A tick later, so the route has landed.
                 setTimeout(focusFirstRow, 0);
