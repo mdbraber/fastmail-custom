@@ -741,8 +741,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ]), []);
     };
 
-    // Mark each row with the colour of a label it carries, as a stripe down
-    // its leading edge.
+    // Wash each row in the colour of a label it carries. A wash and nothing
+    // more: the colour is there to be recognised out of the corner of an eye
+    // while reading down a list, and a band of the full shade down the edge
+    // of every row reads as a stack of rules to be got past instead.
     const PAGE_BG = 'var(--ui-page-color-bg, #fff)';
     const FOCUSED_BG = 'var(--ui-page-color-bg-focused, #e9ebee)';
     const SELECTED_BG = 'var(--ui-page-color-bg-selected, #f2fafd)';
@@ -756,8 +758,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ' .v-MailboxItem-mailboxes, .v-MailboxItem-mailbox, .v-MailboxItem-toolbar';
 
     const ROW_COLOUR_RULES = [
-        `.v-MailboxItem .u-list-link` +
-        ` { box-shadow: inset 4px 0 0 var(--custom-label-colour, transparent); }`,
         `.v-MailboxItem :is(${TINT_TARGETS})` +
         ` { background-color: color-mix(in srgb, ${LABEL} 10%, ${PAGE_BG}); }`,
         // .v-MailboxItem is added to these on purpose, and with no space.
