@@ -706,6 +706,26 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const goToSourceAt = (index) => selectSource(sourcesAboveLabels()[index]);
 
     /*
+     * One step through the sidebar, Fastmail's own way.
+     *
+     * Its sidebar is a selection over the drawn list, and selectUp and
+     * selectDown are what its own arrow keys use; so a step here lands
+     * wherever clicking would, skips the headings, and goes to the place
+     * rather than merely highlighting it. Nothing to do when the sidebar is
+     * not there to walk, as on a phone with the list on screen.
+     */
+    const walkSidebar = (direction) => {
+        try {
+            const sources = controller().sources;
+            if (sources && typeof sources[direction] === 'function') {
+                sources[direction]();
+            }
+        } catch (error) {
+            reportFault('could not step through the sidebar', error);
+        }
+    };
+
+    /*
      * ----------------------------------------------------------------
      * Inbox label on message rows
      * ----------------------------------------------------------------
@@ -4105,7 +4125,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             'Shift-V': () => openLabelPicker(),
             // Archive into a hold label. Fastmail's expandAll sits underneath
             // on this key and answers again the moment the mode is off.
-            'Shift-E': () => openArchiveIntoPicker()
+            'Shift-E': () => openArchiveIntoPicker(),
+
+            // The sidebar, on the shifted pair of the keys that walk a list.
+            // Fastmail's own sidebar controller does the walking, so these
+            // move through it in the order it is drawn, whole: the states
+            // above the labels, the labels themselves, and the folders under
+            // them. Shift-I is the one place worth naming, since the Inbox is
+            // the one you come back to rather than arrive at.
+            'Shift-J': () => walkSidebar('selectDown'),
+            'Shift-K': () => walkSidebar('selectUp'),
+            'Shift-I': () => selectSource(inboxMailbox(controller().get('accountId')))
         };
 
         // null is the caller's selection untouched; the focused conversation
