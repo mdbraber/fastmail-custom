@@ -206,6 +206,11 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     #expect(showing.contains("66-header"))
     #expect(showing.contains("94-header+above"))
     #expect(showing.contains("return above;"))
+    // A menu can carry a header of its own, and measuring against that one
+    // collapses the band; only a header at the very top of the page counts,
+    // and a page whose headers are all elsewhere is left as it is.
+    #expect(showing.contains("r.top>8"))
+    #expect(showing.contains("if(list.length&&!found)return null;"))
 
     let gone = tabInsetScript(visible: false, barTop: 0, barBottom: 0)
     #expect(gone.contains("remove('fmshell-tabbed')"))

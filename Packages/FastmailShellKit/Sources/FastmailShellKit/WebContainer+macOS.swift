@@ -240,9 +240,18 @@ func tabInsetScript(visible: Bool, barTop: CGFloat, barBottom: CGFloat) -> Strin
         return "document.body.classList.remove('fmshell-tabbed');"
             + "document.body.style.removeProperty('--fmshell-tab-inset');"
     }
+    // Only a header pinned to the top of the page counts. A menu or popover
+    // can carry one of its own, and measuring against that collapses the band
+    // and hides the toolbar under the tab bar; when the page has headers but
+    // none of them is the page's own, nothing is touched at all.
     return "(function(){"
-        + "var h=document.querySelector('.v-PageHeader');"
-        + "var header=h?h.getBoundingClientRect().bottom:0;"
+        + "var list=document.querySelectorAll('.v-PageHeader');"
+        + "var header=0,found=false;"
+        + "for(var i=0;i<list.length;i++){"
+        + "var r=list[i].getBoundingClientRect();"
+        + "if(r.height<=0||r.top>8)continue;"
+        + "if(!found||r.bottom>header){header=r.bottom;found=true;}}"
+        + "if(list.length&&!found)return null;"
         + "var above=Math.max(0,\(Int(barTop.rounded()))-header);"
         + "var gap=Math.max(0,\(Int(barBottom.rounded()))-header+above);"
         + "document.body.classList.add('fmshell-tabbed');"

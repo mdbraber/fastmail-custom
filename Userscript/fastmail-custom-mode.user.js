@@ -1612,6 +1612,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             option.customRemoveLabel = true;
             return option;
         });
+
     };
 
     // The setting is an order over every slot, not a subset: slots it does
@@ -1764,6 +1765,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             try {
                 // The snooze period may have moved with the rest
                 registerModeViews(toolbar);
+                nameMoveVerb();
                 toolbar.computedPropertyDidChange('actionsConfig');
             } catch (error) {
                 // Gone
@@ -2364,7 +2366,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // be carrying our narrowing.
     const applyMoveMode = (menu, ours) => {
         const menuController = menu.get('controller');
-        if (!menuController) return;
+        // Answered rather than assumed: the first time the menu is opened it
+        // enters the document before its controller is set, and a menu with no
+        // controller cannot be narrowed yet. The caller tries again.
+        if (!menuController) return false;
 
         autoSaveWhenAlone(menuController);
         narrowLabelOptions(menuController);
@@ -2389,6 +2394,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (typeof menuController.setOptions === 'function') {
             menuController.setOptions();
         }
+
+        return true;
     };
 
     /*
@@ -3795,8 +3802,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 return originalDidEnterDocument.apply(this, arguments);
             }
 
-            applyMoveMode(this, wantOurMove);
+            // Taken before applying, since applying can be put off a tick,
+            // and the next thing to open the menu sets it again.
+            const ours = wantOurMove;
             wantOurMove = false;
+
+            if (!applyMoveMode(this, ours)) {
+                const menu = this;
+                setTimeout(() => {
+                    applyMoveMode(menu, ours);
+                }, 0);
+            }
 
             return originalDidEnterDocument.apply(this, arguments);
         };
@@ -3845,6 +3861,33 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const ourMoveWanted = () => modeIsOn && settings.labelsShortcut;
+
+    /*
+     * What the Move to button says.
+     *
+     * v opens it, and in this mode that files: the pick adds a label and the
+     * message keeps its place in the Inbox. So on a desktop bar it says File,
+     * the verb it performs; Fastmail's own move stays on Option-V. Set on the
+     * button itself, since the bar has no view under that name until Fastmail
+     * registers one, which is after the bar is taken over.
+     *
+     * The phone is left alone: its bar has a File of the mode's own, and a
+     * second one would be two buttons with one name. The stock wording is
+     * kept, so switching the mode off puts it back.
+     */
+    const nameMoveVerb = () => {
+        if (FastMail.isMobile || !moveButton) return;
+
+        const view = moveButton.target;
+        if (!view || typeof view.set !== 'function') return;
+
+        try {
+            if (!view.customStockLabel) view.customStockLabel = view.get('label');
+            view.set('label', ourMoveWanted() ? 'File' : view.customStockLabel);
+        } catch (error) {
+            // A label that will not be set is still a working button
+        }
+    };
 
     // v is keep: on a filed selection it takes Triage off directly, and only
     // an unfiled one opens the picker; the same narrowed menu, opened with
@@ -4145,6 +4188,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // The menu as Fastmail ships it stays reachable on Option-V, which
             // is bound on the physical key rather than registered here
             moveButton = { target: target, method: method };
+            nameMoveVerb();
 
             return originalRegister.call(
                 this, MOVE_SHORTCUT, moveHandlerFor(target), 'openMove', priority
