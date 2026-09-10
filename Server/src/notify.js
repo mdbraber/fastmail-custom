@@ -15,22 +15,18 @@ export function senderName(email) {
     return (from.name || '').trim() || from.email || 'Unknown sender';
 }
 
-// Where the message is opened. A banner should land on the message in the list
-// it is worked from: one still carrying the badge label opens in that label,
-// where the triage verbs act on the list behind it.
-export function threadURL(email, { badge } = {}) {
-    const inTriage = badge?.id && email.mailboxIds?.[badge.id] === true;
-    const list = inTriage ? badge.label : 'Inbox';
+// Where the message is opened: the Inbox, whatever labels the message
+// carries. A banner is read where the mail arrives, not where it is filed.
+export function threadURL(email) {
     const conversation = `${encodeURIComponent(email.threadId)}.${encodeURIComponent(email.id)}`;
-    return `https://app.fastmail.com/mail/${encodeURIComponent(list)}/${conversation}`;
+    return `https://app.fastmail.com/mail/Inbox/${conversation}`;
 }
 
 // The APNs payload for one new message. `badge` is the conversation count to
-// show, or null when there is no badge label to count; `context` is that
-// label's id and name, so the link can open the message where it is worked.
+// show, or null when there is no badge label to count.
 export const ALERT_CATEGORY = 'message';
 
-export function alertPayload(email, { badge, context = null }) {
+export function alertPayload(email, { badge }) {
     const aps = {
         alert: {
             title: senderName(email),
@@ -41,7 +37,7 @@ export function alertPayload(email, { badge, context = null }) {
         category: ALERT_CATEGORY,
     };
     if (Number.isInteger(badge)) aps.badge = badge;
-    return { aps, url: threadURL(email, { badge: context }), emailId: email.id };
+    return { aps, url: threadURL(email), emailId: email.id };
 }
 
 export function badgePayload(badge) {

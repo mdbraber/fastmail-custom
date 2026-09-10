@@ -210,7 +210,7 @@ export class AccountWatcher {
 
         for (const email of fresh) {
             await this.broadcast(
-                alertPayload(email, { badge, context: this.badgeContext() }),
+                alertPayload(email, { badge }),
                 { collapseId: email.id, alerts: true },
             );
         }
@@ -323,12 +323,6 @@ export class AccountWatcher {
             projects: mailboxes.filter((m) => label(m) && !isHold(m) && carried(m)).map((m) => m.id),
             holds: mailboxes.filter((m) => label(m) && isHold(m) && carried(m)).map((m) => m.id),
         };
-    }
-
-    // The badge label as a link context: a message still carrying it opens
-    // in that label rather than in the Inbox.
-    badgeContext() {
-        return this.badgeMailboxId ? { id: this.badgeMailboxId, label: this.config.badgeLabel } : null;
     }
 
     async badgeCount() {
