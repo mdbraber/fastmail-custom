@@ -21,7 +21,7 @@ public enum CustomModeSettings {
             case .labelsFiling: return "Labels & filing"
             case .snooze: return "Snooze"
             case .keyboard: return "Keyboard"
-            case .bottomBar: return "Bottom bar"
+            case .bottomBar: return "Action bar"
             }
         }
 
@@ -277,13 +277,31 @@ public enum CustomModeSettings {
             default: .toggle(true)
         ),
 
-        // Bottom bar; the action bar's ordered actions.
+        // The action bar: one list of verbs, drawn along the bottom of the
+        // screen on iPhone and across the top of the message on iPad. The
+        // stored keys keep their old names so a saved value survives.
         Option(
             "bottomBarSlots",
             group: .bottomBar,
-            title: "Bottom bar actions",
-            hint: "In order; what fits on screen shows, the rest go under More.",
+            title: "Action bar actions",
+            hint: "In order; the bar along the bottom on iPhone, and across the top of a message on iPad and the Mac. What fits shows, the rest go under More.",
             default: .text("Snooze, Pin, File, Archive, Labels, Move, Delete")
+        ),
+        Option(
+            "bottomBarItems",
+            group: .bottomBar,
+            clearable: true,
+            title: "Items on the bottom bar",
+            hint: "How many verbs the bar along the bottom of the screen draws before More. Empty fits as many as it can measure.",
+            default: .text("")
+        ),
+        Option(
+            "topBarItems",
+            group: .bottomBar,
+            clearable: true,
+            title: "Items on the top bar",
+            hint: "The same count for the bar across the top of a message, on iPad and on the Mac. Empty fits as many as it can measure.",
+            default: .text("")
         )
     ]
 

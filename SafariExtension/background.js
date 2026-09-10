@@ -46,6 +46,8 @@ const DEFAULT_SETTINGS = {
     snoozeTime: '08:00',
     urgentKey: 's',
     bottomBarSlots: 'Snooze, Pin, File, Archive, Labels, Move, Delete',
+    bottomBarItems: '',
+    topBarItems: '',
     excludedLabels: 'Later, Feedbin',
     contactGroupLabels: '',
     appBadgeLabel: 'Triage',

@@ -502,19 +502,63 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>In order; what fits on screen shows, the rest go under More.</string>
+			<string>In order; the bar along the bottom on iPhone, and across the top of a message on iPad and the Mac. What fits shows, the rest go under More.</string>
 			<key>Title</key>
-			<string>Bottom bar</string>
+			<string>Action bar</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Bottom bar actions</string>
+			<string>Action bar actions</string>
 			<key>Key</key>
 			<string>customMode.bottomBarSlots</string>
 			<key>DefaultValue</key>
 			<string>Snooze, Pin, File, Archive, Labels, Move, Delete</string>
+			<key>IsSecure</key>
+			<false/>
+			<key>AutocapitalizationType</key>
+			<string>None</string>
+			<key>AutocorrectionType</key>
+			<string>No</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
+			<string>How many verbs the bar along the bottom of the screen draws before More. Empty fits as many as it can measure.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>Items on the bottom bar</string>
+			<key>Key</key>
+			<string>customMode.bottomBarItems</string>
+			<key>DefaultValue</key>
+			<string></string>
+			<key>IsSecure</key>
+			<false/>
+			<key>AutocapitalizationType</key>
+			<string>None</string>
+			<key>AutocorrectionType</key>
+			<string>No</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
+			<string>The same count for the bar across the top of a message, on iPad and on the Mac. Empty fits as many as it can measure.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>Items on the top bar</string>
+			<key>Key</key>
+			<string>customMode.topBarItems</string>
+			<key>DefaultValue</key>
+			<string></string>
 			<key>IsSecure</key>
 			<false/>
 			<key>AutocapitalizationType</key>

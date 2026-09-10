@@ -48,7 +48,7 @@ GROUP_TITLE = {
     "labelsFiling": "Labels & filing",
     "snooze": "Snooze",
     "keyboard": "Keyboard",
-    "bottomBar": "Bottom bar",
+    "bottomBar": "Action bar",
 }
 
 
