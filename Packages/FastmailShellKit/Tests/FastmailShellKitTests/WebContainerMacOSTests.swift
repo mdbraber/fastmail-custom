@@ -210,7 +210,9 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     // collapses the band; only a header at the very top of the page counts,
     // and a page whose headers are all elsewhere is left as it is.
     #expect(showing.contains("r.top>8"))
-    #expect(showing.contains("if(list.length&&!found)return null;"))
+    // Left alone only where a band is already up: a page without one has to
+    // be given something, or it sits under the tab bar.
+    #expect(showing.contains("classList.contains('fmshell-tabbed'))return null;"))
 
     let gone = tabInsetScript(visible: false, barTop: 0, barBottom: 0)
     #expect(gone.contains("remove('fmshell-tabbed')"))

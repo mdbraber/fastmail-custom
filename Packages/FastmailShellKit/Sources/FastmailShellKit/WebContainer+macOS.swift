@@ -251,7 +251,11 @@ func tabInsetScript(visible: Bool, barTop: CGFloat, barBottom: CGFloat) -> Strin
         + "var r=list[i].getBoundingClientRect();"
         + "if(r.height<=0||r.top>8)continue;"
         + "if(!found||r.bottom>header){header=r.bottom;found=true;}}"
-        + "if(list.length&&!found)return null;"
+        // A page that already has a band keeps it rather than being measured
+        // against a menu's header; one that has none is given a band measured
+        // from the top of the page, which is too much rather than too little
+        // and is corrected by the next look.
+        + "if(list.length&&!found&&document.body.classList.contains('fmshell-tabbed'))return null;"
         + "var above=Math.max(0,\(Int(barTop.rounded()))-header);"
         + "var gap=Math.max(0,\(Int(barBottom.rounded()))-header+above);"
         + "document.body.classList.add('fmshell-tabbed');"
