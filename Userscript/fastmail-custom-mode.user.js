@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Custom mode
 // @namespace    custom
-// @version      3.13
+// @version      3.14
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @license      AGPL-3.0-or-later
