@@ -214,9 +214,9 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Added to every incoming message by your rule; removed by keeping, filing or archiving.</string>
+			<string>Added to every incoming message by your rule; removed by keeping it somewhere or archiving it.</string>
 			<key>Title</key>
-			<string>Labels &amp; filing</string>
+			<string>Labels &amp; keeping</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -238,7 +238,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Filing destinations that hold mail rather than queue it; archive leaves them on, and Shift-E archives into one. Comma-separated paths.</string>
+			<string>Destinations that hold mail rather than queue it; archive leaves them on, and Shift-E archives into one. Comma-separated paths.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -282,7 +282,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Filing steps to the next message only while that message still carries the triage label; otherwise the message list comes back.</string>
+			<string>Keeping steps to the next message only while that message still carries the triage label; otherwise the message list comes back.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -298,7 +298,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>A drop files the message and keeps it in the Inbox. Option moves it.</string>
+			<string>A drop keeps the message under that label and leaves it in the Inbox. Option moves it.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
@@ -314,13 +314,13 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
-			<string>Files under a project label and keeps the message in the Inbox; one already filed just loses its triage label. Shift-V refiles, Option-V moves.</string>
+			<string>Keeps the message under a project label and leaves it in the Inbox; one already kept just loses its triage label. Shift-V keeps it somewhere else, Option-V moves.</string>
 		</dict>
 		<dict>
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>File instead of move</string>
+			<string>Keep instead of move</string>
 			<key>Key</key>
 			<string>customMode.labelsShortcut</string>
 			<key>DefaultValue</key>
@@ -514,7 +514,7 @@
 			<key>Key</key>
 			<string>customMode.bottomBarSlots</string>
 			<key>DefaultValue</key>
-			<string>Snooze, Pin, File, Archive, Labels, Move, Delete</string>
+			<string>Snooze, Pin, Keep, Archive, Labels, Move, Delete</string>
 			<key>IsSecure</key>
 			<false/>
 			<key>AutocapitalizationType</key>

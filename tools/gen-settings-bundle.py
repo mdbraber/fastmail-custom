@@ -45,7 +45,7 @@ OPTION = re.compile(
 GROUP_TITLE = {
     "general": "General",
     "appearance": "Appearance",
-    "labelsFiling": "Labels & filing",
+    "labelsFiling": "Labels & keeping",
     "snooze": "Snooze",
     "keyboard": "Keyboard",
     "bottomBar": "Action bar",

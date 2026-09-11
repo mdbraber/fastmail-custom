@@ -165,7 +165,7 @@
         <input type="checkbox" id="backToListAfterTriage">
         <span>
             <span class="title">Back to the list when triage runs out</span>
-            <span class="hint">Filing steps to the next message only while that message still carries the triage label; otherwise the message list comes back.</span>
+            <span class="hint">Keeping steps to the next message only while that message still carries the triage label; otherwise the message list comes back.</span>
         </span>
     </label>
 
@@ -173,7 +173,7 @@
         <input type="checkbox" id="dragAdditive">
         <span>
             <span class="title">Dragging adds a label</span>
-            <span class="hint">A drop files the message and keeps it in the Inbox. Option moves it.</span>
+            <span class="hint">A drop keeps the message under that label and leaves it in the Inbox. Option moves it.</span>
         </span>
     </label>
 
@@ -196,8 +196,8 @@
     <label>
         <input type="checkbox" id="labelsShortcut">
         <span>
-            <span class="title">File instead of move</span>
-            <span class="hint">Files under a project label and keeps the message in the Inbox; one already filed just loses its triage label. Shift-V refiles, Option-V moves.</span>
+            <span class="title">Keep instead of move</span>
+            <span class="hint">Keeps the message under a project label and leaves it in the Inbox; one already kept just loses its triage label. Shift-V keeps it somewhere else, Option-V moves.</span>
         </span>
     </label>
 
@@ -236,7 +236,7 @@
     <label class="text">
         <span>
             <span class="title">Triage label</span>
-            <span class="hint">Added to every incoming message by your rule; removed by keeping, filing or archiving.</span>
+            <span class="hint">Added to every incoming message by your rule; removed by keeping it somewhere or archiving it.</span>
             <input type="text" id="triageLabel" spellcheck="false" autocapitalize="off" placeholder="Triage">
         </span>
     </label>
@@ -244,7 +244,7 @@
     <label class="text">
         <span>
             <span class="title">Labels that are never projects</span>
-            <span class="hint">Filing destinations that hold mail rather than queue it; archive leaves them on. Comma-separated paths.</span>
+            <span class="hint">Destinations that hold mail rather than queue it; archive leaves them on. Comma-separated paths.</span>
             <input type="text" id="excludedLabels" spellcheck="false" autocapitalize="off" placeholder="Later, Feedbin">
         </span>
     </label>
@@ -293,7 +293,7 @@
         <span>
             <span class="title">Action bar actions</span>
             <span class="hint">In order; the bar along the bottom on iPhone, and across the top of a message on iPad and the Mac. What fits shows, the rest go under More.</span>
-            <input type="text" id="bottomBarSlots" spellcheck="false" autocapitalize="off" placeholder="Snooze, Pin, File, Archive, Labels, Move, Delete">
+            <input type="text" id="bottomBarSlots" spellcheck="false" autocapitalize="off" placeholder="Snooze, Pin, Keep, Archive, Labels, Move, Delete">
         </span>
     </label>
 

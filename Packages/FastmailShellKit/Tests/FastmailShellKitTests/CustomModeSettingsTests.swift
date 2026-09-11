@@ -16,7 +16,7 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     #expect(settings["swapArchiveExpand"] as? Bool == true)
     #expect(settings["triageLabel"] as? String == "Triage")
     #expect(settings["snoozeDefault"] as? String == "2w")
-    #expect(settings["bottomBarSlots"] as? String == "Snooze, Pin, File, Archive, Labels, Move, Delete")
+    #expect(settings["bottomBarSlots"] as? String == "Snooze, Pin, Keep, Archive, Labels, Move, Delete")
 }
 
 @Test func storedValuesWinOverDefaults() {
@@ -95,8 +95,8 @@ private func freshDefaults(_ name: String) -> UserDefaults {
 // catalog's order.
 @Test @MainActor func barSlotNamesAreTheCurrentVerbs() {
     #expect(CustomModeSettingsModel.barSlotNames
-        == ["Snooze", "Pin", "File", "Archive", "Labels", "Move", "Delete"])
-    #expect(!CustomModeSettingsModel.barSlotNames.contains("Keep"))
+        == ["Snooze", "Pin", "Keep", "Archive", "Labels", "Move", "Delete"])
+    #expect(!CustomModeSettingsModel.barSlotNames.contains("File"))
     #expect(!CustomModeSettingsModel.barSlotNames.contains("Waiting"))
     #expect(!CustomModeSettingsModel.barSlotNames.contains("Someday"))
 }
@@ -113,22 +113,33 @@ private func freshDefaults(_ name: String) -> UserDefaults {
 // With nothing stored the reorder list is exactly the current verbs.
 @Test @MainActor func loadBarOrderWithoutAStoredValueListsTheCurrentVerbs() {
     #expect(CustomModeSettingsModel.loadBarOrder(from: freshDefaults(#function))
-        == ["Snooze", "Pin", "File", "Archive", "Labels", "Move", "Delete"])
+        == ["Snooze", "Pin", "Keep", "Archive", "Labels", "Move", "Delete"])
 }
 
-// A value saved by an older build still names Keep, Waiting and Someday; those
+// A value saved by an older build still names Waiting and Someday; those
 // retired verbs are dropped, the recognised ones keep their saved order, and
-// the rest; File included; follow in the catalog's order.
+// the rest follow in the catalog's order. Keep is not one of the retired
+// ones: 2.x spelled this verb that way, 3.0 called it File, and it is Keep
+// again, so a saved Keep names the verb it always meant.
 @Test @MainActor func loadBarOrderDropsRetiredVerbsFromAnOlderStoredValue() {
     let defaults = freshDefaults(#function)
     defaults.set("Delete, Keep, Waiting, Someday, Move", forKey: "customMode.bottomBarSlots")
     let order = CustomModeSettingsModel.loadBarOrder(from: defaults)
-    #expect(!order.contains("Keep"))
     #expect(!order.contains("Waiting"))
     #expect(!order.contains("Someday"))
-    #expect(order.contains("File"))
-    #expect(Array(order.prefix(2)) == ["Delete", "Move"])
-    #expect(Set(order) == Set(["Snooze", "Pin", "File", "Archive", "Labels", "Move", "Delete"]))
+    #expect(Array(order.prefix(3)) == ["Delete", "Keep", "Move"])
+    #expect(Set(order) == Set(["Snooze", "Pin", "Keep", "Archive", "Labels", "Move", "Delete"]))
+}
+
+// The verb was File between 3.0 and the rename. An order saved under that
+// spelling still puts Keep where File stood, rather than losing the name and
+// appending the verb at the end.
+@Test @MainActor func loadBarOrderReadsASavedFileAsKeep() {
+    let defaults = freshDefaults(#function)
+    defaults.set("File, Archive, Snooze", forKey: "customMode.bottomBarSlots")
+    let order = CustomModeSettingsModel.loadBarOrder(from: defaults)
+    #expect(Array(order.prefix(3)) == ["Keep", "Archive", "Snooze"])
+    #expect(!order.contains("File"))
 }
 
 @Test func subOptionsNameARealToggleParent() {

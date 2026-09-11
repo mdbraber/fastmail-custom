@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS = {
     snoozeDefault: '2w',
     snoozeTime: '08:00',
     urgentKey: 's',
-    bottomBarSlots: 'Snooze, Pin, File, Archive, Labels, Move, Delete',
+    bottomBarSlots: 'Snooze, Pin, Keep, Archive, Labels, Move, Delete',
     bottomBarItems: '',
     topBarItems: '',
     excludedLabels: 'Later, Feedbin',

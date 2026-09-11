@@ -245,12 +245,20 @@ final class CustomModeSettingsModel: ObservableObject {
             .defaultsKey ?? "customMode.bottomBarSlots"
     }
 
+    // What a verb used to be called, so a saved order still places it. Keep
+    // was File until the rename; an order that still spells it that way would
+    // otherwise lose the name and have the verb appended at the end, quietly
+    // rearranging a bar somebody had arranged. The userscript reads the same
+    // alias, so the two agree on what a saved value means.
+    static let barSlotAliases = ["file": "keep"]
+
     // Stored order first, then whatever it does not name, so a value saved
     // by an older build still lists every verb once
     static func loadBarOrder(from defaults: UserDefaults) -> [String] {
         let stored = (defaults.string(forKey: barSlotsKey) ?? "")
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .map { barSlotAliases[$0] ?? $0 }
 
         var order = stored.compactMap { name in
             barSlotNames.first { $0.lowercased() == name }

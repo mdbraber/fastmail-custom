@@ -18,7 +18,7 @@ public enum CustomModeSettings {
             switch self {
             case .general: return "General"
             case .appearance: return "Appearance"
-            case .labelsFiling: return "Labels & filing"
+            case .labelsFiling: return "Labels & keeping"
             case .snooze: return "Snooze"
             case .keyboard: return "Keyboard"
             case .bottomBar: return "Action bar"
@@ -100,7 +100,7 @@ public enum CustomModeSettings {
         switch slot.lowercased() {
         case "snooze": return "clock"
         case "pin": return "pin"
-        case "file": return "tray.and.arrow.down"
+        case "keep": return "tray.and.arrow.down"
         case "archive": return "archivebox"
         case "move": return "folder"
         case "labels": return "tag"
@@ -183,7 +183,7 @@ public enum CustomModeSettings {
             "triageLabel",
             group: .labelsFiling,
             title: "Triage label",
-            hint: "Added to every incoming message by your rule; removed by keeping, filing or archiving.",
+            hint: "Added to every incoming message by your rule; removed by keeping it somewhere or archiving it.",
             default: .text("Triage")
         ),
         Option(
@@ -191,7 +191,7 @@ public enum CustomModeSettings {
             group: .labelsFiling,
             clearable: true,
             title: "Labels that are never projects",
-            hint: "Filing destinations that hold mail rather than queue it; archive leaves them on, and Shift-E archives into one. Comma-separated paths.",
+            hint: "Destinations that hold mail rather than queue it; archive leaves them on, and Shift-E archives into one. Comma-separated paths.",
             default: .text("Later, Feedbin")
         ),
         Option(
@@ -206,21 +206,21 @@ public enum CustomModeSettings {
             "backToListAfterTriage",
             group: .labelsFiling,
             title: "Back to the list when triage runs out",
-            hint: "Filing steps to the next message only while that message still carries the triage label; otherwise the message list comes back.",
+            hint: "Keeping steps to the next message only while that message still carries the triage label; otherwise the message list comes back.",
             default: .toggle(true)
         ),
         Option(
             "dragAdditive",
             group: .labelsFiling,
             title: "Dragging adds a label",
-            hint: "A drop files the message and keeps it in the Inbox. Option moves it.",
+            hint: "A drop keeps the message under that label and leaves it in the Inbox. Option moves it.",
             default: .toggle(true)
         ),
         Option(
             "labelsShortcut",
             group: .labelsFiling,
-            title: "File instead of move",
-            hint: "Files under a project label and keeps the message in the Inbox; one already filed just loses its triage label. Shift-V refiles, Option-V moves.",
+            title: "Keep instead of move",
+            hint: "Keeps the message under a project label and leaves it in the Inbox; one already kept just loses its triage label. Shift-V keeps it somewhere else, Option-V moves.",
             default: .toggle(true)
         ),
         Option(
@@ -301,7 +301,7 @@ public enum CustomModeSettings {
             group: .bottomBar,
             title: "Action bar actions",
             hint: "In order; the bar along the bottom on iPhone, and across the top of a message on iPad and the Mac. What fits shows, the rest go under More.",
-            default: .text("Snooze, Pin, File, Archive, Labels, Move, Delete")
+            default: .text("Snooze, Pin, Keep, Archive, Labels, Move, Delete")
         ),
         Option(
             "bottomBarItems",

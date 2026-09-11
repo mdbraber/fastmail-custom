@@ -23,7 +23,7 @@ Fastmail lets a message carry any number of labels. That is flexible, but it
 leaves the Inbox as a pile: nothing on a message says whether you have dealt
 with it. Custom mode uses a label as the message's state instead. Every
 message belongs to one project, anything undecided sits under a triage label
-until you file it, and archiving means the same thing wherever you do it. The
+until you keep it, and archiving means the same thing wherever you do it. The
 point is an Inbox you can empty and a queue you can trust.
 
 The web app pieces do that work. The Mac and iPhone apps add what a web page
@@ -34,19 +34,19 @@ cannot reach on its own: real windows, notifications, downloads and links.
 - 🏷️ **One label per message**: each message belongs to a single project.
 - 📥 **Triage queue**: everything undecided waits in one place.
 - 📦 **Consistent archive**: archiving does the same thing wherever you do it.
-- 🎯 **Filing**: pick a label, or drag the message onto one.
-- 👥 **Contact groups**: filing under chosen labels adds the sender to a group.
+- 🎯 **Keeping**: pick a label, or drag the message onto one.
+- 👥 **Contact groups**: keeping under chosen labels adds the sender to a group.
 
 **Keyboard**
 
-- ⌨️ **Single-key actions**: file, snooze or pin with one keystroke.
+- ⌨️ **Single-key actions**: keep, snooze or pin with one keystroke.
 - ⏰ **Snooze defaults**: set when snoozed mail comes back.
 
 **Sidebar and colours**
 
 - 🗂️ **Grouped sidebar**: folders, labels and saved searches kept apart.
 - 🔻 **Triage icon**: the triage label is a funnel, so the queue stands out.
-- 🔢 **Inbox-only counts**: a label counts its Inbox mail, not everything filed under it.
+- 🔢 **Inbox-only counts**: a label counts its Inbox mail, not everything kept under it.
 - 🎨 **Label colours**: on the message rows, or in the sidebar only.
 
 **Windows and writing**

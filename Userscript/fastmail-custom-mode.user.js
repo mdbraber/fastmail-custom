@@ -115,7 +115,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // and the rest wait inside More, in the same order. One list for
         // every bar there is; along the bottom on a phone, across the top of
         // a message on a tablet and on the Mac.
-        bottomBarSlots: 'Snooze, Pin, File, Archive, Labels, Move, Delete',
+        bottomBarSlots: 'Snooze, Pin, Keep, Archive, Labels, Move, Delete',
         // How many of them are drawn rather than measured for, one count per
         // bar; empty leaves the bar measuring, which is what it did before
         // either was asked for
@@ -1343,12 +1343,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         method: 'removeLabel'
     });
 
-    // The bar's spellings of the verbs Fastmail has no button for: file a
+    // The bar's spellings of the verbs Fastmail has no button for: keep a
     // tray, snooze for a while a clock.
     const STATE_VERB_SHAPES = {
         // An arrow going down into an open tray. It was a tick in a circle,
         // which is the mark for done, and done is Archive, two buttons along.
-        file: [
+        keep: [
             ['line', { x1: '12', y1: '4.4', x2: '12', y2: '13.6' }],
             ['polyline', { points: '7.6 9.2 12 13.6 16.4 9.2' }],
             ['polyline', { points: '5.2 12.6 5.2 19.6 18.8 19.6 18.8 12.6' }]
@@ -1359,7 +1359,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ]
     };
 
-    // Dispatched a tick later so the More popover has finished closing: File
+    // Dispatched a tick later so the More popover has finished closing: Keep
     // sends an unfiled conversation to the Labels sheet, and two menus
     // fighting over the same moment is how taps get eaten
     const stateVerbOption = (label, kind) => {
@@ -1513,7 +1513,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         labels: ['labels'],
         move: ['move'],
         'delete': ['trash'],
-        file: ['file']
+        keep: ['keep']
     };
 
     // The verbs that mark a list as the message actions.
@@ -1546,17 +1546,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * it, and it decides that for the buttons it built itself. Ours are built
      * here, so they arrive carrying a label and no opinion about it, and on a
      * bar that shows icons only they are the one place words appear; which is
-     * how File came to be spelled out across the top of a message on a tablet
+     * how Keep came to be spelled out across the top of a message on a tablet
      * while everything beside it was a picture.
      *
      * So the styling is copied from a stock button on the same bar rather
-     * than decided here: whatever Archive is doing next to it is what File
+     * than decided here: whatever Archive is doing next to it is what Keep
      * does. That answers every layout, including ones this has never seen,
      * and it goes on answering when Fastmail changes its mind.
      *
      * The whole button vocabulary, not just the icon-only flag. A bar across
      * the top of a message on the Mac shows words, so nothing was icon-only
-     * and nothing was copied; File arrived with no styling at all and drew
+     * and nothing was copied; Keep arrived with no styling at all and drew
      * half the width of the Archive beside it.
      */
     // A stock button's type is the button's own styling and then that verb's
@@ -1618,10 +1618,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         // Measured as it is registered, since a bar that decides what fits by
         // width has no width on file for a button it has never drawn.
-        if (!toolbar.getView('file')) {
-            toolbar.registerView('file', stateVerbOption('File', 'file'));
+        if (!toolbar.getView('keep')) {
+            toolbar.registerView('keep', stateVerbOption('Keep', 'keep'));
         }
-        matchBarStyle(toolbar, toolbar.getView('file'));
+        matchBarStyle(toolbar, toolbar.getView('keep'));
 
         const snooze = named('customSnooze',
             () => stateVerbOption(snoozeMenuLabel(), 'snooze'));
@@ -1641,12 +1641,19 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     };
 
+    // What a slot used to be called. The verb is Keep; it was File until the
+    // rename, and a saved order still spells it that way. Without this the
+    // name would simply not be recognised and the verb would be appended at
+    // the end, quietly reordering a bar somebody had arranged.
+    const SLOT_ALIASES = { file: 'keep' };
+
     // The setting is an order over every slot, not a subset: slots it does
     // not name join at the end, so an older saved value still places them all
     const orderedSlots = () => {
         const named = String(settings.bottomBarSlots || '')
             .split(',')
             .map(part => part.trim().toLowerCase())
+            .map(name => SLOT_ALIASES[name] || name)
             .filter(name => SLOT_ACTION_NAMES[name]);
 
         Object.keys(SLOT_ACTION_NAMES).forEach((name) => {
@@ -1669,10 +1676,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             const candidates = SLOT_ACTION_NAMES[slot];
             let pick = candidates.filter(has)[0];
 
-            // File is ours, so it is never in Fastmail's list; and inside a
+            // Keep is ours, so it is never in Fastmail's list; and inside a
             // label Fastmail offers Remove label in Archive's place, while
             // this mode wants the full verb.
-            if (!pick && (slot === 'file' || slot === 'archive')) pick = candidates[0];
+            if (!pick && (slot === 'keep' || slot === 'archive')) pick = candidates[0];
             if (pick && wanted.indexOf(pick) === -1) wanted.push(pick);
         });
 
@@ -1923,7 +1930,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // Move to is the quick one: a plain list with no checkboxes and no Save,
     // so a message is filed by typing a few letters.
     let wantOurMove = false;
-    // True while the File verb is opening the tristate Labels menu, a
+    // True while the Keep verb is opening the tristate Labels menu, a
     // multi-selection's picker; so that menu files rather than merely labels
     let wantOurFile = false;
 
@@ -2040,7 +2047,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
             if (!this.customLabels) return result;
             if (!(option instanceof FastMail.classes.Mailbox)) return result;
-            // A hold label is a placing decision only when the File verb
+            // A hold label is a placing decision only when the Keep verb
             // opened this menu; from the L key it is a helper and stays open
             const places = isProject(option) ||
                 (this.customFiling && isExcludedLabel(option));
@@ -2067,7 +2074,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         menuController.customMenu = menu;
         menuController.customLabels = modeIsOn;
-        // Opened by the File verb for a multi-selection, this menu files: a
+        // Opened by the Keep verb for a multi-selection, this menu files: a
         // hold label commits like a project. Opened from the L key it does not.
         menuController.customFiling = wantOurFile;
         wantOurFile = false;
@@ -2538,7 +2545,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // Rule 3, a named label files the sender, from any route
                 adds.forEach(mailbox => fileSendersIntoGroup(mailbox, keys));
 
-                // One-shot: the File verb's picker or a drop armed it for this add
+                // One-shot: the Keep verb's picker or a drop armed it for this add
                 const filing = takeDestinationFiling();
                 const removes = replacedBy(keys, adds, filing);
                 if (!removes.length) return original.apply(this, arguments);
@@ -2556,7 +2563,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                         // afterwards.
                         const advance = takeFileAdvance();
                         const result = original.call(this, storeKeys, adds, merged);
-                        // A File verb waiting on this pick moves the view on
+                        // A Keep verb waiting on this pick moves the view on
                         // to the next message.
                         if (advance) advanceAfterDecision(advance.from, advance.step);
                         return result;
@@ -3015,7 +3022,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
-    // The picker path finishes a tick later, after the pick, so the File verb
+    // The picker path finishes a tick later, after the pick, so the Keep verb
     // arms a one-shot flag; carrying the conversation it acted on; that the
     // filing add takes when it cuts its checkpoint.
     let pendingFileAdvance = false;
@@ -3046,7 +3053,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     // The remembered conversation and what sat either side of it, wrapped in
-    // an object when a File verb is waiting on this pick, or null when nothing
+    // an object when a Keep verb is waiting on this pick, or null when nothing
     // is.
     const takeFileAdvance = () => {
         if (!pendingFileAdvance) return null;
@@ -3059,7 +3066,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return { from: from, step: step };
     };
 
-    // Whether the label add about to land is a filing; the File verb's picker
+    // Whether the label add about to land is a filing; the Keep verb's picker
     // or a drop; which is what lets a hold label replace like a project.
     let pendingFiling = false;
     let pendingFilingTimer = null;
@@ -3131,7 +3138,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * menu take Triage and any other project off in the same checkpoint.
      * Nothing waits on the pick and nothing is asked twice.
      *
-     * The phone has no shortcut buttons to borrow, so the bar's File button
+     * The phone has no shortcut buttons to borrow, so the bar's Keep button
      * presses the message toolbar's own Labels button.
      */
 
@@ -3891,7 +3898,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return mailboxesOf(accountId).filter(isExcludedLabel);
     };
 
-    // Shift-E, and a long press on Archive. The picker is the File picker,
+    // Shift-E, and a long press on Archive. The picker is the Keep picker,
     // narrowed to the holds while this is armed, and the pick archives.
     const openArchiveIntoPicker = () => {
         const actions = controller().actions;
