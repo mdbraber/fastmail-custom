@@ -111,6 +111,12 @@
         border-radius: 5px;
     }
 
+    textarea {
+        font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+        resize: vertical;
+        width: 100%;
+    }
+
     .hint {
         display: block;
         margin-top: 2px;
@@ -230,6 +236,14 @@
         <span>
             <span class="title">Count only what is in the Inbox</span>
             <span class="hint">A project label’s badge counts the same messages its filtered list shows, rather than everything it has ever held.</span>
+        </span>
+    </label>
+
+    <label class="text">
+        <span>
+            <span class="title">Your groupings</span>
+            <span class="hint">One block each: a line naming the grouping, then indented “Name = search” lines, then a bare line for everything else. Fastmail’s own search syntax.</span>
+            <textarea id="groupings" rows="10" spellcheck="false" autocapitalize="off"></textarea>
         </span>
     </label>
 

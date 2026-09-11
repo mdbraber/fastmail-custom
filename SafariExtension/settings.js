@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS = {
     labelsAutoSave: true,
     stickyInboxFilter: true,
     filteredLabelCounts: true,
+    groupings: 'By age (urgent first)\n  Triage = in:Triage OR is:unread\n  Pinned = is:pinned\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n  This month = after:1m\n  Older',
     backToListAfterTriage: true,
     triageLabel: 'Triage',
     snoozeKey: 'w',
@@ -48,12 +49,16 @@ const syncSubs = () => {
     });
 };
 
+// A textarea is not type "text", and the checkbox branch would read its
+// checked property, which is undefined; so the question is asked once, here.
+const isTextInput = (input) => input.type === 'text' || input.tagName === 'TEXTAREA';
+
 const load = async () => {
     const stored = await api.storage.local.get('settings');
     const settings = Object.assign({}, DEFAULT_SETTINGS, stored.settings || {});
 
     inputs.forEach(([key, input]) => {
-        if (input.type === 'text') input.value = settings[key] || '';
+        if (isTextInput(input)) input.value = settings[key] || '';
         else input.checked = !!settings[key];
     });
     syncSubs();
@@ -62,7 +67,7 @@ const load = async () => {
 const save = async () => {
     const settings = {};
     inputs.forEach(([key, input]) => {
-        settings[key] = input.type === 'text' ? input.value.trim() : input.checked;
+        settings[key] = isTextInput(input) ? input.value.trim() : input.checked;
     });
 
     syncSubs();
@@ -72,6 +77,9 @@ const save = async () => {
     await api.storage.local.set({ settings });
 };
 
-inputs.forEach(([, input]) => input.addEventListener('change', save));
+inputs.forEach(([, input]) => {
+    input.addEventListener('change', save);
+    if (input.tagName === 'TEXTAREA') input.addEventListener('input', save);
+});
 
 load();
