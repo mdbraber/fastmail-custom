@@ -773,6 +773,57 @@
         return Promise.resolve(badgeCount());
     };
 
+    /*
+     * Open Fastmail's search, for the home screen shortcut.
+     *
+     * There is no address for it: /mail/search:<query> opens results, and an
+     * empty one bounces to the Inbox; measured. So it is opened the way a
+     * person opens it, and which control that is depends on the layout.
+     *
+     * The phone keeps a search button in the page header and draws no search
+     * field until it is pressed. A wider window has the field itself, in the
+     * sidebar, and Fastmail binds "/" to it; so the shortcut's own target is
+     * asked last, since a field that is not in the document has not
+     * registered one.
+     */
+    function openSearch() {
+        var headers = document.querySelectorAll('.v-PageHeader');
+        for (var i = 0; i < headers.length; i += 1) {
+            var icon = headers[i].querySelector('svg.i-search');
+            var button = icon && icon.closest('button');
+            if (button) {
+                button.click();
+                return true;
+            }
+        }
+
+        var field = document.querySelector('.v-SearchInput input, input[type="search"]');
+        if (field) {
+            field.focus();
+            if (typeof field.select === 'function') field.select();
+            return true;
+        }
+
+        try {
+            var bound = window.FastMail.ViewEventsController.kbShortcuts._shortcuts['/'];
+            var entry = bound && bound[bound.length - 1];
+            var target = entry && entry[0];
+            var method = entry && entry[1];
+            if (target && typeof target[method] === 'function') {
+                target[method]();
+                return true;
+            }
+        } catch (error) {
+            // Fastmail has moved it; nothing left to try
+        }
+
+        return false;
+    }
+
+    window.native.registerAction('search', function () {
+        if (!openSearch()) throw new Error('No search control on this page');
+    });
+
     window.native.addMenuItem({
         id: 'share',
         label: 'Share',

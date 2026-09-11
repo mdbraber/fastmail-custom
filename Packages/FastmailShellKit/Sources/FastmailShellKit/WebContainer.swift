@@ -26,6 +26,8 @@ public final class ShellModel: ObservableObject {
     @Published public var noDragRects: [CGRect] = []
     @Published public var shareRequest: ShareRequest?
     @Published public var pendingLoad: URL?
+    /// A page action waiting for the page to be able to answer.
+    @Published public var pendingAction: String?
     /// The page this window is showing, and the message on it when there is
     /// one. Watched so the page can be offered to another device.
     @Published public var pageURL: URL?
@@ -180,6 +182,7 @@ public struct WebContainer {
         coordinator.settingsPusher = CustomModeSettingsPusher(webView: webView)
         coordinator.sharePresenter = SharePresenter(model: model, webView: webView)
         coordinator.linkLoader = LinkLoader(model: model, webView: webView)
+        coordinator.actionRunner = ActionRunner(model: model, webView: webView)
         coordinator.pageWatcher = PageWatcher(model: model, webView: webView)
         #if !canImport(UIKit)
         coordinator.commandRelay = CommandRelay(model: model, webView: webView)
@@ -206,6 +209,55 @@ public extension Notification.Name {
     static let fmshellCompose = Notification.Name("fmshellCompose")
     static let fmshellComposeInTab = Notification.Name("fmshellComposeInTab")
     static let fmshellInspect = Notification.Name("fmshellInspect")
+}
+
+/// A page action asked for from outside, run against the web view once the
+/// page can answer it. The same relay shape as LinkLoader, for the half of
+/// what a shortcut can ask for that no address reaches.
+@MainActor
+final class ActionRunner {
+    private weak var webView: WKWebView?
+    private let model: ShellModel
+    private var subscription: AnyCancellable?
+
+    /// Long enough for a cold launch to reach a drawn mailbox, and short
+    /// enough that a shortcut nobody can serve gives up rather than firing
+    /// into whatever the page becomes a minute later.
+    private static let tries = 40
+    private static let wait = 0.25
+
+    init(model: ShellModel, webView: WKWebView) {
+        self.model = model
+        self.webView = webView
+        subscription = model.$pendingAction
+            .compactMap { $0 }
+            .sink { [weak self] name in
+                self?.run(name, tries: Self.tries)
+            }
+    }
+
+    /// The page is asked rather than waited for. A shortcut can be what
+    /// launches the app, and then this arrives before Fastmail has drawn
+    /// anything to act on; so a refusal is tried again for a few seconds and
+    /// then let go, quietly, since by then nobody is looking for it.
+    private func run(_ name: String, tries: Int) {
+        model.pendingAction = nil
+        guard let webView, tries > 0 else { return }
+
+        webView.callAsyncJavaScript(
+            "return await window.native.runAction(name);",
+            arguments: ["name": name],
+            in: nil,
+            in: .page
+        ) { [weak self] result in
+            guard case .failure = result else { return }
+            MainActor.assumeIsolated {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.wait) {
+                    MainActor.assumeIsolated { self?.run(name, tries: tries - 1) }
+                }
+            }
+        }
+    }
 }
 
 // External URLs land in the model from onOpenURL; the web view they should

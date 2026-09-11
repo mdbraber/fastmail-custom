@@ -12,6 +12,7 @@ public struct AppShell: View {
     @ObservedObject private var downloads = DownloadManager.shared
     @ObservedObject private var settings = SettingsPresenter.shared
     @ObservedObject private var pendingLinks = PendingLinks.shared
+    @ObservedObject private var pendingActions = PendingActions.shared
     @AppStorage(Backend.defaultsKey) private var backendName = Backend.standard.rawValue
     @Environment(\.scenePhase) private var scenePhase
 
@@ -99,6 +100,7 @@ public struct AppShell: View {
             BadgeController.shared.reapply()
             // The push names production; the page is on whichever server is selected
             if let url = pendingLinks.take() { handle(live.backend.rehost(url)) }
+            if let action = pendingActions.take() { model.pendingAction = action }
         }
         .onChange(of: scenePhase) {
             // Coming back to the front is when a badge permission just granted
@@ -112,6 +114,12 @@ public struct AppShell: View {
         .onChange(of: pendingLinks.url) {
             // A tapped notification, routed exactly as a link from outside
             if let url = pendingLinks.take() { handle(live.backend.rehost(url)) }
+        }
+        .onChange(of: pendingActions.name) {
+            // A shortcut that asks the page to do something rather than to go
+            // somewhere; search, which has no address of its own. The runner
+            // holds it until the page can answer.
+            if let action = pendingActions.take() { model.pendingAction = action }
         }
         #else
         .onAppear {
