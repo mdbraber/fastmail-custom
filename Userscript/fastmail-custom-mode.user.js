@@ -2761,8 +2761,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * (often a filed one) unless held. Either way the walk is explicit: down
      * the list to the next one carrying Triage, stepping over any already
      * filed, and back to the list when none is left rather than opening a
-     * filed one; with its first row focused, so the keyboard has somewhere
-     * to be. Only in the Inbox with the mode on, the triage surface.
+     * filed one; and with nothing selected there, since an emptied queue
+     * should look empty. Only in the Inbox with the mode on, the triage
+     * surface.
      */
     // The same conversation however the two records were reached: the list
     // holds a thread's top message, the verb may hold another of its messages.
@@ -2835,14 +2836,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * one it is the conversation just archived, still filling half the
      * window.
      *
-     * Putting it down is also what lets the focus land. Fastmail's focus and
-     * the open message are bound to each other: closing the message empties
-     * the focus too, so the first row is then somewhere the focus has to
-     * move to rather than where it already sits, and a reading pane follows
-     * its focus. Which is the whole of "back to the list" in that layout:
-     * the list never left, so ending a run there means the pane stops
-     * showing what you have finished with and shows the row the keyboard is
-     * on instead.
+     * Putting it down is also what empties the pane. Fastmail's focus and
+     * the open message are bound to each other, so closing the message
+     * empties the focus with it, and a reading pane follows its focus. Which
+     * is the whole of "back to the list" in that layout: the list never
+     * left, so ending a run there means the pane stops showing what you have
+     * finished with and shows nothing at all.
      */
     const closeOpenMessage = () => {
         try {
@@ -2965,9 +2964,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // placed, since that is what leaves the first row somewhere to
                 // move to.
                 closeOpenMessage();
-                // Back on the list; or already there; the first row takes the
-                // focus rather than nothing. A tick later, so the route has landed.
-                setTimeout(focusFirstRow, 0);
+                // And stays down: the focus is let go a tick later, after the
+                // route has landed, since landing on a list is a moment the
+                // focus can be handed back to the first row.
+                setTimeout(focusNothing, 0);
             };
 
             const where = afterActionGoTo();
@@ -2990,15 +2990,28 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }, 0);
     };
 
-    // The row the keyboard is on: Fastmail's focus is a single-selection
-    // controller over the list, and index 0 is its first row; it waits for the
-    // row itself if the list is still loading.
-    const focusFirstRow = () => {
+    /*
+     * Let the focus go, rather than move it.
+     *
+     * This is the end of a run: nothing above the list is waiting to be
+     * triaged, and the list is what you have come back to. The focus used to
+     * be put on the first row, so the keyboard had somewhere to be; but a
+     * reading pane follows the focus, so the first row was opened the moment
+     * it took it, and finishing a queue ended with a conversation nobody had
+     * asked for filling half the window. An emptied queue should look empty.
+     *
+     * The record rather than the index, because that is the end the
+     * controller reasons from: null is no selection, and it works the index
+     * back to -1 itself. j or k from there starts at the top again.
+     */
+    const focusNothing = () => {
         try {
             const focused = controller().get('focused');
-            if (focused && typeof focused.set === 'function') focused.set('index', 0);
+            if (focused && typeof focused.set === 'function') {
+                focused.set('record', null);
+            }
         } catch (error) {
-            // No list on screen, nothing to focus
+            // No list on screen, nothing to let go of
         }
     };
 
@@ -3466,7 +3479,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // answer to being asked again is the same as the first time: move on.
         if (removes.length) actions.addremove(keys, [], removes);
         // Kept in place; the view moves on to where the setting says, or back
-        // to the list; first row focused; when there is nothing that way.
+        // to the list, with nothing selected, when there is nothing that way.
         advanceAfterDecision(from, step);
     };
 
