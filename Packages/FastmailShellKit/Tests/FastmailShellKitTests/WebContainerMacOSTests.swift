@@ -255,12 +255,65 @@ private func closeButtonPlacement(_ window: NSWindow) -> (x: CGFloat, fromTop: C
     #expect(tabBarEdges(contentInset: 0) == nil)
 }
 
-// The preference is taken by whichever window is set up next, and only that
-// one: a second window opened later must not inherit it.
-@Test @MainActor func theTabPreferenceIsTakenOnceAndThenGone() {
-    #expect(ShellWindows.takeTabPreference() == false)
-    ShellWindows.openAsTab(host: nil) {}   // no host: opens plainly, claims nothing
-    #expect(ShellWindows.takeTabPreference() == false)
+// The whole point of the fold is that it happens while the window is still
+// off screen. A window ordered in first and folded afterwards is exactly the
+// one that flashes up on its own, so the group has to be joined by the time
+// the window asking to be shown gets its way.
+@Test @MainActor func aWindowOpenedForATabJoinsTheGroupBeforeItIsOrderedIn() throws {
+    let host = makeWindow()
+    let fresh = makeWindow()
+    defer {
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: host)
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: fresh)
+    }
+    ShellWindows.openAsTab(host: host) {
+        // What SwiftUI does once it gets round to building the window.
+        fresh.order(.above, relativeTo: 0)
+    }
+    let group = try #require(host.tabGroup)
+    #expect(group.windows.contains(fresh))
+    #expect(fresh.tabGroup === group)
+}
+
+// The host is taken by whichever window answers, and only that one: a window
+// opened a moment later must not be folded into a tab nobody asked for.
+@Test @MainActor func theHostIsTakenOnceAndThenGone() {
+    let host = makeWindow()
+    let fresh = makeWindow()
+    let later = makeWindow()
+    defer {
+        for window in [host, fresh, later] {
+            NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window)
+        }
+    }
+    ShellWindows.openAsTab(host: host) { fresh.order(.above, relativeTo: 0) }
+    #expect(ShellWindows.host(folding: later, ordering: .above) == nil)
+}
+
+// A message being written refuses tabs, so one opening while a tab is still on
+// its way is not mistaken for it: it opens beside the mail, not inside it.
+@Test @MainActor func aWindowThatRefusesTabsIsNeverFoldedIntoOne() {
+    let host = makeWindow()
+    let compose = makeWindow()
+    compose.tabbingMode = .disallowed
+    defer {
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: host)
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: compose)
+    }
+    ShellWindows.openAsTab(host: host) {}   // the window has not arrived yet
+    #expect(ShellWindows.host(folding: compose, ordering: .above) == nil)
+}
+
+// A window on its way out is not a window on its way in.
+@Test @MainActor func aWindowBeingOrderedOutIsNotFoldedIn() {
+    let host = makeWindow()
+    let leaving = makeWindow()
+    defer {
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: host)
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: leaving)
+    }
+    ShellWindows.openAsTab(host: host) {}
+    #expect(ShellWindows.host(folding: leaving, ordering: .out) == nil)
 }
 
 @Test @MainActor func theTabBarIsWatchedOnTheGroupItselfNotThroughTheWindow() throws {

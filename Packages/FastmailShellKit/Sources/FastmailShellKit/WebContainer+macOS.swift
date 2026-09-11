@@ -145,11 +145,6 @@ func configureWindow(_ window: NSWindow) {
     window.styleMask.insert(.fullSizeContentView)
     window.titlebarAppearsTransparent = true
     window.titleVisibility = .hidden
-    // Asked for as a tab: joining now, before the window is ordered in, is
-    // what keeps a separate one from flashing up first.
-    if ShellWindows.takeTabPreference() {
-        window.tabbingMode = .preferred
-    }
     raiseTitlebar(of: window)
 }
 

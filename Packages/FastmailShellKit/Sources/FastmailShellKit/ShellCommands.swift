@@ -1,18 +1,58 @@
 #if os(macOS)
 import AppKit
+import ObjectiveC
 import SwiftUI
 
 /// Opening a window hands nothing back, so a new tab is made by opening one and
 /// then folding it into the window it was asked for from.
+///
+/// The fold has to happen while the window is still off screen, and that is
+/// earlier than anything of ours would otherwise hear about it: by the time the
+/// page's view is put into the window AppKit has already ordered it in, and a
+/// window told only then that it would rather be a tab stays a window of its
+/// own — it stands there on its own for a moment and is folded in afterwards,
+/// in full view. So the window is caught on its way in instead, at the one call
+/// every window makes before the screen has it.
 @MainActor
 public enum ShellWindows {
-    /// Set just before a window is asked for, and taken by the first window
-    /// set up afterwards.
-    private static var wantsTab = false
+    /// The window a tab was asked for from, held from the moment it is asked
+    /// for until the window that answers is caught on its way in. It is not
+    /// cleared on the next line: SwiftUI builds the window when it gets round
+    /// to it, sometimes seconds later, and letting go of the host straight away
+    /// left the window that finally arrived with nothing to join.
+    private static weak var pendingHost: NSWindow?
 
-    static func takeTabPreference() -> Bool {
-        defer { wantsTab = false }
-        return wantsTab
+    /// Whether the window on its way in is the one a tab was asked for, and if
+    /// so what it should join. Only a window being shown for the first time
+    /// counts, and only one AppKit would have grouped anyway: a message being
+    /// written refuses tabs, and a window of another kind answers to another
+    /// name.
+    static func host(folding window: NSWindow, ordering place: NSWindow.OrderingMode) -> NSWindow? {
+        guard
+            place != .out,
+            !window.isVisible,
+            window.tabbingMode != .disallowed,
+            let host = pendingHost,
+            host !== window,
+            host.tabbingIdentifier == window.tabbingIdentifier
+        else { return nil }
+        pendingHost = nil
+        return host
+    }
+
+    /// AppKit offers nothing to listen to this early, so the call a window
+    /// makes to be shown is where the fold goes. Swapped once, and idle
+    /// whenever no tab has been asked for, which is nearly always.
+    private static var catchesWindows = false
+
+    private static func catchWindowsOnTheirWayIn() {
+        guard !catchesWindows else { return }
+        guard
+            let shown = class_getInstanceMethod(NSWindow.self, #selector(NSWindow.order(_:relativeTo:))),
+            let folded = class_getInstanceMethod(NSWindow.self, #selector(NSWindow.fmshellOrder(_:relativeTo:)))
+        else { return }
+        method_exchangeImplementations(shown, folded)
+        catchesWindows = true
     }
 
     /// The window that appeared, if one did. A compose window opening at the
@@ -27,28 +67,29 @@ public enum ShellWindows {
 
     /// Open one and make it a tab of the window in front.
     ///
-    /// The preference is left standing until a window takes it: SwiftUI builds
-    /// one when it gets round to it, sometimes seconds later, and clearing it
-    /// on the next line meant the window that finally arrived was never told
-    /// it was meant to be a tab. It is dropped after a while in case no window
-    /// ever comes, so an unrelated one later cannot pick it up.
+    /// The host is left standing until a window takes it, and dropped after a
+    /// while in case no window ever comes, so an unrelated one later cannot
+    /// pick it up.
     public static func openAsTab(host: NSWindow?, open: () -> Void) {
         guard let host, host.tabbingMode != .disallowed else {
             open()
             return
         }
+        catchWindowsOnTheirWayIn()
         let before = NSApplication.shared.windows
-        wantsTab = true
+        pendingHost = host
         open()
         DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-            MainActor.assumeIsolated { _ = takeTabPreference() }
+            MainActor.assumeIsolated { pendingHost = nil }
         }
         join(host: host, before: before, tries: 60)
     }
 
-    /// The window is waited for rather than assumed: SwiftUI takes its time
-    /// building one, and the first of a session can take seconds, which used
-    /// to run the wait out and leave the tab standing as a window of its own.
+    /// The safety net, for a window that somehow reached the screen without
+    /// being caught: better a tab folded in late than a window left standing
+    /// where a tab was asked for. It is waited for rather than assumed, since
+    /// SwiftUI takes its time and the first window of a session can take
+    /// seconds.
     private static func join(host: NSWindow, before: [NSWindow], tries: Int) {
         guard tries > 0 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -57,14 +98,27 @@ public enum ShellWindows {
                     join(host: host, before: before, tries: tries - 1)
                     return
                 }
-                // Normally it arrived as a tab already, having been told it
-                // preferred one before it was ordered in; there is nothing
-                // left to do then.
+                // Normally it arrived as a tab already, having been folded in
+                // on its way to the screen; there is nothing left to do then.
                 guard fresh.tabGroup !== host.tabGroup || fresh.tabGroup == nil else { return }
                 host.addTabbedWindow(fresh, ordered: .above)
                 fresh.makeKeyAndOrderFront(nil)
             }
         }
+    }
+}
+
+private extension NSWindow {
+    /// Swapped with `order(_:relativeTo:)`, so a window asking to be shown
+    /// arrives here first and the name below reaches what AppKit would have
+    /// done. A window meant for a tab joins its group while it is still off
+    /// screen, and is never seen standing on its own.
+    @objc dynamic func fmshellOrder(_ place: NSWindow.OrderingMode, relativeTo otherWindow: Int) {
+        if let host = ShellWindows.host(folding: self, ordering: place) {
+            tabbingMode = .preferred
+            host.addTabbedWindow(self, ordered: .above)
+        }
+        fmshellOrder(place, relativeTo: otherWindow)
     }
 }
 
