@@ -80,9 +80,9 @@ public struct CustomModeSettingsForm: View {
     @ViewBuilder
     private func barSlotRow(_ name: String) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: CustomModeSettings.barSlotSymbol(name))
+            barSlotIcon(name)
                 .foregroundStyle(.secondary)
-                .frame(width: 18, alignment: .center)
+                .frame(width: 18, height: 18, alignment: .center)
             Text(name)
             Spacer(minLength: 0)
             #if !canImport(UIKit)
@@ -96,6 +96,30 @@ public struct CustomModeSettingsForm: View {
         .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
         .listRowSeparator(.hidden)
         .contentShape(Rectangle())
+    }
+
+    // The glyph the bar itself draws, from the apps' shared catalog. Only the
+    // two apps compile that in, so a bundle without it falls back to the
+    // nearest system symbol rather than drawing a blank.
+    @ViewBuilder
+    private func barSlotIcon(_ name: String) -> some View {
+        if Self.catalogHasGlyph(CustomModeSettings.barSlotGlyph(name)) {
+            Image(CustomModeSettings.barSlotGlyph(name), bundle: .main)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+        } else {
+            Image(systemName: CustomModeSettings.barSlotSymbol(name))
+        }
+    }
+
+    private static func catalogHasGlyph(_ name: String) -> Bool {
+        guard !name.isEmpty else { return false }
+        #if canImport(UIKit)
+        return UIImage(named: name, in: .main, compatibleWith: nil) != nil
+        #else
+        return NSImage(named: name) != nil
+        #endif
     }
 
     @ViewBuilder

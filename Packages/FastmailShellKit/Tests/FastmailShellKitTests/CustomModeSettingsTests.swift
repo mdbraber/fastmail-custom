@@ -222,3 +222,61 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     #expect(CustomModeSettings.current(from: defaults)["triageLabel"] as? String == "New")
     #expect(defaults.object(forKey: "inboxMode.triageLabel") == nil)
 }
+
+#if canImport(AppKit)
+import AppKit
+
+private let repoRoot = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+
+// The reorder list draws the bar's own glyphs, so every verb has to have one
+// in the shared catalog, rendered as a template or it arrives as flat black
+// artwork rather than taking the row's colour.
+@Test @MainActor func everyBarSlotHasItsGlyphInTheSharedCatalog() throws {
+    for name in CustomModeSettingsModel.barSlotNames {
+        let glyph = CustomModeSettings.barSlotGlyph(name)
+        #expect(!glyph.isEmpty, "\(name) names no glyph")
+
+        let imageset = repoRoot
+            .appendingPathComponent("Apps/Shared/Glyphs.xcassets")
+            .appendingPathComponent("\(glyph).imageset")
+        let manifest = imageset.appendingPathComponent("Contents.json")
+        #expect(
+            FileManager.default.fileExists(atPath: manifest.path),
+            "\(glyph) is not in the shared asset catalog"
+        )
+
+        let contents = try #require(
+            try JSONSerialization.jsonObject(with: try Data(contentsOf: manifest)) as? [String: Any]
+        )
+        let properties = contents["properties"] as? [String: Any]
+        #expect(properties?["template-rendering-intent"] as? String == "template")
+
+        let files = (contents["images"] as? [[String: Any]] ?? [])
+            .compactMap { $0["filename"] as? String }
+        #expect(!files.isEmpty, "\(glyph) names no artwork")
+        for file in files {
+            #expect(
+                FileManager.default.fileExists(atPath: imageset.appendingPathComponent(file).path),
+                "\(glyph) names \(file), which is not there"
+            )
+        }
+    }
+}
+
+// The fallback only matters in a bundle without the catalog, but a name the
+// system cannot draw would be a blank rather than a stand-in.
+@Test @MainActor func everyBarSlotFallbackIsASymbolThatWillDraw() {
+    for name in CustomModeSettingsModel.barSlotNames {
+        let symbol = CustomModeSettings.barSlotSymbol(name)
+        #expect(
+            NSImage(systemSymbolName: symbol, accessibilityDescription: nil) != nil,
+            "\(symbol) is not a symbol the system can draw"
+        )
+    }
+}
+#endif

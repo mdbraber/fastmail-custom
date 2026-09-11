@@ -96,9 +96,31 @@ public enum CustomModeSettings {
     /// The symbol a bar verb is drawn with in the reorder list, so a row in
     /// Settings is recognisable as the button it places. Named here beside
     /// the catalog, since the list of verbs is the catalog's own.
+    /// The verb's own glyph: the shape the bar draws for it, carried in the
+    /// apps' shared asset catalog so the list you order the bar in shows the
+    /// same pictures as the bar itself. Five are Fastmail's, traced from the
+    /// icons its own buttons wear; Keep is the mode's, from the same points
+    /// the script draws it with; and none of them has a system symbol that is
+    /// actually the same drawing, which is why they are carried rather than
+    /// approximated. Its own Snooze is an alarm clock, for one, and a plain
+    /// clock was standing in for it.
+    public static func barSlotGlyph(_ slot: String) -> String {
+        switch slot.lowercased() {
+        case "snooze": return "BarSnooze"
+        case "pin": return "BarPin"
+        case "keep": return "BarKeep"
+        case "archive": return "BarArchive"
+        case "move": return "BarMove"
+        case "labels": return "BarLabels"
+        case "delete": return "BarDelete"
+        default: return ""
+        }
+    }
+
+    /// The nearest system symbol, for a bundle without the catalog in it.
     public static func barSlotSymbol(_ slot: String) -> String {
         switch slot.lowercased() {
-        case "snooze": return "clock"
+        case "snooze": return "alarm"
         case "pin": return "pin"
         case "keep": return "tray.and.arrow.down"
         case "archive": return "archivebox"
