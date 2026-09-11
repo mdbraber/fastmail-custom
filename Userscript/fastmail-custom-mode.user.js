@@ -344,7 +344,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // they are cached per account and dropped whenever a Mailbox record
     // changes; the same store event that already rebuilds the stylesheet.
     const labelCache = new Map();
-    const forgetLabelCache = () => labelCache.clear();
+    // Whether a label has labels under it, answered once per label. A label
+    // gaining or losing a child is a Mailbox change like any other, so the
+    // two caches are dropped together.
+    const sublabelCache = new Map();
+
+    const forgetLabelCache = () => {
+        labelCache.clear();
+        sublabelCache.clear();
+    };
 
     const pathsFromSetting = (value) => String(value || '')
         .split(',')
@@ -401,6 +409,81 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // settings.excludedLabels; one at a time, and a hold label survives
     // archive where a project does not
     const isDestination = (mailbox) => isProject(mailbox) || isExcludedLabel(mailbox);
+
+    // Whether anything in the sidebar sits under this label. Hidden children
+    // do not count: a label whose only children are off the sidebar reads as
+    // a leaf there, and reading as one is what this is about.
+    const hasSublabels = (mailbox) => {
+        if (!mailbox || !mailbox.get) return false;
+
+        const cached = sublabelCache.get(mailbox);
+        if (cached !== undefined) return cached;
+
+        const found = mailboxesOf(mailbox.get('accountId')).some(other =>
+            other !== mailbox && parentOf(other) === mailbox && isSidebarLabel(other));
+
+        sublabelCache.set(mailbox, found);
+        return found;
+    };
+
+    /*
+     * The head of a nest, which is not a place to put anything.
+     *
+     * A nested label names a thing and a kind of thing: Boards/ZonMw is the
+     * board, Boards is the shelf it sits on. Mail belongs to the board. So a
+     * label with labels under it is never offered as somewhere to keep a
+     * message, never accepts a drop, and never appears in the narrowed list;
+     * and a label with nothing under it is where every filing lands, nested
+     * or not.
+     *
+     * Only about the mode's own routes. Fastmail's Labels menu still offers
+     * every label it has, because that menu adds the label you ticked and
+     * makes no claim about where the message lives.
+     */
+    const isRootLabel = (mailbox) => isDestination(mailbox) && hasSublabels(mailbox);
+
+    // Where a keep can actually put a message.
+    const isKeepTarget = (mailbox) => isDestination(mailbox) && !hasSublabels(mailbox);
+
+    /*
+     * A destination and every destination above it, outermost first.
+     *
+     * Fastmail infers neither from the other: a message in Boards/ZonMw is
+     * not in Boards, and a list of Boards does not show it. Under this model
+     * it should; the shelf holds what is on it; so filing puts the whole
+     * chain on rather than the leaf alone.
+     *
+     * It stops at the first ancestor the model has no opinion about, so a
+     * label nested under a system folder carries only what is actually a
+     * destination.
+     */
+    const filingChain = (mailbox) => {
+        const chain = [];
+        let node = mailbox;
+
+        // The same depth guard as mailboxPath, for the same reason
+        for (let depth = 0; node && depth < 20; depth += 1) {
+            if (!isDestination(node)) break;
+            chain.unshift(node);
+            node = parentOf(node);
+        }
+
+        return chain;
+    };
+
+    // The labels a filing actually applies: what was asked for, and the
+    // labels above anything nested in it.
+    const withFilingParents = (adds) => {
+        const all = adds.slice();
+
+        adds.forEach((mailbox) => {
+            filingChain(mailbox).forEach((step) => {
+                if (all.indexOf(step) === -1) all.push(step);
+            });
+        });
+
+        return all;
+    };
 
     /*
      * ----------------------------------------------------------------
@@ -1891,12 +1974,27 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const patchDrop = () => {
         const proto = FastMail.classes.MailboxSourceView.prototype;
         const original = proto.drop;
+        const originalWillAccept = proto.willAcceptDrag;
+
+        // Said before the drop rather than after it: the head of a nest is
+        // not somewhere mail goes, so its row does not light up as a target
+        // and the message stays where it was. A row that took the drop and
+        // then did nothing would look like a bug.
+        proto.willAcceptDrag = function () {
+            if (modeIsOn && settings.dragAdditive && isRootLabel(this.get('content'))) {
+                return false;
+            }
+
+            return originalWillAccept.apply(this, arguments);
+        };
 
         proto.drop = function (drag) {
             if (!modeIsOn || !settings.dragAdditive) return original.apply(this, arguments);
 
             const mailbox = this.get('content');
             if (!mailbox.get('mayAddItems')) return;
+            // Refused above; this is for a drop that reaches here another way
+            if (isRootLabel(mailbox)) return;
 
             drag.getDataOfType('MessageStoreKeys', (storeKeys) => {
                 if (!storeKeys) return;
@@ -2018,12 +2116,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // all; so it is left as it comes.
             if (!this.customOurs) return options;
 
-            // Typing is asking for something by name
-            if (this.get('search')) return options;
+            // The head of a nest is never offered, typed or not. Typing is
+            // asking for something by name, but a name you can reach that way
+            // is a name you can pick, and picking the shelf is the one thing
+            // this list must not let you do. "Create label…" and the other
+            // helpers are not mailboxes and are left alone.
+            const offered = options.filter(option =>
+                !(option instanceof FastMail.classes.Mailbox) || !isRootLabel(option));
 
-            return options.filter((option) => {
-                // Leave anything that is not a mailbox alone: "Create label…"
-                // is an option in this list too
+            // Typing is asking for something by name
+            if (this.get('search')) return offered;
+
+            return offered.filter((option) => {
                 if (!(option instanceof FastMail.classes.Mailbox)) return true;
 
                 return !settings.labelsSidebarOnly || isDestination(option);
@@ -2607,24 +2711,38 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 const keys = resolveKeys(this, storeKeys);
                 if (!keys) return original.apply(this, arguments);
 
-                const adds = verb === 'addremove'
+                const asked = verb === 'addremove'
                     ? toArray(arguments[1])
                     : [arguments[1]].filter(Boolean);
 
-                // Rule 3, a named label files the sender, from any route
+                // Rule 4, a nest goes on whole. Filing under Boards/ZonMw
+                // puts Boards on as well, so the shelf holds what is on it;
+                // Fastmail infers neither label from the other. A filing
+                // only: Fastmail's Labels menu adds what was ticked and
+                // nothing else, the same as it adds nothing else here.
+                const adds = pendingFiling ? withFilingParents(asked) : asked;
+                const above = adds.filter(mailbox => asked.indexOf(mailbox) === -1);
+
+                // Rule 3, a named label files the sender, from any route. The
+                // labels above the pick count: they land on the message like
+                // any other, so a contact group named after one still fills.
                 adds.forEach(mailbox => fileSendersIntoGroup(mailbox, keys));
 
                 // Set only by the call this one is nested inside, so an add
                 // that arrives on its own is just an add
                 const removes = replacedBy(keys, adds, pendingFiling);
-                if (!removes.length) return original.apply(this, arguments);
+                if (!removes.length && !above.length) return original.apply(this, arguments);
 
                 applyingLabelRules = true;
                 try {
                     if (verb === 'addremove') {
-                        // One call, one checkpoint: the rule's removals ride
-                        // the same addremove as the pick
-                        const own = toArray(arguments[2]);
+                        // One call, one checkpoint: the rule's removals and
+                        // the labels above the pick ride the same addremove
+                        // as the pick itself. Nothing being added is removed
+                        // in the same breath, so a label unticked in the menu
+                        // that the nest puts back stays on.
+                        const own = toArray(arguments[2])
+                            .filter(m => adds.indexOf(m) === -1);
                         const merged = own.concat(removes.filter(m => own.indexOf(m) === -1));
                         // The caller's own selection argument goes through
                         // untouched: null means the focused conversation to
@@ -2638,16 +2756,35 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                         return result;
                     }
 
-                    // The removals go first and silenced, so the add's own
-                    // didAction is the one that cuts the checkpoint, and
+                    // The removals go first and silenced, so the last write
+                    // here is the one whose didAction cuts the checkpoint, and
                     // everything queued before it joins that checkpoint.
                     const self = this;
                     const args = arguments;
-                    silencingDidAction(this, () => {
-                        removingOnPurpose(() => self.addremove(keys, [], removes));
-                    });
+                    if (removes.length) {
+                        silencingDidAction(this, () => {
+                            removingOnPurpose(() => self.addremove(keys, [], removes));
+                        });
+                    }
                     const advance = takeFilingAdvance();
-                    const result = original.apply(self, args);
+                    let result;
+
+                    if (above.length) {
+                        // The labels above the pick go on last, because move
+                        // takes the message out of the mailbox it is being
+                        // read in and that can be one of them: keeping into
+                        // Boards/ZonMw from a list of Boards would have taken
+                        // Boards straight back off. Going last also makes
+                        // this the write that cuts the checkpoint, so the
+                        // whole filing is still one undo.
+                        silencingDidAction(self, () => {
+                            result = original.apply(self, args);
+                        });
+                        self.addremove(keys, above, []);
+                    } else {
+                        result = original.apply(self, args);
+                    }
+
                     if (advance) advanceAfterDecision(advance.from, advance.step);
                     return result;
                 } finally {
