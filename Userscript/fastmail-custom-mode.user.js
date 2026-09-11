@@ -1906,17 +1906,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 // A drop files: a destination replaces by rule 2, a hold
                 // label included, and a named one files the sender by rule 3.
-                armDestinationFiling();
-                if (optionHeld) {
-                    // Fastmail's move: Inbox off, label on. Asked for with a
-                    // modifier, so left exactly as asked; rule 2 still takes
-                    // Triage and every other destination off underneath.
-                    actions.move(storeKeys, mailbox);
-                } else if (!FastMail.preferences.get('inLabelsMode')) {
-                    actions.copy(storeKeys, mailbox);
-                } else {
-                    actions.add(storeKeys, mailbox);
-                }
+                asFiling(null, () => {
+                    if (optionHeld) {
+                        // Fastmail's move: Inbox off, label on. Asked for with
+                        // a modifier, so left exactly as asked; rule 2 still
+                        // takes Triage and every other destination off under.
+                        actions.move(storeKeys, mailbox);
+                    } else if (!FastMail.preferences.get('inLabelsMode')) {
+                        actions.copy(storeKeys, mailbox);
+                    } else {
+                        actions.add(storeKeys, mailbox);
+                    }
+                });
             });
         };
     };
@@ -2008,7 +2009,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
             // Archiving into a label: the hold labels and nothing else, since
             // a hold label is the only kind that survives an archive.
-            if (this.customHoldsOnly) {
+            if (this.customArchiveInto) {
                 return options.filter(option =>
                     option instanceof FastMail.classes.Mailbox && isExcludedLabel(option));
             }
@@ -2053,33 +2054,62 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 (this.customFiling && isExcludedLabel(option));
             if (!places) return result;
 
-            if (typeof menu.done === 'function') menu.done();
+            // Both spent as they are read, so the menu cannot make the same
+            // decision twice. An archive steps the view itself, so a pick that
+            // ends in one hands its advance to nobody: the filing and the
+            // archive would each take a step, and the message after next is
+            // not where anyone asked to be.
+            const archiveInto = this.customArchiveInto;
+            const advance = archiveInto ? null : this.customAdvance;
+            this.customArchiveInto = false;
+            this.customAdvance = null;
+
+            // Closing is what writes. The tristate holds its ticks in a map
+            // and applies them in one addremove as it leaves the document,
+            // read out of the app bundle; so the whole change lands inside
+            // this call, and a filing can say so around it rather than ahead
+            // of it.
+            if (typeof menu.done === 'function') {
+                const close = () => menu.done();
+                if (this.customFiling) asFiling(advance, close);
+                else close();
+            }
 
             // Archiving into a label: the tristate menu has just put the
             // label on, and the decision is what follows it
-            if (takeArchiveInto()) runDoneInto(option);
+            if (archiveInto) runDoneInto(option);
 
             return result;
         };
     };
 
-    const applyLabelsMode = (menu) => {
+    // True once the menu has been dressed; false while it has no controller
+    // to dress, which is how the first opening of a reused menu arrives. The
+    // caller tries again, the way the Move menu's does: a menu left undressed
+    // is a menu that does not narrow, does not file, and holds on to nothing
+    // handed to it.
+    const applyLabelsMode = (menu, files) => {
         const menuController = menu.get('controller');
-        if (!menuController) return;
+        if (!menuController) return false;
 
         // The list is left stock; Labels is Fastmail's full picker.
         submitAfterPlacing(menuController, menu);
         narrowLabelOptions(menuController);
-        menuController.customHoldsOnly = archiveIntoArmed();
+        // Taken, not read: the verb set these for the next picker to open,
+        // and this is that picker. From here they belong to the menu, and a
+        // menu dismissed without a pick takes them away when it goes.
+        menuController.customArchiveInto = takeArchiveInto();
+        menuController.customAdvance = takeAdvance();
 
         menuController.customMenu = menu;
         menuController.customLabels = modeIsOn;
         // Opened by the Keep verb for a multi-selection, this menu files: a
         // hold label commits like a project. Opened from the L key it does not.
-        menuController.customFiling = wantOurFile;
-        wantOurFile = false;
+        menuController.customFiling = files;
 
         if (typeof menuController.setOptions === 'function') menuController.setOptions();
+
+        return true;
     };
 
     /*
@@ -2300,9 +2330,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         menu.didSelect = function (mailbox) {
             if (!this.customOurs) return originalDidSelect.apply(this, arguments);
 
+            const advance = this.customAdvance;
+            this.customAdvance = null;
+
             // Opened by Shift-E or a long press on Archive: the pick is a
-            // decision rather than a filing, and the verb finishes it.
-            if (takeArchiveInto()) {
+            // decision rather than a filing, and the verb finishes it; it
+            // steps the view itself, so the advance is dropped rather than
+            // handed on.
+            if (this.customArchiveInto) {
+                this.customArchiveInto = false;
                 runDoneInto(mailbox);
                 return;
             }
@@ -2310,13 +2346,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // A pick is an add. Rule 2 takes Triage and every other
             // destination off underneath, rule 3 files the sender; nothing is
             // decided here.
-            armDestinationFiling();
             const actions = controller().actions;
-            if (FastMail.preferences.get('inLabelsMode')) {
-                actions.add(null, mailbox);
-            } else {
-                actions.copy(null, mailbox);
-            }
+            asFiling(advance, () => {
+                if (FastMail.preferences.get('inLabelsMode')) {
+                    actions.add(null, mailbox);
+                } else {
+                    actions.copy(null, mailbox);
+                }
+            });
         };
     };
 
@@ -2337,9 +2374,23 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         menuController.customMenu = menu;
         menu.customOurs = ours;
         menuController.customOurs = ours;
-        // Read rather than taken: the pick is what takes it, and a picker
-        // dismissed without one has to leave it to time out
-        menuController.customHoldsOnly = ours && archiveIntoArmed();
+        // Taken, not read. The keystroke armed it for the next picker to
+        // open, and this is that picker, so it comes off the global and onto
+        // the menu: the list it narrows and the pick it decides are both this
+        // menu's, and a menu dismissed without a pick takes it away with it.
+        // On the view as well as the controller, because the pick arrives at
+        // the view's didSelect and the narrowing at the controller's filter.
+        // Spent whether or not this is our menu: it was armed for whichever
+        // picker opened next, and if that turned out to be a menu of
+        // Fastmail's it is spent wrongly rather than left lying here.
+        const armed = takeArchiveInto();
+        const advance = takeAdvance();
+        const archiveInto = ours && armed;
+        menu.customArchiveInto = archiveInto;
+        menuController.customArchiveInto = archiveInto;
+        // The pick arrives at the view's didSelect, so the advance rides
+        // there; a menu of Fastmail's own has no verb waiting on it.
+        menu.customAdvance = ours ? advance : null;
 
         // filterOptions keeps a mailbox when rolesVisible has a truthy entry
         // for its inherited role, so this leaves the labels you gave names to
@@ -2499,18 +2550,36 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // Every label change in the client passes through these actions, whichever
     // menu, key, drag or swipe asked for it; so the model is enforced here
-    // rather than inside any one picker.
+    // rather than inside any one picker. Seeing them all is not acting on them
+    // all: which changes are filings, and so which the rules have anything to
+    // say about, is the question each rule asks for itself.
     const LABEL_ACTIONS = ['add', 'copy', 'addremove', 'move'];
 
     // True while a rule is issuing its own addremove, so the wrapper does
     // not read that call as one more request to apply the rules to
     let applyingLabelRules = false;
 
-    // Rule 2, a destination replaces. What comes off the selected threads when
-    // `adds` lands on them: Triage and every other destination, project or
-    // hold label alike, so a message is in one place at a time.
+    /*
+     * Rule 2, a destination replaces. What comes off the selected threads when
+     * `adds` lands on them: Triage and every other destination, project or
+     * hold label alike, so a message is in one place at a time.
+     *
+     * Only when the add is a filing, though, and filing is the mode's own
+     * routes: the Keep verb's picker, a drop on a label in the sidebar, the
+     * narrowed Move menu, the label an archive goes into. Each of those says
+     * so by arming the flag before the add lands.
+     *
+     * Fastmail's own Labels menu does not, and must not. It is the full
+     * tristate picker, and ticking a second project in it is a request for a
+     * second label, not a request to move the message somewhere else; the
+     * rule read it as one, so labelling from that menu quietly took every
+     * other label off. Labels is Fastmail's verb and behaves like Fastmail's;
+     * putting a message in one place is what Keep is for.
+     */
     const replacedBy = (storeKeys, adds, filing) => {
-        const landed = adds.some(m => isProject(m) || (filing && isExcludedLabel(m)));
+        if (!filing) return [];
+
+        const landed = adds.some(isDestination);
         if (!landed) return [];
 
         const removes = [];
@@ -2545,9 +2614,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // Rule 3, a named label files the sender, from any route
                 adds.forEach(mailbox => fileSendersIntoGroup(mailbox, keys));
 
-                // One-shot: the Keep verb's picker or a drop armed it for this add
-                const filing = takeDestinationFiling();
-                const removes = replacedBy(keys, adds, filing);
+                // Set only by the call this one is nested inside, so an add
+                // that arrives on its own is just an add
+                const removes = replacedBy(keys, adds, pendingFiling);
                 if (!removes.length) return original.apply(this, arguments);
 
                 applyingLabelRules = true;
@@ -2561,7 +2630,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                         // untouched: null means the focused conversation to
                         // Fastmail, and resolving it here would move the focus
                         // afterwards.
-                        const advance = takeFileAdvance();
+                        const advance = takeFilingAdvance();
                         const result = original.call(this, storeKeys, adds, merged);
                         // A Keep verb waiting on this pick moves the view on
                         // to the next message.
@@ -2577,7 +2646,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     silencingDidAction(this, () => {
                         removingOnPurpose(() => self.addremove(keys, [], removes));
                     });
-                    const advance = takeFileAdvance();
+                    const advance = takeFilingAdvance();
                     const result = original.apply(self, args);
                     if (advance) advanceAfterDecision(advance.from, advance.step);
                     return result;
@@ -3022,82 +3091,96 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
-    // The picker path finishes a tick later, after the pick, so the Keep verb
-    // arms a one-shot flag; carrying the conversation it acted on; that the
-    // filing add takes when it cuts its checkpoint.
-    let pendingFileAdvance = false;
-    let pendingFileFrom = null;
-    // Its neighbours when the picker opened. Taken at arming time for the same
-    // reason every other caller takes them early: the pick may take the row
-    // out of the list it was in, and by then there is nothing to find.
-    let pendingFileStep = null;
-    let pendingFileAdvanceTimer = null;
+    /*
+     * Where the view goes after the pick; the conversation the Keep verb acted
+     * on and what sat either side of it. Read when the picker opens, for the
+     * same reason every other caller reads neighbours early: the pick may take
+     * the row out of the list, and by then there is nothing to find.
+     *
+     * Set by the verb and taken by the next picker to open, which is the one
+     * the verb asked for; from there it rides on that menu, and the pick hands
+     * it to the write it makes. It does not sit here waiting to be claimed by
+     * whatever label change happens along next.
+     *
+     * It used to, with twelve seconds to expire in, and a picker opened and
+     * dismissed left it behind: the next filing you made in those twelve
+     * seconds moved the view to the neighbour of a message you had stopped
+     * looking at.
+     */
+    let pendingAdvance = null;
 
-    const clearFileAdvanceTimer = () => {
-        if (!pendingFileAdvanceTimer) return;
-        clearTimeout(pendingFileAdvanceTimer);
-        pendingFileAdvanceTimer = null;
+    const armAdvance = (from) => {
+        pendingAdvance = { from: from || null, step: stepFrom(from) };
     };
 
-    const armFileAdvance = (from) => {
-        pendingFileAdvance = true;
-        pendingFileFrom = from || null;
-        pendingFileStep = stepFrom(from);
-        clearFileAdvanceTimer();
-        pendingFileAdvanceTimer = setTimeout(() => {
-            pendingFileAdvance = false;
-            pendingFileFrom = null;
-            pendingFileStep = null;
-            pendingFileAdvanceTimer = null;
-        }, 12000);
+    const takeAdvance = () => {
+        const was = pendingAdvance;
+        pendingAdvance = null;
+        return was;
     };
 
-    // The remembered conversation and what sat either side of it, wrapped in
-    // an object when a Keep verb is waiting on this pick, or null when nothing
-    // is.
-    const takeFileAdvance = () => {
-        if (!pendingFileAdvance) return null;
-        const from = pendingFileFrom;
-        const step = pendingFileStep;
-        pendingFileAdvance = false;
-        pendingFileFrom = null;
-        pendingFileStep = null;
-        clearFileAdvanceTimer();
-        return { from: from, step: step };
-    };
-
-    // Whether the label add about to land is a filing; the Keep verb's picker
-    // or a drop; which is what lets a hold label replace like a project.
+    /*
+     * Whether the label change about to land is a filing; the Keep verb's
+     * picker, a drop on a label, the narrowed Move menu, an archive into a
+     * hold label; which is what puts it under rule 2. Unmarked, an add is
+     * only an add, and Fastmail's own Labels menu never marks one.
+     *
+     * A bracket around the call, not a flag set and left standing. Every
+     * route writes synchronously inside the gesture that asks for it, the
+     * tristate menu included: it holds its ticks in a map and applies them in
+     * one addremove as it leaves the document, so even that write happens
+     * inside the call that closes the menu.
+     *
+     * It was set when the picker opened instead, which is a different span
+     * entirely; it had to outlive the reading and the typing, so it was given
+     * twelve seconds to expire in. That made a picker opened and dismissed
+     * leave the mark lying there, and the next label change to come along in
+     * those twelve seconds; from any menu, including the one that must never
+     * file; was filed on its behalf.
+     */
     let pendingFiling = false;
-    let pendingFilingTimer = null;
+    // Where the view goes when this filing lands, for the rule to pick up as
+    // it cuts the checkpoint; null for a filing nobody is waiting on, which is
+    // a drop, and for one whose verb steps the view itself, which is an
+    // archive into a hold label.
+    let filingAdvance = null;
 
-    const armDestinationFiling = () => {
+    const asFiling = (advance, work) => {
+        const wasFiling = pendingFiling;
+        const wasAdvance = filingAdvance;
         pendingFiling = true;
-        if (pendingFilingTimer) clearTimeout(pendingFilingTimer);
-        pendingFilingTimer = setTimeout(() => {
-            pendingFiling = false;
-            pendingFilingTimer = null;
-        }, 12000);
+        filingAdvance = advance || null;
+        try {
+            return work();
+        } finally {
+            pendingFiling = wasFiling;
+            filingAdvance = wasAdvance;
+        }
     };
 
-    const takeDestinationFiling = () => {
-        if (!pendingFiling) return false;
-        pendingFiling = false;
-        if (pendingFilingTimer) {
-            clearTimeout(pendingFilingTimer);
-            pendingFilingTimer = null;
-        }
-        return true;
+    // One step per filing, however many calls the filing turns into.
+    const takeFilingAdvance = () => {
+        const was = filingAdvance;
+        filingAdvance = null;
+        return was;
     };
 
     /*
      * Archive into a hold label; Shift-E, or a long press on Archive.
      *
-     * Armed while the picker opens, which is what narrows that picker to the
-     * hold labels and what turns the pick into a decision rather than a
-     * filing. Read while the menu is drawn and taken when the pick lands, so
-     * a picker dismissed without a pick times out like the others rather
-     * than waiting to catch some later, unrelated pick.
+     * Set by the keystroke and spent by the next picker to open, which is the
+     * one the keystroke asked for. It cannot be scoped to a call the way a
+     * filing is: what it has to survive is you reading the list and choosing
+     * from it, and there is no call around that. So it is handed to the menu
+     * instead. From the moment the picker opens, being an archive-into is a
+     * property of that menu: it is what narrows the list to the hold labels
+     * and what turns the pick into a decision rather than a filing, and a
+     * menu dismissed without a pick takes it away when it goes.
+     *
+     * It used to stay here and time out after twelve seconds, and in those
+     * twelve seconds it belonged to nobody. A picker opened on Shift-E and
+     * dismissed left it behind, and the next picker you opened for any reason
+     * came up narrowed to the hold labels and archived what you picked in it.
      *
      * Only hold labels are offered because only a hold label survives an
      * archive: a project label is the live state, and a project label on a
@@ -3105,27 +3188,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * moment later anyway.
      */
     let pendingArchiveInto = false;
-    let pendingArchiveIntoTimer = null;
 
     const armArchiveInto = () => {
         pendingArchiveInto = true;
-        if (pendingArchiveIntoTimer) clearTimeout(pendingArchiveIntoTimer);
-        pendingArchiveIntoTimer = setTimeout(() => {
-            pendingArchiveInto = false;
-            pendingArchiveIntoTimer = null;
-        }, 12000);
     };
 
-    const archiveIntoArmed = () => pendingArchiveInto;
-
     const takeArchiveInto = () => {
-        if (!pendingArchiveInto) return false;
+        const was = pendingArchiveInto;
         pendingArchiveInto = false;
-        if (pendingArchiveIntoTimer) {
-            clearTimeout(pendingArchiveIntoTimer);
-            pendingArchiveIntoTimer = null;
-        }
-        return true;
+        return was;
     };
 
     /*
@@ -3372,14 +3443,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     // Open the filing picker for these conversations; the projects and the
-    // hold labels.
+    // hold labels. True when something opened, so a caller with a decision
+    // riding on this picker knows whether there is a menu to hand it to.
     const openProjectPicker = (keys) => {
-        // The pick lands a tick later, through the label-rule patch; arm the
-        // advance now; with the conversation being filed; so the add, when it
-        // files, moves on to the next one waiting for triage, and mark the add
-        // a filing so a hold label replaces like a project.
-        armFileAdvance(messagesFrom(keys)[0]);
-        armDestinationFiling();
+        // Where to go after the pick, read now because the pick may take the
+        // row out of the list. The menu about to open takes it; what marks the
+        // pick a filing is not set here at all, the pick itself sets that.
+        armAdvance(messagesFrom(keys)[0]);
         const single = keys.length === 1;
         const order = single
             ? [moveButton, labelsButton]
@@ -3389,18 +3459,30 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (captured) {
             if (captured === moveButton) wantOurMove = true;
             if (captured === labelsButton) wantOurFile = true;
-            if (pressCaptured(captured)) return;
+            if (pressCaptured(captured)) return true;
             wantOurFile = false;
         }
 
-        // The phone's path, and a desktop that has never drawn Move to
+        // The phone's path, and a desktop that has never drawn Move to.
+        // Whatever this finds opens the tristate, so the menu about to appear
+        // is the Labels one opened by Keep, and it carries the same mark the
+        // captured button's route gives it: without that it is indistinguishable
+        // from someone pressing Labels, and Keep would stop filing.
         const drawn = drawnPickerView();
-        if (drawn && pressButtonView(drawn)) return;
+        if (drawn) {
+            wantOurFile = true;
+            if (pressButtonView(drawn)) return true;
+            wantOurFile = false;
+        }
 
         // No button anywhere: ask Fastmail for the menu itself
-        if (buildPicker(keys)) return;
+        if (buildPicker(keys)) return true;
 
+        // Nothing opened, so no menu took what was set for it, and it must
+        // not be left here for one that opens later with no verb behind it.
+        takeAdvance();
         reportFault('no label menu to open');
+        return false;
     };
 
     /*
@@ -3511,22 +3593,22 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * label off, the pin off, and hold labels left alone; which is what
      * leaves the one just chosen standing, and the whole point of the verb.
      *
-     * The advance the picker armed is dropped first. Filing moves the view on
+     * No advance is handed to the label going on. Filing moves the view on
      * and so does archiving; both would step, and the message after next is
-     * not where anyone asked to be.
+     * not where anyone asked to be. The pick site drops it before calling in.
      */
     const runDoneInto = (mailbox) => {
         if (!mailbox) return;
         const actions = controller().actions;
 
-        takeFileAdvance();
         silencingDidAction(actions, () => {
-            armDestinationFiling();
-            if (FastMail.preferences.get('inLabelsMode')) {
-                actions.add(null, mailbox);
-            } else {
-                actions.copy(null, mailbox);
-            }
+            asFiling(null, () => {
+                if (FastMail.preferences.get('inLabelsMode')) {
+                    actions.add(null, mailbox);
+                } else {
+                    actions.copy(null, mailbox);
+                }
+            });
         });
         actions.archive(null);
     };
@@ -3804,13 +3886,22 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         };
 
         proto.didEnterDocument = function () {
+            // Taken before applying, since applying can be put off a tick,
+            // and the next thing to open the menu sets it again.
             if (isLabelsMenu(this)) {
-                applyLabelsMode(this);
+                const files = wantOurFile;
+                wantOurFile = false;
+
+                if (!applyLabelsMode(this, files)) {
+                    const menu = this;
+                    setTimeout(() => {
+                        applyLabelsMode(menu, files);
+                    }, 0);
+                }
+
                 return originalDidEnterDocument.apply(this, arguments);
             }
 
-            // Taken before applying, since applying can be put off a tick,
-            // and the next thing to open the menu sets it again.
             const ours = wantOurMove;
             wantOurMove = false;
 
@@ -3911,8 +4002,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             return;
         }
 
+        // Nothing opened means no menu took it, and it must not be left here
+        // for one that opens later and was never asked to archive anything.
         armArchiveInto();
-        openProjectPicker(keys);
+        if (!openProjectPicker(keys)) takeArchiveInto();
     };
 
     /*
