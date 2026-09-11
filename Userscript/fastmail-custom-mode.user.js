@@ -4597,15 +4597,25 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const observer = new MutationObserver((changes) => {
             let sidebarDrawn = false;
             let toolbarDrawn = false;
-            let headerDrawn = false;
 
             changes.forEach((change) => {
                 change.addedNodes.forEach((node) => {
                     stripLabelsIn(node);
                     sidebarDrawn = sidebarDrawn || drawsSourceRow(node);
                     toolbarDrawn = toolbarDrawn || draws(node, '.v-Toolbar');
-                    if (!FastMail.isMobile) return;
-                    headerDrawn = headerDrawn || draws(node, '.v-PageHeader');
+                });
+
+                // A row leaving counts for as much as one arriving.
+                // Collapsing a label takes its children out of the list and
+                // hands each row below them to a different mailbox, rewriting
+                // the inline style as it goes; which drops the shift the
+                // marking pass wrote there and leaves those rows lapping the
+                // one above. Nothing is added in the whole of that, so a test
+                // that only reads addedNodes never hears about it, and the
+                // sidebar stayed overlapped until some unrelated change
+                // happened to redraw it.
+                change.removedNodes.forEach((node) => {
+                    sidebarDrawn = sidebarDrawn || drawsSourceRow(node);
                 });
             });
 
@@ -4614,9 +4624,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 dressToolbar();
                 updatePinState();
             }
-
-            // Placement gives up after a second of the header not being there.
-            if (headerDrawn && !placeTimer) placeIndicator();
 
             // A row appearing or leaving moves where one kind gives way to
             // the next
