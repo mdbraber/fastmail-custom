@@ -38,8 +38,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * ----------------------------------------------------------------
      */
 
-    // Keystroke that toggles Custom mode
-    const SHORTCUT = 'Shift-I';
     // Option-Command and 1 … 9 or 0 go to the sources listed above the Labels
     // heading. Command and a number used to do the same; it belongs to the
     // window's tabs in the shell apps, and to the browser's tabs elsewhere.
@@ -58,8 +56,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // What it was called before the mode was renamed, read once so a mode
     // switched off stays off.
     const LEGACY_STORAGE_KEY = 'custom-inbox-mode';
-    // Marks our toolbar button so it can be found again after a redraw
-    const INDICATOR_CLASS = 'custom-modeButton';
     // Set on <body> while the Inbox chip should be hidden on message rows
     const HIDE_INBOX_LABEL_CLASS = 'custom-hideInboxLabel';
     // Goes on the sidebar row that opens a run of a different kind, so the line
@@ -685,10 +681,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * ----------------------------------------------------------------
      */
 
-    const shortcut = (keystroke, fn) => {
-        FastMail.ViewEventsController.kbShortcuts.register(keystroke, { do: fn }, 'do');
-    };
-
     // Go somewhere the way clicking the sidebar would.
     const selectSource = (source) => {
         if (source) controller().sources.select(source);
@@ -1109,131 +1101,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * ----------------------------------------------------------------
-     * Toolbar indicator
+     * The list toolbar
      * ----------------------------------------------------------------
      */
-
-    let indicatorView = null;
 
     const mailToolbar = () => {
         const page = document.getElementById('mailbox');
         const toolbar = page && page.querySelector('.v-Toolbar');
         return toolbar ? FastMail.getViewFromNode(toolbar) : null;
     };
-
-    // The phone has no toolbar above the list and no filter control at all, so
-    // the desktop's home for this button does not exist there.
-    const headerSearch = () => {
-        // The sidebar has a search field of its own, so the header's is picked
-        // out by the header it sits in.
-        const header = Array.from(document.querySelectorAll('.v-PageHeader'))
-            .find(node => node.querySelector('svg.i-search'));
-
-        const icon = header && header.querySelector('svg.i-search');
-        const button = icon && icon.closest('button');
-
-        return button ? FastMail.getViewFromNode(button) : null;
-    };
-
-    // Where the button goes, and what it goes next to
-    const indicatorHome = () => {
-        if (FastMail.isMobile) {
-            const search = headerSearch();
-            const header = search && search.get('parentView');
-            return header ? { parent: header, anchor: search, side: 'after' } : null;
-        }
-
-        const toolbar = mailToolbar();
-        const anchor = indicatorAnchor();
-        return toolbar && anchor
-            ? { parent: toolbar, anchor: anchor, side: 'before' }
-            : null;
-    };
-
-    // The filter control we sit to the left of
-    const filterButton = () => {
-        const page = document.getElementById('mailbox');
-        const icon = page && page.querySelector('.v-Toolbar svg.i-filter');
-        const button = icon && icon.closest('button');
-        return button ? FastMail.getViewFromNode(button) : null;
-    };
-
-    // The same funnel the Triage row wears, so the switch and the list it
-    // produces read as one thing.
-    const inboxIcon = () => {
-        // The phone has neither of the first two; it has no filter control at
-        // all, and the sidebar holding the Inbox icon is off screen; so its
-        // own header search icon stands in, which is the icon this one sits
-        // beside.
-        const existing = document.querySelector('.v-Toolbar svg.i-filter') ||
-            document.querySelector('svg.i-inbox') ||
-            document.querySelector('svg.i-search');
-
-        return existing ? filterGlyph(existing) : null;
-    };
-
-    const drawnIndicator = () => document.querySelector('.' + INDICATOR_CLASS);
-
-    // Asking only whether the layer is in the document is not enough:
-    // insertView draws on the run loop, so a second call before that lands
-    // would see nothing and insert a duplicate.
-    const indicatorIsInPlace = () => {
-        if (drawnIndicator()) return true;
-        if (!indicatorView) return false;
-
-        const home = indicatorHome();
-        const children = home && home.parent.get('childViews');
-        return !!children && children.indexOf(indicatorView) !== -1;
-    };
-
-    // A button in the bar above the thread list, left of the filter control,
-    // or, on a phone, in the page header between search and the three dots.
-    const addIndicator = () => {
-        if (indicatorIsInPlace()) return;
-
-        // Any earlier view went with the bar that held it
-        indicatorView = null;
-
-        const home = indicatorHome();
-        if (!home) return;
-
-        indicatorView = new FastMail.classes.ButtonView({
-            // The phone's header buttons carry no subtleStandard, and giving it
-            // one would make this the only boxed control up there
-            type: INDICATOR_CLASS + (FastMail.isMobile
-                ? ' v-Button--iconOnly'
-                : ' v-Button--subtleStandard v-Button--sizeM' +
-                  ' v-Button--iconOnly v-Button--tooltipLabel'),
-            isActive: indicatorIsActive(),
-            icon: inboxIcon(),
-            label: 'Custom mode',
-            target: { toggleCustomMode: () => toggleCurrent() },
-            method: 'toggleCustomMode'
-        });
-
-        try {
-            home.parent.insertView(indicatorView, home.anchor, home.side);
-        } catch (error) {
-            reportFault('could not add the toolbar indicator', error);
-            indicatorView = null;
-        }
-    };
-
-    // We sit to the left of the filter control. A view without one, an
-    // in:inbox search; puts the sort control in that same place, so it stands
-    // in and the button keeps its position.
-    const indicatorAnchor = () => {
-        const filter = filterButton();
-        if (filter) return filter;
-
-        const toolbar = mailToolbar();
-        const children = toolbar && toolbar.get('childViews');
-        if (!children) return null;
-
-        return children.find(view => isViewOfClass(view, 'MenuButtonView')) || null;
-    };
-
-    const indicatorIsActive = () => modeIsOn;
 
     /*
      * The Inbox filter, made to stick.
@@ -1268,40 +1144,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
-    // Fastmail's is-active is a faint grey wash behind the icon; enough to
-    // separate a pressed button from an unpressed one, not enough for a switch
-    // you want to read at a glance.
-    const accentColour = () => {
-        // The theme keeps its palette here, one set per appearance: accent5
-        // through accent120, of which accent100 is the accent proper.
-        const theme = FastMail.theme;
-        const palette = theme && theme.colors &&
-            theme.colors[theme.isDark ? 'dark' : 'light'];
-
-        if (palette && palette.accent100) return palette.accent100;
-
-        // Sampled from the compose button if the palette ever moves.
-        const cta = document.querySelector('.v-Button--cta');
-        const colour = cta && getComputedStyle(cta).backgroundColor;
-
-        return colour && colour !== 'transparent' && !/,\s*0\)$/.test(colour)
-            ? colour
-            : null;
-    };
-
-    // Empty rather than a colour for "off", so it drops back to whatever the
-    // theme gives the other icons around it.
-    const paintIndicator = (active) => {
-        Array.from(document.querySelectorAll('.' + INDICATOR_CLASS)).forEach((layer) => {
-            const glyph = layer.querySelector('svg');
-            if (glyph) glyph.style.color = active ? (accentColour() || '') : '';
-            layer.classList.toggle('is-active', active);
-        });
-    };
-
     /*
      * ----------------------------------------------------------------
-     * The phone's switch
+     * The message bar
      * ----------------------------------------------------------------
      */
 
@@ -1999,101 +1844,29 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         });
     };
 
-    const toggleCurrent = () => toggleMode();
-
-    const removeIndicator = () => {
-        const toolbar = mailToolbar();
-
-        if (indicatorView && toolbar && typeof toolbar.removeView === 'function') {
-            try {
-                toolbar.removeView(indicatorView);
-            } catch (error) {
-                reportFault('could not remove the toolbar indicator', error);
-            }
-        }
-
-        // Whatever the view system made of that, make sure nothing is left drawn
-        const layer = drawnIndicator();
-        if (layer && layer.parentNode) layer.parentNode.removeChild(layer);
-
-        indicatorView = null;
-    };
-
     // A search that starts with in:inbox is an Inbox view by another name; the
     // saved search listing what has not been triaged yet.
     const INBOX_SEARCH = /^\s*in:inbox\b/i;
 
     const isInboxSearch = () => INBOX_SEARCH.test(controller().get('search') || '');
 
-    // Whether this screen has a filter for the mode to be about.
+    // Whether this screen is one the mode has anything to say about.
     const modeAppliesHere = () =>
         FastMail.router.get('app') === 'mail' &&
         (!controller().get('search') || isInboxSearch());
 
-    // canFilter says whether the button belongs on this screen, but not
-    // whether there is yet anywhere to put it: the observers run before
-    // Overture has drawn the new bar, so coming back from a search or from
-    // Settings there is no filter control to sit left of.
-    let placeTimer = null;
-    let placeTries = 0;
-
-    const stopPlacing = () => {
-        if (placeTimer) clearTimeout(placeTimer);
-        placeTimer = null;
-        placeTries = 0;
-    };
-
-    const placeIndicator = () => {
-        placeTimer = null;
-        addIndicator();
-        paintIndicator(indicatorIsActive());
-
-        if (indicatorIsInPlace() || placeTries >= 20) {
-            stopPlacing();
-            return;
-        }
-
-        placeTries += 1;
-        placeTimer = setTimeout(placeIndicator, 50);
-    };
-
-    // The toolbar is rebuilt as you move around, so re-add when it has gone,
-    // and on a screen with no filter of its own, take the button away rather
-    // than leave it sitting there alone.
-    const updateIndicator = () => {
+    // The bar is rebuilt as you move around, so it is dressed again on every
+    // move rather than once.
+    const refreshToolbar = () => {
         if (modeAppliesHere()) {
             // Every layout that has a message actions bar: along the bottom
             // on a phone, across the top of the message on a tablet and on
             // the Mac. The setting names one list of verbs for all three.
             dressToolbar();
             updatePinState();
-
-            if (!placeTimer) placeIndicator();
-
-            if (indicatorView) {
-                const active = indicatorIsActive();
-                indicatorView.set('isActive', active);
-
-                // className recomputes correctly but Overture does not write
-                // it back to the layer for a view inserted this way, so apply
-                // it by hand.
-                const layer = drawnIndicator();
-                if (layer) layer.classList.toggle('is-active', active);
-
-                paintIndicator(active);
-            }
-        } else {
-            removeIndicator();
         }
 
         updateInboxLabelVisibility();
-    };
-
-    // Start each move over: whatever we were waiting to place belonged to the
-    // screen we have just left.
-    const refreshToolbar = () => {
-        stopPlacing();
-        updateIndicator();
     };
 
     /*
@@ -4872,7 +4645,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         dressSourceSections();
         watchLabels();
         stripLabelsIn(document);
-        updateIndicator();
+        refreshToolbar();
     };
 
     // Label changes arrive in bursts too
@@ -4999,8 +4772,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             }
         }, 'go');
 
-        // Moving between sources rebuilds the toolbar, taking the indicator
-        // with it.
+        // Moving between sources rebuilds the toolbar, and a rebuilt one
+        // comes back wearing Fastmail's verbs rather than the mode's.
         controller().addObserverForKey('mailbox', { go: refreshToolbar }, 'go');
 
         // Arriving at a project label is when the Inbox filter goes on, so
@@ -5253,7 +5026,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         patchShortcuts();
         updateStyles();
         installAppBadge();
-        shortcut(SHORTCUT, toggleMode);
 
         // A rotation, a split view or a window dragged narrower all change
         // how many verbs fit on the bar
@@ -5262,7 +5034,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             if (redressTimer) clearTimeout(redressTimer);
             redressTimer = setTimeout(() => {
                 redressTimer = null;
-                updateIndicator();
+                refreshToolbar();
             }, 150);
         });
 
@@ -5298,7 +5070,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // settings too, and the bar's list is cached until asked again
                 refreshOwnedConfigs();
                 reclaimKeys();
-                updateIndicator();
+                refreshToolbar();
                 installAppBadge();
                 updateStyles();
                 updateInboxLabelVisibility();
@@ -5306,7 +5078,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             }
         };
 
-        console.log(`Custom mode ready (${SHORTCUT} to toggle), currently ${modeIsOn ? 'on' : 'off'}`);
+        console.log(`Custom mode ${modeIsOn ? 'on' : 'off'}; window.customMode.toggleMode() to switch it`);
     };
 
     const mainObserver = new MutationObserver(() => {

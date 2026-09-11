@@ -121,7 +121,7 @@ With a Fastmail tab open:
 window.customMode.isOn()
 ```
 
-The console also logs `Custom mode ready (Shift-I to toggle)` on load. If the CSP
+The console also logs `Custom mode on` or `off` on load. If the CSP
 error still appears, that is the Userscripts copy of the script failing; disable
 it there, since this extension now delivers it.
 
