@@ -93,6 +93,22 @@ public enum CustomModeSettings {
         options.filter { $0.group == group }
     }
 
+    /// The symbol a bar verb is drawn with in the reorder list, so a row in
+    /// Settings is recognisable as the button it places. Named here beside
+    /// the catalog, since the list of verbs is the catalog's own.
+    public static func barSlotSymbol(_ slot: String) -> String {
+        switch slot.lowercased() {
+        case "snooze": return "clock"
+        case "pin": return "pin"
+        case "file": return "tray.and.arrow.down"
+        case "archive": return "archivebox"
+        case "move": return "folder"
+        case "labels": return "tag"
+        case "delete": return "trash"
+        default: return "square"
+        }
+    }
+
     // Grouped in display order. The group decides where a setting is shown, a
     // macOS tab, a phone section, an iOS Settings.bundle header; while the
     // key, default and copy stay exactly as the userscript and the parity

@@ -21,8 +21,31 @@ public struct CustomModeSettingsForm: View {
         }
     }
 
+    // A row is as tall as the platform draws one, and the list is exactly as
+    // tall as its rows: a List inside a Form has no height of its own, so it
+    // has to be given one, and a guessed one leaves dead space under the last
+    // verb.
+    #if canImport(UIKit)
+    private static let barRowHeight: CGFloat = 44
+    #else
+    private static let barRowHeight: CGFloat = 28
+    #endif
+
+    // A List keeps a little air above its first row and below its last, and
+    // the Mac's bordered table draws a hairline around the lot; none of it is
+    // part of any row, so it has to be added or the last verb is clipped.
+    #if canImport(UIKit)
+    private static let barListInset: CGFloat = 16
+    #else
+    private static let barListInset: CGFloat = 4
+    #endif
+
     // The bar order is dragged, not typed: one row per verb, reordered with
     // onMove and written back as the same comma string the userscript reads.
+    //
+    // The whole row is the handle, not the word in it: a bare Text is the only
+    // thing a drag can start on, so a row is given a shape of its own, the
+    // verb's icon, and a grip, and picks up anywhere along its width.
     @ViewBuilder
     private func barOrderRows(for option: CustomModeSettings.Option) -> some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -34,18 +57,45 @@ public struct CustomModeSettingsForm: View {
         }
         List {
             ForEach(model.barOrder, id: \.self) { name in
-                Text(name)
+                barSlotRow(name)
             }
             .onMove { from, to in model.moveBarSlot(from: from, to: to) }
         }
         #if canImport(UIKit)
         .listStyle(.plain)
         .environment(\.editMode, .constant(.active))
-        .frame(height: 400)
         #else
-        .frame(height: 248)
+        // The Mac's own table: a hairline box, square-edged rows and the
+        // system's alternating row colours, the same list System Settings
+        // shows its login items in.
+        .listStyle(.bordered(alternatesRowBackgrounds: true))
         #endif
+        .frame(
+            height: Self.barRowHeight * CGFloat(model.barOrder.count)
+                + Self.barListInset
+        )
         .scrollDisabled(true)
+    }
+
+    @ViewBuilder
+    private func barSlotRow(_ name: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: CustomModeSettings.barSlotSymbol(name))
+                .foregroundStyle(.secondary)
+                .frame(width: 18, alignment: .center)
+            Text(name)
+            Spacer(minLength: 0)
+            #if !canImport(UIKit)
+            // iOS draws its own reorder grip in edit mode; the Mac does not.
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(.tertiary)
+                .imageScale(.small)
+            #endif
+        }
+        .frame(height: Self.barRowHeight)
+        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+        .listRowSeparator(.hidden)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder

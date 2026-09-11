@@ -1498,8 +1498,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         method: 'removeLabel'
     });
 
-    // The phone's spellings of the verbs it has no key for, for More: file a
-    // tick, snooze for a while a clock.
+    // The bar's spellings of the verbs Fastmail has no button for: file a
+    // tray, snooze for a while a clock.
     const STATE_VERB_SHAPES = {
         // An arrow going down into an open tray. It was a tick in a circle,
         // which is the mark for done, and done is Archive, two buttons along.
@@ -1708,19 +1708,31 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * than decided here: whatever Archive is doing next to it is what File
      * does. That answers every layout, including ones this has never seen,
      * and it goes on answering when Fastmail changes its mind.
+     *
+     * The whole button vocabulary, not just the icon-only flag. A bar across
+     * the top of a message on the Mac shows words, so nothing was icon-only
+     * and nothing was copied; File arrived with no styling at all and drew
+     * half the width of the Archive beside it.
      */
-    const ICON_ONLY_CLASS = 'v-Button--iconOnly';
+    // A stock button's type is the button's own styling and then that verb's
+    // name for itself: "v-Button--subtleStandard v-Button--sizeM s-archive".
+    // Only the first kind is anybody's to copy.
+    const BUTTON_STYLE_PREFIX = 'v-Button--';
 
     // Verbs Fastmail puts on this bar itself, in the order they are worth
     // asking: the first one the bar actually has is the one to copy.
     const STOCK_STYLE_NAMES = ['archive', 'delete', 'move', 'labels', 'trash'];
 
-    const barDrawsIconsOnly = (toolbar) => {
+    const isButtonStyle = (part) => part.indexOf(BUTTON_STYLE_PREFIX) === 0;
+
+    const barButtonStyle = (toolbar) => {
         for (const name of STOCK_STYLE_NAMES) {
             try {
                 const view = toolbar.getView(name);
                 const type = view && typeof view.get === 'function' && view.get('type');
-                if (type) return String(type).split(/\s+/).indexOf(ICON_ONLY_CLASS) !== -1;
+                if (type) {
+                    return String(type).split(/\s+/).filter(isButtonStyle);
+                }
             } catch (error) {
                 // Not a verb this bar knows; try the next
             }
@@ -1733,18 +1745,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const matchBarStyle = (toolbar, view) => {
         if (!view || typeof view.set !== 'function') return;
 
-        const iconOnly = barDrawsIconsOnly(toolbar);
-        if (iconOnly === null) return;
+        const style = barButtonStyle(toolbar);
+        if (!style) return;
 
-        let type = String((typeof view.get === 'function' && view.get('type')) || '');
+        const type = String((typeof view.get === 'function' && view.get('type')) || '');
         const parts = type ? type.split(/\s+/).filter(Boolean) : [];
-        const has = parts.indexOf(ICON_ONLY_CLASS) !== -1;
-        if (has === iconOnly) return;
+        const wanted = parts.filter(part => !isButtonStyle(part)).concat(style).join(' ');
+        if (wanted === type) return;
 
         try {
-            view.set('type', iconOnly
-                ? parts.concat(ICON_ONLY_CLASS).join(' ')
-                : parts.filter(part => part !== ICON_ONLY_CLASS).join(' '));
+            view.set('type', wanted);
         } catch (error) {
             // A button that will not restyle is still a working button
         }
@@ -1936,7 +1946,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             try {
                 // The snooze period may have moved with the rest
                 registerModeViews(toolbar);
-                nameMoveVerb();
                 toolbar.computedPropertyDidChange('actionsConfig');
             } catch (error) {
                 // Gone
@@ -1975,8 +1984,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const PIN_VIEW_NAMES = ['flag', 'unflag'];
 
     const updatePinState = () => {
-        if (!FastMail.isMobile) return;
-
         const pinned = openThreadIsPinned();
 
         messageActionsBars().forEach((toolbar) => {
@@ -2055,10 +2062,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // than leave it sitting there alone.
     const updateIndicator = () => {
         if (modeAppliesHere()) {
-            if (FastMail.isMobile) {
-                dressToolbar();
-                updatePinState();
-            }
+            // Every layout that has a message actions bar: along the bottom
+            // on a phone, across the top of the message on a tablet and on
+            // the Mac. The setting names one list of verbs for all three.
+            dressToolbar();
+            updatePinState();
 
             if (!placeTimer) placeIndicator();
 
@@ -4068,33 +4076,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const ourMoveWanted = () => modeIsOn && settings.labelsShortcut;
 
-    /*
-     * What the Move to button says.
-     *
-     * v opens it, and in this mode that files: the pick adds a label and the
-     * message keeps its place in the Inbox. So on a desktop bar it says File,
-     * the verb it performs; Fastmail's own move stays on Option-V. Set on the
-     * button itself, since the bar has no view under that name until Fastmail
-     * registers one, which is after the bar is taken over.
-     *
-     * The phone is left alone: its bar has a File of the mode's own, and a
-     * second one would be two buttons with one name. The stock wording is
-     * kept, so switching the mode off puts it back.
-     */
-    const nameMoveVerb = () => {
-        if (FastMail.isMobile || !moveButton) return;
-
-        const view = moveButton.target;
-        if (!view || typeof view.set !== 'function') return;
-
-        try {
-            if (!view.customStockLabel) view.customStockLabel = view.get('label');
-            view.set('label', ourMoveWanted() ? 'File' : view.customStockLabel);
-        } catch (error) {
-            // A label that will not be set is still a working button
-        }
-    };
-
     // v is keep: on a filed selection it takes Triage off directly, and only
     // an unfiled one opens the picker; the same narrowed menu, opened with
     // nothing waiting on it.
@@ -4412,7 +4393,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // The menu as Fastmail ships it stays reachable on Option-V, which
             // is bound on the physical key rather than registered here
             moveButton = { target: target, method: method };
-            nameMoveVerb();
 
             return originalRegister.call(
                 this, MOVE_SHORTCUT, moveHandlerFor(target), 'openMove', priority
@@ -4623,8 +4603,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 change.addedNodes.forEach((node) => {
                     stripLabelsIn(node);
                     sidebarDrawn = sidebarDrawn || drawsSourceRow(node);
-                    if (!FastMail.isMobile) return;
                     toolbarDrawn = toolbarDrawn || draws(node, '.v-Toolbar');
+                    if (!FastMail.isMobile) return;
                     headerDrawn = headerDrawn || draws(node, '.v-PageHeader');
                 });
             });
@@ -4653,10 +4633,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         markSourceGroups();
         dressTriageRows();
         dressSourceSections();
-        if (FastMail.isMobile) {
-            dressToolbar();
-            updatePinState();
-        }
+        dressToolbar();
+        updatePinState();
     };
 
     // Lucide's filter glyph, drawn in the SVG namespace and given the classes
@@ -5270,10 +5248,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         installAppBadge();
         shortcut(SHORTCUT, toggleMode);
 
-        // Rotation and split view change how many verbs fit on the bar
+        // A rotation, a split view or a window dragged narrower all change
+        // how many verbs fit on the bar
         let redressTimer = null;
         window.addEventListener('resize', () => {
-            if (!FastMail.isMobile) return;
             if (redressTimer) clearTimeout(redressTimer);
             redressTimer = setTimeout(() => {
                 redressTimer = null;
