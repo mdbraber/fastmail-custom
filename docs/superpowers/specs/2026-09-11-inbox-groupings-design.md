@@ -153,21 +153,37 @@ mistyped `date:todya` groups by the text "date:todya" rather than complaining.
 
 ### The Group menu
 
-The stock menu is built by the `menuView` of the list header's `sort` button:
-four radio items bound to `groupBy`, then a "Custom…" item. It is declared
-`.property().nocache()`, so it is rebuilt every time it opens — which means an
-inserted item can compute its tick once at build time and needs no live
-binding.
+The mode patches `FastMail.classes.MenuView.prototype.draw`, guarded by a flag
+on the prototype so it installs once. This is not a new technique: it is
+exactly how the mode already puts Copy link on the message actions menu.
 
-The mode wraps that `menuView` to call the original and splice in Labels and
-one entry per parsed grouping, between the radio section and "Custom…",
-modelled on the "Custom…" item and built from the same class, reachable from
-the items Fastmail has already constructed. The mode draws its own tick.
+Identification is by binding rather than by position, name or wording. Every
+radio item in the Group section carries its binding in the clear, at
+`option.__meta__.bindings.isSelected.fromPath`. A menu is the Group menu when
+one of its options binds `isSelected` to `groupBy`. That test is independent of
+the DOM, of which toolbar holds the button, of the registered view name, of the
+minified class names, and of the interface language — all of which an earlier
+draft of this design depended on.
 
-**This is the most fragile part of the work.** It patches a view rather than a
-controller method, and it is the piece most likely to need repair when Fastmail
-changes its list header. Implementation starts with a probe against the live
-menu to settle exactly how the items are constructed.
+Entries are `FastMail.classes.ButtonView` instances, which is the mode's
+existing way of building native menu items, as it already does for Keep and
+Snooze on the action bar. They are shaped like the stock radio items — `label`,
+`isSelected`, `method: "chooseItem"`, and a `chooseItem` that sets `sort` — and
+are inserted after the last option bound to `groupBy` and before `custom…`,
+fixing up `isLastOfSection` on the item that was last. `isSelected` is computed
+once at build time rather than bound, because the menu is declared `nocache`
+with `destroyMenuViewOnClose` and so is rebuilt on every open.
+
+Proven end to end against the live app before this was written: with the patch
+installed the Group menu drew none, by age, pinned first, unread first,
+**labels**, **by age (urgent first)**, custom…, and removing the patch restored
+the stock menu.
+
+The one internal this leans on is `__meta__.bindings`, which is Overture's own
+bindings store rather than a documented interface. If it ever changes shape the
+fingerprint stops matching, the mode adds nothing, and Fastmail's menu appears
+exactly as it always did. Failure is silent and harmless by construction, never
+a corrupted menu.
 
 ### Collapse state
 
@@ -278,6 +294,8 @@ Live verification, on the work account, which has the nesting and the volume:
    `collapsed` list intact.
 7. Forcing `groupByCounts` out of step with `queryLength` makes the list fall
    back to ungrouped and refetch, rather than empty.
+8. The Group menu carries the new entries, ticks the active one, and is
+   untouched on a mailbox where no grouping of the mode's applies.
 
 ## Not in scope
 
