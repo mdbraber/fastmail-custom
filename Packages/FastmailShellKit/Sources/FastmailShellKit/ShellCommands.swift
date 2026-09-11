@@ -99,6 +99,14 @@ public struct ShellCommands: Commands {
                 NotificationCenter.default.post(name: .fmshellReload, object: nil)
             }
             .keyboardShortcut("r", modifiers: .command)
+            // Safari's own key for it. There is no Develop menu here to put
+            // it under, and the page cancels the right-click that would
+            // otherwise offer Inspect Element, so without this the apps have
+            // no console at all.
+            Button("Show Web Inspector") {
+                NotificationCenter.default.post(name: .fmshellInspect, object: nil)
+            }
+            .keyboardShortcut("i", modifiers: [.command, .option])
         }
         CommandGroup(after: .importExport) {
             Button("Share Message…") {

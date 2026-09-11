@@ -5029,7 +5029,37 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         };
     };
 
+    /*
+     * ----------------------------------------------------------------
+     * A way through to the browser's own menu
+     * ----------------------------------------------------------------
+     */
+
+    /*
+     * Fastmail answers contextmenu and cancels it, which is how it draws its
+     * own menu on a message row; but it answers on the document, for every
+     * element, so the browser's menu never appears anywhere on the page. In
+     * a browser that costs little, since the inspector is reachable from the
+     * menu bar regardless. In the shell apps it costs everything: they have
+     * no Develop menu, so with the page swallowing the event there is no
+     * Inspect Element and no console.
+     *
+     * Firefox's convention, then; Shift held means the page does not get
+     * this one. Taken in the capture phase on the window, which is before
+     * anything registered on the document, and only stopped rather than
+     * cancelled: WebKit then does what it would have done with a right-click
+     * nobody answered, which is to draw its own menu, Inspect Element and
+     * all. A plain right-click still reaches Fastmail and still opens the
+     * menu it draws for the row under the pointer.
+     */
+    const passContextMenuThrough = () => {
+        window.addEventListener('contextmenu', (event) => {
+            if (event.shiftKey) event.stopPropagation();
+        }, true);
+    };
+
     const start = () => {
+        passContextMenuThrough();
         patchBadgeRendering();
         patchDrop();
         patchMailboxMenu();

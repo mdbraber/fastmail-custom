@@ -205,6 +205,7 @@ public extension Notification.Name {
     static let fmshellShare = Notification.Name("fmshellShare")
     static let fmshellCompose = Notification.Name("fmshellCompose")
     static let fmshellComposeInTab = Notification.Name("fmshellComposeInTab")
+    static let fmshellInspect = Notification.Name("fmshellInspect")
 }
 
 // External URLs land in the model from onOpenURL; the web view they should
@@ -321,6 +322,11 @@ final class CommandRelay {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.shareCurrentMessage() }
         })
+        observers.append(center.addObserver(
+            forName: .fmshellInspect, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.openInspector() }
+        })
     }
 
     deinit {
@@ -332,6 +338,17 @@ final class CommandRelay {
     private func ifKey(_ act: (WKWebView) -> Void) {
         guard let webView, webView.window?.isKeyWindow == true else { return }
         act(webView)
+    }
+
+    // The inspector is reached through a private name, so it can go away
+    // under us; better a line saying it has than a menu item that does
+    // nothing and explains nothing.
+    private func openInspector() {
+        ifKey { webView in
+            if !WebInspector.open(for: webView) {
+                model.show("This build of WebKit will not open the inspector")
+            }
+        }
     }
 
     private func shareCurrentMessage() {
