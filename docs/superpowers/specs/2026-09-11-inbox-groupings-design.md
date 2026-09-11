@@ -88,10 +88,15 @@ module-private binding. Verified against the live app: `in:Triage OR
 is:unread`, `is:pinned`, `date:today`, `date:yesterday`, `after:1w` and
 `after:1m` all produced correct filters through this path.
 
-The same substitution goes on `updateNewDayListener`, which registers for the
-midnight refresh only when `groupBy` is `isTodayWeekMonth` or `custom`. With
-the stand-in it registers for the mode's groupings too, so `date:today` groups
-roll over at midnight instead of going stale.
+A day boundary needs separate handling. `updateNewDayListener` arms Fastmail's
+midnight refresh only when `groupBy` is `isTodayWeekMonth` or `custom`, so a
+mode grouping using `date:today` would show yesterday's mail under Today until
+something else made the list recompute. The same substitution does not work
+here, because that function registers `this` with a scheduler and the stand-in
+is not the controller. So the mode keeps its own clock instead: one timer to
+the next midnight, rearmed when it fires, armed only while one of the mode's
+groupings is on. Fewer moving parts than dressing the grouping up as `custom`
+for one comparison.
 
 ### The Labels grouping
 
@@ -230,9 +235,12 @@ nothing, and marks the query for a full refetch so real counts return.
 Fastmail's own `_groupRanges` already clamps the catch-all at zero, which is it
 half-acknowledging the same condition.
 
-The mode's `staleAfter` is separately changed not to be the thing that causes
-the drift, but the guard is what makes it safe whatever the cause — including
-Fastmail's own paths.
+The mode's `staleAfter` is deliberately left alone. Changing it would be a
+speculative fix to a state that could not be reproduced on demand, in the one
+call the mode makes to keep a label list honest after a verb, and there would
+be no way to tell whether the change had worked. The guard above is safe
+whatever the cause, Fastmail's own paths included, and if the drift turns out
+to keep happening the trace will now say so out loud.
 
 ### Settings plumbing
 
