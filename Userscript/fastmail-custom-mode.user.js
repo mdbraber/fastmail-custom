@@ -807,15 +807,35 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const steppedToward = (colour, percent) =>
         `color-mix(in srgb, ${colour} ${100 - percent}%, ${TEXT_FG})`;
 
+    /*
+     * The row's own class, said four times, which is not a typo.
+     *
+     * While the list has the keyboard Fastmail paints the row you are on in
+     * the account's selected colour, and it does so through a selector six
+     * classes deep rather than the two-deep one the same rule uses otherwise.
+     * Being the narrower rule it wins, so the highlight went the account's
+     * accent shade; and since that selector reaches the row and its toolbar
+     * but not the date beside them, the date was the one part still taking
+     * this mode's colour. Which is exactly what it looked like: a row that
+     * barely changed, with a small patch by the date that did.
+     *
+     * Repeating the class is how a selector is made narrower without
+     * naming anything new, and it keeps the answer here rather than in a
+     * copy of Fastmail's selector that would go quietly wrong the day that
+     * selector is renamed. Only the two highlight rules need it; nothing
+     * argues with the resting one.
+     */
+    const NARROW_ROW = '.v-MailboxItem.v-MailboxItem.v-MailboxItem.v-MailboxItem';
+
     // The three rules one resting colour needs. `on` narrows them to the rows
     // that wear it; empty for the rows that wear none.
     const rowColourRules = (resting, on) => [
         `.v-MailboxItem${on} :is(${TINT_TARGETS})` +
         ` { background-color: ${resting}; }`,
-        // .v-MailboxItem is added to these on purpose, and with no space.
-        `.u-list-item.is-focused.v-MailboxItem${on} :is(${TINT_TARGETS})` +
+        // The row's class is added to these on purpose, and with no space.
+        `.u-list-item.is-focused${NARROW_ROW}${on} :is(${TINT_TARGETS})` +
         ` { background-color: ${steppedToward(resting, FOCUSED_STEP)}; }`,
-        `.u-list-item.is-selected.v-MailboxItem${on} :is(${TINT_TARGETS})` +
+        `.u-list-item.is-selected${NARROW_ROW}${on} :is(${TINT_TARGETS})` +
         ` { background-color: ${steppedToward(resting, SELECTED_STEP)}; }`
     ];
 
