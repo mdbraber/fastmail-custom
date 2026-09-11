@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fastmail Custom mode
 // @namespace    custom
-// @version      3.12
+// @version      3.13
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
 // @author       Maarten den Braber <m@mdbraber.com>
 // @license      AGPL-3.0-or-later
@@ -1641,8 +1641,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     };
 
-    // What a slot used to be called. The verb is Keep; it was File until the
-    // rename, and a saved order still spells it that way. Without this the
+    // What a slot used to be called. The verb is Keep; it was File from 3.0
+    // to 3.13, and a saved order still spells it that way. Without this the
     // name would simply not be recognised and the verb would be appended at
     // the end, quietly reordering a bar somebody had arranged.
     const SLOT_ALIASES = { file: 'keep' };
