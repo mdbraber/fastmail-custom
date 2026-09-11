@@ -768,31 +768,61 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ]), []);
     };
 
-    // Wash each row in the colour of a label it carries. A wash and nothing
-    // more: the colour is there to be recognised out of the corner of an eye
-    // while reading down a list, and a band of the full shade down the edge
-    // of every row reads as a stack of rules to be got past instead.
+    /*
+     * Wash each row in the colour of a label it carries, and darken the whole
+     * of that wash when the row is the one you are on.
+     *
+     * Two decisions are worth writing down, because the obvious way to do
+     * either of them is what this replaced.
+     *
+     * The colour is written into each label's own rules rather than set as a
+     * property on the row and read back by one shared rule. The shared rule
+     * is tidier and it does not survive contact with the list, which recycles
+     * its rows as you scroll: WebKit does not reliably work a blend out again
+     * when the property it reads changes underneath, so a row could go on
+     * wearing the colour of whichever message used to live in it. Written per
+     * label there is nothing per row to go stale.
+     *
+     * And the highlight is a step from the row's own resting colour toward
+     * the page's text colour, rather than a blend toward Fastmail's highlight
+     * background. Blending toward that background means the size of the
+     * change depends on how near the label already is to it; on an account
+     * whose highlight is a pale green and whose busiest label is a green, the
+     * two land on nearly the same colour and being on a row stops showing at
+     * all. A step toward the text is the same size of step whatever the
+     * label, and it is the right direction in a dark theme too, where the
+     * text is the light end.
+     */
     const PAGE_BG = 'var(--ui-page-color-bg, #fff)';
-    const FOCUSED_BG = 'var(--ui-page-color-bg-focused, #e9ebee)';
-    const SELECTED_BG = 'var(--ui-page-color-bg-selected, #f2fafd)';
-    // A row's label colour, falling back to the page colour so every mix below
-    // collapses to exactly the stock background on rows without one
-    const LABEL = `var(--custom-label-colour, ${PAGE_BG})`;
+    const TEXT_FG = 'var(--ui-page-color-fg, #1b1e20)';
 
-    // Rules that apply to every row and do nothing until a label colour is
-    // set.
+    // How far toward the text each state moves. Focused is the row you are
+    // on; selected is a row you have ticked, and says so more loudly.
+    const FOCUSED_STEP = 12;
+    const SELECTED_STEP = 18;
+
     const TINT_TARGETS = '.u-list-link, .v-MailboxItem-time,' +
         ' .v-MailboxItem-mailboxes, .v-MailboxItem-mailbox, .v-MailboxItem-toolbar';
 
-    const ROW_COLOUR_RULES = [
-        `.v-MailboxItem :is(${TINT_TARGETS})` +
-        ` { background-color: color-mix(in srgb, ${LABEL} 10%, ${PAGE_BG}); }`,
+    const steppedToward = (colour, percent) =>
+        `color-mix(in srgb, ${colour} ${100 - percent}%, ${TEXT_FG})`;
+
+    // The three rules one resting colour needs. `on` narrows them to the rows
+    // that wear it; empty for the rows that wear none.
+    const rowColourRules = (resting, on) => [
+        `.v-MailboxItem${on} :is(${TINT_TARGETS})` +
+        ` { background-color: ${resting}; }`,
         // .v-MailboxItem is added to these on purpose, and with no space.
-        `.u-list-item.is-focused.v-MailboxItem :is(${TINT_TARGETS})` +
-        ` { background-color: color-mix(in srgb, ${LABEL} 12%, ${FOCUSED_BG}); }`,
-        `.u-list-item.is-selected.v-MailboxItem :is(${TINT_TARGETS})` +
-        ` { background-color: color-mix(in srgb, ${LABEL} 12%, ${SELECTED_BG}); }`
+        `.u-list-item.is-focused.v-MailboxItem${on} :is(${TINT_TARGETS})` +
+        ` { background-color: ${steppedToward(resting, FOCUSED_STEP)}; }`,
+        `.u-list-item.is-selected.v-MailboxItem${on} :is(${TINT_TARGETS})` +
+        ` { background-color: ${steppedToward(resting, SELECTED_STEP)}; }`
     ];
+
+    // Rows carrying no colour at all still take the step, so being on a row
+    // reads the same everywhere in the list rather than only where a label
+    // happens to have a colour.
+    const ROW_COLOUR_RULES = rowColourRules(PAGE_BG, '');
 
     const labelColourRules = () => {
         // The colours are part of the mode, not of Fastmail
@@ -810,11 +840,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 const name = cssString(mailboxPath(m));
                 const chip = `.v-MailboxItem-mailbox span[title="${name}"]`;
 
-                // Each label only has to declare its colour; the rules above
-                // do the rest, and custom properties inherit to the children
-                // that need them
-                rules.push(`.v-MailboxItem:has(${chip})` +
-                    ` { --custom-label-colour: ${m.get('color')}; }`);
+                // Its own three rules, resting and both highlights, written
+                // with the colour in them. A rule that names the label is
+                // narrower than the ones above, so it wins on rows wearing it
+                // and leaves every other row to them.
+                const resting =
+                    `color-mix(in srgb, ${m.get('color')} 10%, ${PAGE_BG})`;
+                rowColourRules(resting, `:has(${chip})`)
+                    .forEach(rule => rules.push(rule));
 
                 // The row is tinted to the chip's own shade, so the chip needs
                 // an edge of its own: a hairline on top, right and bottom,
