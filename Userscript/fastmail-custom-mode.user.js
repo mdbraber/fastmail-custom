@@ -1188,6 +1188,300 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * ----------------------------------------------------------------
+     * Groupings
+     * ----------------------------------------------------------------
+     */
+
+    /*
+     * Fastmail splits a message list into named groups. The choice lives in
+     * the mailbox's own sort, whose first entry names it while the last is
+     * the sort field; its five are "" for none, isTodayWeekMonth, isPinned,
+     * isUnread and custom, and custom reads a definition stored on the
+     * mailbox. The mode adds two kinds of its own and stores no definition
+     * anywhere: "labels", built from the label tree, and one per block of
+     * settings.groupings, under the id "split:" and its name.
+     *
+     * A value Fastmail does not know is safe in that sort: its own
+     * calculateSplits returns null for one, no category sort is built, and
+     * the list simply shows ungrouped. So an account opened in the official
+     * app loses the grouping and nothing else.
+     */
+
+    const LABELS_GROUPING = 'labels';
+    const SPLIT_PREFIX = 'split:';
+
+    // Everything the list falls into that no group claimed. Fastmail's own
+    // wording for the same bucket.
+    const OTHER_NAME = 'Other';
+
+    /*
+     * The settings text, as groupings.
+     *
+     * A line at the margin opens a block and names it; an indented line with
+     * an equals sign is a group, its name before and a Fastmail search after;
+     * an indented line without one names the bucket for the rest; a blank
+     * line ends the block. A block with no groups is dropped, since a
+     * grouping that groups nothing is a menu entry that does nothing, and the
+     * first of two blocks sharing a name wins, so "split:" and the name stay
+     * one grouping.
+     */
+    const parseGroupings = (text) => {
+        const groupings = [];
+        const taken = {};
+        let current = null;
+
+        String(text || '').split('\n').forEach((raw) => {
+            const line = raw.trim();
+
+            if (!line) {
+                current = null;
+                return;
+            }
+
+            const indented = /^\s/.test(raw);
+            const divider = line.indexOf('=');
+
+            if (!current || (!indented && divider === -1)) {
+                current = {
+                    id: SPLIT_PREFIX + line,
+                    name: line,
+                    categories: [],
+                    otherName: OTHER_NAME
+                };
+                if (!taken[current.id]) {
+                    taken[current.id] = true;
+                    groupings.push(current);
+                } else {
+                    current = null;
+                }
+                return;
+            }
+
+            if (divider === -1) {
+                current.otherName = line;
+                return;
+            }
+
+            const name = line.slice(0, divider).trim();
+            const query = line.slice(divider + 1).trim();
+            if (name && query) current.categories.push({ name: name, query: query });
+        });
+
+        return groupings.filter(one => one.categories.length);
+    };
+
+    const modeGroupings = () => parseGroupings(settings.groupings);
+
+    /*
+     * A group per label under this one.
+     *
+     * Built as filters rather than searches, so no query has to be written or
+     * parsed and two labels with the same leaf name cannot be confused. Plain
+     * membership: Fastmail's labels do not inherit, and keeping under a
+     * nested label already puts every label above it on, so mail filed by
+     * this mode lands under its own heading. Mail filed before that rule, or
+     * labelled from Fastmail's own menu, carries the leaf alone and falls
+     * into Other, which is where it should be visible rather than hidden.
+     */
+    const labelsGrouping = (mailbox) => {
+        if (!mailbox || !mailbox.get) return null;
+
+        const children = mailboxesOf(mailbox.get('accountId'))
+            .filter(other => parentOf(other) === mailbox &&
+                isSidebarLabel(other) && !isTriage(other))
+            .sort((a, b) => (a.get('sortOrder') || 0) - (b.get('sortOrder') || 0));
+
+        if (!children.length) return null;
+
+        return {
+            id: LABELS_GROUPING,
+            name: 'labels',
+            categories: children.map(child => ({
+                name: child.get('name'),
+                filter: { inMailbox: child.get('id') }
+            })),
+            otherName: OTHER_NAME
+        };
+    };
+
+    // The Inbox groups by the labels at the top level, which are nobody's
+    // children; every other mailbox by its own.
+    const groupingParent = (mailbox) =>
+        mailbox && mailbox.get('role') === 'inbox' ? null : mailbox;
+
+    const labelsGroupingFor = (mailbox) => {
+        if (!mailbox || !mailbox.get) return null;
+        const under = groupingParent(mailbox);
+        if (under) return labelsGrouping(under);
+
+        const roots = mailboxesOf(mailbox.get('accountId'))
+            .filter(other => !parentOf(other) && isUserLabel(other) &&
+                isSidebarLabel(other) && !isTriage(other))
+            .sort((a, b) => (a.get('sortOrder') || 0) - (b.get('sortOrder') || 0));
+
+        if (!roots.length) return null;
+
+        return {
+            id: LABELS_GROUPING,
+            name: 'labels',
+            categories: roots.map(root => ({
+                name: root.get('name'),
+                filter: { inMailbox: root.get('id') }
+            })),
+            otherName: OTHER_NAME
+        };
+    };
+
+    const groupingFor = (id, mailbox) => {
+        if (!id) return null;
+        if (id === LABELS_GROUPING) return labelsGroupingFor(mailbox);
+        if (id.indexOf(SPLIT_PREFIX) !== 0) return null;
+        return modeGroupings().filter(one => one.id === id)[0] || null;
+    };
+
+    // The sort's first entry names the grouping, and there is one only when
+    // the sort has a second entry to be the sort field.
+    const currentGroupingId = () => {
+        try {
+            const sort = controller().get('sort') || [];
+            return sort.length > 1 ? String(sort[0].property || '') : '';
+        } catch (error) {
+            return '';
+        }
+    };
+
+    const modeGroupingIsActive = () => {
+        const id = currentGroupingId();
+        if (id !== LABELS_GROUPING && id.indexOf(SPLIT_PREFIX) !== 0) return null;
+        return groupingFor(id, controller().get('mailbox'));
+    };
+
+    /*
+     * Written to sort rather than set through groupBy, because that setter
+     * deletes the collapsed list off the mailbox's stored split on its way
+     * past; switching grouping and switching back would quietly unfold a
+     * split somebody had folded.
+     */
+    const chooseGrouping = (id) => {
+        const mailController = controller();
+        const sort = mailController.get('sort') || [];
+        const sortField = sort[sort.length - 1];
+
+        mailController.set('sort',
+            id ? [{ property: id, isAscending: false }, sortField] : [sortField]);
+    };
+
+    /*
+     * Fastmail's own calculateSplits, asked a different question.
+     *
+     * It reads groupBy off the controller and, for custom, a definition off
+     * the sort source, and returns categories whose searches it has parsed
+     * into filters. Rather than reimplement that parsing, the mode calls the
+     * original with a stand-in: an object that answers custom for groupBy
+     * and hands back the mode's definition for splits, and delegates every
+     * other question to the real one. Fastmail then does the parsing, and
+     * the shape that comes back is its own.
+     *
+     * A definition built from filters already, which Labels is, needs none
+     * of that and is returned as it stands.
+     */
+    const standInFor = (mailController, definition) => {
+        const source = {
+            get(key) {
+                if (key === 'splits') return definition;
+                return mailController.get('sortSource').get(key);
+            }
+        };
+
+        return {
+            get(key) {
+                if (key === 'groupBy') return 'custom';
+                if (key === 'sortSource') return source;
+                return mailController.get(key);
+            }
+        };
+    };
+
+    const splitsFor = (mailController, original, definition) => {
+        const parsed = definition.categories.every(one => one.filter);
+        if (parsed) {
+            return {
+                categories: definition.categories,
+                otherName: definition.otherName
+            };
+        }
+
+        return original.call(standInFor(mailController, definition));
+    };
+
+    const patchSplits = () => {
+        const mailController = controller();
+        if (mailController.customGroupings) return;
+        mailController.customGroupings = true;
+
+        const original = mailController.calculateSplits;
+
+        mailController.calculateSplits = function () {
+            try {
+                const definition = modeGroupingIsActive();
+                if (definition) return splitsFor(this, original, definition);
+            } catch (error) {
+                reportFault('could not build the groups', error);
+            }
+
+            return original.apply(this, arguments);
+        };
+    };
+
+    /*
+     * A day boundary moves under a grouping that names one.
+     *
+     * Fastmail arms its own midnight refresh only for its by-age grouping and
+     * for custom, so a mode grouping using date:today would show yesterday's
+     * mail under Today until something else made the list recompute. Rather
+     * than dress the mode's grouping up as custom for that one check, the
+     * mode keeps its own clock: one timer to the next midnight, rearmed each
+     * time it fires, and only while one of its groupings is on.
+     */
+    let midnightTimer = null;
+
+    const scheduleMidnight = () => {
+        if (midnightTimer) clearTimeout(midnightTimer);
+        midnightTimer = null;
+        if (!modeGroupingIsActive()) return;
+
+        const midnight = new Date();
+        midnight.setHours(24, 0, 5, 0);
+
+        midnightTimer = setTimeout(() => {
+            midnightTimer = null;
+            try {
+                controller().computedPropertyDidChange('splits');
+            } catch (error) {
+                reportFault('could not refresh the groups at midnight', error);
+            }
+            scheduleMidnight();
+        }, Math.max(1000, midnight.getTime() - Date.now()));
+    };
+
+    /*
+     * The splits computed says it depends on the saved search, the mailbox,
+     * groupBy and whether conversations are on. None of those changes when a
+     * label is renamed or the settings text is edited, so the mode says so
+     * itself; the same call Fastmail's own custom-split dialog makes when it
+     * saves.
+     */
+    const refreshGroupings = () => {
+        try {
+            if (!modeGroupingIsActive()) return;
+            controller().computedPropertyDidChange('splits');
+        } catch (error) {
+            reportFault('could not refresh the groups', error);
+        }
+    };
+
+    /*
+     * ----------------------------------------------------------------
      * The list toolbar
      * ----------------------------------------------------------------
      */
@@ -5021,6 +5315,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         FastMail.store.on(FastMail.classes.Mailbox, {
             go: () => {
                 forgetLabelCache();
+                refreshGroupings();
                 scheduleStyles();
                 scheduleBadgeRepaint();
             }
@@ -5054,6 +5349,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         controller().addObserverForKey('mailboxFilter', {
             go: refreshToolbar
         }, 'go');
+
+        // A different mailbox may be grouped differently, or not at all
+        controller().addObserverForKey('sort', { go: scheduleMidnight }, 'go');
+        controller().addObserverForKey('mailbox', { go: scheduleMidnight }, 'go');
     };
 
     /*
@@ -5307,6 +5606,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         patchArchive();
         patchLabelActions();
         patchMessageMenu();
+        patchSplits();
         patchShortcuts();
         updateStyles();
         installAppBadge();
@@ -5326,6 +5626,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         addObservers();
 
         setMode(storedMode());
+        scheduleMidnight();
 
         // Handy from the console, and how the counts can be checked by hand
         window.customMode = {
@@ -5337,6 +5638,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             sourcesAboveLabels,
             goToSourceAt,
             settings: () => settings,
+            parseGroupings,
+            labelsGrouping: labelsGroupingFor,
+            currentGroupingId,
+            chooseGrouping,
             // Called by the extension when the settings change, so options take
             // effect without a reload
             applySettings: (next) => {
@@ -5346,6 +5651,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 forgetHide();
                 // The label names may have changed
                 forgetLabelCache();
+                refreshGroupings();
                 // A query per label is worth running only while something
                 // reads it, so turning the setting off stops them
                 if (!settings.filteredLabelCounts) forgetInboxCounts();
