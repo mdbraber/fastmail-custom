@@ -131,20 +131,33 @@ public struct CustomModeSettingsForm: View {
                 Toggle(option.title, isOn: model.toggleBinding(for: option))
             case .text(let fallback):
                 Text(option.title)
-                // A clearable field shows its default as text rather than as a
-                // placeholder, because for those two an empty box is
-                // ambiguous; never touched, or emptied on purpose, and they
-                // mean opposite things.
-                TextField(
-                    option.title,
-                    text: model.textBinding(for: option),
-                    prompt: Text(option.clearable ? "none" : fallback)
-                )
-                .labelsHidden()
-                .autocorrectionDisabled()
-                #if canImport(UIKit)
-                .textInputAutocapitalization(.never)
-                #endif
+                if option.multiline {
+                    // A field would show one line of a value that is a dozen,
+                    // and a placeholder cannot stand in for a format, so the
+                    // hint below carries the format instead.
+                    TextEditor(text: model.textBinding(for: option))
+                        .font(.body.monospaced())
+                        .frame(minHeight: 160)
+                        .autocorrectionDisabled()
+                        #if canImport(UIKit)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                } else {
+                    // A clearable field shows its default as text rather than
+                    // as a placeholder, because for those two an empty box is
+                    // ambiguous; never touched, or emptied on purpose, and
+                    // they mean opposite things.
+                    TextField(
+                        option.title,
+                        text: model.textBinding(for: option),
+                        prompt: Text(option.clearable ? "none" : fallback)
+                    )
+                    .labelsHidden()
+                    .autocorrectionDisabled()
+                    #if canImport(UIKit)
+                    .textInputAutocapitalization(.never)
+                    #endif
+                }
             }
             Text(option.hint)
                 .font(.caption)

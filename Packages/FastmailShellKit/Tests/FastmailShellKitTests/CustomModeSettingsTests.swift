@@ -223,6 +223,41 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     #expect(defaults.object(forKey: "inboxMode.triageLabel") == nil)
 }
 
+// The groupings field is the one place a user writes their own message-list
+// groupings, so the shipped default doubles as the worked example of the
+// format the userscript parses.
+@Test func theGroupingsDefaultIsTheAgePreset() {
+    let settings = CustomModeSettings.current(from: freshDefaults(#function))
+    let text = settings["groupings"] as? String
+    #expect(text?.hasPrefix("By age (urgent first)") == true)
+    #expect(text?.contains("\n  Triage = in:Triage OR is:unread") == true)
+    #expect(text?.contains("\n  Pinned = is:pinned") == true)
+    #expect(text?.contains("\n  Today = date:today") == true)
+    #expect(text?.contains("\n  Yesterday = date:yesterday") == true)
+    #expect(text?.contains("\n  This week = after:1w") == true)
+    #expect(text?.contains("\n  This month = after:1m") == true)
+    #expect(text?.hasSuffix("\n  Older") == true)
+}
+
+// Emptied on purpose means no groupings of the user's own, not the preset back.
+@Test func theGroupingsFieldIsClearable() {
+    let defaults = freshDefaults(#function)
+    defaults.set("   ", forKey: "customMode.groupings")
+    #expect(CustomModeSettings.current(from: defaults)["groupings"] as? String == "")
+}
+
+// Only the form reads this; the value kind stays .text so the resolver, the
+// injected JSON and their tests are untouched.
+@Test func onlyTheGroupingsOptionIsMultiline() {
+    let multiline = CustomModeSettings.options.filter(\.multiline).map(\.key)
+    #expect(multiline == ["groupings"])
+}
+
+@Test func theGroupingsOptionSitsInItsOwnGroup() {
+    #expect(CustomModeSettings.options(in: .grouping).map(\.key) == ["groupings"])
+    #expect(CustomModeSettings.Group.grouping.title == "Groups")
+}
+
 #if canImport(AppKit)
 import AppKit
 

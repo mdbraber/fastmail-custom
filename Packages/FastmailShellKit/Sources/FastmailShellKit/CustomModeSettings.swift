@@ -10,6 +10,7 @@ public enum CustomModeSettings {
         case general
         case appearance
         case labelsFiling
+        case grouping
         case snooze
         case keyboard
         case bottomBar
@@ -19,6 +20,7 @@ public enum CustomModeSettings {
             case .general: return "General"
             case .appearance: return "Appearance"
             case .labelsFiling: return "Labels & keeping"
+            case .grouping: return "Groups"
             case .snooze: return "Snooze"
             case .keyboard: return "Keyboard"
             case .bottomBar: return "Action bar"
@@ -31,6 +33,7 @@ public enum CustomModeSettings {
             case .general: return "gearshape"
             case .appearance: return "paintbrush"
             case .labelsFiling: return "tag"
+            case .grouping: return "rectangle.3.group"
             case .snooze: return "clock"
             case .keyboard: return "keyboard"
             case .bottomBar: return "rectangle.bottomthird.inset.filled"
@@ -59,6 +62,11 @@ public enum CustomModeSettings {
         public let parent: String?
         /// Whether an empty text field is an answer rather than an omission.
         public let clearable: Bool
+        /// Whether the value runs to several lines. The value kind stays
+        /// `.text`; this only tells the form to draw an editor rather than a
+        /// field, and tells the iOS Settings bundle to leave it alone, since
+        /// a PSTextFieldSpecifier is one line and cannot hold it.
+        public let multiline: Bool
         public let title: String
         public let hint: String
         public let defaultValue: Value
@@ -74,6 +82,7 @@ public enum CustomModeSettings {
             group: Group,
             parent: String? = nil,
             clearable: Bool = false,
+            multiline: Bool = false,
             title: String,
             hint: String,
             default value: Value
@@ -82,6 +91,7 @@ public enum CustomModeSettings {
             self.group = group
             self.parent = parent
             self.clearable = clearable
+            self.multiline = multiline
             self.title = title
             self.hint = hint
             self.defaultValue = value
@@ -274,6 +284,20 @@ public enum CustomModeSettings {
             title: "Count only what is in the Inbox",
             hint: "A project label’s badge counts the same messages its filtered list shows, rather than everything it has ever held.",
             default: .toggle(true)
+        ),
+
+        // Groups; the message list split into named sections. Fastmail offers
+        // none, by age, pinned first, unread first and one custom split per
+        // mailbox; the userscript adds Labels, which is built from the label
+        // tree, and everything written here.
+        Option(
+            "groupings",
+            group: .grouping,
+            clearable: true,
+            multiline: true,
+            title: "Your groupings",
+            hint: "One block each: a line naming the grouping, then indented “Name = search” lines, then a bare line for everything else. Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Renaming a grouping loses it on the mailboxes using it.",
+            default: .text("By age (urgent first)\n  Triage = in:Triage OR is:unread\n  Pinned = is:pinned\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n  This month = after:1m\n  Older")
         ),
 
         // Snooze; the snooze action and its defaults, kept together.
