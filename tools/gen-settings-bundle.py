@@ -31,6 +31,7 @@ OPTION = re.compile(
     r'group:\s*\.(?P<group>\w+),\s*'
     r'(?:parent:\s*"\w+",\s*)?'
     r'(?:clearable:\s*(?:true|false),\s*)?'
+    r'(?:multiline:\s*(?P<multiline>true|false),\s*)?'
     r'title:\s*"(?P<title>[^"]*)",\s*'
     r'hint:\s*"(?P<hint>[^"]*)",\s*'
     r'default:\s*\.(?:toggle\((?P<toggle>true|false)\)'
@@ -46,6 +47,7 @@ GROUP_TITLE = {
     "general": "General",
     "appearance": "Appearance",
     "labelsFiling": "Labels & keeping",
+    "grouping": "Groups",
     "snooze": "Snooze",
     "keyboard": "Keyboard",
     "bottomBar": "Action bar",
@@ -60,7 +62,8 @@ def options():
         default = (match["toggle"] == "true" if match["toggle"]
                    else match["text"])
         found.append((match["key"], match["group"], default,
-                      match["title"], match["hint"]))
+                      match["title"], match["hint"],
+                      match["multiline"] == "true"))
 
     # A catalog that stopped parsing would otherwise write a plist with the
     # options silently missing, and the guard test is the only thing that
@@ -127,18 +130,28 @@ def specifiers(catalog):
         },
     ]
 
+    # A multi-line value has no specifier that fits: PSTextFieldSpecifier is
+    # one line. The header still goes in, with a footer saying where the
+    # setting is, rather than the group vanishing off the phone's screen.
+    IN_APP_ONLY = ("This one runs to several lines, so it is edited in the "
+                   "app’s own settings screen rather than here.")
+
     # The General header is already on the backend row above, and start page
     # and the app badge continue under it, so the first header we add is for
     # the group after general.
     last_group = "general"
-    for key, group_key, default, title, hint in catalog:
-        group = {"Type": "PSGroupSpecifier", "FooterText": hint}
+    for key, group_key, default, title, hint, multiline in catalog:
+        group = {"Type": "PSGroupSpecifier",
+                 "FooterText": IN_APP_ONLY if multiline else hint}
         if group_key != last_group:
             if last_group == "general":
                 rows.extend(notifications)
             group["Title"] = GROUP_TITLE[group_key]
             last_group = group_key
         rows.append(group)
+
+        if multiline:
+            continue
 
         if isinstance(default, bool):
             rows.append({

@@ -394,6 +394,14 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>FooterText</key>
+			<string>This one runs to several lines, so it is edited in the app’s own settings screen rather than here.</string>
+			<key>Title</key>
+			<string>Groups</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>FooterText</key>
 			<string>Opens the snooze dialog with the default period filled in.</string>
 			<key>Title</key>
 			<string>Snooze</string>
