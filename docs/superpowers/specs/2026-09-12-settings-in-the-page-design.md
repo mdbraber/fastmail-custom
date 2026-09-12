@@ -66,9 +66,15 @@ the apps have a channel; it simply has no settings action on it.
   the app's backup, and stay readable by native code.
 - The **native screens keep only the shell's own settings**. They are not
   removed, because three of them decide whether a page can load at all.
-- The **catalogue moves into the userscript**. Swift keeps a bare list of the
-  twenty-six keys, carrying no copy, and one default — `appBadgeLabel`,
-  because `HomeShortcuts` reads it natively.
+- The **userscript's catalogue is canonical**. It is the only place an option
+  is declared, and neither host holds a copy of the list — not its keys, not
+  its copy, not its defaults. Each host handles the `customMode.` namespace
+  without knowing what is in it. The single exception is `appBadgeLabel`,
+  whose default Swift needs because `HomeShortcuts` reads it before the page
+  has ever run.
+- **No migration.** The `inboxMode.` rename and the 2.x settings version both
+  landed on 2026-09-07 and every device has run them; the code that performs
+  them goes, and nothing replaces it.
 - A **plain-HTML fallback panel** ships alongside, drawn only when a Fastmail
   class the panel needs has gone missing. With the native screens gone, a
   renamed class would otherwise lock the user out of their own settings.
@@ -165,6 +171,16 @@ in the same file, placed beside `DEFAULT_SETTINGS` rather than near the panel
 that renders it — the catalogue is data about the options, not part of the
 view.
 
+**This list is canonical, and it is the only one.** Adding an option means
+adding one entry here and nothing anywhere else. Neither host enumerates the
+options, so neither can fall behind: they handle the `customMode.` namespace
+as a namespace. In Swift that means `json(from:)` reads every
+`customMode.`-prefixed key out of `UserDefaults.dictionaryRepresentation()`
+and strips the prefix, rather than walking a list; in the extension it means
+`background.js` passes stored settings through untouched. A key the page
+stops using lingers in storage, unread and harmless, until the page writes
+over it.
+
 ## The groupings editor
 
 The Groups section lists your groupings — one row each, drag to reorder,
@@ -246,12 +262,14 @@ present, in this order: `window.native.setSetting`, then the extension, then
 **The apps.** `harness.js` gains
 `window.native.setSetting = (key, value) => post('setting', { key: key, value: value })`.
 `NativeBridge.handle` gains a `setting` case that writes `customMode.<key>`
-into `UserDefaults`. The key is refused unless it appears in
-`CustomModeSettings.keys`, the bare key list Swift keeps for the migration —
-an allowlist rather than a pattern, so the page cannot reach `backend`,
-`startView` or `push.alerts`, and a key path cannot be smuggled through. The
-value is refused unless it is a `Bool` or a `String`. A refusal returns a
-`BridgeReply` error and writes nothing.
+into `UserDefaults`. Swift holds no list of valid keys, so the guard is the
+namespace: the key is refused unless it matches `^[A-Za-z][A-Za-z0-9]*$`.
+That is enough on its own. Everything the page could write lands under
+`customMode.`, a prefix no other setting uses, so `backend`, `startView` and
+`push.alerts` are unreachable whatever the page sends, and a key path cannot
+be smuggled through because a dot is not in the pattern. The value is refused
+unless it is a `Bool` or a `String`. A refusal returns a `BridgeReply` error
+and writes nothing.
 
 **The Safari extension.** The payload runs in the page world, which cannot
 reach extension storage. It posts to its own window:
@@ -290,16 +308,15 @@ not have focus, so an inbound echo cannot overwrite what is being typed.
 ## What each host keeps
 
 **Swift.** `CustomModeSettings` loses the `Option` type, the whole `options`
-array, the `Group` enum, `barSlotGlyph` and `barSlotSymbol`. In their place it
-keeps `keys: [String]` — the twenty-six bare keys, no titles, no hints, no
-defaults — which is what `migrateLegacyKeys` walks, what the injection
-filters on, and what the bridge's `setting` case checks against. It keeps the
-`customMode.` prefix, `json(from:)`, `bootstrapScript`, `applyScriptSource`,
-and one literal default: `appBadgeLabel` is `"Triage"`, for
-`HomeShortcuts.badgeLabel`.
+array, the `Group` enum, `barSlotGlyph`, `barSlotSymbol` and
+`migrateLegacyKeys`. What is left is small enough to describe in a sentence:
+the `customMode.` prefix, a `json(from:)` that collects the prefixed keys out
+of `UserDefaults.dictionaryRepresentation()`, `bootstrapScript`,
+`applyScriptSource`, and one literal default — `appBadgeLabel` is `"Triage"`,
+for `HomeShortcuts.badgeLabel`.
 
 Because the page owns every default and already merges `DEFAULT_SETTINGS`
-under `window.__customModeSettings`, the injection sends only keys that are
+under `window.__customModeSettings`, the injection sends only what is
 actually stored, and the resolution rules go with the catalogue. The
 default-seeding pass that existed so the iOS Settings bundle could show a
 value is removed along with the rows it served.
@@ -321,15 +338,10 @@ tab in the `MAIN` world to invoke `window.customMode.openSettings()` and then
 closes itself. If the active tab is not Fastmail, the button says so rather
 than doing nothing.
 
-`background.js` keeps its storage listener and its injection, and its
-`DEFAULT_SETTINGS` map shrinks to `KNOWN_KEYS`, a flat list of the same
-twenty-six names. It needs the names, because `migrateSettings` drops stored
-keys that no longer exist; it does not need the values, because the page
-supplies every default. `LEGACY_DEFAULTS` keeps its two entries but changes
-what it does with a match: today it overwrites a stale stored value with the
-current default, and with no defaults left to reach for it deletes the key
-instead, which leaves the page to supply the default. The outcome is the
-same.
+`background.js` keeps its storage listener and its injection and loses
+everything else: `DEFAULT_SETTINGS`, `SETTINGS_VERSION`, `LEGACY_DEFAULTS`
+and `migrateSettings` all go. It reads what is stored and injects it, without
+knowing or caring which keys exist. That is most of the file.
 
 ## The fallback
 
@@ -361,27 +373,31 @@ same reason in miniature: a panel that cannot save is not worth drawing.
 
 ## Testing
 
-**Swift.** `NativeBridgeTests` gains cases for the `setting` action: a
-boolean and a string are each written under the prefixed key; a key outside
-the allowlist is refused with an error and writes nothing, tested with
-`backend`, with `customMode.triageLabel` (a key path, not a key), with an
-empty key and with a key that merely resembles one; and a numeric or array
-value is refused. `HarnessTests` gains a case that `window.native.setSetting`
-reaches the bridge, alongside the `openSettings` case already there, because
-`harness.js` is only ever exercised in a real web view.
+**Swift.** `NativeBridgeTests` gains cases for the `setting` action. A
+boolean and a string are each written under the prefixed key. A key that does
+not match the pattern is refused with an error and writes nothing: a dotted
+key, a key with a leading digit, one with a space, one with a hyphen, and an
+empty key. Two cases guard the namespace itself and matter more than the
+pattern does, because they are what stops the page reaching a shell setting:
+sending the key `backend` writes `customMode.backend` and leaves the real
+`backend` untouched, and sending `push.alerts` is refused outright for the
+dot. A numeric or array value is refused. `HarnessTests` gains a case that
+`window.native.setSetting` reaches the bridge, alongside the `openSettings`
+case already there, because `harness.js` is only ever exercised in a real web
+view.
 
 `SettingsBundleTests` is rewritten against the three fixed rows.
-`CustomModeSettingsTests` loses the cases for options that no longer exist in
-Swift and keeps the injection tests, with the resolution cases moving out
-with the rules they cover.
+`CustomModeSettingsTests` loses the cases for options and migrations that no
+longer exist in Swift, and keeps the injection tests — with a new one, that
+`json(from:)` picks up a `customMode.`-prefixed key it has never heard of and
+ignores an unprefixed one, since collecting by namespace rather than by list
+is the whole mechanism now.
 
-`SettingsParityTests` is the one that matters most, because three lists of
-keys now exist where there was one catalogue. It checks that Swift's
-`CustomModeSettings.keys`, the userscript's `DEFAULT_SETTINGS` and
-`background.js`'s `KNOWN_KEYS` name exactly the same twenty-six keys, and
-that Swift's single `appBadgeLabel` default matches the userscript's. A key
-added to the page and forgotten in Swift would otherwise be silently
-unwritable — the bridge would refuse it and the panel would appear to work.
+`SettingsParityTests` shrinks to a single case, because after this there is
+only one list of options anywhere: Swift's `appBadgeLabel` default matches
+the userscript's. Everything the test used to guard — the extension's HTML
+rows, its background defaults, the Settings bundle rows — is guarded now by
+those lists not existing.
 
 **The userscript** has no test harness — it is one IIFE with no imports and
 no build step. Verification is the technique the grouping work used: slice
@@ -399,15 +415,28 @@ applications and forces the running mail to quit, so it waits on an explicit
 go-ahead. It is a merge gate, not an optional extra — and it also discharges
 the same outstanding gate the groupings work left behind.
 
-## Migration
+## No migration
 
-Nothing to migrate. The keys, the store and the values are unchanged; only
-the editor moves. A value already in `UserDefaults` or extension storage is
-read by the new panel exactly as the old screens read it.
+Nothing to migrate, and nothing left that migrates. The keys, the store and
+the values are unchanged; only the editor moves, so a value already in
+`UserDefaults` or extension storage is read by the new panel exactly as the
+old screens read it.
 
-The one visible loss is that Custom mode options no longer appear in the iOS
-Settings app. The settings that could strand a user — backend and start page —
-are precisely the ones that stay there.
+The two migration paths that exist today go with the lists they walked.
+`CustomModeSettings.migrateLegacyKeys` moves values from an `inboxMode.`
+prefix that the Custom mode rename retired on 2026-09-07; `migrateSettings`
+in `background.js` drops keys the same rename retired, and rewrites two
+values whose defaults moved. Both have run on every device that has launched
+a build since, which is all of them, and neither can run at all once the
+lists they enumerate are gone. They are deleted rather than ported.
+
+The cost of being wrong about that is small and visible: a device that had
+somehow never run a build from the last five days would come up with default
+settings, and the panel would set them again.
+
+The one visible loss from the change as a whole is that Custom mode options
+no longer appear in the iOS Settings app. The settings that could strand a
+user — backend and start page — are precisely the ones that stay there.
 
 ## Not in scope
 
