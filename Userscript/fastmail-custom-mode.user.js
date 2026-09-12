@@ -1482,15 +1482,23 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * a grouping that is never kept, so its lines are consumed rather than
      * reopening the first or derailing everything after it.
      *
-     * A block with no groups yet is returned like any other. The settings
-     * panel needs to see one: its list writes the text back from what the
-     * text parses to, and a grouping somebody has only begun to type is one
-     * that write would delete.
+     * A block with no groups yet is returned like any other, and every other
+     * non-blank line the reading throws away is listed beside the blocks: all
+     * of a block whose name was already taken, a group line missing its name
+     * or its search, and a bucket name that a later one in the same block
+     * replaced. The settings panel needs both. Its list writes the text back
+     * from what the text parses to, so any of these would be deleted by that
+     * write, most likely from under someone still typing them.
      */
     const readGroupingBlocks = (text) => {
         const groupings = [];
+        const discarded = [];
         const taken = {};
         let current = null;
+        // Whether the open block is the one kept under its name, and the
+        // bucket line it has named so far.
+        let kept = false;
+        let bucketLine = null;
 
         String(text || '').split('\n').forEach((raw) => {
             const line = raw.trim();
@@ -1514,29 +1522,43 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     categories: [],
                     otherName: OTHER_NAME
                 };
-                if (!taken[id]) {
+                kept = !taken[id];
+                bucketLine = null;
+                if (kept) {
                     taken[id] = true;
                     groupings.push(current);
+                } else {
+                    discarded.push({ line: line, grouping: line, reason: 'duplicate' });
                 }
                 return;
             }
 
+            if (!kept) discarded.push({ line: line, grouping: current.name, reason: 'duplicate' });
+
             if (divider === -1) {
+                if (kept && bucketLine !== null) {
+                    discarded.push({ line: bucketLine, grouping: current.name, reason: 'replaced' });
+                }
+                bucketLine = line;
                 current.otherName = line;
                 return;
             }
 
             const name = line.slice(0, divider).trim();
             const query = line.slice(divider + 1).trim();
-            if (name && query) current.categories.push({ name: name, query: query });
+            if (name && query) {
+                current.categories.push({ name: name, query: query });
+            } else if (kept) {
+                discarded.push({ line: line, grouping: current.name, reason: 'unfinished' });
+            }
         });
 
-        return groupings;
+        return { blocks: groupings, discarded: discarded };
     };
 
     // The groupings the text defines. A block with no groups is dropped, since
     // a grouping that groups nothing is a menu entry that does nothing.
-    const parseGroupings = (text) => readGroupingBlocks(text).filter(one => one.categories.length);
+    const parseGroupings = (text) => readGroupingBlocks(text).blocks.filter(one => one.categories.length);
 
     /*
      * The inverse of parseGroupings: an array of groupings back to the text
@@ -6599,28 +6621,62 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * field away under the cursor; a label that lags the text costs nothing
      * now that no action reads one.
      *
-     * And an action refuses outright while the text holds a grouping with no
-     * groups yet. The write would be made from what the parser keeps, which
-     * leaves that grouping out, so it would be deleted from under whoever is
-     * still typing it. A refusal writes nothing, and redraws nothing either,
-     * since a redraw would replace the field that holds the unfinished text.
+     * And an action refuses outright while writing the text back would lose
+     * any line of it: a grouping with no groups yet, or any line the reading
+     * discards. The write is made from what the parser keeps, so whatever it
+     * leaves out would be deleted from under whoever is still typing it. A
+     * refusal writes nothing, and redraws nothing but its own notice, since a
+     * redraw of the section would replace the field holding the text.
+     *
+     * The notice is the section's own line rather than a fault. A fault is
+     * shown once per page load, so a second press of the same button would
+     * seem to do nothing at all; the notice is drawn again on every refusal,
+     * and cleared by the next action that goes ahead.
      */
     const groupingsSection = (classes, register) => {
         const el = FastMail.el;
         const option = settingFor('groupings');
         let showText = false;
 
-        // The groupings as they stand, or null, reported, while one is unfinished.
+        // Drawn in a view of its own, so that saying something redraws only
+        // the notice and never the text field beside it.
+        let notice = '';
+        let noticeView = null;
+        const say = (text) => {
+            if (!text && !notice) return;
+            notice = text;
+            if (noticeView) noticeView.viewNeedsRedraw();
+        };
+
+        // The first thing a write would lose, in words; '' when it loses nothing.
+        const problemIn = (read) => {
+            const empty = read.blocks.filter(one => !one.categories.length)[0];
+            if (empty) {
+                return 'Finish or remove the grouping “' + empty.name +
+                    '” in the text before changing the list.';
+            }
+            const lost = read.discarded[0];
+            if (!lost) return '';
+            if (lost.reason === 'duplicate') {
+                return 'The grouping “' + lost.grouping +
+                    '” appears twice; rename or remove one before changing the list.';
+            }
+            if (lost.reason === 'replaced') {
+                return '“' + lost.grouping + '” has two lines naming everything else, “' +
+                    lost.line + '” among them; remove one before changing the list.';
+            }
+            return 'The line “' + lost.line + '” under “' + lost.grouping +
+                '” is unfinished; finish or remove it before changing the list.';
+        };
+
+        // The groupings as they stand, or null while writing them back would
+        // lose something typed; the notice says which, or is cleared.
         const current = () => {
             register.flushPending();
             const text = settingValue('groupings');
-            const unfinished = readGroupingBlocks(text).filter(one => !one.categories.length)[0];
-            if (unfinished) {
-                reportFault('finish or remove the grouping “' + unfinished.name +
-                    '” in the text before changing the list');
-                return null;
-            }
-            return parseGroupings(text);
+            const problem = problemIn(readGroupingBlocks(text));
+            say(problem);
+            return problem ? null : parseGroupings(text);
         };
         const named = (groupings, name) => groupings.filter(one => one.name === name)[0] || null;
 
@@ -6661,10 +6717,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             }
             editGrouping(classes, seed, (value) => {
                 // Saved down to nothing, it would vanish from the list at the
-                // next parse; removing it is the list's job, and says so.
+                // next parse; removing it is the list's job, and says so. As a
+                // fault, since this happens inside Fastmail's dialog where the
+                // notice cannot be seen, and in the notice too, so that it is
+                // still there once the dialog has gone.
                 if (!value.categories || !value.categories.length) {
                     reportFault('a grouping needs at least one group; remove “' + name +
                         '” from the list instead');
+                    say('A grouping needs at least one group; remove “' + name +
+                        '” from the list instead.');
                     return;
                 }
                 const now = current();
@@ -6733,9 +6794,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     method: 'go'
                 });
 
+                noticeView = new classes.View({
+                    draw: () => (notice
+                        ? [el('p.u-trim.u-text-sm.u-color-error',
+                            { role: 'status', style: 'margin-top:8px' }, [notice])]
+                        : [])
+                });
+
                 const parts = [
                     el('h3.u-trim.u-font-bold', [option.title]),
-                    list, addButton, toggle
+                    el('div', [list, noticeView]),
+                    addButton, toggle
                 ];
                 if (showText) parts.push(settingRow(classes, option, register));
                 parts.push(el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint]));
