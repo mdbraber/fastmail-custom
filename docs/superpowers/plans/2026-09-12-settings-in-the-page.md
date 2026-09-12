@@ -822,7 +822,7 @@ git commit -m "feat: the page carries the option catalogue and can save a settin
 - Produces: `openSettingsPanel()`, and `window.customMode.openSettings()`.
 - Produces: `panelClasses()` → an object of the resolved Fastmail classes, or
   `null` when one is missing. Task 6 branches on that `null`.
-- Produces: `settingRow(option, onParentChange)` → a view, used by Task 5's
+- Produces: `settingRow(classes, option, register)` → a view, used by Task 5's
   sections for the rows they do not draw themselves.
 
 - [ ] **Step 1: Add the class resolver**
