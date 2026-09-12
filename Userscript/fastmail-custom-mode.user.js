@@ -174,7 +174,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * option means adding one entry here and nothing anywhere else.
      *
      * The default is not repeated: DEFAULT_SETTINGS above already carries all
-     * twenty-six, and settingValue reads it from there.
+     * twenty-seven, and settingValue reads it from there.
      */
     const SETTING_GROUPS = [
         { id: 'general', title: 'General' },
