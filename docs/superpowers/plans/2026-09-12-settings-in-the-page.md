@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move all twenty-six Custom mode options out of three native settings
+**Goal:** Move all twenty-seven Custom mode options out of three native settings
 screens and into one panel drawn inside the Fastmail page from Fastmail's own
 view classes.
 
@@ -28,7 +28,7 @@ Python for the Settings bundle generator.
   exception is Swift's literal `appBadgeLabel` default of `"Triage"`.
 - Never write Fastmail's per-mailbox `splits` property from the userscript.
   The groupings editor writes only our own settings.
-- The twenty-six keys, their titles, their hints and their defaults are moved
+- The twenty-seven keys, their titles, their hints and their defaults are moved
   verbatim from `CustomModeSettings.options`. No copy changes in this work.
 - Order is load-bearing: write channels first, then the panel, then the
   deletions. A build that deletes the native screens before the panel works
@@ -474,7 +474,7 @@ Insert after the `DEFAULT_SETTINGS` literal and the `let settings = …` line:
      * option means adding one entry here and nothing anywhere else.
      *
      * The default is not repeated: DEFAULT_SETTINGS above already carries all
-     * twenty-six, and settingValue reads it from there.
+     * twenty-seven, and settingValue reads it from there.
      */
     const SETTING_GROUPS = [
         { id: 'general', title: 'General' },
@@ -2083,7 +2083,7 @@ these cases:
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `cd Packages/FastmailShellKit && swift test --filter settingsBundleCarriesNoCustomModeRow`
-Expected: FAIL — the checked-in plist still has twenty-six `customMode.` rows.
+Expected: FAIL — the checked-in plist still has twenty-seven `customMode.` rows.
 
 - [ ] **Step 3: Rewrite the generator**
 

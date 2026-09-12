@@ -10,7 +10,7 @@ of one list is still three renderings, and none of them can offer the thing
 the groupings setting most needs — a list you can drag, rename in place, and
 add to.
 
-This moves all twenty-six Custom mode options into a single settings panel
+This moves all twenty-seven Custom mode options into a single settings panel
 drawn inside the Fastmail page, built from Fastmail's own view classes. One
 implementation serves the macOS app, the iOS app, the Safari extension and a
 plain browser tab, because the page is the only layer all four share. The
@@ -91,7 +91,7 @@ working page. `push.alerts` is read by `PushRegistrar` and belongs beside
 iOS's own notification switches. On macOS only, compose mode, the downloads
 folder and auto-open attachments are shell settings with no page equivalent.
 
-**Moves to the page.** All twenty-six options in `CustomModeSettings.options`,
+**Moves to the page.** All twenty-seven options in `CustomModeSettings.options`,
 in their seven existing groups, with their existing titles, hints, defaults,
 sub-option parents and clearable flags unchanged. This is a move, not a
 rewrite: no copy changes, no keys change, no defaults change.
@@ -104,7 +104,7 @@ The surfaces end up as:
 | macOS Settings window | General tab only: backend, start page, compose mode, downloads folder, auto-open attachments |
 | iOS in-app sheet | Backend, Start page |
 | Safari extension popup | One button: open Custom mode settings in the current tab |
-| The page | All twenty-six Custom mode options, everywhere |
+| The page | All twenty-seven Custom mode options, everywhere |
 
 ## The settings panel
 
@@ -162,7 +162,7 @@ home moves.
 `CustomModeSettings.options` moves into the userscript as a `SETTINGS` array
 beside `DEFAULT_SETTINGS`, one entry per option carrying `key`, `group`,
 `parent`, `clearable`, `multiline`, `title` and `hint`. The default stays in
-`DEFAULT_SETTINGS`, which already holds all twenty-six, so the default is not
+`DEFAULT_SETTINGS`, which already holds all twenty-seven, so the default is not
 written twice. Group titles move with it, as a `SETTING_GROUPS` list in
 display order.
 
