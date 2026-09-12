@@ -1500,6 +1500,34 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
+    /*
+     * The Mailbox store fires on every record change, and that is not only a
+     * label-tree event: it also carries the count updates this file's own
+     * badge code already treats as optimistic and short-lived. Rebuilding
+     * splits invalidates the list proxy and refetches the query, the most
+     * expensive thing available, so this asks first whether the tree the
+     * Labels grouping actually reads has moved, and calls refreshGroupings
+     * only when the signature of what it would build has changed. A grouping
+     * the user wrote reads no label tree, so it needs no mailbox-driven
+     * refresh at all, which the currentGroupingId check gives for free.
+     */
+    let lastLabelGroups = '';
+
+    const refreshLabelGroups = () => {
+        try {
+            if (currentGroupingId() !== LABELS_GROUPING) return;
+            const grouping = labelsGroupingFor(controller().get('mailbox'));
+            const signature = grouping
+                ? grouping.categories.map(one => one.filter.inMailbox + ':' + one.name).join('|')
+                : '';
+            if (signature === lastLabelGroups) return;
+            lastLabelGroups = signature;
+            refreshGroupings();
+        } catch (error) {
+            // A tree that cannot be read is a tree that has not changed
+        }
+    };
+
     // Folded groups, for the mode's own groupings only: mailbox and grouping
     // to the indexes folded under it. Local because the definition is never
     // stored either, so there is nothing on the server for it to hang off.
@@ -5474,7 +5502,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         FastMail.store.on(FastMail.classes.Mailbox, {
             go: () => {
                 forgetLabelCache();
-                refreshGroupings();
+                refreshLabelGroups();
                 scheduleStyles();
                 scheduleBadgeRepaint();
             }
