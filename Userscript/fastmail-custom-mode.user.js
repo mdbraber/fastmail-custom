@@ -1559,31 +1559,41 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         list.collapsedGroupsDidChange = function () {
             rememberFolded(mailbox, definition.id,
                 Array.from(this.collapsedGroups).sort((a, b) => a - b));
+            checkGroupCounts(this);
         };
     };
 
     /*
-     * Counts that outrun the list.
+     * A folded group hiding more than the list actually has.
      *
-     * The list's height is its length less the folded groups' counts, and
-     * those counts are taken as given; the bucket for everything else is the
-     * difference between them, which Fastmail floors at nothing when it
-     * measures the list but not when it counts it. So counts left over from
-     * a longer list make the length negative and the list draws nothing at
-     * all, which is how a label with a grouping on it comes up empty.
-     *
-     * Counts summing above the length are never right, whatever put them
-     * there. Dropped, so the list draws now, ungrouped, rather than not at
-     * all; and the query is refetched so real ones come back.
+     * The list's visible height is its length less the folded groups'
+     * counts, taken as given; that subtraction is not floored the way
+     * Fastmail's own _groupRanges floors the catch-all when it measures the
+     * list. So when folded counts run ahead of the length, the height goes
+     * negative and the list draws nothing at all, which is how a label with
+     * a grouping on it comes up empty. That negative height is the actual
+     * harm, and it can only happen with something folded, so that is what is
+     * guarded rather than the sum on its own: on a mailbox where every
+     * message falls into some group, the counts already sum to exactly the
+     * length, and archiving one message drops the length optimistically
+     * before the counts follow, so the sum runs a message ahead for a moment
+     * on every ordinary triage verb. Guarding the sum would refetch the
+     * whole list on every one of those; guarding the height does not, since
+     * one message can move the height by one but cannot carry it past zero.
      */
     const checkGroupCounts = (list) => {
         try {
             const counts = list.get('groupByCounts');
             const length = list.get('queryLength');
-            if (!counts || typeof length !== 'number') return;
+            const folded = list.collapsedGroups;
+            if (!counts || typeof length !== 'number' || !folded || !folded.size) {
+                list.customCountsDropped = false;
+                return;
+            }
 
-            const total = counts.reduce((sum, one) => sum + (one || 0), 0);
-            if (total <= length) {
+            let hidden = 0;
+            folded.forEach((index) => { hidden += counts[index] || 0; });
+            if (length - hidden >= 0) {
                 list.customCountsDropped = false;
                 return;
             }
@@ -1593,9 +1603,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             if (list.customCountsDropped) return;
             list.customCountsDropped = true;
 
-            reportFault('the group counts had run ahead of the list; refetching');
             if (list.query) list.query.set('groupByCounts', null);
-            list.reset();
+            if (typeof list.reset === 'function') list.reset();
+            else if (list.query && typeof list.query.reset === 'function') list.query.reset();
+            reportFault('the group counts had run ahead of the list; refetching');
         } catch (error) {
             // A list that cannot be asked is a list that cannot be mended
         }
@@ -1606,7 +1617,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      *
      * adoptList returns early when no grouping of the mode's own is in
      * force, but the drift this guards against happens under Fastmail's own
-     * groupings too, so the watch is attached separately and unconditionally.
+     * groupings too, so the watch is attached separately and unconditionally,
+     * unlike adoptList, rather than gated on modeIsOn. With the mode off and
+     * a mode grouping still named in the sort, stock Fastmail draws nothing
+     * for it, so there is no stock behaviour for the mode being off to fall
+     * back to, and the watch has to keep running to catch the same drift.
      */
     const watchGroupCounts = () => {
         const list = controller().get('mailboxMessageList');
