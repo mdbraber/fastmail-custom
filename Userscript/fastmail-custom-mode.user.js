@@ -1217,17 +1217,22 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     /*
      * The settings text, as groupings.
      *
-     * An equals sign makes a line a group, its name before and a Fastmail
-     * search after; a line without one opens a grouping, if none is open, or
-     * names its catch-all otherwise; a blank line closes it. Leading
-     * whitespace is only for the reader and is never read here, because a
-     * block whose lines the user forgot to indent should still parse, and
-     * that matters more than reserving the equals sign out of a grouping's
-     * own name. A block with no groups is dropped, since a grouping that
-     * groups nothing is a menu entry that does nothing, and the first of two
-     * blocks sharing a name wins: a later block with the same name is parsed
-     * and thrown away rather than reopening it, so "split:" and the name
-     * stay one grouping.
+     * A blank line ends a block. Inside one, a line with an equals sign is a
+     * group, its name before and a Fastmail search after; a line without one
+     * names the bucket for everything else, unless it sits at the margin, in
+     * which case it opens the next grouping instead. That last rule is all
+     * the indentation does, and it is there so a second block can follow the
+     * first without a blank line between them. The cost is that a bucket name
+     * written at the margin opens a grouping of its own and is dropped for
+     * having no groups, leaving the default name behind; the gain is that a
+     * block nobody indented still reads as one grouping rather than as
+     * several empty ones, which is the likelier slip by far.
+     *
+     * A block with no groups is dropped, since a grouping that groups nothing
+     * is a menu entry that does nothing. Of two blocks sharing a name the
+     * first wins: the second is parsed into a grouping that is never kept, so
+     * its lines are consumed rather than reopening the first or derailing
+     * everything after it.
      */
     const parseGroupings = (text) => {
         const groupings = [];
