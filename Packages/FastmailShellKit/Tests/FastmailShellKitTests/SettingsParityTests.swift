@@ -73,3 +73,19 @@ private func defaults(inMirror path: String) throws -> [String: CustomModeSettin
         }
     }
 }
+
+// settings.js reads storage into inputs built from DEFAULT_SETTINGS' own
+// keys, one document.getElementById per key; a key with no matching element
+// in settings.html makes that lookup return null and the load path throw,
+// taking the whole options page down rather than just that one field. The
+// two tests above never look at the HTML at all, so this is the only thing
+// that would catch a fourth mirror drifting.
+@Test func settingsHTMLCarriesEveryCatalogueKey() throws {
+    let source = try String(
+        contentsOf: repoRoot.appendingPathComponent("SafariExtension/settings.html"),
+        encoding: .utf8
+    )
+    for option in CustomModeSettings.options {
+        #expect(source.contains("id=\"\(option.key)\""), Comment(rawValue: option.key))
+    }
+}
