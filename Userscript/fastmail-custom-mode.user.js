@@ -6121,6 +6121,282 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * ----------------------------------------------------------------
+     * The settings panel
+     * ----------------------------------------------------------------
+     *
+     * Every Custom mode option, drawn in the page from Fastmail's own view
+     * classes, so one panel serves the Mac app, the phone, the extension and
+     * a plain tab. The native screens keep only what has to be reachable when
+     * no page will load: the backend, the start page and notifications.
+     *
+     * These four are the ones a row cannot be drawn without. They are looked
+     * up once, together, rather than as each is needed: a panel that fails
+     * halfway leaves a modal on screen with nothing in it, and the fallback
+     * has to be chosen before anything is drawn.
+     */
+    const panelClasses = () => {
+        const wanted = ['ModalOverlayView', 'View', 'CheckboxView', 'TextInputView', 'ButtonView'];
+        const found = {};
+        let missing = false;
+
+        wanted.forEach((name) => {
+            const Class = FastMail.classes && FastMail.classes[name];
+            if (typeof Class !== 'function') missing = true;
+            found[name] = Class;
+        });
+
+        return missing ? null : found;
+    };
+
+    // Writing on every keystroke would send one message per character, and
+    // each one comes back through applySettings and rebuilds the grouped
+    // list. Coalesced into one write once typing pauses. The same interval
+    // the extension's own settings page used.
+    const SETTING_WRITE_DELAY = 450;
+
+    const debouncedWrite = () => {
+        let timer = null;
+        return (key, value) => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => { timer = null; writeSetting(key, value); }, SETTING_WRITE_DELAY);
+        };
+    };
+
+    /*
+     * One option, drawn. A toggle is a checkbox carrying its hint as the
+     * description Fastmail already draws under a label; a text option is a
+     * field with the hint beneath it, and the multi-line one gets a textarea.
+     *
+     * A clearable field shows "none" rather than its default as the
+     * placeholder, because for those an empty box is ambiguous: never
+     * touched, or emptied on purpose, and the two mean opposite things.
+     */
+    const settingRow = (classes, option, register) => {
+        const el = FastMail.el;
+        const current = settingValue(option.key);
+
+        if (typeof current === 'boolean') {
+            const box = new classes.CheckboxView({
+                label: option.title,
+                description: option.hint,
+                value: current
+            });
+            box.addObserverForKey('value', {
+                changed: () => {
+                    writeSetting(option.key, box.get('value'));
+                    register.parentChanged(option.key, box.get('value'));
+                }
+            }, 'changed');
+            register.add(option, box);
+            return box;
+        }
+
+        const write = debouncedWrite();
+        const field = new classes.TextInputView({
+            label: option.title,
+            placeholder: option.clearable ? 'none' : String(DEFAULT_SETTINGS[option.key] || ''),
+            value: String(current),
+            isMultiline: !!option.multiline,
+            isExpanding: !!option.multiline
+        });
+        field.addObserverForKey('value', {
+            changed: () => write(option.key, field.get('value'))
+        }, 'changed');
+        register.add(option, field);
+
+        return new classes.View({
+            className: 'u-space-y-1',
+            draw: () => [field, el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint])]
+        });
+    };
+
+    /*
+     * A sub-option only means anything while the option above it is on, so it
+     * follows its parent rather than sitting there looking available. The
+     * rows are built one at a time and a parent may be drawn after its child,
+     * so each row registers itself and the parent's state is applied to the
+     * whole set once, at the end, and again whenever a parent changes.
+     */
+    const settingRegister = () => {
+        const views = {};
+        const register = {
+            add: (option, view) => { views[option.key] = view; },
+            parentChanged: (key, on) => {
+                SETTINGS.forEach((option) => {
+                    if (option.parent !== key || !views[option.key]) return;
+                    views[option.key].set('isDisabled', !on);
+                });
+            },
+            settle: () => {
+                SETTINGS.forEach((option) => {
+                    if (!option.parent || !views[option.key]) return;
+                    views[option.key].set('isDisabled', !settingValue(option.parent));
+                });
+            }
+        };
+        return register;
+    };
+
+    // Wide enough for a hint to read as a sentence, narrow enough to sit in a
+    // laptop window. Below this the two columns become one.
+    const PANEL_WIDTH = 620;
+    const PANEL_STACKS_BELOW = 700;
+
+    let openPanel = null;
+
+    // Replaced in the task that adds the list editors
+    const sectionRow = (classes, option, register) => settingRow(classes, option, register);
+    // Replaced in the task that adds the fallback
+    const openFallbackSettings = () => reportFault('the settings panel is unavailable');
+
+    const settingsPanelView = (classes, register) => {
+        const el = FastMail.el;
+        const stacked = !!(FastMail.isMobile ||
+            (FastMail.root && FastMail.root.get('pxWidth') < PANEL_STACKS_BELOW));
+
+        let chosen = SETTING_GROUPS[0].id;
+
+        const rowsFor = (groupId) => settingsInGroup(groupId)
+            .map(option => sectionRow(classes, option, register));
+
+        const body = new classes.View({
+            className: 'u-flex-1 u-space-y-4 u-overflow-y-auto',
+            draw: () => stacked
+                ? SETTING_GROUPS.reduce((out, group) => out.concat(
+                    [el('h2.u-trim.u-font-bold', [group.title])], rowsFor(group.id)), [])
+                : [el('h2.u-trim.u-font-bold', [titleOf(chosen)])].concat(rowsFor(chosen))
+        });
+
+        const choose = (groupId) => {
+            chosen = groupId;
+            body.viewNeedsRedraw();
+        };
+
+        const sidebar = new classes.View({
+            className: 'u-flex-none u-space-y-1',
+            layout: { width: 170 },
+            draw: () => SETTING_GROUPS.map(group => new classes.ButtonView({
+                type: 'v-Button--subtle v-Button--sizeM',
+                label: group.title,
+                target: { go: () => choose(group.id) },
+                method: 'go'
+            }))
+        });
+
+        return new classes.View({
+            className: 'u-p-8 u-space-y-5',
+            draw: () => [
+                el('h1.u-trim.u-text-2xl.u-font-bold', ['Custom mode']),
+                stacked
+                    ? body
+                    : new classes.View({
+                        className: 'u-flex u-space-x-5',
+                        draw: () => [sidebar, body]
+                    }),
+                new classes.ButtonView({
+                    type: 'v-Button--standard v-Button--sizeM',
+                    label: 'Done',
+                    target: { close: () => closeSettingsPanel() },
+                    method: 'close'
+                })
+            ]
+        });
+    };
+
+    const titleOf = (groupId) =>
+        (SETTING_GROUPS.filter(group => group.id === groupId)[0] || {}).title || '';
+
+    const closeSettingsPanel = () => {
+        if (!openPanel) return;
+        const modal = openPanel;
+        openPanel = null;
+        try {
+            modal.hide();
+            setTimeout(() => { try { modal.destroy(); } catch (error) { /* already gone */ } }, 400);
+        } catch (error) {
+            reportFault('the settings panel would not close');
+        }
+    };
+
+    const openSettingsPanel = () => {
+        if (openPanel) return;
+
+        const classes = panelClasses();
+        if (!classes) {
+            openFallbackSettings();
+            return;
+        }
+
+        try {
+            const register = settingRegister();
+            const view = settingsPanelView(classes, register);
+            const modal = new classes.ModalOverlayView({
+                rootView: FastMail.root,
+                className: 'u-modal',
+                positioning: 'relative',
+                layout: { width: PANEL_WIDTH },
+                view: view
+            });
+            openPanel = modal;
+            modal.show();
+            register.settle();
+        } catch (error) {
+            openPanel = null;
+            reportFault('the settings panel would not open; showing the plain one');
+            openFallbackSettings();
+        }
+    };
+
+    /*
+     * Fastmail's own Settings screen is where someone goes looking, so the
+     * panel is opened from there. The shells add a "Device settings" row to
+     * the same list from harness.js; this one is the userscript's, so it is
+     * there in Safari and in a plain tab too.
+     *
+     * Fastmail redraws that sidebar as sections change, so the row is re-added
+     * whenever the DOM settles rather than once.
+     */
+    const SETTINGS_ROW_CLASS = 'custom-mode-settings-row';
+
+    const dressSettingsList = () => {
+        const swipes = document.querySelector('#v-Settings-swipes, .v-Settings-swipes');
+        const list = swipes && swipes.closest('ul, .u-list-body');
+        if (!list || list.querySelector('.' + SETTINGS_ROW_CLASS)) return;
+
+        const clone = swipes.cloneNode(true);
+        clone.removeAttribute('id');
+        const link = clone.querySelector('a') || clone;
+        link.classList.remove('is-selected');
+        link.classList.add(SETTINGS_ROW_CLASS);
+        link.setAttribute('href', '#');
+        link.removeAttribute('title');
+
+        const label = link.querySelector('span');
+        if (label) label.textContent = 'Custom mode';
+        else link.appendChild(document.createTextNode('Custom mode'));
+
+        link.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openSettingsPanel();
+        });
+
+        list.insertBefore(clone, swipes.nextSibling);
+    };
+
+    const watchSettingsList = () => {
+        let scheduled = false;
+        const run = () => { scheduled = false; dressSettingsList(); };
+        new MutationObserver(() => {
+            if (scheduled) return;
+            scheduled = true;
+            setTimeout(run, 100);
+        }).observe(document.documentElement, { childList: true, subtree: true });
+        run();
+    };
+
+    /*
+     * ----------------------------------------------------------------
      * A way through to the browser's own menu
      * ----------------------------------------------------------------
      */
@@ -6160,6 +6436,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         patchShortcuts();
         updateStyles();
         installAppBadge();
+        watchSettingsList();
 
         // A rotation, a split view or a window dragged narrower all change
         // how many verbs fit on the bar
@@ -6194,6 +6471,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             labelsGrouping: labelsGroupingFor,
             currentGroupingId,
             chooseGrouping,
+            openSettings: openSettingsPanel,
             // Called by the extension when the settings change, so options take
             // effect without a reload
             applySettings: (next) => {
