@@ -1385,6 +1385,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const mailController = controller();
         const sort = mailController.get('sort') || [];
         const sortField = sort[sort.length - 1];
+        if (!sortField) return;
 
         mailController.set('sort',
             id ? [{ property: id, isAscending: false }, sortField] : [sortField]);
@@ -1569,26 +1570,30 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * what was folded here last time.
      */
     const adoptList = () => {
-        const mailController = controller();
-        const list = mailController.get('mailboxMessageList');
-        if (!list || !list.collapsedGroups) return;
+        try {
+            const mailController = controller();
+            const list = mailController.get('mailboxMessageList');
+            if (!list || !list.collapsedGroups) return;
 
-        const definition = modeGroupingIsActive();
-        if (!definition) return;
-        if (list.customFolding === definition.id) return;
-        list.customFolding = definition.id;
+            const definition = modeGroupingIsActive();
+            if (!definition) return;
+            if (list.customFolding === definition.id) return;
+            list.customFolding = definition.id;
 
-        const mailbox = mailController.get('mailbox');
-        const remembered = foldedGroups()[foldKey(mailbox, definition.id)] || [];
+            const mailbox = mailController.get('mailbox');
+            const remembered = foldedGroups()[foldKey(mailbox, definition.id)] || [];
 
-        list.collapsedGroups.clear();
-        remembered.forEach(index => list.collapsedGroups.add(index));
+            list.collapsedGroups.clear();
+            remembered.forEach(index => list.collapsedGroups.add(index));
 
-        list.collapsedGroupsDidChange = function () {
-            rememberFolded(mailbox, definition.id,
-                Array.from(this.collapsedGroups).sort((a, b) => a - b));
-            checkGroupCounts(this);
-        };
+            list.collapsedGroupsDidChange = function () {
+                rememberFolded(mailbox, definition.id,
+                    Array.from(this.collapsedGroups).sort((a, b) => a - b));
+                checkGroupCounts(this);
+            };
+        } catch (error) {
+            reportFault('could not take over the list\'s folding', error);
+        }
     };
 
     /*
@@ -5932,6 +5937,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // The label names may have changed
                 forgetLabelCache();
                 refreshGroupings();
+                scheduleMidnight();
                 // A query per label is worth running only while something
                 // reads it, so turning the setting off stops them
                 if (!settings.filteredLabelCounts) forgetInboxCounts();
