@@ -6154,11 +6154,33 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // the extension's own settings page used.
     const SETTING_WRITE_DELAY = 450;
 
+    /*
+     * The key and value are captured at the moment of the keystroke rather
+     * than re-read from the field later, because flush() runs when the
+     * panel is closing: by then the field it came from may already be
+     * destroyed, and a value read off a destroyed view is not the one that
+     * was typed.
+     */
     const debouncedWrite = () => {
         let timer = null;
-        return (key, value) => {
-            if (timer) clearTimeout(timer);
-            timer = setTimeout(() => { timer = null; writeSetting(key, value); }, SETTING_WRITE_DELAY);
+        let pending = null;
+        const fire = () => {
+            timer = null;
+            const [key, value] = pending;
+            pending = null;
+            writeSetting(key, value);
+        };
+        return {
+            write: (key, value) => {
+                pending = [key, value];
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(fire, SETTING_WRITE_DELAY);
+            },
+            flush: () => {
+                if (!timer) return;
+                clearTimeout(timer);
+                fire();
+            }
         };
     };
 
@@ -6191,7 +6213,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             return box;
         }
 
-        const write = debouncedWrite();
+        const debounced = debouncedWrite();
         const field = new classes.TextInputView({
             label: option.title,
             placeholder: option.clearable ? 'none' : String(DEFAULT_SETTINGS[option.key] || ''),
@@ -6200,9 +6222,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             isExpanding: !!option.multiline
         });
         field.addObserverForKey('value', {
-            changed: () => write(option.key, field.get('value'))
+            changed: () => debounced.write(option.key, field.get('value'))
         }, 'changed');
         register.add(option, field);
+        register.trackFlush(debounced.flush);
 
         return new classes.View({
             className: 'u-space-y-1',
@@ -6215,12 +6238,27 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * follows its parent rather than sitting there looking available. The
      * rows are built one at a time and a parent may be drawn after its child,
      * so each row registers itself and the parent's state is applied to the
-     * whole set once, at the end, and again whenever a parent changes.
+     * whole set once its group has finished drawing.
+     *
+     * Switching groups throws the old rows away and builds fresh ones, so the
+     * register is reset before each build rather than kept: a stale view left
+     * in it belongs to a group no longer on screen, and settling against it
+     * would mean nothing.
+     *
+     * The panel's pending field writes live here too, rather than in a
+     * second object: it is already the one thing threaded through every row
+     * for the life of the open panel, unlike the views map above, which is
+     * thrown away on every redraw while a debounce timer from a group no
+     * longer on screen may still be waiting.
      */
     const settingRegister = () => {
-        const views = {};
+        let views = {};
+        const flushers = [];
         const register = {
             add: (option, view) => { views[option.key] = view; },
+            reset: () => { views = {}; },
+            trackFlush: (flush) => { flushers.push(flush); },
+            flushPending: () => { flushers.forEach((flush) => flush()); },
             parentChanged: (key, on) => {
                 SETTINGS.forEach((option) => {
                     if (option.parent !== key || !views[option.key]) return;
@@ -6242,6 +6280,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const PANEL_WIDTH = 620;
     const PANEL_STACKS_BELOW = 700;
 
+    // { modal, register } while a panel is open, so closeSettingsPanel can
+    // flush pending writes and tear the right modal down; null otherwise.
     let openPanel = null;
 
     // Replaced in the task that adds the list editors
@@ -6259,12 +6299,21 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const rowsFor = (groupId) => settingsInGroup(groupId)
             .map(option => sectionRow(classes, option, register));
 
+        // Every redraw rebuilds its rows from nothing, so the register is
+        // cleared first and settled against whatever it ends up holding:
+        // the only rows left after this are the ones just built, for
+        // whichever group is now on screen.
         const body = new classes.View({
             className: 'u-flex-1 u-space-y-4 u-overflow-y-auto',
-            draw: () => stacked
-                ? SETTING_GROUPS.reduce((out, group) => out.concat(
-                    [el('h2.u-trim.u-font-bold', [group.title])], rowsFor(group.id)), [])
-                : [el('h2.u-trim.u-font-bold', [titleOf(chosen)])].concat(rowsFor(chosen))
+            draw: () => {
+                register.reset();
+                const rows = stacked
+                    ? SETTING_GROUPS.reduce((out, group) => out.concat(
+                        [el('h2.u-trim.u-font-bold', [group.title])], rowsFor(group.id)), [])
+                    : [el('h2.u-trim.u-font-bold', [titleOf(chosen)])].concat(rowsFor(chosen));
+                register.settle();
+                return rows;
+            }
         });
 
         const choose = (groupId) => {
@@ -6308,8 +6357,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const closeSettingsPanel = () => {
         if (!openPanel) return;
-        const modal = openPanel;
+        const { modal, register } = openPanel;
         openPanel = null;
+
+        // Whatever is mid-debounce is spent now, on the key and value it
+        // captured when typed, before the view that supplied them is gone.
+        try {
+            register.flushPending();
+        } catch (error) {
+            reportFault('a setting typed just before closing may not have saved');
+        }
+
         try {
             modal.hide();
             setTimeout(() => { try { modal.destroy(); } catch (error) { /* already gone */ } }, 400);
@@ -6337,11 +6395,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 layout: { width: PANEL_WIDTH },
                 view: view
             });
-            openPanel = modal;
+            // Recorded before show(), not after: anything from here on that
+            // throws has already put something on screen, and
+            // closeSettingsPanel is what knows how to take it back off.
+            openPanel = { modal, register };
             modal.show();
-            register.settle();
         } catch (error) {
-            openPanel = null;
+            closeSettingsPanel();
             reportFault('the settings panel would not open; showing the plain one');
             openFallbackSettings();
         }
@@ -6350,18 +6410,59 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     /*
      * Fastmail's own Settings screen is where someone goes looking, so the
      * panel is opened from there. The shells add a "Device settings" row to
-     * the same list from harness.js; this one is the userscript's, so it is
-     * there in Safari and in a plain tab too.
+     * the same list from harness.js; this one is the userscript's own row,
+     * with its own class and label, so the two can coexist on the phone
+     * without fighting over which is present. Unlike harness.js's row, this
+     * one is not skipped under Electron: harness.js's own settings still
+     * open from the app menu there, but once the native tabs are gone this
+     * panel is the only way into these settings on the Mac too.
      *
-     * Fastmail redraws that sidebar as sections change, so the row is re-added
-     * whenever the DOM settles rather than once.
+     * Found the way harness.js finds it, since Fastmail names this list
+     * nothing more specific than any other source list: every
+     * ul.v-Sources-list is walked, and the one accepted is whichever holds
+     * both a "Custom swipes" row and an "Offline" row, compared with
+     * whitespace collapsed and lower-cased so a stray line break or a
+     * differently-cased label still matches.
      */
     const SETTINGS_ROW_CLASS = 'custom-mode-settings-row';
 
+    const collapseText = (text) => String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+
+    const settingsSourceList = () => {
+        const lists = document.querySelectorAll('ul.v-Sources-list');
+        for (let i = 0; i < lists.length; i += 1) {
+            let swipes = null;
+            let offline = null;
+            Array.prototype.forEach.call(lists[i].children, (li) => {
+                const link = li.querySelector('a.app-source');
+                if (!link) return;
+                const text = collapseText(link.textContent).toLowerCase();
+                if (text === 'custom swipes') swipes = li;
+                if (text === 'offline') offline = li;
+            });
+            if (swipes && offline) return { list: lists[i], swipes, offline };
+        }
+        return null;
+    };
+
+    // Fastmail gives this list an inline pixel height for its collapse
+    // animation, row count times one row's height; an inserted row overflows
+    // that height and the next section's heading laps the last row.
+    const fixListHeight = (list, sample) => {
+        if (!/px\s*$/.test(list.style.height)) return;
+        const rowHeight = sample ? sample.offsetHeight : 0;
+        if (rowHeight > 0) list.style.height = (list.children.length * rowHeight) + 'px';
+    };
+
     const dressSettingsList = () => {
-        const swipes = document.querySelector('#v-Settings-swipes, .v-Settings-swipes');
-        const list = swipes && swipes.closest('ul, .u-list-body');
-        if (!list || list.querySelector('.' + SETTINGS_ROW_CLASS)) return;
+        const found = settingsSourceList();
+        if (!found) return;
+        const { list, swipes, offline } = found;
+
+        if (list.querySelector('.' + SETTINGS_ROW_CLASS)) {
+            fixListHeight(list, swipes);
+            return;
+        }
 
         const clone = swipes.cloneNode(true);
         clone.removeAttribute('id');
@@ -6381,7 +6482,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             openSettingsPanel();
         });
 
-        list.insertBefore(clone, swipes.nextSibling);
+        list.insertBefore(clone, offline);
+        fixListHeight(list, swipes);
     };
 
     const watchSettingsList = () => {
