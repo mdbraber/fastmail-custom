@@ -1217,13 +1217,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     /*
      * The settings text, as groupings.
      *
-     * A line at the margin opens a block and names it; an indented line with
-     * an equals sign is a group, its name before and a Fastmail search after;
-     * an indented line without one names the bucket for the rest; a blank
-     * line ends the block. A block with no groups is dropped, since a
-     * grouping that groups nothing is a menu entry that does nothing, and the
-     * first of two blocks sharing a name wins, so "split:" and the name stay
-     * one grouping.
+     * An equals sign makes a line a group, its name before and a Fastmail
+     * search after; a line without one opens a grouping, if none is open, or
+     * names its catch-all otherwise; a blank line closes it. Leading
+     * whitespace is only for the reader and is never read here, because a
+     * block whose lines the user forgot to indent should still parse, and
+     * that matters more than reserving the equals sign out of a grouping's
+     * own name. A block with no groups is dropped, since a grouping that
+     * groups nothing is a menu entry that does nothing, and the first of two
+     * blocks sharing a name wins: a later block with the same name is parsed
+     * and thrown away rather than reopening it, so "split:" and the name
+     * stay one grouping.
      */
     const parseGroupings = (text) => {
         const groupings = [];
@@ -1242,17 +1246,19 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             const divider = line.indexOf('=');
 
             if (!current || (!indented && divider === -1)) {
+                // A name already taken still opens a scratch grouping, so its
+                // lines are consumed rather than falling through and being
+                // read as the start of a grouping of their own.
+                const id = SPLIT_PREFIX + line;
                 current = {
-                    id: SPLIT_PREFIX + line,
+                    id: id,
                     name: line,
                     categories: [],
                     otherName: OTHER_NAME
                 };
-                if (!taken[current.id]) {
-                    taken[current.id] = true;
+                if (!taken[id]) {
+                    taken[id] = true;
                     groupings.push(current);
-                } else {
-                    current = null;
                 }
                 return;
             }
@@ -1350,10 +1356,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
-    const modeGroupingIsActive = () => {
+    // Whether the mailbox's sort names one of the mode's groupings, whatever
+    // the mode is doing. Asked by the refresh, which has to fire when the
+    // mode goes off as well as on, or the list would keep the grouping it
+    // had until something else recomputed it.
+    const sortNamesModeGrouping = () => {
         const id = currentGroupingId();
-        if (id !== LABELS_GROUPING && id.indexOf(SPLIT_PREFIX) !== 0) return null;
-        return groupingFor(id, controller().get('mailbox'));
+        return id === LABELS_GROUPING || id.indexOf(SPLIT_PREFIX) === 0;
+    };
+
+    const modeGroupingIsActive = () => {
+        if (!modeIsOn || !sortNamesModeGrouping()) return null;
+        return groupingFor(currentGroupingId(), controller().get('mailbox'));
     };
 
     /*
@@ -1403,7 +1417,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const splitsFor = (mailController, original, definition) => {
-        const parsed = definition.categories.every(one => one.filter);
+        const parsed = definition.categories.length > 0 &&
+            definition.categories.every(one => one.filter);
         if (parsed) {
             return {
                 categories: definition.categories,
@@ -1473,7 +1488,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      */
     const refreshGroupings = () => {
         try {
-            if (!modeGroupingIsActive()) return;
+            if (!sortNamesModeGrouping()) return;
             controller().computedPropertyDidChange('splits');
         } catch (error) {
             reportFault('could not refresh the groups', error);
@@ -5240,6 +5255,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // mode changes the answer, so the list has to be asked again
         refreshOwnedConfigs();
         refresh();
+        // The mode going off has to put the list back to ungrouped, and the
+        // mode coming back on has to pick the clock back up if a grouping
+        // is already sitting in the sort.
+        refreshGroupings();
+        scheduleMidnight();
         applyStickyFilter();
     };
 
