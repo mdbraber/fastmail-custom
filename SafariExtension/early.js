@@ -17,6 +17,14 @@ in another tab; is corrected by the payload a moment later. The worst case is
 the flash this exists to remove, which is where we started.
 */
 
+const api = globalThis.browser || globalThis.chrome;
+
+// The page world cannot see this content script, and cannot see extension
+// storage either; but both see the DOM. Stamping the root element at document
+// start is how the settings panel knows there is an extension here to write
+// through, before it has drawn anything.
+document.documentElement.dataset.customModeHost = 'extension';
+
 const EARLY_KEY = 'custom-mode-early';
 const MODE_KEY = 'custom-mode';
 // What it was called before the rename; the page script migrates it, but this
@@ -72,3 +80,32 @@ const shouldHide = storedMode() !== '0' &&
 if (shouldHide) {
     document.documentElement.classList.add(HIDE_CLASS);
 }
+
+/*
+The settings panel runs in the page world, which has no route to extension
+storage. It posts to its own window and this carries the value across.
+
+Any script on this origin could post the same message. The origin is
+Fastmail's own and none of these settings is security-sensitive, so the check
+is that the message came from this window rather than a frame, and that it is
+shaped like ours; nothing stronger is claimed.
+*/
+window.addEventListener('message', (event) => {
+    if (event.source !== window || event.origin !== location.origin) return;
+
+    const message = event.data;
+    if (!message || message.source !== 'custom-mode' || message.kind !== 'setting') return;
+    if (typeof message.key !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(message.key)) return;
+    if (typeof message.value !== 'boolean' && typeof message.value !== 'string') return;
+
+    // Read, merge, write: the settings live as one object, so writing a key
+    // means rewriting the object, and two panels open at once would otherwise
+    // undo each other.
+    api.storage.local.get('settings').then((stored) => {
+        const settings = Object.assign({}, stored.settings || {});
+        settings[message.key] = message.value;
+        return api.storage.local.set({ settings });
+    }).catch((error) => {
+        console.error('Custom mode: could not save a setting', error);
+    });
+});
