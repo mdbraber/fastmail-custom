@@ -116,6 +116,17 @@ public struct WebContainer {
                 UserDefaults.standard.set(names, forKey: IntentSupport.actionNamesKey)
             },
             onOpenSettings: { SettingsPresenter.shared.open() },
+            onSetting: { key, value in
+                UserDefaults.standard.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
+                #if canImport(UIKit)
+                // The home-screen quick actions are built from the badge
+                // label. They are rebuilt when the app comes forward, which
+                // was enough while the label was only editable in the iOS
+                // Settings app; now that it is editable without leaving the
+                // app, they have to be rebuilt here too.
+                if key == "appBadgeLabel" { HomeShortcuts.refresh() }
+                #endif
+            },
             onNotify: { notification in
                 #if os(macOS)
                 NotificationPresenter.shared.show(notification)

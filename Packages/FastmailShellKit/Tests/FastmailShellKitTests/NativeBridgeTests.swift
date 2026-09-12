@@ -252,3 +252,84 @@ actor Recorder {
     #expect(reply.error == nil)
     #expect(received == ["Dinner on Friday", nil])
 }
+
+// MARK: The setting action
+
+private func settingsDefaults(_ name: String) -> UserDefaults {
+    let suite = "NativeBridgeTests.\(name)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    return defaults
+}
+
+@Test @MainActor func settingActionWritesABooleanAndAString() async {
+    let defaults = settingsDefaults(#function)
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onSetting: { key, value in defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key)) }
+    )
+    let first = await bridge.handle(body: [
+        "action": "setting", "payload": ["key": "labelColours", "value": false],
+    ])
+    let second = await bridge.handle(body: [
+        "action": "setting", "payload": ["key": "triageLabel", "value": "Todo"],
+    ])
+    #expect(first.error == nil)
+    #expect(second.error == nil)
+    #expect(defaults.object(forKey: "customMode.labelColours") as? Bool == false)
+    #expect(defaults.string(forKey: "customMode.triageLabel") == "Todo")
+}
+
+// The prefix is the whole guard: whatever the page sends lands under
+// customMode., a namespace nothing else uses, so a key that happens to spell
+// a shell setting writes a Custom mode one and leaves the shell alone.
+@Test @MainActor func settingActionCannotReachAShellSetting() async {
+    let defaults = settingsDefaults(#function)
+    defaults.set("production", forKey: Backend.defaultsKey)
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onSetting: { key, value in defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key)) }
+    )
+    let reply = await bridge.handle(body: [
+        "action": "setting", "payload": ["key": "backend", "value": "beta"],
+    ])
+    #expect(reply.error == nil)
+    #expect(defaults.string(forKey: Backend.defaultsKey) == "production")
+    #expect(defaults.string(forKey: "customMode.backend") == "beta")
+}
+
+// A dot would let a key path out of the namespace, so it is refused before
+// anything is written; so is anything else that is not letters and digits.
+@Test @MainActor func settingActionRefusesAKeyThatIsNotPlain() async {
+    var written: [String] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onSetting: { key, _ in written.append(key) }
+    )
+    for key in ["push.alerts", "1st", "has space", "has-hyphen", "", "customMode.triageLabel"] {
+        let reply = await bridge.handle(body: [
+            "action": "setting", "payload": ["key": key, "value": "x"],
+        ])
+        #expect(reply.error != nil, "\(key) should be refused")
+    }
+    #expect(written.isEmpty)
+}
+
+// JavaScript's 1 and true both cross the bridge as an NSNumber, and a number
+// stored where a flag belongs reads back as true. Only a real boolean counts.
+@Test @MainActor func settingActionRefusesAValueThatIsNeitherFlagNorText() async {
+    var written: [String] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onSetting: { key, _ in written.append(key) }
+    )
+    for value in [1, 0, 2.5, ["a"], [:] as [String: String]] as [Any] {
+        let reply = await bridge.handle(body: [
+            "action": "setting", "payload": ["key": "labelColours", "value": value],
+        ])
+        #expect(reply.error != nil)
+    }
+    let missing = await bridge.handle(body: ["action": "setting", "payload": ["key": "labelColours"]])
+    #expect(missing.error != nil)
+    #expect(written.isEmpty)
+}

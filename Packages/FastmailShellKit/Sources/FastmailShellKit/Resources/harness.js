@@ -773,6 +773,13 @@
         return Promise.resolve(badgeCount());
     };
 
+    // A Custom mode setting the page's own settings panel has changed. The
+    // key is bare: the shell owns the namespace it is stored under, so the
+    // page cannot name anything outside it.
+    window.native.setSetting = function (key, value) {
+        return post('setting', { key: key, value: value });
+    };
+
     /*
      * Open Fastmail's search, for the home screen shortcut.
      *

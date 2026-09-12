@@ -141,6 +141,25 @@ public enum CustomModeSettings {
         }
     }
 
+    /// Where every Custom mode setting lives in UserDefaults. Prefixed so the
+    /// shell's own keys (backend, startView, push.alerts) and the page's
+    /// cannot collide, and so the page can be given the whole namespace
+    /// without being given anything else.
+    public static let keyPrefix = "customMode."
+
+    public static func defaultsKey(for key: String) -> String { keyPrefix + key }
+
+    /// A key the page is allowed to write. Letters and digits only, starting
+    /// with a letter. Swift keeps no list of the options — the userscript's
+    /// catalogue is canonical — so the namespace is the guard: a key that
+    /// passes this can only ever name something under `customMode.`, and a
+    /// dot, which is the only way to climb out of a key path, is not in the
+    /// pattern.
+    public static func isWritableSettingKey(_ key: String) -> Bool {
+        guard let first = key.first, first.isASCII, first.isLetter else { return false }
+        return key.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+    }
+
     // Grouped in display order. The group decides where a setting is shown, a
     // macOS tab, a phone section, an iOS Settings.bundle header; while the
     // key, default and copy stay exactly as the userscript and the parity

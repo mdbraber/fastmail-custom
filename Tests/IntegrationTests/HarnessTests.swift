@@ -799,4 +799,15 @@ final class HarnessTests: XCTestCase {
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(composeAsks(), [])
     }
+
+    func testSetSettingReachesTheBridge() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, "window.native.setSetting('triageLabel', 'Todo'); true;")
+        try await waitUntil { self.received.contains { $0["action"] as? String == "setting" } }
+        let message = try XCTUnwrap(received.first { $0["action"] as? String == "setting" })
+        let payload = try XCTUnwrap(message["payload"] as? [String: Any])
+        XCTAssertEqual(payload["key"] as? String, "triageLabel")
+        XCTAssertEqual(payload["value"] as? String, "Todo")
+    }
 }

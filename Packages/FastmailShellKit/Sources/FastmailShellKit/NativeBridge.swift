@@ -17,6 +17,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onBadge: @MainActor (Int) -> Void
     private let onActions: @MainActor ([String]) -> Void
     private let onOpenSettings: @MainActor () -> Void
+    /// A Custom mode setting the page has changed. The key is bare; the
+    /// caller adds the namespace.
+    private let onSetting: @MainActor (String, Any) -> Void
     private let onNotify: @MainActor (MailNotification) -> Void
     private let onDismissNotifications: @MainActor ([String]) -> Void
     private let onShowWindow: @MainActor () -> Void
@@ -36,6 +39,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onBadge: @escaping @MainActor (Int) -> Void = { _ in },
         onActions: @escaping @MainActor ([String]) -> Void = { _ in },
         onOpenSettings: @escaping @MainActor () -> Void = {},
+        onSetting: @escaping @MainActor (String, Any) -> Void = { _, _ in },
         onNotify: @escaping @MainActor (MailNotification) -> Void = { _ in },
         onDismissNotifications: @escaping @MainActor ([String]) -> Void = { _ in },
         onShowWindow: @escaping @MainActor () -> Void = {},
@@ -51,6 +55,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onBadge = onBadge
         self.onActions = onActions
         self.onOpenSettings = onOpenSettings
+        self.onSetting = onSetting
         self.onNotify = onNotify
         self.onDismissNotifications = onDismissNotifications
         self.onShowWindow = onShowWindow
@@ -124,6 +129,28 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             return BridgeReply(value: nil, error: nil)
         case "openSettings":
             onOpenSettings()
+            return BridgeReply(value: nil, error: nil)
+        case "setting":
+            guard
+                let key = payload["key"] as? String,
+                CustomModeSettings.isWritableSettingKey(key)
+            else {
+                return BridgeReply(value: nil, error: "setting payload has no usable key")
+            }
+            // A JavaScript true and a JavaScript 1 both arrive as NSNumber,
+            // and `as? Bool` accepts either; a count stored where a flag
+            // belongs would then read back as true forever. Ask CoreFoundation
+            // which one it really is.
+            let value: Any
+            if let number = payload["value"] as? NSNumber,
+               CFGetTypeID(number as CFTypeRef) == CFBooleanGetTypeID() {
+                value = number.boolValue
+            } else if let text = payload["value"] as? String {
+                value = text
+            } else {
+                return BridgeReply(value: nil, error: "setting value must be a boolean or a string")
+            }
+            onSetting(key, value)
             return BridgeReply(value: nil, error: nil)
         case "subject":
             let subject = payload["title"] as? String
