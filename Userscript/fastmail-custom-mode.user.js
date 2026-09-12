@@ -6284,8 +6284,364 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // flush pending writes and tear the right modal down; null otherwise.
     let openPanel = null;
 
-    // Replaced in the task that adds the list editors
-    const sectionRow = (classes, option, register) => settingRow(classes, option, register);
+    /*
+     * A list you can put in order. Fastmail's own splits editor already has
+     * one — SplitConditionItemView carries the whole drag protocol, mouse and
+     * touch — so a row here is one of those, drawing our parts where it would
+     * draw a search.
+     *
+     * If that row cannot be made, the rows still list and still reorder,
+     * with a pair of buttons each. The dragging rows carry the same buttons,
+     * because there is no keyboard path to a drag.
+     */
+
+    // An icon-only button draws its label into a span the app's own stylesheet
+    // gives no height and no opacity, so one handed no icon is a blank box
+    // thirty-six pixels wide. These are the chevrons the app draws elsewhere,
+    // so the two moves look like the rest of the page rather than like text.
+    const MOVE_SHAPES = {
+        up: [['polyline', { points: '6.25 14.88 12 9.13 17.75 14.88' }]],
+        down: [['polyline', { points: '17.75 9.13 12 14.88 6.25 9.13' }]]
+    };
+
+    // The height Fastmail's own editor gives these rows. A dragging list puts
+    // each row at its index times this, so no row may grow past it, and the
+    // label is truncated rather than left to wrap onto a second line. Nor may
+    // a row fall short of it: the rows sit apart by this pitch whatever their
+    // own height, so the label is given a button's height to fill it out,
+    // where Fastmail's own row gets there with its taller menu button.
+    const REORDER_ROW_HEIGHT = 49;
+
+    const reorderRowParts = (classes, item, move, draggable) => {
+        const el = FastMail.el;
+        const parts = [];
+        // Fastmail's own grip, so that a row that drags looks like one.
+        if (draggable) {
+            parts.push(el('div.u-flex-none.u-select-none',
+                { style: 'margin-top:-6px;cursor: grab' }, ['⣶']));
+        }
+        parts.push(el('div.u-flex-1.u-truncate', { style: 'line-height:32px' }, [item.label]));
+        parts.push(new classes.ButtonView({
+            type: 'v-Button--subtle v-Button--sizeM v-Button--iconOnly',
+            label: 'Move up',
+            icon: standardIcon('i-chevronup', MOVE_SHAPES.up),
+            target: { go: () => move(item.id, -1) }, method: 'go'
+        }));
+        parts.push(new classes.ButtonView({
+            type: 'v-Button--subtle v-Button--sizeM v-Button--iconOnly',
+            label: 'Move down',
+            icon: standardIcon('i-chevrondown', MOVE_SHAPES.down),
+            target: { go: () => move(item.id, 1) }, method: 'go'
+        }));
+        if (item.edit) parts.push(new classes.ButtonView({
+            type: 'v-Button--subtle v-Button--sizeM',
+            label: 'Edit', target: { go: item.edit }, method: 'go'
+        }));
+        if (item.remove) parts.push(new classes.ButtonView({
+            type: 'v-Button--subtle v-Button--sizeM',
+            label: 'Remove', target: { go: item.remove }, method: 'go'
+        }));
+        return parts;
+    };
+
+    /*
+     * The dragging list, assembled the way Fastmail assembles its own, and
+     * every piece of it is something the row demands rather than a choice.
+     * The row finds where it sits by asking its parent for an index's offset,
+     * which only a ListView with a fixed item height answers. It reads the
+     * scroll position of the nearest ScrollView above it, and throws on the
+     * first drag when there is none. And it reorders by writing sortOrder on
+     * the objects it shows, so those must be observable, and the collection
+     * holding them must then be sorted by it again.
+     *
+     * Not a subclass: the helper Fastmail builds its classes with is private
+     * to its bundle. Each row is a SplitConditionItemView handed its own
+     * draw, setIndex and dragEnded, which take precedence over the ones it
+     * inherits.
+     *
+     * The collection is sorted once setIndex has returned, never from inside
+     * it. When two neighbours' sortOrders sit too close, setIndex renumbers
+     * the whole list in one pass by position, and a collection that re-sorted
+     * on each of those writes moved rows under that pass: a drag across four
+     * rows or more landed them in an order nobody chose.
+     *
+     * The setting is written once a drag is over, and a tick after that. The
+     * write redraws this whole list, and a row destroyed inside its own
+     * dragEnded is destroyed under a drag that has not finished with it.
+     */
+    const reorderDragList = (classes, items, move, onOrder) => {
+        const found = FastMail.classes || {};
+        const Row = found.SplitConditionItemView;
+        const List = found.ListView;
+        const Scroll = found.ScrollView;
+        const Collection = found.ObservableArray;
+        if ([Row, List, Scroll, Collection].some(Class => typeof Class !== 'function')) return null;
+
+        // Overture's own observable object. The class list leaves it out, but
+        // every collection in it descends from it.
+        const base = Object.getPrototypeOf(Collection.prototype);
+        const Observable = base && base.constructor;
+        if (typeof Observable !== 'function') return null;
+
+        try {
+            const byId = {};
+            items.forEach((item) => { byId[item.id] = item; });
+
+            const records = items.map((item, at) => new Observable({ id: item.id, sortOrder: at }));
+            const content = new Collection(records.slice());
+
+            const RowView = function (properties) {
+                return new Row(Object.assign({}, properties, {
+                    draw: function () {
+                        return reorderRowParts(classes, byId[this.get('content').get('id')], move, true);
+                    },
+                    setIndex: function (to, from) {
+                        Row.prototype.setIndex.call(this, to, from);
+                        content.sort((one, other) => one.get('sortOrder') - other.get('sortOrder'));
+                    },
+                    dragEnded: function (drag) {
+                        Row.prototype.dragEnded.call(this, drag);
+                        const after = content.map(record => record.get('id'));
+                        if (after.some((id, at) => id !== items[at].id)) {
+                            setTimeout(() => onOrder(after), 0);
+                        }
+                    }
+                }));
+            };
+
+            const list = new List({
+                content: content,
+                layerTag: 'ul',
+                className: 'u-list-body u-list-body--borders',
+                ItemView: RowView,
+                itemHeight: REORDER_ROW_HEIGHT
+            });
+
+            return new Scroll({
+                positioning: 'relative',
+                layout: { height: items.length * REORDER_ROW_HEIGHT },
+                childViews: [list]
+            });
+        } catch (error) {
+            reportFault('could not build a list that drags; the buttons still reorder it', error);
+            return null;
+        }
+    };
+
+    const reorderList = (classes, items, onOrder) => {
+        const order = items.map(item => item.id);
+
+        const move = (id, by) => {
+            const at = order.indexOf(id);
+            const to = at + by;
+            if (at === -1 || to < 0 || to >= order.length) return;
+            order.splice(to, 0, order.splice(at, 1)[0]);
+            onOrder(order.slice());
+        };
+
+        const dragging = reorderDragList(classes, items, move, onOrder);
+        if (dragging) return dragging;
+
+        return new classes.View({
+            className: 'u-list-body u-list-body--borders',
+            draw: () => items.map(item => new classes.View({
+                className: 'u-list-item u-flex u-items-center u-space-x-2',
+                draw: () => reorderRowParts(classes, item, move, false)
+            }))
+        });
+    };
+
+    /*
+     * Your groupings, as a list rather than as text. Opening one raises
+     * Fastmail's own splits editor, seeded with that grouping instead of a
+     * mailbox's: a stand-in controller answers sortSource with an object
+     * holding our categories, and catches the save.
+     *
+     * Nothing here touches a Mailbox record. Fastmail's own Custom… dialog
+     * still edits the real per-mailbox splits, and still works.
+     */
+    const groupingStandIn = (grouping, keep) => {
+        const source = {
+            get: (key) => {
+                if (key === 'splits') {
+                    return { categories: grouping.categories, otherName: grouping.otherName };
+                }
+                return key === 'name' ? grouping.name : null;
+            },
+            set: (key, value) => {
+                if (key === 'splits' && value) keep(value);
+                return source;
+            }
+        };
+        const controller = {
+            get: (key) => (key === 'sortSource' ? source : null),
+            set: () => controller,
+            computedPropertyDidChange: () => controller
+        };
+        return controller;
+    };
+
+    /*
+     * Shown the way Fastmail shows this editor from its own Custom… entry,
+     * as read from its bundle: the editor inside a ScrollView that carries
+     * the modal's look, and an overlay around that which passes keys on.
+     * Both parts matter. Without the ScrollView the editor's own rows throw
+     * on the first drag, since each reads the scroll position of the nearest
+     * one above it; without keyOutside, Escape and Enter never reach the
+     * editor's Cancel and Save.
+     */
+    const editGrouping = (classes, grouping, done) => {
+        const found = FastMail.classes || {};
+        const Editor = found.GroupSettingsView;
+        const Scroll = found.ScrollView;
+        if (typeof Editor !== 'function' || typeof Scroll !== 'function') {
+            reportFault('Fastmail’s groupings editor is not available; edit the text instead');
+            return;
+        }
+
+        let saved = null;
+        const controller = groupingStandIn(grouping, (value) => { saved = value; });
+        const view = new Editor({ controller: controller });
+        const frame = new Scroll({
+            className: 'u-modal',
+            positioning: 'relative',
+            layout: { width: 580 },
+            childViews: [view]
+        });
+        const modal = new classes.ModalOverlayView({
+            rootView: FastMail.root,
+            view: frame,
+            keyOutside: (event) => {
+                if (event.type !== 'keydown') return;
+                view.keyOutside(event);
+                event.stopPropagation();
+            }
+        });
+
+        // The editor's own Cancel and Save both fire modal:hide; Save has
+        // already handed us the value by then.
+        view.on('modal:hide', { close: () => modal.hide() }, 'close');
+
+        // show() settles once the overlay has been hidden, and that is when
+        // Fastmail takes its own apart: the frame out of the overlay first,
+        // since a view still in the document cannot be destroyed.
+        modal.show().then(() => {
+            try {
+                frame.detach();
+                modal.destroy();
+                frame.destroy();
+            } catch (error) {
+                reportFault('the groupings editor did not close cleanly', error);
+            }
+            if (saved) done(saved);
+        });
+    };
+
+    const groupingsSection = (classes, register) => {
+        const el = FastMail.el;
+        const option = settingFor('groupings');
+        let showText = false;
+
+        const holder = new classes.View({
+            className: 'u-space-y-3',
+            draw: () => {
+                const groupings = parseGroupings(settingValue('groupings'));
+
+                const save = (next) => {
+                    writeSetting('groupings', formatGroupings(next));
+                    holder.viewNeedsRedraw();
+                };
+
+                const items = groupings.map((one, index) => ({
+                    id: one.name,
+                    label: one.name + ' — ' + one.categories.length +
+                        (one.categories.length === 1 ? ' group' : ' groups'),
+                    edit: () => editGrouping(classes, one, (value) => {
+                        const next = groupings.slice();
+                        next[index] = {
+                            id: one.id, name: one.name,
+                            categories: value.categories, otherName: value.otherName || OTHER_NAME
+                        };
+                        save(next);
+                    }),
+                    remove: () => save(groupings.filter((other, at) => at !== index))
+                }));
+
+                const list = reorderList(classes, items, (order) => {
+                    save(order.map(name => groupings.filter(one => one.name === name)[0]));
+                });
+
+                const add = new classes.ButtonView({
+                    type: 'v-Button--standard v-Button--sizeM',
+                    label: 'Add a grouping',
+                    target: { go: () => save(groupings.concat([{
+                        id: SPLIT_PREFIX + 'New grouping', name: 'New grouping',
+                        categories: [{ name: 'Pinned', query: 'is:pinned' }],
+                        otherName: OTHER_NAME
+                    }])) },
+                    method: 'go'
+                });
+
+                const toggle = new classes.ButtonView({
+                    type: 'v-Button--subtle v-Button--sizeM',
+                    label: showText ? 'Hide the text' : 'Edit as text',
+                    target: { go: () => { showText = !showText; holder.viewNeedsRedraw(); } },
+                    method: 'go'
+                });
+
+                const parts = [
+                    el('h3.u-trim.u-font-bold', [option.title]),
+                    list, add, toggle
+                ];
+                if (showText) parts.push(settingRow(classes, option, register));
+                parts.push(el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint]));
+                return parts;
+            }
+        });
+
+        return holder;
+    };
+
+    /*
+     * The bar's verbs, in the order the bar takes them. orderedSlots already
+     * turns the setting into a complete list — it lowercases, renames the old
+     * "file" to "keep", drops what it does not know and appends what the
+     * saved value failed to mention — so nothing new is needed to read it.
+     */
+    const barSlotsSection = (classes) => {
+        const el = FastMail.el;
+        const option = settingFor('bottomBarSlots');
+
+        const holder = new classes.View({
+            className: 'u-space-y-3',
+            draw: () => {
+                const names = orderedSlots();
+                const pretty = (name) => name.charAt(0).toUpperCase() + name.slice(1);
+                const items = names.map(name => ({
+                    id: name, label: pretty(name), edit: null, remove: null
+                }));
+                const list = reorderList(classes, items, (order) => {
+                    writeSetting('bottomBarSlots', order.map(pretty).join(', '));
+                    holder.viewNeedsRedraw();
+                });
+                return [
+                    el('h3.u-trim.u-font-bold', [option.title]),
+                    list,
+                    el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint])
+                ];
+            }
+        });
+
+        return holder;
+    };
+
+    // Two options are lists rather than fields; everything else is a row.
+    const sectionRow = (classes, option, register) => {
+        if (option.key === 'groupings') return groupingsSection(classes, register);
+        if (option.key === 'bottomBarSlots') return barSlotsSection(classes);
+        return settingRow(classes, option, register);
+    };
+
     // Replaced in the task that adds the fallback
     const openFallbackSettings = () => reportFault('the settings panel is unavailable');
 
