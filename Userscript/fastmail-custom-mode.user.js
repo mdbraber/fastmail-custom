@@ -6129,13 +6129,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * a plain tab. The native screens keep only what has to be reachable when
      * no page will load: the backend, the start page and notifications.
      *
-     * These four are the ones a row cannot be drawn without. They are looked
-     * up once, together, rather than as each is needed: a panel that fails
-     * halfway leaves a modal on screen with nothing in it, and the fallback
-     * has to be chosen before anything is drawn.
+     * These are the classes a row, and the frame it scrolls in, cannot be
+     * drawn without. They are looked up once, together, rather than as each
+     * is needed: a panel that fails halfway leaves a modal on screen with
+     * nothing in it, and the fallback has to be chosen before anything is
+     * drawn.
      */
     const panelClasses = () => {
-        const wanted = ['ModalOverlayView', 'View', 'CheckboxView', 'TextInputView', 'ButtonView'];
+        const wanted = ['ModalOverlayView', 'ScrollView', 'View', 'CheckboxView', 'TextInputView', 'ButtonView'];
         const found = {};
         let missing = false;
 
@@ -6482,30 +6483,25 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * Shown the way Fastmail shows this editor from its own Custom… entry,
-     * as read from its bundle: the editor inside a ScrollView that carries
-     * the modal's look, and an overlay around that which passes keys on.
-     * Both parts matter. Without the ScrollView the editor's own rows throw
-     * on the first drag, since each reads the scroll position of the nearest
-     * one above it; without keyOutside, Escape and Enter never reach the
-     * editor's Cancel and Save.
+     * A dialog put together the way Fastmail puts its own together, as read
+     * from its bundle: the view inside a ScrollView that carries the modal's
+     * look, and that inside an overlay which passes keys on. Every part does
+     * something. The overlay centres what it holds only while its own classes
+     * are left alone. The frame is what scrolls a view taller than the window.
+     * A row that drags reads the scroll position of the nearest ScrollView
+     * above it, and throws when there is none. And a key pressed while nothing
+     * in the dialog has focus reaches it only through keyOutside.
+     *
+     * takeApart is for after the overlay has been hidden, and keeps Fastmail's
+     * order: the frame comes out of the overlay first, because a view still in
+     * the document cannot be destroyed, and because the overlay would destroy
+     * the frame along with itself.
      */
-    const editGrouping = (classes, grouping, done) => {
-        const found = FastMail.classes || {};
-        const Editor = found.GroupSettingsView;
-        const Scroll = found.ScrollView;
-        if (typeof Editor !== 'function' || typeof Scroll !== 'function') {
-            reportFault('Fastmail’s groupings editor is not available; edit the text instead');
-            return;
-        }
-
-        let saved = null;
-        const controller = groupingStandIn(grouping, (value) => { saved = value; });
-        const view = new Editor({ controller: controller });
-        const frame = new Scroll({
+    const framedModal = (classes, view, width, keydown) => {
+        const frame = new classes.ScrollView({
             className: 'u-modal',
             positioning: 'relative',
-            layout: { width: 580 },
+            layout: { width: width },
             childViews: [view]
         });
         const modal = new classes.ModalOverlayView({
@@ -6513,85 +6509,187 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             view: frame,
             keyOutside: (event) => {
                 if (event.type !== 'keydown') return;
-                view.keyOutside(event);
+                keydown(event);
                 event.stopPropagation();
             }
         });
-
-        // The editor's own Cancel and Save both fire modal:hide; Save has
-        // already handed us the value by then.
-        view.on('modal:hide', { close: () => modal.hide() }, 'close');
-
-        // show() settles once the overlay has been hidden, and that is when
-        // Fastmail takes its own apart: the frame out of the overlay first,
-        // since a view still in the document cannot be destroyed.
-        modal.show().then(() => {
+        const takeApart = () => {
             try {
                 frame.detach();
                 modal.destroy();
                 frame.destroy();
             } catch (error) {
-                reportFault('the groupings editor did not close cleanly', error);
+                reportFault('a dialog did not close cleanly', error);
             }
+        };
+        return { frame, modal, takeApart };
+    };
+
+    // Fastmail's own editor, in the frame its own Custom… entry uses: its
+    // condition rows drag only inside a ScrollView, and its Escape and Enter
+    // are answered by its own keyOutside.
+    const editGrouping = (classes, grouping, done) => {
+        const Editor = FastMail.classes && FastMail.classes.GroupSettingsView;
+        if (typeof Editor !== 'function') {
+            reportFault('Fastmail’s groupings editor is not available; edit the text instead');
+            return;
+        }
+
+        let saved = null;
+        const controller = groupingStandIn(grouping, (value) => { saved = value; });
+        const view = new Editor({ controller: controller });
+        const dialog = framedModal(classes, view, 580, event => view.keyOutside(event));
+
+        // The editor's own Cancel and Save both fire modal:hide; Save has
+        // already handed us the value by then.
+        view.on('modal:hide', { close: () => dialog.modal.hide() }, 'close');
+
+        // show() settles once the overlay has been hidden.
+        dialog.modal.show().then(() => {
+            dialog.takeApart();
             if (saved) done(saved);
         });
     };
 
+    /*
+     * An order taken from a list as it was drawn, laid over the names as they
+     * are now. The names the drawn order holds go where it puts them. A name
+     * it does not hold arrived since the list was drawn, and follows the rest
+     * in the order it already had. A name only the drawn order holds has gone
+     * since, and stays gone.
+     */
+    const mergeOrder = (names, order) => {
+        const rank = new Map();
+        order.forEach((name, at) => { if (!rank.has(name)) rank.set(name, at); });
+        return names.filter(name => rank.has(name))
+            .sort((one, other) => rank.get(one) - rank.get(other))
+            .concat(names.filter(name => !rank.has(name)));
+    };
+
+    const NEW_GROUPING_NAME = 'New grouping';
+
+    /*
+     * Nothing here writes from the groupings as they were when the list was
+     * drawn. The text field below saves the setting without redrawing the
+     * list, and the host can push a new value in while the panel is open, so
+     * a list drawn a minute ago may show groupings since typed away and miss
+     * ones since typed in; a write made from that picture puts it back.
+     *
+     * So each action first saves whatever a field still has waiting, then
+     * parses the setting afresh, finds its grouping by name rather than by a
+     * position that may have moved, and writes from that. The list redraws
+     * after it writes, but not while someone types, since a redraw throws the
+     * field away under the cursor; a label that lags the text costs nothing
+     * now that no action reads one.
+     */
     const groupingsSection = (classes, register) => {
         const el = FastMail.el;
         const option = settingFor('groupings');
         let showText = false;
 
+        const current = () => {
+            register.flushPending();
+            return parseGroupings(settingValue('groupings'));
+        };
+        const named = (groupings, name) => groupings.filter(one => one.name === name)[0] || null;
+
+        const redraw = () => holder.viewNeedsRedraw();
+        const save = (next) => {
+            writeSetting('groupings', formatGroupings(next));
+            redraw();
+        };
+
+        const reorder = (order) => {
+            const now = current();
+            save(mergeOrder(now.map(one => one.name), order).map(name => named(now, name)));
+        };
+
+        const remove = (name) => {
+            const now = current();
+            if (!named(now, name)) {
+                redraw();
+                return;
+            }
+            save(now.filter(one => one.name !== name));
+        };
+
+        // The editor is seeded with the grouping as it stands at the press,
+        // and its save is laid over the setting as it stands at the save. A
+        // grouping renamed or deleted in between is not brought back.
+        const edit = (name) => {
+            const seed = named(current(), name);
+            if (!seed) {
+                redraw();
+                return;
+            }
+            editGrouping(classes, seed, (value) => {
+                const now = current();
+                const at = now.map(one => one.name).indexOf(name);
+                if (at === -1) {
+                    reportFault('“' + name + '” is no longer in your groupings, so its edit was not saved');
+                    redraw();
+                    return;
+                }
+                now[at] = {
+                    id: now[at].id, name: name,
+                    categories: value.categories, otherName: value.otherName || OTHER_NAME
+                };
+                save(now);
+            });
+        };
+
+        // A name no grouping has yet: of two groupings sharing a name the
+        // parser keeps the first and drops the second without a word, so a
+        // second Add under the same name would add nothing.
+        const add = () => {
+            const now = current();
+            let name = NEW_GROUPING_NAME;
+            for (let count = 2; named(now, name); count += 1) name = NEW_GROUPING_NAME + ' ' + count;
+            save(now.concat([{
+                id: SPLIT_PREFIX + name, name: name,
+                categories: [{ name: 'Pinned', query: 'is:pinned' }],
+                otherName: OTHER_NAME
+            }]));
+        };
+
         const holder = new classes.View({
             className: 'u-space-y-3',
             draw: () => {
+                // Drawn from, and never written from.
                 const groupings = parseGroupings(settingValue('groupings'));
 
-                const save = (next) => {
-                    writeSetting('groupings', formatGroupings(next));
-                    holder.viewNeedsRedraw();
-                };
-
-                const items = groupings.map((one, index) => ({
+                const items = groupings.map(one => ({
                     id: one.name,
                     label: one.name + ' — ' + one.categories.length +
                         (one.categories.length === 1 ? ' group' : ' groups'),
-                    edit: () => editGrouping(classes, one, (value) => {
-                        const next = groupings.slice();
-                        next[index] = {
-                            id: one.id, name: one.name,
-                            categories: value.categories, otherName: value.otherName || OTHER_NAME
-                        };
-                        save(next);
-                    }),
-                    remove: () => save(groupings.filter((other, at) => at !== index))
+                    edit: () => edit(one.name),
+                    remove: () => remove(one.name)
                 }));
 
-                const list = reorderList(classes, items, (order) => {
-                    save(order.map(name => groupings.filter(one => one.name === name)[0]));
-                });
+                const list = reorderList(classes, items, reorder);
 
-                const add = new classes.ButtonView({
+                const addButton = new classes.ButtonView({
                     type: 'v-Button--standard v-Button--sizeM',
                     label: 'Add a grouping',
-                    target: { go: () => save(groupings.concat([{
-                        id: SPLIT_PREFIX + 'New grouping', name: 'New grouping',
-                        categories: [{ name: 'Pinned', query: 'is:pinned' }],
-                        otherName: OTHER_NAME
-                    }])) },
+                    target: { go: add },
                     method: 'go'
                 });
 
+                // Saved before it goes, so the list it leaves behind is current.
                 const toggle = new classes.ButtonView({
                     type: 'v-Button--subtle v-Button--sizeM',
                     label: showText ? 'Hide the text' : 'Edit as text',
-                    target: { go: () => { showText = !showText; holder.viewNeedsRedraw(); } },
+                    target: { go: () => {
+                        register.flushPending();
+                        showText = !showText;
+                        redraw();
+                    } },
                     method: 'go'
                 });
 
                 const parts = [
                     el('h3.u-trim.u-font-bold', [option.title]),
-                    list, add, toggle
+                    list, addButton, toggle
                 ];
                 if (showText) parts.push(settingRow(classes, option, register));
                 parts.push(el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint]));
@@ -6620,8 +6718,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 const items = names.map(name => ({
                     id: name, label: pretty(name), edit: null, remove: null
                 }));
+                // Laid over the order as it is at the press, not as drawn: the
+                // host can push a new one in while the panel is open.
                 const list = reorderList(classes, items, (order) => {
-                    writeSetting('bottomBarSlots', order.map(pretty).join(', '));
+                    writeSetting('bottomBarSlots',
+                        mergeOrder(orderedSlots(), order).map(pretty).join(', '));
                     holder.viewNeedsRedraw();
                 });
                 return [
@@ -6724,9 +6825,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             reportFault('a setting typed just before closing may not have saved');
         }
 
+        // Hiding is all: the promise openSettingsPanel took from show()
+        // settles on it, and takes the panel apart from there.
         try {
             modal.hide();
-            setTimeout(() => { try { modal.destroy(); } catch (error) { /* already gone */ } }, 400);
         } catch (error) {
             reportFault('the settings panel would not close');
         }
@@ -6741,23 +6843,21 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             return;
         }
 
+        let dialog = null;
         try {
             const register = settingRegister();
-            const view = settingsPanelView(classes, register);
-            const modal = new classes.ModalOverlayView({
-                rootView: FastMail.root,
-                className: 'u-modal',
-                positioning: 'relative',
-                layout: { width: PANEL_WIDTH },
-                view: view
-            });
+            dialog = framedModal(classes, settingsPanelView(classes, register), PANEL_WIDTH,
+                (event) => { if (event.key === 'Escape') closeSettingsPanel(); });
             // Recorded before show(), not after: anything from here on that
             // throws has already put something on screen, and
             // closeSettingsPanel is what knows how to take it back off.
-            openPanel = { modal, register };
-            modal.show();
+            openPanel = { modal: dialog.modal, register };
+            dialog.modal.show().then(dialog.takeApart);
         } catch (error) {
             closeSettingsPanel();
+            // A throw inside show() comes before the promise that would have
+            // taken the panel apart was handed back, so that is done here.
+            if (dialog) dialog.takeApart();
             reportFault('the settings panel would not open; showing the plain one');
             openFallbackSettings();
         }
