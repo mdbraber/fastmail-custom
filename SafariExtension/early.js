@@ -81,6 +81,14 @@ if (shouldHide) {
     document.documentElement.classList.add(HIDE_CLASS);
 }
 
+// Each write is a read, a merge and a write, so two in flight at once
+// would let the second read a value the first had not yet committed and
+// drop it. One panel is enough to cause that: its text fields each debounce
+// on their own timer and its checkboxes write at once. Chaining the writes
+// keeps them in order at the cost of nothing that matters here — these are
+// single keystrokes' worth of work, arriving at human speed.
+let pendingWrite = Promise.resolve();
+
 /*
 The settings panel runs in the page world, which has no route to extension
 storage. It posts to its own window and this carries the value across.
@@ -98,13 +106,13 @@ window.addEventListener('message', (event) => {
     if (typeof message.key !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(message.key)) return;
     if (typeof message.value !== 'boolean' && typeof message.value !== 'string') return;
 
-    // Read, merge, write: the settings live as one object, so writing a key
-    // means rewriting the object, and two panels open at once would otherwise
-    // undo each other.
-    api.storage.local.get('settings').then((stored) => {
-        const settings = Object.assign({}, stored.settings || {});
-        settings[message.key] = message.value;
-        return api.storage.local.set({ settings });
+    // Chain this write onto the pending promise to serialize all writes.
+    pendingWrite = pendingWrite.then(() => {
+        return api.storage.local.get('settings').then((stored) => {
+            const settings = Object.assign({}, stored.settings || {});
+            settings[message.key] = message.value;
+            return api.storage.local.set({ settings });
+        });
     }).catch((error) => {
         console.error('Custom mode: could not save a setting', error);
     });
