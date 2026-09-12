@@ -79,9 +79,12 @@ const save = async () => {
 
 // Writing settings wakes the background script, which pushes them into every
 // open Fastmail tab and rebuilds the grouped list there; a textarea firing
-// input on every keystroke would do that once per character. Coalesced the
-// way WebContainer.swift coalesces its own push, into one write once typing
-// pauses. change still saves straight away, for the blur case.
+// input on every keystroke would do that once per character. Coalesced into
+// one write once typing pauses, rather than one write per keystroke. If the
+// popup is dismissed inside that window with no blur — a close that tears
+// the context down outright — the pending write would be lost, so hiding or
+// tearing down the page flushes it immediately instead of waiting out the
+// timer. change still saves straight away, for the blur case.
 let saveTimer = null;
 
 const scheduleSave = () => {
@@ -89,9 +92,22 @@ const scheduleSave = () => {
     saveTimer = setTimeout(save, 450);
 };
 
+const flushSave = () => {
+    if (saveTimer === null) return;
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    save();
+};
+
 inputs.forEach(([, input]) => {
     input.addEventListener('change', save);
     if (input.tagName === 'TEXTAREA') input.addEventListener('input', scheduleSave);
 });
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushSave();
+});
+
+window.addEventListener('pagehide', flushSave);
 
 load();
