@@ -810,4 +810,22 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(payload["key"] as? String, "triageLabel")
         XCTAssertEqual(payload["value"] as? String, "Todo")
     }
+
+    // NativeBridgeTests boxes its numeric cases as Swift literals inside an
+    // Any array, which is not the object real traffic hands over: WebKit
+    // marshals a JS number into a genuine NSNumber, and only a genuine
+    // NSNumber triggers the bridging quirk the CFGetTypeID guard exists to
+    // catch. This sends a real 1 through the live bridge, so what the fake
+    // recorder captures is what Swift actually receives for it, then feeds
+    // that exact body to the same NativeBridge the app runs.
+    func testSetSettingWithARealJavaScriptOneIsRefused() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, "window.native.setSetting('labelColours', 1); true;")
+        try await waitUntil { self.received.contains { $0["action"] as? String == "setting" } }
+        let message = try XCTUnwrap(received.first { $0["action"] as? String == "setting" })
+        let bridge = NativeBridge(expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in })
+        let reply = await bridge.handle(body: message)
+        XCTAssertNotNil(reply.error)
+    }
 }

@@ -323,7 +323,11 @@ private func settingsDefaults(_ name: String) -> UserDefaults {
         expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
         onSetting: { key, _ in written.append(key) }
     )
-    for value in [1, 0, 2.5, ["a"], [:] as [String: String]] as [Any] {
+    // 1 and 0 are boxed as NSNumber deliberately: a bare Swift Int literal in
+    // an Any array is not the object real bridge traffic hands over, and the
+    // naive `as? Bool` this guard replaces only misfires on an actual
+    // NSNumber, so a bare literal would pass whether the guard is right or not.
+    for value in [NSNumber(value: 1), NSNumber(value: 0), 2.5, ["a"], [:] as [String: String]] as [Any] {
         let reply = await bridge.handle(body: [
             "action": "setting", "payload": ["key": "labelColours", "value": value],
         ])
