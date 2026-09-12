@@ -141,7 +141,257 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         hideLoneExpando: true
     };
 
-    let settings = Object.assign({}, DEFAULT_SETTINGS, window.__customModeSettings || {});
+    // Named here, ahead of localSettings, so that writeSetting's own
+    // local-storage fallback further down the file reads and writes the same
+    // key rather than a second spelling of it.
+    const LOCAL_SETTINGS_KEY = 'custom-mode-settings';
+
+    // A plain browser tab has no host to store settings in, so the panel
+    // keeps them here. A tab that does have a host never writes this, so an
+    // old copy cannot outrank what the host injected.
+    const localSettings = () => {
+        try {
+            return JSON.parse(localStorage.getItem(LOCAL_SETTINGS_KEY)) || {};
+        } catch (error) {
+            return {};
+        }
+    };
+
+    let settings = Object.assign(
+        {},
+        DEFAULT_SETTINGS,
+        window.__customModeSettings || localSettings()
+    );
+
+    /*
+     * ----------------------------------------------------------------
+     * The option catalogue
+     * ----------------------------------------------------------------
+     *
+     * Canonical, and the only one. The settings panel is drawn from this, and
+     * neither host holds a copy: the apps and the extension handle the
+     * customMode. namespace without knowing what is in it, so adding an
+     * option means adding one entry here and nothing anywhere else.
+     *
+     * The default is not repeated: DEFAULT_SETTINGS above already carries all
+     * twenty-six, and settingValue reads it from there.
+     */
+    const SETTING_GROUPS = [
+        { id: 'general', title: 'General' },
+        { id: 'appearance', title: 'Appearance' },
+        { id: 'labelsFiling', title: 'Labels & keeping' },
+        { id: 'grouping', title: 'Groups' },
+        { id: 'snooze', title: 'Snooze' },
+        { id: 'keyboard', title: 'Keyboard' },
+        { id: 'bottomBar', title: 'Action bar' }
+    ];
+
+    const SETTINGS = [
+        {
+            key: 'appBadgeLabel', group: 'general', clearable: true,
+            title: 'Badge label',
+            hint: 'The app icon shows how many conversations carry this label. Empty uses the Inbox count.'
+        },
+        {
+            key: 'labelColours', group: 'appearance',
+            title: 'Colour rows by label',
+            hint: 'Rows take the colour of a label they carry.'
+        },
+        {
+            key: 'labelColoursSidebarOnly', group: 'appearance', parent: 'labelColours',
+            title: 'Only labels in the sidebar',
+            hint: 'Plain tags stay uncoloured.'
+        },
+        {
+            key: 'labelColoursSkipTriage', group: 'appearance', parent: 'labelColours',
+            title: 'Ignore the triage label',
+            hint: 'Every undecided message carries it; its colour would tint everything.'
+        },
+        {
+            key: 'sidebarSeparators', group: 'appearance',
+            title: 'Separate folders from labels',
+            hint: 'A line between the system folders and your labels.'
+        },
+        {
+            key: 'hideLoneExpando', group: 'appearance',
+            title: 'Hide the Labels collapse arrow',
+            hint: 'Hidden while only one account is shown.'
+        },
+        {
+            key: 'hideInboxLabel', group: 'appearance',
+            title: 'Hide the Inbox tag',
+            hint: 'Hidden where every message is in the Inbox anyway.'
+        },
+        {
+            key: 'stripLabelPrefix', group: 'appearance',
+            title: 'Show only the label’s own name',
+            hint: '“Work” instead of “Projects/Work”. Hover for the full path.'
+        },
+        {
+            key: 'triageLabel', group: 'labelsFiling',
+            title: 'Triage label',
+            hint: 'Added to every incoming message by your rule; removed by keeping it somewhere or archiving it.'
+        },
+        {
+            key: 'excludedLabels', group: 'labelsFiling', clearable: true,
+            title: 'Labels that are never projects',
+            hint: 'Destinations that hold mail rather than queue it; archive leaves them on, and Shift-E archives into one. Comma-separated paths.'
+        },
+        {
+            key: 'contactGroupLabels', group: 'labelsFiling', clearable: true,
+            title: 'Labels that add the sender to a contact group',
+            hint: 'Applying one adds the sender to the contact group of the same name, creating it if needed. Comma-separated paths.'
+        },
+        {
+            key: 'backToListAfterTriage', group: 'labelsFiling',
+            title: 'Back to the list when triage runs out',
+            hint: 'Keeping steps to the next message only while that message still carries the triage label; otherwise the message list comes back.'
+        },
+        {
+            key: 'dragAdditive', group: 'labelsFiling',
+            title: 'Dragging adds a label',
+            hint: 'A drop keeps the message under that label and leaves it in the Inbox. Option moves it.'
+        },
+        {
+            key: 'labelsShortcut', group: 'labelsFiling',
+            title: 'Keep instead of move',
+            hint: 'Keeps the message under a project label and leaves it in the Inbox; one already kept just loses its triage label. Shift-V keeps it somewhere else, Option-V moves.'
+        },
+        {
+            key: 'labelsSidebarOnly', group: 'labelsFiling', parent: 'labelsShortcut',
+            title: 'Only labels in the sidebar',
+            hint: 'The picker hides Trash, Spam and plain tags; typing still finds any label.'
+        },
+        {
+            key: 'labelsAutoSave', group: 'labelsFiling', parent: 'labelsShortcut',
+            title: 'Apply the only match automatically',
+            hint: 'A single remaining match is applied and the picker closes.'
+        },
+        {
+            key: 'stickyInboxFilter', group: 'labelsFiling',
+            title: 'Filter a project label to the Inbox',
+            hint: 'Its list opens showing only what is still in the Inbox, since that is the queue and the rest is history. Turning the filter off holds while you stay on that label.'
+        },
+        {
+            key: 'filteredLabelCounts', group: 'labelsFiling',
+            title: 'Count only what is in the Inbox',
+            hint: 'A project label’s badge counts the same messages its filtered list shows, rather than everything it has ever held.'
+        },
+        {
+            key: 'groupings', group: 'grouping', clearable: true, multiline: true,
+            title: 'Your groupings',
+            hint: 'One block each: a line naming the grouping, then indented “Name = search” lines, then a bare line for everything else. Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Renaming a grouping loses it on the mailboxes using it.'
+        },
+        {
+            key: 'snoozeKey', group: 'snooze',
+            title: 'Snooze key',
+            hint: 'Opens the snooze dialog with the default period filled in.'
+        },
+        {
+            key: 'snoozeDefault', group: 'snooze',
+            title: 'Default snooze period',
+            hint: 'A number and d, w or m for days, weeks or months, such as 2w.'
+        },
+        {
+            key: 'snoozeTime', group: 'snooze',
+            title: 'Snooze time of day',
+            hint: 'When a snoozed message returns, as HH:MM.'
+        },
+        {
+            key: 'urgentKey', group: 'keyboard',
+            title: 'Pin key',
+            hint: 'Pins or unpins the selection.'
+        },
+        {
+            key: 'swapArchiveExpand', group: 'keyboard',
+            title: 'Swap E and Y',
+            hint: 'E archives and Y expands, the reverse of Fastmail’s default. H still archives.'
+        },
+        {
+            key: 'bottomBarSlots', group: 'bottomBar',
+            title: 'Action bar actions',
+            hint: 'In order; the bar along the bottom on iPhone, and across the top of a message on iPad and the Mac. What fits shows, the rest go under More.'
+        },
+        {
+            key: 'bottomBarItems', group: 'bottomBar', clearable: true,
+            title: 'Items on the bottom bar',
+            hint: 'How many verbs the bar along the bottom of the screen draws before More. Empty fits as many as it can measure.'
+        },
+        {
+            key: 'topBarItems', group: 'bottomBar', clearable: true,
+            title: 'Items on the top bar',
+            hint: 'The same count for the bar across the top of a message, on iPad and on the Mac. Empty fits as many as it can measure.'
+        }
+    ];
+
+    const settingFor = (key) => SETTINGS.filter(one => one.key === key)[0] || null;
+
+    const settingsInGroup = (group) => SETTINGS.filter(one => one.group === group);
+
+    /*
+     * What a stored value means. These rules used to live in Swift, in
+     * CustomModeSettings.current; they move here with the catalogue, because
+     * the hosts no longer know which options are clearable.
+     *
+     * A text value is trimmed. If nothing is left, a clearable option means
+     * "none" and keeps the empty string, and any other option means "put it
+     * back" and gets its default: a triage label called nothing is not
+     * something anyone means, while no excluded labels plainly is.
+     */
+    const settingValue = (key) => {
+        const fallback = DEFAULT_SETTINGS[key];
+        const stored = settings[key];
+
+        if (typeof fallback === 'boolean') {
+            return typeof stored === 'boolean' ? stored : fallback;
+        }
+        if (typeof stored !== 'string') return fallback;
+
+        const trimmed = stored.trim();
+        if (trimmed) return trimmed;
+
+        const option = settingFor(key);
+        return option && option.clearable ? '' : fallback;
+    };
+
+    /*
+     * Where a changed setting goes. The panel runs in the page, which owns
+     * none of the three stores, so it hands the value to whichever host is
+     * here: the shell apps expose window.native, the extension leaves a mark
+     * on the root element and listens for a posted message, and a plain
+     * browser tab has neither and keeps its own copy.
+     *
+     * Each host echoes the change back through applySettings, so the local
+     * object is updated here only so that the panel and the mode agree before
+     * the round trip lands.
+     */
+    const hostIsExtension = () =>
+        document.documentElement.dataset.customModeHost === 'extension';
+
+    const writeSetting = (key, value) => {
+        settings[key] = value;
+
+        if (window.native && typeof window.native.setSetting === 'function') {
+            window.native.setSetting(key, value);
+            return;
+        }
+
+        if (hostIsExtension()) {
+            window.postMessage(
+                { source: 'custom-mode', kind: 'setting', key: key, value: value },
+                location.origin
+            );
+            return;
+        }
+
+        try {
+            const stored = JSON.parse(localStorage.getItem(LOCAL_SETTINGS_KEY)) || {};
+            stored[key] = value;
+            localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(stored));
+        } catch (error) {
+            reportFault('could not save that setting');
+        }
+    };
 
     /*
      * ----------------------------------------------------------------
@@ -1280,6 +1530,23 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         return groupings.filter(one => one.categories.length);
     };
+
+    /*
+     * The inverse of parseGroupings: an array of groupings back to the text
+     * the setting holds. The two must round-trip, because the editor parses,
+     * edits and writes back, and anything this drops is lost.
+     *
+     * The leftover bucket's name is written only when it is not the default
+     * one, since parseGroupings supplies that name for a block that omits it.
+     */
+    const formatGroupings = (groupings) => (groupings || []).map((one) => {
+        const lines = [one.name];
+        (one.categories || []).forEach((category) => {
+            lines.push('  ' + category.name + ' = ' + category.query);
+        });
+        if (one.otherName && one.otherName !== OTHER_NAME) lines.push('  ' + one.otherName);
+        return lines.join('\n');
+    }).join('\n\n');
 
     const modeGroupings = () => parseGroupings(settings.groupings);
 
