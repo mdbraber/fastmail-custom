@@ -1500,6 +1500,68 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
+    // Folded groups, for the mode's own groupings only: mailbox and grouping
+    // to the indexes folded under it. Local because the definition is never
+    // stored either, so there is nothing on the server for it to hang off.
+    const GROUPING_STORE_KEY = 'custom-mode-groups';
+
+    const foldedGroups = () => {
+        try {
+            return JSON.parse(localStorage.getItem(GROUPING_STORE_KEY)) || {};
+        } catch (error) {
+            return {};
+        }
+    };
+
+    const foldKey = (mailbox, id) =>
+        (mailbox && mailbox.get ? mailbox.get('id') : '') + '|' + id;
+
+    const rememberFolded = (mailbox, id, indexes) => {
+        try {
+            const store = foldedGroups();
+            const key = foldKey(mailbox, id);
+
+            if (indexes.length) store[key] = indexes;
+            else delete store[key];
+
+            localStorage.setItem(GROUPING_STORE_KEY, JSON.stringify(store));
+        } catch (error) {
+            // A fold that cannot be written is a fold that does not last
+        }
+    };
+
+    /*
+     * Take the open list's folding over.
+     *
+     * The list is a proxy over the query: collapsedGroups is a plain set on
+     * it, and folding calls collapsedGroupsDidChange, which Fastmail defines
+     * on the proxy itself to write into the mailbox's stored split. Under
+     * one of the mode's groupings that would store a definition the mode
+     * does not own, so the method is replaced and the set is seeded from
+     * what was folded here last time.
+     */
+    const adoptList = () => {
+        const mailController = controller();
+        const list = mailController.get('mailboxMessageList');
+        if (!list || !list.collapsedGroups) return;
+
+        const definition = modeGroupingIsActive();
+        if (!definition) return;
+        if (list.customFolding === definition.id) return;
+        list.customFolding = definition.id;
+
+        const mailbox = mailController.get('mailbox');
+        const remembered = foldedGroups()[foldKey(mailbox, definition.id)] || [];
+
+        list.collapsedGroups.clear();
+        remembered.forEach(index => list.collapsedGroups.add(index));
+
+        list.collapsedGroupsDidChange = function () {
+            rememberFolded(mailbox, definition.id,
+                Array.from(this.collapsedGroups).sort((a, b) => a - b));
+        };
+    };
+
     /*
      * ----------------------------------------------------------------
      * The list toolbar
@@ -5378,6 +5440,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // A different mailbox may be grouped differently, or not at all
         controller().addObserverForKey('sort', { go: scheduleMidnight }, 'go');
         controller().addObserverForKey('mailbox', { go: scheduleMidnight }, 'go');
+
+        // The list is rebuilt whenever the mailbox, the sort or the filter
+        // moves, and a fresh one folds nothing until it is told
+        controller().addObserverForKey('mailboxMessageList', { go: adoptList }, 'go');
     };
 
     /*
@@ -5733,6 +5799,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         setMode(storedMode());
         scheduleMidnight();
+        adoptList();
 
         // Handy from the console, and how the counts can be checked by hand
         window.customMode = {
