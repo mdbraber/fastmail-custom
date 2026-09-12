@@ -1283,6 +1283,34 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ' opacity: 1; transform: translateX(-50%) translateY(0); }'
     ];
 
+    // The fallback panel's own styles. Unconditional, like the rules above,
+    // rather than gated on modeIsOn the way labelColourRules is: the panel
+    // can be opened with the mode off (openSettingsPanel does not check it),
+    // and a panel drawn with no styles at all would defeat the point of a
+    // fallback that is supposed to always be there.
+    const FALLBACK_PANEL_RULES = [
+        '#custom-mode-fallback-settings {' +
+        ' position: fixed; inset: 0; z-index: 2147483000;' +
+        ' display: flex; align-items: flex-start; justify-content: center;' +
+        ' padding: 24px; overflow-y: auto; background: rgba(0, 0, 0, 0.4); }',
+        '.custom-mode-fallback-sheet {' +
+        ' width: 100%; max-width: 620px; padding: 20px 24px;' +
+        ' border-radius: 10px; background: Canvas; color: CanvasText;' +
+        ' color-scheme: light dark;' +
+        ' font: 14px/1.45 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }',
+        '.custom-mode-fallback-row {' +
+        ' display: flex; gap: 9px; align-items: flex-start; padding: 9px 0;' +
+        ' border-top: 1px solid rgba(128, 128, 128, 0.3); }',
+        '.custom-mode-fallback-row input[type="text"],' +
+        ' .custom-mode-fallback-row textarea {' +
+        ' display: block; width: 100%; box-sizing: border-box; font: inherit; }',
+        '.custom-mode-fallback-row textarea {' +
+        ' font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }',
+        '.custom-mode-fallback-title { display: block; font-weight: 500; }',
+        '.custom-mode-fallback-hint { display: block; opacity: 0.7; }',
+        '.custom-mode-fallback-note { opacity: 0.7; }'
+    ];
+
     // The line is the stylesheet's half of the option; the gap it sits in is
     // the marking pass's, since only that can move a row the list has pinned.
     const sourceSeparatorRules = () =>
@@ -1397,6 +1425,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             .concat(BADGE_UNREAD_RULES)
             .concat(TRIAGE_ICON_RULES)
             .concat(TOAST_RULES)
+            .concat(FALLBACK_PANEL_RULES)
             .join('\n');
         const existing = document.getElementById(STYLE_ID);
 
@@ -6858,8 +6887,120 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return settingRow(classes, option, register);
     };
 
-    // Replaced in the task that adds the fallback
-    const openFallbackSettings = () => reportFault('the settings panel is unavailable');
+    /*
+     * The panel without Fastmail. With the native settings screens gone, a
+     * deploy that renames one of the view classes would otherwise leave no
+     * way to change a setting at all; this is the same options, drawn in
+     * plain HTML, so that failure costs the drag-and-drop and nothing else.
+     *
+     * Deliberately dull. It is not meant to be nice, it is meant to be there.
+     */
+    const FALLBACK_ID = 'custom-mode-fallback-settings';
+
+    const openFallbackSettings = () => {
+        if (document.getElementById(FALLBACK_ID)) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = FALLBACK_ID;
+
+        const sheet = document.createElement('div');
+        sheet.className = 'custom-mode-fallback-sheet';
+
+        const heading = document.createElement('h1');
+        heading.textContent = 'Custom mode';
+        sheet.appendChild(heading);
+
+        const note = document.createElement('p');
+        note.className = 'custom-mode-fallback-note';
+        note.textContent = 'Fastmail’s own controls are unavailable in this ' +
+            'version, so these are plain ones. Everything still saves.';
+        sheet.appendChild(note);
+
+        // Every text field gets its own debouncedWrite rather than one
+        // timer shared across the sheet: typing into a second field within
+        // the delay must not cost the first field its pending save, and
+        // closing has to flush every one of these, not just the last.
+        const flushers = [];
+
+        SETTING_GROUPS.forEach((group) => {
+            const rows = settingsInGroup(group.id);
+            if (!rows.length) return;
+
+            const title = document.createElement('h2');
+            title.textContent = group.title;
+            sheet.appendChild(title);
+
+            rows.forEach((option) => {
+                const current = settingValue(option.key);
+                const row = document.createElement('label');
+                row.className = 'custom-mode-fallback-row';
+
+                const input = typeof current === 'boolean'
+                    ? document.createElement('input')
+                    : document.createElement(option.multiline ? 'textarea' : 'input');
+                if (typeof current === 'boolean') {
+                    input.type = 'checkbox';
+                    input.checked = current;
+                    input.addEventListener('change', () => writeSetting(option.key, input.checked));
+                } else {
+                    if (input.tagName === 'INPUT') input.type = 'text';
+                    else input.rows = 10;
+                    input.value = String(current);
+                    input.spellcheck = false;
+                    const debounced = debouncedWrite();
+                    flushers.push(debounced.flush);
+                    input.addEventListener('input', () => debounced.write(option.key, input.value));
+                }
+
+                const text = document.createElement('span');
+                const name = document.createElement('span');
+                name.className = 'custom-mode-fallback-title';
+                name.textContent = option.title;
+                const hint = document.createElement('span');
+                hint.className = 'custom-mode-fallback-hint';
+                hint.textContent = option.hint;
+                text.appendChild(name);
+                text.appendChild(hint);
+
+                row.appendChild(input);
+                row.appendChild(text);
+                sheet.appendChild(row);
+            });
+        });
+
+        const close = () => {
+            // Whatever is mid-debounce in any field is spent now, on the key
+            // and value that field captured when typed, before the field
+            // itself is gone.
+            flushers.forEach((flush) => flush());
+            document.removeEventListener('keydown', onKey, true);
+            overlay.remove();
+        };
+        const onKey = (event) => { if (event.key === 'Escape') { event.stopPropagation(); close(); } };
+
+        const done = document.createElement('button');
+        done.type = 'button';
+        done.textContent = 'Done';
+        done.addEventListener('click', close);
+        sheet.appendChild(done);
+
+        overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+        document.addEventListener('keydown', onKey, true);
+
+        // The overlay is plain DOM outside Fastmail's view tree, but
+        // Fastmail's own shortcuts still listen at the document: without
+        // this, typing "e" to rename something here would also archive
+        // whatever message is open behind the panel. Stopped here, at the
+        // overlay, rather than on each field, so a key nothing above has
+        // claimed still cannot leak out; the field itself still gets the
+        // event first; blocking only stops it travelling further.
+        ['keydown', 'keypress', 'keyup'].forEach((type) => {
+            overlay.addEventListener(type, (event) => event.stopPropagation());
+        });
+
+        overlay.appendChild(sheet);
+        document.body.appendChild(overlay);
+    };
 
     const settingsPanelView = (classes, register) => {
         const el = FastMail.el;
