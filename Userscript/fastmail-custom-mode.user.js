@@ -5553,6 +5553,85 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return option;
     };
 
+    /*
+     * Which menu is the Group menu.
+     *
+     * Not by where its button sits, what it is registered as, or what its
+     * heading says, all of which move or translate. Each of the four
+     * groupings Fastmail offers is a button whose selected state is bound to
+     * the controller's groupBy, and Overture keeps a binding's source path on
+     * the object in the open. So the menu carrying such a button is the one,
+     * whatever the language and wherever the button lives.
+     *
+     * If that ever stops matching, nothing is added and Fastmail's own menu
+     * is what opens.
+     */
+    const boundToGroupBy = (option) => {
+        try {
+            const bindings = option && option.__meta__ && option.__meta__.bindings;
+            const binding = bindings && bindings.isSelected;
+            return !!binding && binding.fromPath === 'groupBy';
+        } catch (error) {
+            return false;
+        }
+    };
+
+    const isGroupMenu = (options) => (options || []).some(boundToGroupBy);
+
+    // Selected is worked out once rather than bound, because the menu is
+    // built fresh every time it opens and thrown away when it closes.
+    const groupingOption = (definition, active) => {
+        const option = new FastMail.classes.ButtonView({
+            label: definition.name,
+            isSelected: definition.id === active,
+            method: 'chooseItem',
+            chooseItem() {
+                chooseGrouping(definition.id);
+            }
+        });
+
+        option.customGroupingOption = true;
+        return option;
+    };
+
+    // After the last of Fastmail's own groupings and before its Custom entry,
+    // which is the end of that section; the entry that was last gives up the
+    // mark that says so.
+    const addGroupings = (options) => {
+        // With the mode off this stays out of the menu entirely, so Fastmail's
+        // own menu is what opens; the toggle is how the user gets back to
+        // stock behaviour, and every divergence from it in this file honours
+        // that.
+        if (!modeIsOn) return;
+        if (options.some(option => option && option.customGroupingOption)) return;
+        if (!isGroupMenu(options)) return;
+
+        const active = currentGroupingId();
+        const entries = [];
+        const labels = labelsGroupingFor(controller().get('mailbox'));
+
+        if (labels) entries.push(groupingOption(labels, active));
+        modeGroupings().forEach((definition) => {
+            entries.push(groupingOption(definition, active));
+        });
+
+        if (!entries.length) return;
+
+        let last = -1;
+        options.forEach((option, index) => {
+            if (boundToGroupBy(option)) last = index;
+        });
+
+        try {
+            options[last].set('isLastOfSection', false);
+        } catch (error) {
+            // A menu that will not be told is still a working menu
+        }
+
+        entries[entries.length - 1].isLastOfSection = false;
+        options.splice.apply(options, [last + 1, 0].concat(entries));
+    };
+
     const isMessageActionsMenu = (options) => {
         let reply = false;
         let forward = false;
@@ -5571,23 +5650,25 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return reply && forward;
     };
 
-    const patchMessageMenu = () => {
+    const patchMenus = () => {
         const MenuView = FastMail.classes.MenuView;
-        if (!MenuView || MenuView.prototype.customCopyLink) return;
-        MenuView.prototype.customCopyLink = true;
+        if (!MenuView || MenuView.prototype.customMenuItems) return;
+        MenuView.prototype.customMenuItems = true;
 
         const originalDraw = MenuView.prototype.draw;
 
         MenuView.prototype.draw = function () {
             try {
                 const options = this.get('options');
-                if (options && typeof options.unshift === 'function' &&
-                    !options.some(option => option && option.customCopyLinkOption) &&
-                    isMessageActionsMenu(options)) {
-                    options.unshift(copyLinkOption(), null);
+                if (options && typeof options.unshift === 'function') {
+                    if (!options.some(option => option && option.customCopyLinkOption) &&
+                        isMessageActionsMenu(options)) {
+                        options.unshift(copyLinkOption(), null);
+                    }
+                    addGroupings(options);
                 }
             } catch (error) {
-                reportFault('could not add Copy link', error);
+                reportFault('could not add to a menu', error);
             }
 
             return originalDraw.apply(this, arguments);
@@ -5630,7 +5711,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         patchMailboxMenu();
         patchArchive();
         patchLabelActions();
-        patchMessageMenu();
+        patchMenus();
         patchSplits();
         patchShortcuts();
         updateStyles();
