@@ -102,8 +102,10 @@ for one comparison.
 
 Built from the mailbox tree, so no query parsing is involved: the direct
 children of the current mailbox that are sidebar labels and are not the triage
-label, in sidebar order, each as a plain `{inMailbox: id}` filter. Catch-all
-name "Other".
+label, in sidebar order, each as a plain `{inMailbox: id}` filter. The Inbox is
+special-cased to the account's root labels instead — the Inbox's own top-level
+labels are nobody's children, so the direct-children rule would otherwise find
+nothing there. Catch-all name "Other".
 
 The existing helpers carry the definitions: `parentOf`, `isSidebarLabel`,
 `isTriage`. On the work account's Inbox this yields Business, Projects, Boards,
@@ -134,12 +136,18 @@ A new setting, `groupings`, holding multi-line text, parsed in the userscript.
       This month = after:1m
       Older
 
-Rules: a bare line opens a grouping and names it for the menu; a following
-`Name = query` line adds a group; a following bare line names the catch-all;
-a blank line ends the block. Leading whitespace is ignored. Without a
-catch-all line the name is "Other". A grouping with no groups is skipped.
-Two groupings with the same name: the first wins, so the identifier
-`split:<name>` stays unambiguous.
+Rules: a bare line at the margin opens a grouping and names it for the menu; a
+following `Name = query` line, indented or not, adds a group; a following bare
+line that is indented names the catch-all; a blank line ends the block.
+Indentation is what tells a catch-all line from the next block's name, and
+that is all it does — it lets a second block follow the first without a blank
+line between them. The accepted cost is that a catch-all line written at the
+margin is read as opening a grouping of its own instead, which has no groups
+and is dropped, leaving the default name "Other" behind; the gain is that a
+block nobody indented still parses as one grouping rather than several empty
+ones, which is the likelier slip by far. Without an indented catch-all line the
+name is "Other". A grouping with no groups is skipped. Two groupings with the
+same name: the first wins, so the identifier `split:<name>` stays unambiguous.
 
 That text is the setting's default value, so the field arrives holding exactly
 the grouping above. The setting is clearable: emptied deliberately, it means
@@ -226,14 +234,21 @@ optimistic changes — length updates, counts do not. It is the same code path
 as the open archive-sync bug.
 
 It did not reproduce on demand, so the fix is a guard rather than a repair of
-one path. On the same proxy hook the mode watches for
-`sum(groupByCounts) > queryLength`, a condition that is never legitimate since
-the catch-all count is their difference. On seeing it the mode clears the stale
-counts — `groupByCounts` set to `null`, which makes `splitOffsets` return
-`null` — so the list immediately draws as an ungrouped list instead of drawing
-nothing, and marks the query for a full refetch so real counts return.
-Fastmail's own `_groupRanges` already clamps the catch-all at zero, which is it
-half-acknowledging the same condition.
+one path. On the same proxy hook the mode watches the list's own arithmetic —
+length less the folded groups' counts — for the moment it goes negative, since
+that is the actual harm: a negative length draws nothing, and reaching it needs
+something folded. The counts running ahead of the length is not itself a sign
+of trouble; on a mailbox where every message falls into some group the two
+already sum to exactly equal, and an ordinary archive drops the length
+optimistically a message before the counts follow, so the sum runs briefly
+ahead on every triage verb without doing any harm. Only a fold deep enough to
+carry the subtraction past zero is treated as drift. On seeing that the mode
+clears the stale counts — `groupByCounts` set to `null`, which makes
+`splitOffsets` return `null` — so the list immediately draws as an ungrouped
+list instead of drawing nothing, and marks the query for a full refetch so real
+counts return. Fastmail's own `_groupRanges` already clamps the catch-all at
+zero when it measures the list, without flooring the subtraction that produces
+the height itself — which is it half-acknowledging the same condition.
 
 The mode's `staleAfter` is deliberately left alone. Changing it would be a
 speculative fix to a state that could not be reproduced on demand, in the one
