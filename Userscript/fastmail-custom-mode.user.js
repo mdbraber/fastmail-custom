@@ -1465,7 +1465,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const OTHER_NAME = 'Other';
 
     /*
-     * The settings text, as groupings.
+     * The settings text, as blocks: every grouping it holds, finished or not.
      *
      * A blank line ends a block. Inside one, a line with an equals sign is a
      * group, its name before and a Fastmail search after; a line without one
@@ -1473,18 +1473,21 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * which case it opens the next grouping instead. That last rule is all
      * the indentation does, and it is there so a second block can follow the
      * first without a blank line between them. The cost is that a bucket name
-     * written at the margin opens a grouping of its own and is dropped for
-     * having no groups, leaving the default name behind; the gain is that a
-     * block nobody indented still reads as one grouping rather than as
-     * several empty ones, which is the likelier slip by far.
+     * written at the margin opens a grouping of its own, which parseGroupings
+     * drops for having no groups, leaving the default name behind; the gain
+     * is that a block nobody indented still reads as one grouping rather than
+     * as several empty ones, which is the likelier slip by far.
      *
-     * A block with no groups is dropped, since a grouping that groups nothing
-     * is a menu entry that does nothing. Of two blocks sharing a name the
-     * first wins: the second is parsed into a grouping that is never kept, so
-     * its lines are consumed rather than reopening the first or derailing
-     * everything after it.
+     * Of two blocks sharing a name the first wins: the second is parsed into
+     * a grouping that is never kept, so its lines are consumed rather than
+     * reopening the first or derailing everything after it.
+     *
+     * A block with no groups yet is returned like any other. The settings
+     * panel needs to see one: its list writes the text back from what the
+     * text parses to, and a grouping somebody has only begun to type is one
+     * that write would delete.
      */
-    const parseGroupings = (text) => {
+    const readGroupingBlocks = (text) => {
         const groupings = [];
         const taken = {};
         let current = null;
@@ -1528,8 +1531,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             if (name && query) current.categories.push({ name: name, query: query });
         });
 
-        return groupings.filter(one => one.categories.length);
+        return groupings;
     };
+
+    // The groupings the text defines. A block with no groups is dropped, since
+    // a grouping that groups nothing is a menu entry that does nothing.
+    const parseGroupings = (text) => readGroupingBlocks(text).filter(one => one.categories.length);
 
     /*
      * The inverse of parseGroupings: an array of groupings back to the text
@@ -6368,7 +6375,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      *
      * The setting is written once a drag is over, and a tick after that. The
      * write redraws this whole list, and a row destroyed inside its own
-     * dragEnded is destroyed under a drag that has not finished with it.
+     * dragEnded is destroyed under a drag that has not finished with it. A
+     * write that onOrder refuses redraws nothing, so the rows are put back
+     * where they were by hand.
      */
     const reorderDragList = (classes, items, move, onOrder) => {
         const found = FastMail.classes || {};
@@ -6404,7 +6413,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                         Row.prototype.dragEnded.call(this, drag);
                         const after = content.map(record => record.get('id'));
                         if (after.some((id, at) => id !== items[at].id)) {
-                            setTimeout(() => onOrder(after), 0);
+                            setTimeout(() => {
+                                if (onOrder(after) !== false) return;
+                                records.forEach((record, at) => record.set('sortOrder', at));
+                                content.sort((one, other) => one.get('sortOrder') - other.get('sortOrder'));
+                            }, 0);
                         }
                     }
                 }));
@@ -6432,12 +6445,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const reorderList = (classes, items, onOrder) => {
         const order = items.map(item => item.id);
 
+        // onOrder answers false when it refused to write. The order kept here
+        // then goes back to the one on screen, so the next move starts from
+        // what the list shows rather than from a move that never happened.
         const move = (id, by) => {
             const at = order.indexOf(id);
             const to = at + by;
             if (at === -1 || to < 0 || to >= order.length) return;
+            const before = order.slice();
             order.splice(to, 0, order.splice(at, 1)[0]);
-            onOrder(order.slice());
+            if (onOrder(order.slice()) === false) order.splice(0, order.length, ...before);
         };
 
         const dragging = reorderDragList(classes, items, move, onOrder);
@@ -6581,15 +6598,29 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * after it writes, but not while someone types, since a redraw throws the
      * field away under the cursor; a label that lags the text costs nothing
      * now that no action reads one.
+     *
+     * And an action refuses outright while the text holds a grouping with no
+     * groups yet. The write would be made from what the parser keeps, which
+     * leaves that grouping out, so it would be deleted from under whoever is
+     * still typing it. A refusal writes nothing, and redraws nothing either,
+     * since a redraw would replace the field that holds the unfinished text.
      */
     const groupingsSection = (classes, register) => {
         const el = FastMail.el;
         const option = settingFor('groupings');
         let showText = false;
 
+        // The groupings as they stand, or null, reported, while one is unfinished.
         const current = () => {
             register.flushPending();
-            return parseGroupings(settingValue('groupings'));
+            const text = settingValue('groupings');
+            const unfinished = readGroupingBlocks(text).filter(one => !one.categories.length)[0];
+            if (unfinished) {
+                reportFault('finish or remove the grouping “' + unfinished.name +
+                    '” in the text before changing the list');
+                return null;
+            }
+            return parseGroupings(text);
         };
         const named = (groupings, name) => groupings.filter(one => one.name === name)[0] || null;
 
@@ -6601,11 +6632,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         const reorder = (order) => {
             const now = current();
+            if (!now) return false;
             save(mergeOrder(now.map(one => one.name), order).map(name => named(now, name)));
         };
 
         const remove = (name) => {
             const now = current();
+            if (!now) return;
             if (!named(now, name)) {
                 redraw();
                 return;
@@ -6615,15 +6648,27 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         // The editor is seeded with the grouping as it stands at the press,
         // and its save is laid over the setting as it stands at the save. A
-        // grouping renamed or deleted in between is not brought back.
+        // grouping renamed or deleted in between is not brought back. It
+        // refuses to open while the text is unfinished, rather than letting
+        // somebody edit only to be refused at Save.
         const edit = (name) => {
-            const seed = named(current(), name);
+            const before = current();
+            if (!before) return;
+            const seed = named(before, name);
             if (!seed) {
                 redraw();
                 return;
             }
             editGrouping(classes, seed, (value) => {
+                // Saved down to nothing, it would vanish from the list at the
+                // next parse; removing it is the list's job, and says so.
+                if (!value.categories || !value.categories.length) {
+                    reportFault('a grouping needs at least one group; remove “' + name +
+                        '” from the list instead');
+                    return;
+                }
                 const now = current();
+                if (!now) return;
                 const at = now.map(one => one.name).indexOf(name);
                 if (at === -1) {
                     reportFault('“' + name + '” is no longer in your groupings, so its edit was not saved');
@@ -6643,6 +6688,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // second Add under the same name would add nothing.
         const add = () => {
             const now = current();
+            if (!now) return;
             let name = NEW_GROUPING_NAME;
             for (let count = 2; named(now, name); count += 1) name = NEW_GROUPING_NAME + ' ' + count;
             save(now.concat([{
