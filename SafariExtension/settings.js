@@ -77,9 +77,21 @@ const save = async () => {
     await api.storage.local.set({ settings });
 };
 
+// Writing settings wakes the background script, which pushes them into every
+// open Fastmail tab and rebuilds the grouped list there; a textarea firing
+// input on every keystroke would do that once per character. Coalesced the
+// way WebContainer.swift coalesces its own push, into one write once typing
+// pauses. change still saves straight away, for the blur case.
+let saveTimer = null;
+
+const scheduleSave = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 450);
+};
+
 inputs.forEach(([, input]) => {
     input.addEventListener('change', save);
-    if (input.tagName === 'TEXTAREA') input.addEventListener('input', save);
+    if (input.tagName === 'TEXTAREA') input.addEventListener('input', scheduleSave);
 });
 
 load();
