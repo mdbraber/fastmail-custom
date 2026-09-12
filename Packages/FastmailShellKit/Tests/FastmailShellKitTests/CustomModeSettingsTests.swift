@@ -229,7 +229,7 @@ private func freshDefaults(_ name: String) -> UserDefaults {
 @Test func theGroupingsDefaultIsTheAgePreset() {
     let settings = CustomModeSettings.current(from: freshDefaults(#function))
     let text = settings["groupings"] as? String
-    #expect(text?.hasPrefix("By age (urgent first)") == true)
+    #expect(text?.hasPrefix("by age (urgent first)") == true)
     #expect(text?.contains("\n  Triage = in:Triage OR is:unread") == true)
     #expect(text?.contains("\n  Pinned = is:pinned") == true)
     #expect(text?.contains("\n  Today = date:today") == true)

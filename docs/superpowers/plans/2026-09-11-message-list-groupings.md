@@ -66,7 +66,7 @@ Append to `Packages/FastmailShellKit/Tests/FastmailShellKitTests/CustomModeSetti
 @Test func theGroupingsDefaultIsTheAgePreset() {
     let settings = CustomModeSettings.current(from: freshDefaults(#function))
     let text = settings["groupings"] as? String
-    #expect(text?.hasPrefix("By age (urgent first)") == true)
+    #expect(text?.hasPrefix("by age (urgent first)") == true)
     #expect(text?.contains("\n  Triage = in:Triage OR is:unread") == true)
     #expect(text?.contains("\n  Pinned = is:pinned") == true)
     #expect(text?.contains("\n  Today = date:today") == true)
@@ -173,7 +173,7 @@ In the `options` array, immediately after the `filteredLabelCounts` entry that c
             multiline: true,
             title: "Your groupings",
             hint: "One block each: a line naming the grouping, then indented “Name = search” lines, then a bare line for everything else. Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Renaming a grouping loses it on the mailboxes using it.",
-            default: .text("By age (urgent first)\n  Triage = in:Triage OR is:unread\n  Pinned = is:pinned\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n  This month = after:1m\n  Older")
+            default: .text("by age (urgent first)\n  Triage = in:Triage OR is:unread\n  Pinned = is:pinned\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n  This month = after:1m\n  Older")
         ),
 ```
 
@@ -518,7 +518,7 @@ In `Userscript/fastmail-custom-mode.user.js`, inside `DEFAULT_SETTINGS`, immedia
         // The groupings offered in Fastmail's Group menu beyond its own five
         // and the automatic Labels one. A block each: a line naming it, then
         // indented Name = search lines, then a bare line for the rest.
-        groupings: 'By age (urgent first)\n  Triage = in:Triage OR is:unread\n  Pinned = is:pinned\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n  This month = after:1m\n  Older',
+        groupings: 'by age (urgent first)\n  Triage = in:Triage OR is:unread\n  Pinned = is:pinned\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n  This month = after:1m\n  Older',
 ```
 
 - [ ] **Step 4: Add the same line to both extension scripts**
@@ -1025,7 +1025,7 @@ Run: `node --check Userscript/fastmail-custom-mode.user.js && make install-exten
 Then reload the Fastmail window in the work app and run:
 `osascript -e 'tell application "nexthealth.nl" to do JavaScript (read POSIX file "'"$PWD"'/Userscript/probe-groups.js" as «class utf8»)'`
 
-Expected, on the Inbox: `parsed` holds one grouping, `split:By age (urgent first)`, with the seven groups and `otherName` "Older"; `labels` lists `["Business","Projects","Boards","Later"]` with `otherName` "Other"; `current` is whatever that mailbox was already using.
+Expected, on the Inbox: `parsed` holds one grouping, `split:by age (urgent first)`, with the seven groups and `otherName` "Older"; `labels` lists `["Business","Projects","Boards","Later"]` with `otherName` "Other"; `current` is whatever that mailbox was already using.
 
 - [ ] **Step 7: Check the stand-in against Fastmail's parser**
 
@@ -1033,7 +1033,7 @@ In the work app's console or through a one-off probe, run:
 
 ```javascript
 const mode = window.customMode;
-mode.chooseGrouping('split:By age (urgent first)');
+mode.chooseGrouping('split:by age (urgent first)');
 FastMail.router.getAppController('mail').calculateSplits();
 ```
 
@@ -1220,7 +1220,7 @@ osascript -e 'tell application "nexthealth.nl" to do JavaScript "
 "'
 ```
 
-Expected: the text runs none, by age, pinned first, unread first, labels, By age (urgent first), custom…, then the Sort section. The Copy link entry on a message's own menu must still be there — open one and check.
+Expected: the text runs none, by age, pinned first, unread first, labels, by age (urgent first), custom…, then the Sort section. The Copy link entry on a message's own menu must still be there — open one and check.
 
 - [ ] **Step 5: Commit**
 
@@ -1541,7 +1541,7 @@ Against the work account, which has the nesting and the volume. These are the sp
 - [ ] Labels on the Inbox shows Business, Projects, Boards, Later, with the mail filed the old way in Other.
 - [ ] Labels on Boards shows ZonMw and Gezond Adviseren.
 - [ ] Renaming a label, and adding one, changes the groups without a reload.
-- [ ] By age (urgent first) puts the right mail in each of its seven groups.
+- [ ] by age (urgent first) puts the right mail in each of its seven groups.
 - [ ] Folding a group survives leaving the mailbox and coming back, and appears nowhere in the mailbox's stored `splits`.
 - [ ] Switching to a mode grouping and back leaves the Projects split's own folded groups intact.
 - [ ] Counts forced out of step with the length make the list fall back to ungrouped and refetch, rather than empty.

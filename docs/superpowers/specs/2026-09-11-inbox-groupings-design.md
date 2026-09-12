@@ -54,7 +54,7 @@ implementation writes the indexes into the mailbox's stored `splits`.
   message, so this is right for anything filed from now on; mail filed before
   it, and mail labelled through Fastmail's own Labels menu, lands in the
   catch-all group, where it is visible rather than hidden.
-- "By age (urgent first)" **ships as the starting content of the editable
+- "by age (urgent first)" **ships as the starting content of the editable
   field** rather than being fixed in code, so it doubles as the worked example
   of the format.
 
@@ -125,7 +125,7 @@ It is code-defined and not editable.
 
 A new setting, `groupings`, holding multi-line text, parsed in the userscript.
 
-    By age (urgent first)
+    by age (urgent first)
       Triage = in:Triage OR is:unread
       Pinned = is:pinned
       Today = date:today

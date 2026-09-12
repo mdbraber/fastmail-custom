@@ -13,7 +13,7 @@ const DEFAULT_SETTINGS = {
     labelsAutoSave: true,
     stickyInboxFilter: true,
     filteredLabelCounts: true,
-    groupings: 'By age (urgent first)\n  Triage = in:Triage OR is:unread\n  Pinned = is:pinned\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n  This month = after:1m\n  Older',
+    groupings: 'by age (urgent first)\n  Triage = in:Triage OR is:unread\n  Pinned = is:pinned\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n  This month = after:1m\n  Older',
     backToListAfterTriage: true,
     triageLabel: 'Triage',
     snoozeKey: 'w',
