@@ -1563,6 +1563,63 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
+     * Counts that outrun the list.
+     *
+     * The list's height is its length less the folded groups' counts, and
+     * those counts are taken as given; the bucket for everything else is the
+     * difference between them, which Fastmail floors at nothing when it
+     * measures the list but not when it counts it. So counts left over from
+     * a longer list make the length negative and the list draws nothing at
+     * all, which is how a label with a grouping on it comes up empty.
+     *
+     * Counts summing above the length are never right, whatever put them
+     * there. Dropped, so the list draws now, ungrouped, rather than not at
+     * all; and the query is refetched so real ones come back.
+     */
+    const checkGroupCounts = (list) => {
+        try {
+            const counts = list.get('groupByCounts');
+            const length = list.get('queryLength');
+            if (!counts || typeof length !== 'number') return;
+
+            const total = counts.reduce((sum, one) => sum + (one || 0), 0);
+            if (total <= length) {
+                list.customCountsDropped = false;
+                return;
+            }
+
+            // Dropping the counts changes them, which brings us back here;
+            // once per drift is enough.
+            if (list.customCountsDropped) return;
+            list.customCountsDropped = true;
+
+            reportFault('the group counts had run ahead of the list; refetching');
+            if (list.query) list.query.set('groupByCounts', null);
+            list.reset();
+        } catch (error) {
+            // A list that cannot be asked is a list that cannot be mended
+        }
+    };
+
+    /*
+     * Watch every list, grouped or not.
+     *
+     * adoptList returns early when no grouping of the mode's own is in
+     * force, but the drift this guards against happens under Fastmail's own
+     * groupings too, so the watch is attached separately and unconditionally.
+     */
+    const watchGroupCounts = () => {
+        const list = controller().get('mailboxMessageList');
+        if (!list || !list.collapsedGroups || list.customCountWatch) return;
+        list.customCountWatch = true;
+
+        const check = { go: () => checkGroupCounts(list) };
+        list.addObserverForKey('groupByCounts', check, 'go');
+        list.addObserverForKey('queryLength', check, 'go');
+        checkGroupCounts(list);
+    };
+
+    /*
      * ----------------------------------------------------------------
      * The list toolbar
      * ----------------------------------------------------------------
@@ -5442,8 +5499,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         controller().addObserverForKey('mailbox', { go: scheduleMidnight }, 'go');
 
         // The list is rebuilt whenever the mailbox, the sort or the filter
-        // moves, and a fresh one folds nothing until it is told
-        controller().addObserverForKey('mailboxMessageList', { go: adoptList }, 'go');
+        // moves, and a fresh one folds nothing until it is told; it also
+        // needs its counts watched from the moment it exists
+        controller().addObserverForKey('mailboxMessageList', {
+            go: () => {
+                adoptList();
+                watchGroupCounts();
+            }
+        }, 'go');
     };
 
     /*
@@ -5800,6 +5863,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         setMode(storedMode());
         scheduleMidnight();
         adoptList();
+        watchGroupCounts();
 
         // Handy from the console, and how the counts can be checked by hand
         window.customMode = {
