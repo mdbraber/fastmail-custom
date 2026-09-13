@@ -497,6 +497,11 @@ final class CustomModeSettingsPusher {
     // Written once in init, read again only from deinit; never concurrently
     private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
     private var pushTask: Task<Void, Never>?
+    /// The settings last pushed into the running page, or nothing while it
+    /// has only what it was built with.
+    private var pushed: String?
+    /// Whether the push waiting to go was asked for regardless of change.
+    private var forceNext = false
 
     init(webView: WKWebView) {
         self.webView = webView
@@ -506,7 +511,7 @@ final class CustomModeSettingsPusher {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.schedulePush() }
+            MainActor.assumeIsolated { self?.schedulePush(force: false) }
         })
         #if canImport(UIKit)
         observers.append(center.addObserver(
@@ -514,7 +519,7 @@ final class CustomModeSettingsPusher {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.schedulePush() }
+            MainActor.assumeIsolated { self?.schedulePush(force: true) }
         })
         #endif
     }
@@ -525,15 +530,34 @@ final class CustomModeSettingsPusher {
         }
     }
 
+    /// A new document was loaded, with the settings the view was built with.
+    func pageLoaded() {
+        pushed = nil
+    }
+
+    /// Every defaults write posts the same notification, the shell's own keys
+    /// included, and the iPhone and iPad apps write one each time the page
+    /// changes while Remember last viewed page is on. A push the page already
+    /// has would only make it drop its caches again.
+    nonisolated static func shouldPush(_ settings: String, after pushed: String?, force: Bool) -> Bool {
+        force || settings != pushed
+    }
+
     // Applying settings makes the page drop caches and re-ask the server for
     // counts, so a keystroke-by-keystroke stream of changes is coalesced into
     // one push once the writing pauses.
-    private func schedulePush() {
+    private func schedulePush(force: Bool) {
+        forceNext = forceNext || force
         pushTask?.cancel()
         pushTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
-            guard !Task.isCancelled else { return }
-            self?.webView?.evaluateJavaScript(
+            guard !Task.isCancelled, let self else { return }
+            let settings = CustomModeSettings.json(from: .standard)
+            let force = self.forceNext
+            self.forceNext = false
+            guard Self.shouldPush(settings, after: self.pushed, force: force) else { return }
+            self.pushed = settings
+            self.webView?.evaluateJavaScript(
                 CustomModeSettings.applyScriptSource(),
                 completionHandler: nil
             )

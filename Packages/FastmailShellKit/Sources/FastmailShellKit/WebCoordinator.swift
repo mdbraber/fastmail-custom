@@ -211,6 +211,9 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
     }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // A new document starts from the settings it was built with, so the
+        // next change reaches it whatever the last one pushed.
+        settingsPusher?.pageLoaded()
         #if !canImport(UIKit)
         if let window = webView.window, window.styleMask.contains(.fullScreen) {
             webView.evaluateJavaScript("document.body.classList.add('fmshell-fullscreen')")

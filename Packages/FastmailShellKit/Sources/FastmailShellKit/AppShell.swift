@@ -20,6 +20,16 @@ public struct AppShell: View {
         self.profile = profile
     }
 
+    /// What the web view opens. On iPhone and iPad a remembered page comes
+    /// first; the Mac opens its Start page as it always has.
+    private var launchURL: URL {
+        #if canImport(UIKit)
+        live.launchURL(readingFrom: .standard)
+        #else
+        live.startURL(readingFrom: .standard)
+        #endif
+    }
+
     // The profile as the setting currently has it. Everything that builds an
     // address reads it from here, so nothing is left pointing at the server
     // the app was launched against.
@@ -38,7 +48,7 @@ public struct AppShell: View {
         ZStack(alignment: .top) {
             // Keyed on the backend so choosing the other server builds a new
             // web view rather than steering the old one there.
-            WebContainer(profile: live, model: model, loadURL: live.startURL(readingFrom: .standard))
+            WebContainer(profile: live, model: model, loadURL: launchURL)
                 .ignoresSafeArea()
                 .id(backendName)
             if let banner = model.banner {
@@ -110,6 +120,10 @@ public struct AppShell: View {
                 BadgeController.shared.reapply()
                 PushRegistrar.current?.becameActive()
             }
+        }
+        .onChange(of: model.pageURL) {
+            // Remember last viewed page: saved as it changes, while the switch is on
+            DevicePreferences.recordPage(model.pageURL)
         }
         .onChange(of: pendingLinks.url) {
             // A tapped notification, routed exactly as a link from outside
