@@ -28,6 +28,13 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     /// Asked where to put a message, and answers where it put it; so a page
     /// told "inline" knows to go ahead and open one itself.
     private let onCompose: @MainActor (String) -> String
+    /// What the Notifications page draws from; nothing where there is no such
+    /// page, which is the Mac.
+    private let onNotificationState: @MainActor () async -> NotificationState?
+    /// Keeps a choice the page made and registers it; answers the choice as
+    /// saved, or nothing where there is no such page.
+    private let onSetNotifications: @MainActor (NotificationChoice) -> NotificationChoice?
+    private let onOpenNotificationSettings: @MainActor () -> Void
 
     public init(
         expectedHost: String,
@@ -44,7 +51,10 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onDismissNotifications: @escaping @MainActor ([String]) -> Void = { _ in },
         onShowWindow: @escaping @MainActor () -> Void = {},
         onSubject: @escaping @MainActor (String?) -> Void = { _ in },
-        onCompose: @escaping @MainActor (String) -> String = { _ in ComposeMode.inline.rawValue }
+        onCompose: @escaping @MainActor (String) -> String = { _ in ComposeMode.inline.rawValue },
+        onNotificationState: @escaping @MainActor () async -> NotificationState? = { nil },
+        onSetNotifications: @escaping @MainActor (NotificationChoice) -> NotificationChoice? = { _ in nil },
+        onOpenNotificationSettings: @escaping @MainActor () -> Void = {}
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
@@ -61,6 +71,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onShowWindow = onShowWindow
         self.onSubject = onSubject
         self.onCompose = onCompose
+        self.onNotificationState = onNotificationState
+        self.onSetNotifications = onSetNotifications
+        self.onOpenNotificationSettings = onOpenNotificationSettings
     }
 
     static func rect(from values: [Double]) -> CGRect? {
@@ -189,6 +202,26 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             return BridgeReply(value: onCompose(mode), error: nil)
         case "showWindow":
             onShowWindow()
+            return BridgeReply(value: nil, error: nil)
+        case "notificationState":
+            guard let state = await onNotificationState() else {
+                return BridgeReply(value: nil, error: "notification settings are not available here")
+            }
+            // Text rather than an object: a reply's value is a string, and
+            // the harness parses it
+            return BridgeReply(value: state.json, error: nil)
+        case "setNotifications":
+            switch NotificationChoice.parse(payload) {
+            case .failure(let invalid):
+                return BridgeReply(value: nil, error: "setNotifications: \(invalid.message)")
+            case .success(let choice):
+                guard let saved = onSetNotifications(choice) else {
+                    return BridgeReply(value: nil, error: "notification settings are not available here")
+                }
+                return BridgeReply(value: saved.json, error: nil)
+            }
+        case "openNotificationSettings":
+            onOpenNotificationSettings()
             return BridgeReply(value: nil, error: nil)
         default:
             return BridgeReply(value: nil, error: "unknown action: \(action)")

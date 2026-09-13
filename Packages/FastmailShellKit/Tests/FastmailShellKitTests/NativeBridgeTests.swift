@@ -337,3 +337,94 @@ private func settingsDefaults(_ name: String) -> UserDefaults {
     #expect(missing.error != nil)
     #expect(written.isEmpty)
 }
+
+// MARK: The Notifications page
+
+private func replyObject(_ reply: BridgeReply) throws -> [String: Any] {
+    let text = try #require(reply.value)
+    return try #require(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+}
+
+// A reply carries a string, so the state travels as JSON text the harness parses
+@Test @MainActor func notificationStateAnswersTheAppsStateAsJSON() async throws {
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onNotificationState: {
+            NotificationState(
+                choice: NotificationChoice(mode: .important),
+                permission: .undetermined, pushToken: nil, contacts: true
+            )
+        }
+    )
+    let reply = await bridge.handle(body: ["action": "notificationState", "payload": [:]])
+    #expect(reply.error == nil)
+    let object = try replyObject(reply)
+    #expect(object["mode"] as? String == "important")
+    #expect(object["permission"] as? String == "undetermined")
+    #expect(object["pushToken"] is NSNull)
+    #expect(object["contacts"] as? Bool == true)
+}
+
+// The Mac passes no handlers: the page never asks there, and if it did it
+// would be told no rather than handed a made-up state
+@Test @MainActor func withoutHandlersTheNotificationActionsAreRefused() async {
+    let bridge = NativeBridge(expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in })
+    let state = await bridge.handle(body: ["action": "notificationState", "payload": [:]])
+    let set = await bridge.handle(body: ["action": "setNotifications", "payload": ["mode": "off"]])
+    #expect(state.error != nil)
+    #expect(set.error != nil)
+}
+
+@Test @MainActor func setNotificationsSavesTheParsedChoiceAndAnswersWhatWasSaved() async throws {
+    var saved: [NotificationChoice] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onSetNotifications: { choice in
+            saved.append(choice)
+            return choice
+        }
+    )
+    let reply = await bridge.handle(body: [
+        "action": "setNotifications",
+        "payload": ["mode": "custom", "senders": "contacts", "mailboxIds": ["P2F"]],
+    ])
+    #expect(reply.error == nil)
+    #expect(saved == [NotificationChoice(mode: .custom, senders: .contacts, mailboxIds: ["P2F"])])
+    let object = try replyObject(reply)
+    #expect(object["mode"] as? String == "custom")
+    #expect(object["mailboxIds"] as? [String] == ["P2F"])
+}
+
+@Test @MainActor func setNotificationsRefusesABadChoiceBeforeSavingAnything() async {
+    var saved = 0
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onSetNotifications: { choice in
+            saved += 1
+            return choice
+        }
+    )
+    let payloads: [[String: Any]] = [
+        [:],
+        ["mode": "loud"],
+        ["mode": "custom", "senders": "friends"],
+        ["mode": "custom", "mailboxIds": [""]],
+    ]
+    for payload in payloads {
+        let reply = await bridge.handle(body: ["action": "setNotifications", "payload": payload])
+        #expect(reply.error?.hasPrefix("setNotifications: ") == true)
+    }
+    #expect(saved == 0)
+}
+
+@Test @MainActor func openNotificationSettingsReachesTheApp() async {
+    var opened = 0
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onOpenNotificationSettings: { opened += 1 }
+    )
+    let reply = await bridge.handle(body: ["action": "openNotificationSettings", "payload": [:]])
+    #expect(reply.error == nil)
+    #expect(reply.value == nil)
+    #expect(opened == 1)
+}

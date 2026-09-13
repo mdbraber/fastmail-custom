@@ -151,6 +151,27 @@ public struct WebContainer {
                 // in the page.
                 return ComposeMode.inline.rawValue
                 #endif
+            },
+            // The Notifications page exists on iPhone and iPad only; the Mac
+            // keeps Fastmail's own and answers nothing
+            onNotificationState: {
+                #if canImport(UIKit)
+                return await NotificationSettings.state()
+                #else
+                return nil
+                #endif
+            },
+            onSetNotifications: { choice in
+                #if canImport(UIKit)
+                return NotificationSettings.save(choice)
+                #else
+                return nil
+                #endif
+            },
+            onOpenNotificationSettings: {
+                #if canImport(UIKit)
+                NotificationSettings.openSystemSettings()
+                #endif
             }
         )
         configuration.userContentController.addScriptMessageHandler(
