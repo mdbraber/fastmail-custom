@@ -87,7 +87,9 @@ final class PreviewPresenter: NSObject {
         let controller = QLPreviewController()
         controller.dataSource = self
         self.controller = controller
-        topViewController()?.present(controller, animated: true)
+        // From the app's window, so a download finishing while the lock is
+        // up shows beneath the cover rather than on top of it.
+        AppWindow.topViewController()?.present(controller, animated: true)
         #else
         guard let panel = QLPreviewPanel.shared() else { return }
         panel.dataSource = self
@@ -95,18 +97,6 @@ final class PreviewPresenter: NSObject {
         panel.makeKeyAndOrderFront(nil)
         #endif
     }
-
-    #if canImport(UIKit)
-    private func topViewController() -> UIViewController? {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let window = scenes.flatMap(\.windows).first { $0.isKeyWindow }
-        var top = window?.rootViewController
-        while let presented = top?.presentedViewController {
-            top = presented
-        }
-        return top
-    }
-    #endif
 }
 
 #if canImport(UIKit)

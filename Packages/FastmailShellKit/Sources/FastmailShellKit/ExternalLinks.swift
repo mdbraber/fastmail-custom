@@ -37,7 +37,14 @@ extension ExternalLinks {
     public static func open(_ url: URL, defaults: UserDefaults = .standard) {
         switch destination(for: url, inAppBrowser: DevicePreferences.inAppBrowser(in: defaults)) {
         case .inAppBrowser:
-            guard let presenter = topViewController() else {
+            // Presented from the app's window, so while the lock is up it
+            // waits beneath the cover. A controller still coming or going
+            // cannot present, and the system takes the link instead.
+            guard
+                let presenter = AppWindow.topViewController(),
+                !presenter.isBeingPresented,
+                !presenter.isBeingDismissed
+            else {
                 UIApplication.shared.open(url)
                 return
             }
@@ -45,17 +52,6 @@ extension ExternalLinks {
         case .system:
             UIApplication.shared.open(url)
         }
-    }
-
-    @MainActor
-    private static func topViewController() -> UIViewController? {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let window = scenes.flatMap(\.windows).first { $0.isKeyWindow }
-        var top = window?.rootViewController
-        while let presented = top?.presentedViewController {
-            top = presented
-        }
-        return top
     }
 }
 #endif
