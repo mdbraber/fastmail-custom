@@ -6642,6 +6642,598 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     );
 
     /*
+     * The Notifications page, on the phone and the iPad. Fastmail's own page
+     * draws its choices only inside Fastmail's app; in the shells it shows
+     * only the app store badges. So where the shell offers
+     * window.native.notifications, which it does on iPhone and iPad and never
+     * on the Mac, this page takes Fastmail's notifications id. It is built
+     * from the Custom mode page's parts: the same page view, header and
+     * sections. The sidebar entry and its highlight stay Fastmail's own,
+     * since the id is.
+     *
+     * The choice lives in the app, which tells the push server. Fastmail's
+     * own notification preferences are never read here and never written.
+     */
+    const NOTIFICATIONS_PAGE_ID = 'notifications';
+    const NOTIFICATIONS_PAGE_TITLE = 'Notifications';
+    // Fastmail's own section, as its Notifications page wraps each part
+    const NOTIFICATIONS_SECTION = 'div.u-p-6.u-space-y-5';
+    const NOTIFICATIONS_PERMISSION_TEXT = 'Notifications are turned off for this app in iOS Settings.';
+    const NOTIFICATIONS_CONTACTS_TEXT =
+        'The push server cannot read your contacts, so VIPs and contacts get no notifications.';
+
+    // Fastmail's glyphs for the four choices and for its warning banner,
+    // copied from its Cancelled, VIP, Inbox, settings and attention icons;
+    // the functions that draw them belong to its modules and are not
+    // reachable from here.
+    const NOTIFICATION_GLYPHS = {
+        cancelled: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="u-standardicon">' +
+            '<circle cx="12" cy="12" r="6.75"/><line x1="7.5" y1="7.5" x2="16.5" y2="16.5"/></svg>',
+        vip: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="u-standardicon">' +
+            '<path d="M12.41,16.28a.8.8,0,0,0-.82,0L7.36,19.17c-.23.16-.35.07-.27-.19l1.27-4.52a.93.93,0,0,0-.21-.83' +
+            'L4.86,10.28c-.19-.19-.13-.37.15-.4l4.35-.41a.92.92,0,0,0,.69-.5l1.75-4c.11-.25.29-.25.4,0L14,9' +
+            'a.92.92,0,0,0,.69.5L19,9.88c.28,0,.34.21.15.4l-3.29,3.35a.93.93,0,0,0-.21.83L16.91,19' +
+            'c.08.26,0,.35-.27.19Z"/></svg>',
+        inbox: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="u-standardicon">' +
+            '<path d="M3.75 13.2727H7.01567C7.73679 13.2727 8.39602 13.6813 8.71852 14.328L8.93533 14.7629' +
+            'C9.25782 15.4096 9.91706 15.8182 10.6382 15.8182H13.3618C14.0829 15.8182 14.7422 15.4096 15.0647 14.7629' +
+            'L15.2815 14.328C15.604 13.6813 16.2632 13.2727 16.9843 13.2727H20.25M3.75 13.5598V17.0909' +
+            'C3.75 18.1453 4.60238 19 5.65385 19H18.3462C19.3976 19 20.25 18.1453 20.25 17.0909V13.5598' +
+            'C20.25 13.3695 20.2216 13.1802 20.1658 12.9984L18.1251 6.34765C17.8793 5.54662 17.1412 5 16.3054 5' +
+            'H7.69459C6.8588 5 6.12073 5.54662 5.87494 6.34765L3.83419 12.9984C3.77838 13.1802 3.75 13.3695 3.75 13.5598Z"/></svg>',
+        settings: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="u-standardicon">' +
+            '<path d="M20.48 10.6L19 10.17a.33.33 0 0 1-.24-.24 6.86 6.86 0 0 0-.52-1.25.34.34 0 0 1 0-.34L19 7' +
+            'a.71.71 0 0 0-.12-.86l-1-1a.72.72 0 0 0-.51-.22A.64.64 0 0 0 17 5l-1.33.74a.35.35 0 0 1-.17 0 .33.33 0 0 1-.17 0' +
+            ' 7 7 0 0 0-1.26-.52.36.36 0 0 1-.25-.22l-.42-1.48a.72.72 0 0 0-.69-.52h-1.42a.72.72 0 0 0-.69.52L10.17 5' +
+            'a.33.33 0 0 1-.24.24 7.17 7.17 0 0 0-1.25.52.35.35 0 0 1-.17 0 .33.33 0 0 1-.17 0L7 5a.64.64 0 0 0-.35-.1' +
+            '.74.74 0 0 0-.51.22l-1 1A.74.74 0 0 0 5 7l.75 1.34a.37.37 0 0 1 0 .34 7.17 7.17 0 0 0-.52 1.25' +
+            '.34.34 0 0 1-.24.24l-1.48.43a.72.72 0 0 0-.52.69v1.42a.72.72 0 0 0 .52.69l1.49.43a.34.34 0 0 1 .24.24' +
+            ' 7.17 7.17 0 0 0 .52 1.25.37.37 0 0 1 0 .34L5 17a.7.7 0 0 0 .12.85l1 1a.69.69 0 0 0 .5.21A.63.63 0 0 0 7 19' +
+            'l1.34-.74a.38.38 0 0 1 .34 0 7 7 0 0 0 1.26.52.33.33 0 0 1 .23.24l.43 1.48a.72.72 0 0 0 .69.52h1.42' +
+            'a.72.72 0 0 0 .69-.52l.43-1.5a.33.33 0 0 1 .24-.24 7.17 7.17 0 0 0 1.25-.52.35.35 0 0 1 .17 0 .33.33 0 0 1 .17 0' +
+            'L17 19a.63.63 0 0 0 .35.09.73.73 0 0 0 .51-.21l1-1A.71.71 0 0 0 19 17l-.75-1.34a.37.37 0 0 1 0-.34' +
+            ' 7 7 0 0 0 .52-1.26.35.35 0 0 1 .24-.23l1.48-.43a.72.72 0 0 0 .52-.69v-1.42a.73.73 0 0 0-.53-.69z' +
+            'M12 15.24A3.24 3.24 0 1 1 15.24 12 3.24 3.24 0 0 1 12 15.24z"/></svg>',
+        attention: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"' +
+            ' stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5">' +
+            '<circle cx="11.75" cy="11.75" r="7.25"/>' +
+            '<circle cx="11.5" cy="15.37" r="0.88" fill="currentColor" stroke="none"/>' +
+            '<line x1="11.5" y1="8" x2="11.5" y2="12.5"/></svg>'
+    };
+
+    // A fresh glyph each time, since a node can be in one place only; the
+    // classes are the ones Fastmail's own icon function and its caller add.
+    const notificationGlyph = (name, sizing) => {
+        const svg = new DOMParser().parseFromString(NOTIFICATION_GLYPHS[name], 'image/svg+xml').documentElement;
+        svg.setAttribute('role', 'presentation');
+        ['v-Icon', 'i-' + name].concat(sizing.split(' ')).forEach(one => svg.classList.add(one));
+        return svg;
+    };
+
+    // Fastmail's label for a boxed choice, drawn the way RadioGroupView's own
+    // helper draws it: the glyph and title on one line, the description under
+    // the title.
+    const notificationChoiceLabel = (glyph, title, description) => {
+        const el = FastMail.el;
+        return el('div.u-py-1.u-flex.u-flex-col.u-space-y-3', [
+            el('p.u-flex.u-space-x-2.u-items-center', [
+                notificationGlyph(glyph, 'u-sq-24 u-my-n4'),
+                el('div.u-flex-1.u-trim', [title])
+            ]),
+            el('div.u-flex.u-space-x-2', [
+                el('span.u-sq-24.u-my-n4'),
+                el('p.u-flex-1.u-trim.u-color-unimportant', [description])
+            ])
+        ]);
+    };
+
+    const NOTIFICATION_MODES = [
+        { value: 'off', glyph: 'cancelled', title: 'Off',
+            description: "Don't show a notification for any message on this device." },
+        { value: 'important', glyph: 'vip', title: 'Important messages only',
+            description: 'Show a notification for messages from your VIP contacts, and replies to conversations you are following.' },
+        { value: 'inbox', glyph: 'inbox', title: 'All in inbox',
+            description: 'Show a notification for everything that arrives in your inbox.' },
+        { value: 'custom', glyph: 'settings', title: 'Custom',
+            description: 'Choose senders and labels to notify for.' }
+    ];
+
+    const NOTIFICATION_SENDERS = [
+        { label: 'Everyone', value: 'everyone' },
+        { label: 'Contacts', value: 'contacts' },
+        { label: 'VIPs', value: 'vips' }
+    ];
+
+    // Fastmail's warning banner, as its own helper draws one: the attention
+    // glyph beside the text, and the button, when there is one, at the end.
+    const notificationBanner = (text, button) => {
+        const el = FastMail.el;
+        return el('div.u-banner.u-p-3.u-flex.u-items-baseline.u-space-x-2', { className: 'u-banner--warning' }, [
+            el('div.u-self-start.u-sq-24.u-m-n0_5'),
+            el('div.u-flex-1', [
+                el('div.u-flex.u-flex-wrap.u-items-center.u-space-wrap-2', [
+                    el('div.u-banner-content.u-py-1.u-flex-1', [
+                        el('h3.u-relative.u-trim.u-font-semibold', [
+                            notificationGlyph('attention', 'u-banner-icon u-sq-24 u-my-n0_5'),
+                            text
+                        ])
+                    ]),
+                    button
+                ])
+            ])
+        ]);
+    };
+
+    // Only a refusal counts: a question not yet asked is asked at launch,
+    // and iOS Settings has no switch to show for it yet.
+    const needsPermissionWarning = (state) => state.permission === 'denied' && state.mode !== 'off';
+
+    // Only a server that said it cannot read contacts, and only for a choice
+    // that needs them.
+    const needsContactsWarning = (state) => state.contacts === false &&
+        (state.mode === 'important' || (state.mode === 'custom' && state.senders !== 'everyone'));
+
+    const notificationsBridge = () => {
+        const native = window.native;
+        const bridge = native && native.notifications;
+        return bridge && typeof bridge.state === 'function' && typeof bridge.set === 'function' &&
+            typeof bridge.openSettings === 'function' ? bridge : null;
+    };
+
+    const primaryMailAccountId = () => {
+        const primary = FastMail.auth && typeof FastMail.auth.get === 'function'
+            ? FastMail.auth.get('primaryAccounts') : null;
+        return primary ? primary['urn:ietf:params:jmap:mail'] || null : null;
+    };
+
+    // What a notification can be for: the Inbox first, then every mailbox
+    // without a role, by path.
+    const notificationLabels = (accountId) => {
+        const all = accountId ? mailboxesOf(accountId) : [];
+        const inbox = all.filter(mailbox => mailbox.get('role') === 'inbox');
+        const labels = all.filter(mailbox => !mailbox.get('role'))
+            .sort((a, b) => String(a.get('pathName')).localeCompare(String(b.get('pathName'))));
+        return inbox.concat(labels);
+    };
+
+    // A label the store does not have (deleted, or not loaded yet) keeps its
+    // place in the list rather than being dropped from the choice unseen.
+    const notificationLabelName = (accountId, id) => {
+        const found = accountId ? mailboxesOf(accountId).filter(mailbox => mailbox.get('id') === id)[0] : null;
+        return found ? String(found.get('pathName')) : 'Unknown label';
+    };
+
+    // Fastmail's Notifications module, which the page loads before it draws,
+    // brings in the choices, the copy button and the list parts. The list and
+    // the copy button each have a fallback, so they are optional.
+    const notificationsPageClasses = () => findClasses(
+        ['PageView', 'SettingsPaneView', 'RadioGroupView', 'SelectView', 'ButtonView', 'View'],
+        ['PageHeaderView', 'CopyTextView', 'ListInputView', 'MenuButtonView', 'MailboxMenuView', 'SubscreenSelectView']
+    );
+
+    // The first eight characters shown, the whole token copied
+    const notificationPushId = (classes, token) => {
+        const shown = token.slice(0, 8);
+        if (typeof classes.CopyTextView !== 'function') return FastMail.el('b.u-whitespace-nowrap', [shown]);
+        return new classes.CopyTextView({
+            layerTag: 'b', type: 'u-whitespace-nowrap', toCopy: shown, text: token, label: null
+        });
+    };
+
+    /*
+     * The labels, drawn with Fastmail's own list, menu button and mailbox
+     * menu, the way its page draws them. The menu offers the Inbox and
+     * mailboxes without a role. Both lists answer { view, show(ids) }, where
+     * show puts ids chosen elsewhere into the list on screen.
+     */
+    const fastmailLabelList = (classes, accountId, ids, changed) => {
+        const el = FastMail.el;
+        const list = new classes.ListInputView({
+            label: 'Labels',
+            value: ids.slice(),
+            mapValueToItems: (value) => (value || []).map(id => ({ id })),
+            mapItemsToValue: (items) => items.map(item => item.id),
+            drawItemContent: (item) => el('p.u-trim.u-flex-1', [notificationLabelName(accountId, item.id)]),
+            drawAddInput() {
+                const owner = this;
+                return el('p', [new classes.MenuButtonView({
+                    type: 'v-Button--standard v-Button--sizeM',
+                    label: 'Add label',
+                    popOverOptions: { positionToThe: 'right', alignEdge: 'middle', showCallout: true },
+                    menuView: new classes.MailboxMenuView({
+                        accountId,
+                        rolesVisible: { inbox: true, none: true },
+                        didSelect: (mailbox) => owner.addItem(mailbox)
+                    })
+                })]);
+            },
+            addItem(mailbox) {
+                const id = mailbox && typeof mailbox.get === 'function' ? mailbox.get('id') : null;
+                if (!id || this._items.some(item => item.id === id)) return;
+                this._items.replaceObjectsAt(this._items.get('length'), 0, [{ id }]);
+                this.setValueFromItems();
+            },
+            userDidInput(value) {
+                this.set('value', value);
+                changed(value);
+            }
+        });
+        return { view: list, show: (next) => list.set('value', next.slice()) };
+    };
+
+    // The same list from parts that are always there: the list's own markup,
+    // a remove button per label, and a select to add one.
+    const plainLabelList = (classes, accountId, ids, changed) => {
+        const el = FastMail.el;
+        let current = ids.slice();
+        let holder = null;
+        const change = (next) => {
+            current = next;
+            holder.viewNeedsRedraw();
+            changed(next.slice());
+        };
+        holder = new classes.View({
+            layerTag: 'fieldset',
+            className: 'v-ListInput u-space-y-3',
+            draw: () => {
+                const chosen = new Set(current);
+                const rows = current.map(id => el('li.u-list-item.u-py-3.u-flex.u-items-center.u-space-x-2', [
+                    el('p.u-trim.u-flex-1', [notificationLabelName(accountId, id)]),
+                    new classes.ButtonView({
+                        type: 'v-Button--subtle v-Button--sizeM',
+                        label: 'Remove',
+                        target: { go: () => change(current.filter(one => one !== id)) },
+                        method: 'go'
+                    })
+                ]));
+                const addable = notificationLabels(accountId).filter(mailbox => !chosen.has(mailbox.get('id')));
+                return [
+                    el('legend.u-font-semibold.u-trim', ['Labels']),
+                    el('ul.u-list-body.u-list-body--borders.u-hideifempty', rows),
+                    new classes.SelectView({
+                        label: 'Add label',
+                        value: '',
+                        options: [{ label: 'Choose a label', value: '' }].concat(
+                            addable.map(mailbox => ({ label: String(mailbox.get('pathName')), value: mailbox.get('id') }))),
+                        userDidInput: (value) => {
+                            if (value) change(current.concat([value]));
+                        }
+                    })
+                ];
+            }
+        });
+        return {
+            view: holder,
+            show: (next) => {
+                if (next.join('\n') === current.join('\n')) return;
+                current = next.slice();
+                holder.viewNeedsRedraw();
+            }
+        };
+    };
+
+    /*
+     * The page's one pane. It asks the app for the state when it enters the
+     * document and again whenever the window comes back, and draws from
+     * that. A choice is shown at once and sent to the app; whatever the app
+     * answers is what stays. Each answer is taken only if nothing was asked
+     * after it, so a late reply cannot undo a newer choice.
+     *
+     * Parts that come and go (a warning, Custom's controls, the push id)
+     * redraw the pane; a value that changes in parts already on screen is
+     * put into them, so a choice made in a control is not redrawn under the
+     * finger that made it.
+     */
+    const notificationsPane = (classes, controller, bridge) => {
+        const el = FastMail.el;
+        const mobile = isMobileSettings(controller);
+        const accountId = primaryMailAccountId();
+        const state = {
+            status: 'loading', mode: null, senders: 'everyone', mailboxIds: [],
+            permission: 'allowed', pushToken: null, contacts: null
+        };
+        let asked = 0;
+        let drawnShape = '';
+        let views = {};
+        let pane = null;
+
+        const shape = () => [state.status, state.mode === 'custom', needsPermissionWarning(state),
+            needsContactsWarning(state), state.pushToken || ''].join('|');
+
+        const update = () => {
+            if (!pane) return;
+            if (shape() !== drawnShape) {
+                pane.viewNeedsRedraw();
+                return;
+            }
+            if (views.choices && views.choices.get('value') !== state.mode) views.choices.set('value', state.mode);
+            if (views.senders && views.senders.get('value') !== state.senders) views.senders.set('value', state.senders);
+            if (views.labels) views.labels.show(state.mailboxIds);
+        };
+
+        const takeChoice = (reply) => {
+            if (!reply || NOTIFICATION_MODES.every(one => one.value !== reply.mode)) {
+                throw new Error('the app answered no notification choice');
+            }
+            state.mode = reply.mode;
+            state.senders = NOTIFICATION_SENDERS.some(one => one.value === reply.senders) ? reply.senders : 'everyone';
+            state.mailboxIds = Array.isArray(reply.mailboxIds)
+                ? reply.mailboxIds.filter(id => typeof id === 'string' && id) : [];
+        };
+
+        const refresh = () => {
+            const mine = ++asked;
+            Promise.resolve().then(() => bridge.state()).then((reply) => {
+                if (mine !== asked) return;
+                takeChoice(reply);
+                state.permission = reply.permission === 'denied' || reply.permission === 'undetermined'
+                    ? reply.permission : 'allowed';
+                state.pushToken = typeof reply.pushToken === 'string' && reply.pushToken ? reply.pushToken : null;
+                state.contacts = typeof reply.contacts === 'boolean' ? reply.contacts : null;
+                state.status = 'ready';
+                update();
+            }).catch((error) => {
+                if (mine !== asked) return;
+                if (state.status === 'loading') {
+                    state.status = 'failed';
+                    update();
+                }
+                reportFault('the notification settings could not be read', error);
+            });
+        };
+
+        const choose = (change) => {
+            if (state.status !== 'ready') return;
+            const next = { mode: state.mode, senders: state.senders, mailboxIds: state.mailboxIds.slice() };
+            Object.assign(next, change);
+            // Custom chosen with no labels yet starts from the Inbox, for
+            // everyone; a list kept from an earlier Custom is taken up again.
+            if (change.mode === 'custom' && state.mode !== 'custom' && !next.mailboxIds.length) {
+                const inbox = notificationLabels(accountId).filter(mailbox => mailbox.get('role') === 'inbox')[0];
+                next.mailboxIds = inbox ? [inbox.get('id')] : [];
+                next.senders = 'everyone';
+            }
+            Object.assign(state, next);
+            update();
+            const mine = ++asked;
+            Promise.resolve().then(() => bridge.set(next)).then((saved) => {
+                if (mine !== asked) return;
+                takeChoice(saved);
+                update();
+            }).catch((error) => {
+                reportFault('the notification choice could not be saved', error);
+                refresh();
+            });
+        };
+
+        const drawChoices = () => new classes.RadioGroupView({
+            type: 'v-RadioGroup--boxed',
+            isDisabled: state.status !== 'ready',
+            value: state.mode,
+            options: NOTIFICATION_MODES.map(one => ({
+                label: notificationChoiceLabel(one.glyph, one.title, one.description),
+                value: one.value
+            })),
+            userDidInput(value) {
+                this.set('value', value);
+                if (value !== state.mode) choose({ mode: value });
+            }
+        });
+
+        // The phone's own page opens the senders as a page of their own
+        const drawSenders = () => {
+            const Select = mobile && typeof classes.SubscreenSelectView === 'function'
+                ? classes.SubscreenSelectView : classes.SelectView;
+            return new Select({
+                label: 'Notify for messages from',
+                value: state.senders,
+                options: NOTIFICATION_SENDERS.map(one => ({ label: one.label, value: one.value })),
+                userDidInput(value) {
+                    this.set('value', value);
+                    if (value !== state.senders) choose({ senders: value });
+                }
+            });
+        };
+
+        const drawLabels = () => {
+            const changed = (ids) => choose({ mailboxIds: ids });
+            const fastmails = ['ListInputView', 'MenuButtonView', 'MailboxMenuView']
+                .every(name => typeof classes[name] === 'function');
+            return fastmails
+                ? fastmailLabelList(classes, accountId, state.mailboxIds, changed)
+                : plainLabelList(classes, accountId, state.mailboxIds, changed);
+        };
+
+        const openSettingsButton = () => new classes.ButtonView({
+            type: 'v-Button--standard v-Button--sizeM',
+            label: 'Open Settings',
+            target: { go: () => {
+                Promise.resolve().then(() => bridge.openSettings()).catch((error) => {
+                    reportFault('iOS Settings would not open', error);
+                });
+            } },
+            method: 'go'
+        });
+
+        const onFocus = () => refresh();
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') refresh();
+        };
+
+        pane = new classes.SettingsPaneView({
+            draw() {
+                views = {};
+                drawnShape = shape();
+                if (state.status === 'failed') {
+                    return [el(NOTIFICATIONS_SECTION, [
+                        el('p.u-trim.u-color-unimportant', ['Notification settings are unavailable right now.'])
+                    ])];
+                }
+                const sections = [];
+                if (needsPermissionWarning(state)) {
+                    sections.push(el(NOTIFICATIONS_SECTION, [
+                        notificationBanner(NOTIFICATIONS_PERMISSION_TEXT, openSettingsButton())
+                    ]));
+                }
+                if (needsContactsWarning(state)) {
+                    sections.push(el(NOTIFICATIONS_SECTION, [notificationBanner(NOTIFICATIONS_CONTACTS_TEXT, null)]));
+                }
+                views.choices = drawChoices();
+                const controls = [views.choices];
+                if (state.mode === 'custom') {
+                    views.senders = drawSenders();
+                    views.labels = drawLabels();
+                    controls.push(el('div.u-space-y-5', [views.senders, views.labels.view]));
+                }
+                sections.push(pageSection(NOTIFICATIONS_PAGE_ID, { id: 'messages', title: 'New messages' }, controls));
+                if (state.pushToken) {
+                    sections.push(el(NOTIFICATIONS_SECTION, [
+                        el('p.u-trim.u-text-sm.u-color-unimportant', [
+                            'The push id for your device is ', notificationPushId(classes, state.pushToken)
+                        ])
+                    ]));
+                }
+                return sections;
+            },
+            // Coming back from iOS Settings is how a granted permission shows,
+            // so the state is asked again each time the window comes back.
+            didEnterDocument() {
+                const result = classes.SettingsPaneView.prototype.didEnterDocument.call(this);
+                window.addEventListener('focus', onFocus);
+                document.addEventListener('visibilitychange', onVisibility);
+                refresh();
+                return result;
+            },
+            willLeaveDocument() {
+                window.removeEventListener('focus', onFocus);
+                document.removeEventListener('visibilitychange', onVisibility);
+                return classes.SettingsPaneView.prototype.willLeaveDocument.call(this);
+            }
+        });
+        return pane;
+    };
+
+    const notificationsPage = (classes, controller, bridge) => settingsPageView(
+        classes, controller, NOTIFICATIONS_PAGE_ID, NOTIFICATIONS_PAGE_TITLE,
+        () => [notificationsPane(classes, controller, bridge)]
+    );
+
+    /*
+     * Taking the id. Fastmail's Settings controller keeps each page's
+     * builder in _registeredViews, and asks Fastmail's loader for a page's
+     * module only when it has no builder; Fastmail's Notifications module
+     * registers its own builder when it loads. So this page's builder goes
+     * in, and register is wrapped on the controller, so that Fastmail's
+     * builder, arriving later, is kept aside rather than put over this one.
+     * The builder loads Fastmail's module itself, which is what brings in
+     * the classes the page is drawn with.
+     *
+     * Anything that goes wrong while building puts Fastmail's builder back
+     * and hands the page to it, so a failure costs this page and nothing
+     * else. The install returns the function that puts the controller back.
+     */
+    let notificationsPageState = 'waiting';
+
+    const notificationsContract = (controller) => !!controller &&
+        typeof controller.get === 'function' && typeof controller.register === 'function' &&
+        typeof controller.go === 'function' && typeof controller.getModuleForViewId === 'function' &&
+        !!controller._registeredViews && typeof controller._registeredViews === 'object';
+
+    const installNotificationsPage = (controller) => {
+        const views = controller._registeredViews;
+        const hadOwnRegister = Object.prototype.hasOwnProperty.call(controller, 'register');
+        const originalRegister = controller.register;
+        let fastmails = typeof views[NOTIFICATIONS_PAGE_ID] === 'function' ? views[NOTIFICATIONS_PAGE_ID] : null;
+        let ours = null;
+
+        const uninstall = () => {
+            if (hadOwnRegister) controller.register = originalRegister;
+            else delete controller.register;
+            if (views[NOTIFICATIONS_PAGE_ID] !== ours) return;
+            if (fastmails) views[NOTIFICATIONS_PAGE_ID] = fastmails;
+            else delete views[NOTIFICATIONS_PAGE_ID];
+        };
+
+        const giveUp = (what, error) => {
+            if (notificationsPageState === 'unavailable') return;
+            notificationsPageState = 'unavailable';
+            uninstall();
+            reportFault(what + '; Fastmail’s own page stands in', error);
+        };
+
+        // Fastmail's own page, from the builder its module registers
+        const theirs = (args) => Promise.resolve(controller.getModuleForViewId(NOTIFICATIONS_PAGE_ID)).then(() => {
+            const builder = fastmails || views[NOTIFICATIONS_PAGE_ID];
+            if (typeof builder !== 'function' || builder === ours) {
+                throw new Error('Fastmail’s own Notifications page is not registered');
+            }
+            return builder.apply(null, args);
+        });
+
+        // HierarchyController calls a builder as builder(viewState,
+        // controller, parent) and waits for a promise it returns.
+        ours = function () {
+            const args = Array.prototype.slice.call(arguments);
+            if (notificationsPageState === 'unavailable') return theirs(args);
+            return Promise.resolve(controller.getModuleForViewId(NOTIFICATIONS_PAGE_ID)).then(() => {
+                const bridge = notificationsBridge();
+                const classes = notificationsPageClasses();
+                if (!bridge || !classes) throw new Error('missing ' + (bridge ? 'classes' : 'window.native.notifications'));
+                return notificationsPage(classes, args[1] || controller, bridge);
+            }).then(null, (error) => {
+                giveUp('the Notifications page could not be drawn', error);
+                return theirs(args);
+            });
+        };
+
+        originalRegister.call(controller, NOTIFICATIONS_PAGE_ID, ours);
+        controller.register = function (id, builder) {
+            if (id === NOTIFICATIONS_PAGE_ID && builder !== ours) {
+                fastmails = builder;
+                return this;
+            }
+            return originalRegister.apply(this, arguments);
+        };
+
+        try {
+            // Fastmail's page may already be on screen, built before this one
+            // could take the id; it is built again, as this one. A new view
+            // state is what makes the controller build rather than reuse.
+            const router = FastMail.router;
+            if (router && router.get('app') === 'settings' && controller.get('viewId') === NOTIFICATIONS_PAGE_ID) {
+                controller.go(NOTIFICATIONS_PAGE_ID, { nonce: Math.random() });
+            }
+        } catch (error) {
+            uninstall();
+            throw error;
+        }
+        return uninstall;
+    };
+
+    // Called whenever the Custom mode page is: the Settings controller exists
+    // only once Settings has loaded. Without window.native.notifications,
+    // which is everywhere but iPhone and iPad, it does nothing at all.
+    const ensureNotificationsPage = () => {
+        if (notificationsPageState !== 'waiting' || !notificationsBridge()) return;
+        try {
+            const router = FastMail.router;
+            const controller = router && typeof router.getAppController === 'function'
+                ? router.getAppController('settings') : null;
+            if (!controller) return;
+            if (!notificationsContract(controller) || !findClasses(['PageView', 'SettingsPaneView', 'ButtonView', 'View'], [])) {
+                notificationsPageState = 'unavailable';
+                reportFault('the Notifications page could not be added; Fastmail’s own page stands in');
+                return;
+            }
+            installNotificationsPage(controller);
+            notificationsPageState = 'installed';
+        } catch (error) {
+            notificationsPageState = 'unavailable';
+            reportFault('the Notifications page could not be added; Fastmail’s own page stands in', error);
+        }
+    };
+
+    /*
      * Reaching the page. Fastmail's Settings controller registers each of its
      * own pages by id, and lists it from a sources controller whose groups are
      * plain arrays of entries; Display options is registered this way. So is
@@ -6910,10 +7502,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                         reportFault('could not tell which app is showing', error);
                     }
                     ensureSettingsPage();
+                    ensureNotificationsPage();
                 }
             }, 'check');
         }
         ensureSettingsPage();
+        ensureNotificationsPage();
     };
 
     const openSettings = () => {
@@ -7701,6 +8295,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const dressSettingsList = () => {
         ensureSettingsPage();
+        ensureNotificationsPage();
         const found = settingsSourceList();
         if (!found) return;
         const { list, swipes, offline } = found;
