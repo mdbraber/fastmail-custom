@@ -6460,14 +6460,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const SETTINGS_PAGE_TITLE = 'Custom mode';
 
     // The page needs these; the groupings editor's dialog also wants
-    // ModalOverlayView and ScrollView, but checks for them itself, so their
-    // absence costs that one button rather than the page.
+    // ModalOverlayView and ScrollView, and the mobile build's back button
+    // wants PageHeaderView, but each checks for its own class, so its
+    // absence costs that one part rather than the page.
     const pageClasses = () => {
         const all = FastMail.classes || {};
         const required = ['PageView', 'SettingsPaneView', 'ToggleView', 'TextInputView', 'ButtonView', 'View'];
         if (required.some(name => typeof all[name] !== 'function')) return null;
         const found = {};
-        required.concat(['ModalOverlayView', 'ScrollView']).forEach((name) => {
+        required.concat(['ModalOverlayView', 'ScrollView', 'PageHeaderView']).forEach((name) => {
             if (typeof all[name] === 'function') found[name] = all[name];
         });
         return found;
@@ -6514,12 +6515,46 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         });
     };
 
-    const settingsPage = (classes) => new classes.PageView({
+    /*
+     * The desktop build's own Settings pages have no header at all: Display
+     * options itself passes header: null there, which is what this page
+     * copied until the phone was tried. The mobile build gives each one
+     * Fastmail's own PageHeaderView instead, whose back button follows
+     * whether the sidebar sits beside the page — hidden on an iPad, where
+     * the sidebar is there and Display options' own header hides it the
+     * same way, shown on an iPhone, where it is not. A controller that
+     * binds isWithSidebar, rather than carrying it as a plain constant, is
+     * how the mobile build is told apart from the desktop one.
+     */
+    const settingsPageHeader = (classes, controller) => {
+        try {
+            const bindings = controller && controller.__meta__ && controller.__meta__.bindings;
+            if (!bindings || !bindings.isWithSidebar || typeof classes.PageHeaderView !== 'function') return null;
+
+            const header = new classes.PageHeaderView({
+                showBack: !controller.get('isWithSidebar'),
+                isWithSidebarDidChange() {
+                    this.set('showBack', !controller.get('isWithSidebar'));
+                },
+                destroy() {
+                    controller.removeObserverForKey('isWithSidebar', this, 'isWithSidebarDidChange');
+                    classes.PageHeaderView.prototype.destroy.call(this);
+                }
+            });
+            controller.addObserverForKey('isWithSidebar', header, 'isWithSidebarDidChange');
+            return header;
+        } catch (error) {
+            reportFault('the settings page could not add its back button', error);
+            return null;
+        }
+    };
+
+    const settingsPage = (classes, controller) => new classes.PageView({
         title: SETTINGS_PAGE_TITLE,
         url: SETTINGS_PAGE_ID,
         isTitleFromH1s: true,
         isImmortal: false,
-        header: null,
+        header: settingsPageHeader(classes, controller),
         content: [settingsPane(classes)]
     });
 
@@ -6611,7 +6646,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const installSettingsPage = (controller, classes, found) => {
-        controller.register(SETTINGS_PAGE_ID, () => settingsPage(classes));
+        // HierarchyController.makeViewInstance calls a registered builder as
+        // builder(viewState, controller, parent); the controller is passed
+        // through so settingsPage can tell the mobile build's header apart
+        // from the desktop build, which has none.
+        controller.register(SETTINGS_PAGE_ID, (viewState, owner) => settingsPage(classes, owner));
 
         // Kept so a throw below can put the controller back exactly as it
         // was found. The registration above can stay either way: without
@@ -6621,6 +6660,41 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const originalMake = controller.makeViewInstance;
         const originalRestore = controller.restoreEncodedState;
         const originalContent = found.group.content;
+
+        /*
+         * Fastmail works out the sidebar's selected entry from its own id
+         * table, built from its own fixed list of pages, which does not
+         * include this one — so without this, opening the page would leave
+         * no row anywhere carrying is-selected. The binding is Overture's
+         * own, so it is found and wrapped rather than replaced outright: a
+         * transform Fastmail did not mean to give up still runs first, and
+         * only a genuine miss (this page, unrecognised) is filled in.
+         */
+        const binding = found.sources.__meta__ && found.sources.__meta__.bindings &&
+            found.sources.__meta__.bindings.selected;
+        const originalTransform = binding && typeof binding.transform === 'function' ? binding.transform : null;
+        if (originalTransform) {
+            binding.transform = function (stack) {
+                const result = originalTransform.apply(this, arguments);
+                if (result || !stack || !stack.length || stack[0].viewId !== SETTINGS_PAGE_ID) return result;
+                try {
+                    const groups = found.sources.get('sourceGroups');
+                    const group = Array.isArray(groups) && groups.find(one => one && Array.isArray(one.content) &&
+                        one.content.some(entry => entry && entry.id === SETTINGS_PAGE_ID));
+                    const entry = group && group.content.find(entry => entry && entry.id === SETTINGS_PAGE_ID);
+                    return entry || result;
+                } catch (error) {
+                    return result;
+                }
+            };
+            // A page already showing is highlighted now, not only the next
+            // time something else changes the stack.
+            try {
+                if (typeof binding.sync === 'function') binding.sync();
+            } catch (error) {
+                reportFault('the sidebar entry could not be highlighted', error);
+            }
+        }
 
         // Fastmail titles a stack entry from its own table of names, which
         // has none for this page. A function expression, not an arrow, so
@@ -6646,6 +6720,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         } catch (error) {
             if (hadOwnMake) controller.makeViewInstance = originalMake; else delete controller.makeViewInstance;
             if (hadOwnRestore) controller.restoreEncodedState = originalRestore; else delete controller.restoreEncodedState;
+            if (originalTransform) {
+                binding.transform = originalTransform;
+                try {
+                    if (typeof binding.sync === 'function') binding.sync();
+                } catch (syncError) {
+                    reportFault('the sidebar entry could not be un-highlighted after a failed install', syncError);
+                }
+            }
             if (found.group.content !== originalContent) {
                 found.group.content = originalContent;
                 try {
