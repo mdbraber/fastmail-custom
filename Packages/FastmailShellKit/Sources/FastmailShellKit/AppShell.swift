@@ -15,6 +15,11 @@ public struct AppShell: View {
     @ObservedObject private var pendingActions = PendingActions.shared
     @AppStorage(Backend.defaultsKey) private var backendName = Backend.standard.rawValue
     @Environment(\.scenePhase) private var scenePhase
+    #if canImport(UIKit)
+    @ObservedObject private var lock = ScreenLock.shared
+    /// Links handed in while the screen lock is up, opened once it opens.
+    @State private var heldLinks: [URL] = []
+    #endif
 
     public init(profile: Profile) {
         self.profile = profile
@@ -78,7 +83,7 @@ public struct AppShell: View {
         .animation(.default, value: model.banner)
         .animation(.default, value: downloads.items)
         .onOpenURL { url in
-            handle(url)
+            route(url)
         }
         // Handoff: the page open here offered to the same app on your other
         // device, and to a browser on a device that does not have it. The Mac
@@ -97,7 +102,7 @@ public struct AppShell: View {
             // Routed like any other link, so a page belonging to the other
             // account still ends up in the other account's app.
             guard let target = Continuity.target(of: activity) else { return }
-            handle(target)
+            route(target)
         }
         #if canImport(UIKit)
         .sheet(isPresented: $settings.isPresented) {
@@ -108,11 +113,16 @@ public struct AppShell: View {
             // badge back once the app is on screen, and opens the notification
             // that launched it, if one did.
             BadgeController.shared.reapply()
+            // With the lock on, the cover goes up and the app asks, before
+            // anything that launched it is opened.
+            lock.scenePhaseChanged(scenePhase)
             // The push names production; the page is on whichever server is selected
-            if let url = pendingLinks.take() { handle(live.backend.rehost(url)) }
-            if let action = pendingActions.take() { model.pendingAction = action }
+            if let url = pendingLinks.take() { route(live.backend.rehost(url)) }
+            if !lock.holdsLinks, let action = pendingActions.take() { model.pendingAction = action }
         }
         .onChange(of: scenePhase) {
+            lock.scenePhaseChanged(scenePhase)
+            releaseHeldLinks()
             // Coming back to the front is when a badge permission just granted
             // in Settings first takes effect, and when a number that drifted
             // while the app slept gets corrected.
@@ -121,18 +131,23 @@ public struct AppShell: View {
                 PushRegistrar.current?.becameActive()
             }
         }
+        .onChange(of: lock.state.isLocked) {
+            releaseHeldLinks()
+        }
         .onChange(of: model.pageURL) {
             // Remember last viewed page: saved as it changes, while the switch is on
             DevicePreferences.recordPage(model.pageURL)
         }
         .onChange(of: pendingLinks.url) {
             // A tapped notification, routed exactly as a link from outside
-            if let url = pendingLinks.take() { handle(live.backend.rehost(url)) }
+            if let url = pendingLinks.take() { route(live.backend.rehost(url)) }
         }
         .onChange(of: pendingActions.name) {
             // A shortcut that asks the page to do something rather than to go
             // somewhere; search, which has no address of its own. The runner
-            // holds it until the page can answer.
+            // holds it until the page can answer, and the lock holds it until
+            // it has opened.
+            guard !lock.holdsLinks else { return }
             if let action = pendingActions.take() { model.pendingAction = action }
         }
         #else
@@ -160,6 +175,29 @@ public struct AppShell: View {
         .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         #endif
     }
+
+    /// A link from outside the page: opened now, or, on iPhone and iPad while
+    /// the screen lock is up or about to be, held until it has opened.
+    private func route(_ url: URL) {
+        #if canImport(UIKit)
+        if lock.holdsLinks {
+            heldLinks.append(url)
+            return
+        }
+        #endif
+        handle(url)
+    }
+
+    #if canImport(UIKit)
+    /// Opens what waited behind the lock, once the lock has opened.
+    private func releaseHeldLinks() {
+        guard !lock.holdsLinks else { return }
+        let waiting = heldLinks
+        heldLinks.removeAll()
+        for url in waiting { handle(url) }
+        if let action = pendingActions.take() { model.pendingAction = action }
+    }
+    #endif
 
     private func handle(_ url: URL) {
         switch LinkRouter.route(url, profile: live) {
