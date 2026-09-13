@@ -7,8 +7,9 @@ DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/ available/ {
 generate:
 	xcodegen generate
 
-# Root.plist is generated and checked in; regenerate whenever the
-# CustomModeSettings catalog changes, or `make test` fails on the parity guard
+# Root.plist is generated and checked in; regenerate whenever the shell's
+# own settings (backend, start page, alerts switch) change, or `make test`
+# fails on the parity guard
 settings-bundle:
 	python3 tools/gen-settings-bundle.py
 
