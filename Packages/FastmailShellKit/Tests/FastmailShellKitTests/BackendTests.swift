@@ -22,8 +22,9 @@ import Testing
     #expect(Backend.standard == .beta)
 }
 
-// Settings.bundle writes this key as a plain string, so an unknown value is
-// something that can genuinely arrive rather than a case that cannot happen
+// The key is a plain string in defaults, left there by an older build or
+// written by hand, so an unknown value can genuinely arrive rather than
+// being a case that cannot happen
 @Test func anUnknownOrMissingNameIsTheStandardBackend() {
     #expect(Backend.resolve(nil) == .standard)
     #expect(Backend.resolve("") == .standard)

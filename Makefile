@@ -2,16 +2,10 @@ PROJECT = FastmailShell.xcodeproj
 LSREGISTER = /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/ available/ {print $$3; exit}')
 
-.PHONY: generate test build-macos install-macos forget-builds build-ios install-ios build-extension install-extension install deploy settings-bundle clean
+.PHONY: generate test build-macos install-macos forget-builds build-ios install-ios build-extension install-extension install deploy clean
 
 generate:
 	xcodegen generate
-
-# Root.plist is generated and checked in; regenerate whenever the shell's
-# own settings (backend, start page, alerts switch) change, or `make test`
-# fails on the parity guard
-settings-bundle:
-	python3 tools/gen-settings-bundle.py
 
 test: generate
 	cd Packages/FastmailShellKit && swift test
