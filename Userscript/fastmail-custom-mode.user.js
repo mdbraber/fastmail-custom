@@ -338,9 +338,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * back" and gets its default: a triage label called nothing is not
      * something anyone means, while no excluded labels plainly is.
      */
-    const settingValue = (key) => {
+    const resolveSetting = (key, stored) => {
         const fallback = DEFAULT_SETTINGS[key];
-        const stored = settings[key];
 
         if (typeof fallback === 'boolean') {
             return typeof stored === 'boolean' ? stored : fallback;
@@ -353,6 +352,24 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const option = settingFor(key);
         return option && option.clearable ? '' : fallback;
     };
+
+    const settingValue = (key) => resolveSetting(key, settings[key]);
+
+    // Every key the page knows, resolved; a key storage still holds but the
+    // catalogue has dropped does not come along.
+    const resolveSettings = (raw) => {
+        const source = raw || {};
+        const resolved = {};
+        Object.keys(DEFAULT_SETTINGS).forEach((key) => {
+            resolved[key] = resolveSetting(key, source[key]);
+        });
+        return resolved;
+    };
+
+    // The declaration above runs before the catalogue exists, and resolving
+    // needs the catalogue to know which fields may be empty; so the values
+    // are resolved here, once it does.
+    settings = resolveSettings(settings);
 
     /*
      * Where a changed setting goes. The panel runs in the page, which owns
@@ -369,7 +386,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         document.documentElement.dataset.customModeHost === 'extension';
 
     const writeSetting = (key, value) => {
-        settings[key] = value;
+        settings[key] = resolveSetting(key, value);
 
         if (window.native && typeof window.native.setSetting === 'function') {
             window.native.setSetting(key, value);
@@ -7289,7 +7306,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // Called by the extension when the settings change, so options take
             // effect without a reload
             applySettings: (next) => {
-                settings = Object.assign({}, DEFAULT_SETTINGS, next || {});
+                settings = resolveSettings(next);
                 // Turning the chip setting off makes every remembered "hide"
                 // wrong, not just this view's
                 forgetHide();
