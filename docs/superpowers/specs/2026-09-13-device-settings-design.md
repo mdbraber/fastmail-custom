@@ -84,6 +84,9 @@ These facts were read from the running Mac app, from Fastmail's mobile code
     grant contacts.
   - The server's host uses the same tokens as `Server/.env` on the
     development Mac; the two hashes match.
+  - **Later, on 2026-09-13:** the user replaced both tokens with ones that
+    also grant read-only contacts, and the host was given the same new
+    tokens when Part 2 was rolled out.
 - **The shell today.**
   - **The settings row.** `harness.js` clones the Custom swipes row into a
     "Device settings" row, placed just before Offline, and skips it under
