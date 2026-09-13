@@ -7144,7 +7144,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // the only rows left after this are the ones just built, for
         // whichever group is now on screen.
         const body = new classes.View({
-            className: 'u-flex-1 u-space-y-4 u-overflow-y-auto',
+            // Fastmail's u-flex-1 also sets width: 0, which only a flex row
+            // grows back: beside the sidebar it fills the rest, but stacked,
+            // in a plain block, it squeezes every row to its longest word.
+            className: (stacked ? '' : 'u-flex-1 ') + 'u-space-y-4 u-overflow-y-auto',
             draw: () => {
                 register.reset();
                 const rows = stacked
