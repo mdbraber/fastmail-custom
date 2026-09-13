@@ -108,6 +108,11 @@ The surfaces end up as:
 
 ## The settings panel
 
+> **Superseded on 2026-09-13** by `2026-09-13-settings-page-design.md`:
+> "Reaching it" and "Shape" below describe a dialog. Custom mode is now a
+> page registered with Fastmail's Settings. The rest of this section still
+> holds.
+
 ### Reaching it
 
 `harness.js` already inserts a "Device settings" row into Fastmail's own
