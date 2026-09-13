@@ -854,4 +854,103 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(CFGetTypeID(stored as CFTypeRef), CFBooleanGetTypeID())
         XCTAssertEqual(stored as? Bool, true)
     }
+
+    // MARK: The Notifications page
+
+    // The page is for the phone and the iPad; the Mac keeps Fastmail's own,
+    // so under the Electron token there is nothing for the userscript to find
+    func testNotificationsBridgeExistsOnlyWithoutTheElectronToken() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        let kinds = try await evaluate(webView, """
+        [typeof window.native.notifications.state,
+         typeof window.native.notifications.set,
+         typeof window.native.notifications.openSettings].join(',')
+        """) as? String
+        XCTAssertEqual(kinds, "function,function,function")
+
+        let mac = try makeWebView(
+            userScript: "", metadata: Self.meta(),
+            applicationName: WebContainer.electronUserAgentToken
+        )
+        try await load(mac)
+        let onMac = try await evaluate(mac, "typeof window.native.notifications") as? String
+        XCTAssertEqual(onMac, "undefined")
+    }
+
+    func testNotificationStateResolvesToTheAppsAnswerParsed() async throws {
+        replies = { body in
+            guard body["action"] as? String == "notificationState" else { return nil }
+            return #"{"contacts":null,"mailboxIds":[],"mode":"inbox","permission":"allowed","pushToken":"00abff","senders":"everyone"}"#
+        }
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, """
+        window.__state = null;
+        window.native.notifications.state().then(function (state) { window.__state = state; });
+        true;
+        """)
+        try await waitUntil {
+            try await self.evaluate(self.webView, "!!window.__state") as? Bool == true
+        }
+        let summary = try await evaluate(webView, """
+        [window.__state.mode, window.__state.pushToken, String(window.__state.contacts === null)].join(',')
+        """) as? String
+        XCTAssertEqual(summary, "inbox,00abff,true")
+    }
+
+    func testSetNotificationsSendsTheChoiceAndResolvesToTheSavedOne() async throws {
+        replies = { body in
+            guard body["action"] as? String == "setNotifications" else { return nil }
+            return #"{"mailboxIds":["P2F"],"mode":"custom","senders":"vips"}"#
+        }
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, """
+        window.__saved = null;
+        window.native.notifications.set({ mode: 'custom', senders: 'vips', mailboxIds: ['P2F'] })
+            .then(function (saved) { window.__saved = saved; });
+        true;
+        """)
+        try await waitUntil { self.received.contains { $0["action"] as? String == "setNotifications" } }
+        let message = try XCTUnwrap(received.first { $0["action"] as? String == "setNotifications" })
+        let payload = try XCTUnwrap(message["payload"] as? [String: Any])
+        XCTAssertEqual(payload["mode"] as? String, "custom")
+        XCTAssertEqual(payload["senders"] as? String, "vips")
+        XCTAssertEqual(payload["mailboxIds"] as? [String], ["P2F"])
+        try await waitUntil {
+            try await self.evaluate(self.webView, "!!window.__saved") as? Bool == true
+        }
+        let saved = try await evaluate(webView, "window.__saved.mode + ',' + window.__saved.mailboxIds.join('|')") as? String
+        XCTAssertEqual(saved, "custom,P2F")
+    }
+
+    // A refusal, or no app at all, reaches the page as a rejection it can
+    // report, not as a state made of nothing
+    func testNotificationStateRejectsWhenTheAppGivesNoAnswer() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, """
+        window.__failed = null;
+        window.native.notifications.state().then(
+            function () { window.__failed = 'resolved'; },
+            function (error) { window.__failed = error.message; }
+        );
+        true;
+        """)
+        try await waitUntil {
+            try await self.evaluate(self.webView, "window.__failed !== null") as? Bool == true
+        }
+        let failed = try await evaluate(webView, "window.__failed") as? String
+        XCTAssertEqual(failed, "The app did not answer")
+    }
+
+    func testOpenNotificationSettingsReachesTheBridge() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, "window.native.notifications.openSettings(); true;")
+        try await waitUntil {
+            self.received.contains { $0["action"] as? String == "openNotificationSettings" }
+        }
+    }
 }

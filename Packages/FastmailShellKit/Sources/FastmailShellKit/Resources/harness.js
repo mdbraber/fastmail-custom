@@ -780,6 +780,36 @@
         return post('setting', { key: key, value: value });
     };
 
+    // The Notifications page's way to the app, on the phone and the iPad. The
+    // Mac keeps Fastmail's own page, so under the Electron user agent there
+    // is none, and the userscript leaves Fastmail's page alone there.
+    //
+    // The app answers state() and set() as JSON text, since a reply's value
+    // is a string; they resolve to the object, and reject when there is no
+    // answer to read, which is how post() hands on a refusal.
+    function notificationReply(text) {
+        if (typeof text !== 'string') throw new Error('The app did not answer');
+        return JSON.parse(text);
+    }
+
+    if (!/Electron\//.test(navigator.userAgent)) {
+        window.native.notifications = {
+            state: function () {
+                return post('notificationState', {}).then(notificationReply);
+            },
+            set: function (choice) {
+                choice = choice || {};
+                var payload = { mode: choice.mode };
+                if (choice.senders !== undefined) payload.senders = choice.senders;
+                if (choice.mailboxIds !== undefined) payload.mailboxIds = choice.mailboxIds;
+                return post('setNotifications', payload).then(notificationReply);
+            },
+            openSettings: function () {
+                return post('openNotificationSettings', {});
+            }
+        };
+    }
+
     /*
      * Open Fastmail's search, for the home screen shortcut.
      *
