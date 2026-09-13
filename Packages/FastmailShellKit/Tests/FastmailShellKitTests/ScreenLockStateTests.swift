@@ -2,7 +2,8 @@ import Foundation
 import Testing
 @testable import FastmailShellKit
 
-private let start = Date(timeIntervalSinceReferenceDate: 800_000_000)
+/// A fixed instant on the continuous clock, which the Settings app cannot set.
+private let start = ContinuousClock.now
 
 /// A lock that asked at launch and was opened.
 private func unlocked() -> ScreenLockState {
@@ -29,28 +30,28 @@ private func unlocked() -> ScreenLockState {
     let asked = state.becameActive(at: start, lockEnabled: false)
     #expect(!asked)
     state.enteredBackground(at: start)
-    let askedLater = state.becameActive(at: start.addingTimeInterval(3600), lockEnabled: false)
+    let askedLater = state.becameActive(at: start.advanced(by: .seconds(3600)), lockEnabled: false)
     #expect(!askedLater)
     #expect(!state.coversContent(isInFront: false, lockEnabled: false))
-    #expect(!state.wouldBeLocked(at: start.addingTimeInterval(3600), lockEnabled: false))
+    #expect(!state.wouldBeLocked(at: start.advanced(by: .seconds(3600)), lockEnabled: false))
 }
 
 @Test func theLockAsksAfterMoreThanAMinuteAway() {
     var state = unlocked()
     state.enteredBackground(at: start)
-    let asked = state.becameActive(at: start.addingTimeInterval(60.5), lockEnabled: true)
+    let asked = state.becameActive(at: start.advanced(by: .milliseconds(60_500)), lockEnabled: true)
     #expect(asked)
     #expect(state.isLocked)
 }
 
 @Test func theLockDoesNotAskAfterAMinuteOrLess() {
-    for away: TimeInterval in [0, 30, 60] {
+    for away: Duration in [.zero, .seconds(30), .seconds(60)] {
         var state = unlocked()
         state.enteredBackground(at: start)
-        let asked = state.becameActive(at: start.addingTimeInterval(away), lockEnabled: true)
-        #expect(!asked, "away \(away)s")
-        #expect(!state.isLocked, "away \(away)s")
-        #expect(!state.coversContent(isInFront: true, lockEnabled: true), "away \(away)s")
+        let asked = state.becameActive(at: start.advanced(by: away), lockEnabled: true)
+        #expect(!asked, "away \(away)")
+        #expect(!state.isLocked, "away \(away)")
+        #expect(!state.coversContent(isInFront: true, lockEnabled: true), "away \(away)")
     }
 }
 
@@ -62,7 +63,7 @@ private func unlocked() -> ScreenLockState {
     #expect(state.coversContent(isInFront: true, lockEnabled: true))
     // The prompt itself takes the app out of the front and back again, which
     // is not a return from the background
-    let askedByItself = state.becameActive(at: start.addingTimeInterval(1), lockEnabled: true)
+    let askedByItself = state.becameActive(at: start.advanced(by: .seconds(1)), lockEnabled: true)
     #expect(!askedByItself)
     let askedByUnlock = state.unlockTapped()
     #expect(askedByUnlock)
@@ -83,8 +84,8 @@ private func unlocked() -> ScreenLockState {
     var state = ScreenLockState(lockEnabled: true)
     _ = state.becameActive(at: start, lockEnabled: true)
     state.finishedAsking(succeeded: false)
-    state.enteredBackground(at: start.addingTimeInterval(5))
-    let asked = state.becameActive(at: start.addingTimeInterval(10), lockEnabled: true)
+    state.enteredBackground(at: start.advanced(by: .seconds(5)))
+    let asked = state.becameActive(at: start.advanced(by: .seconds(10)), lockEnabled: true)
     #expect(asked)
 }
 
@@ -107,8 +108,8 @@ private func unlocked() -> ScreenLockState {
     var state = unlocked()
     #expect(!state.wouldBeLocked(at: start, lockEnabled: true))
     state.enteredBackground(at: start)
-    #expect(!state.wouldBeLocked(at: start.addingTimeInterval(60), lockEnabled: true))
-    #expect(state.wouldBeLocked(at: start.addingTimeInterval(61), lockEnabled: true))
+    #expect(!state.wouldBeLocked(at: start.advanced(by: .seconds(60)), lockEnabled: true))
+    #expect(state.wouldBeLocked(at: start.advanced(by: .seconds(61)), lockEnabled: true))
 }
 
 @Test func turningTheLockOnWhileTheAppIsOpenDoesNotLockIt() {
@@ -137,17 +138,17 @@ private func unlocked() -> ScreenLockState {
 // Sent to the background while Face ID is asking, the prompt is cancelled and
 // its reply arrives as a failure; coming back asks again, however soon
 @Test func anAskInterruptedByTheBackgroundAsksAgainOnReturn() {
-    for away: TimeInterval in [5, 120] {
+    for away: Duration in [.seconds(5), .seconds(120)] {
         var state = ScreenLockState(lockEnabled: true)
         _ = state.becameActive(at: start, lockEnabled: true)
         #expect(state.isAsking)
-        state.enteredBackground(at: start.addingTimeInterval(1))
+        state.enteredBackground(at: start.advanced(by: .seconds(1)))
         state.finishedAsking(succeeded: false)
-        #expect(!state.isAsking, "away \(away)s")
-        #expect(state.isLocked, "away \(away)s")
-        let asked = state.becameActive(at: start.addingTimeInterval(1 + away), lockEnabled: true)
-        #expect(asked, "away \(away)s")
+        #expect(!state.isAsking, "away \(away)")
+        #expect(state.isLocked, "away \(away)")
+        let asked = state.becameActive(at: start.advanced(by: .seconds(1) + away), lockEnabled: true)
+        #expect(asked, "away \(away)")
         let unlock = state.unlockTapped()
-        #expect(!unlock, "already asking, away \(away)s")
+        #expect(!unlock, "already asking, away \(away)")
     }
 }

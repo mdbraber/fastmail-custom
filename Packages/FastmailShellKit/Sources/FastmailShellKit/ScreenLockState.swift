@@ -8,14 +8,18 @@ import Foundation
 /// front and back again without sending it to the background, so only time in
 /// the background counts, and an ask that failed or was cancelled waits for
 /// Unlock rather than asking again by itself.
+///
+/// Time away is measured on the continuous clock, which the Settings app
+/// cannot set and which keeps counting while the device sleeps, so setting
+/// the date back does not shorten it.
 public struct ScreenLockState: Equatable, Sendable {
     /// How long the app may be away before it asks again. Exactly this long
     /// does not ask.
-    public static let gracePeriod: TimeInterval = 60
+    public static let gracePeriod: Duration = .seconds(60)
 
     public private(set) var isLocked: Bool
     public private(set) var isAsking = false
-    private var backgroundSince: Date?
+    private var backgroundSince: ContinuousClock.Instant?
     private var askedSinceBackground = false
 
     /// A launch with the lock on starts locked.
@@ -23,14 +27,14 @@ public struct ScreenLockState: Equatable, Sendable {
         isLocked = lockEnabled
     }
 
-    public mutating func enteredBackground(at now: Date) {
+    public mutating func enteredBackground(at now: ContinuousClock.Instant) {
         if backgroundSince == nil { backgroundSince = now }
         askedSinceBackground = false
     }
 
     /// The app is in front again, or for the first time. Answers whether to
     /// ask now.
-    public mutating func becameActive(at now: Date, lockEnabled: Bool) -> Bool {
+    public mutating func becameActive(at now: ContinuousClock.Instant, lockEnabled: Bool) -> Bool {
         guard lockEnabled else {
             isLocked = false
             backgroundSince = nil
@@ -38,7 +42,7 @@ public struct ScreenLockState: Equatable, Sendable {
         }
         if let since = backgroundSince {
             backgroundSince = nil
-            if now.timeIntervalSince(since) > Self.gracePeriod { isLocked = true }
+            if since.duration(to: now) > Self.gracePeriod { isLocked = true }
         }
         guard isLocked, !isAsking, !askedSinceBackground else { return false }
         isAsking = true
@@ -67,11 +71,11 @@ public struct ScreenLockState: Equatable, Sendable {
 
     /// Whether the app is locked, or will be the moment it is in front again.
     /// A link handed in now waits until the lock has opened.
-    public func wouldBeLocked(at now: Date, lockEnabled: Bool) -> Bool {
+    public func wouldBeLocked(at now: ContinuousClock.Instant, lockEnabled: Bool) -> Bool {
         guard lockEnabled else { return false }
         if isLocked { return true }
         guard let since = backgroundSince else { return false }
-        return now.timeIntervalSince(since) > Self.gracePeriod
+        return since.duration(to: now) > Self.gracePeriod
     }
 
     /// The cover is up while the app is locked, and whenever it is not in

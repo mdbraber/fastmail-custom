@@ -42,7 +42,7 @@ public final class ScreenLock: ObservableObject {
 
     /// Whether a link or page action handed in now waits for the lock to open.
     public var holdsLinks: Bool {
-        state.wouldBeLocked(at: Date(), lockEnabled: isEnabled)
+        state.wouldBeLocked(at: ContinuousClock.now, lockEnabled: isEnabled)
     }
 
     /// What this device unlocks with right now.
@@ -64,10 +64,10 @@ public final class ScreenLock: ObservableObject {
         switch phase {
         case .active:
             isInFront = true
-            if state.becameActive(at: Date(), lockEnabled: isEnabled) { ask() }
+            if state.becameActive(at: ContinuousClock.now, lockEnabled: isEnabled) { ask() }
         case .background:
             isInFront = false
-            state.enteredBackground(at: Date())
+            state.enteredBackground(at: ContinuousClock.now)
         default:
             isInFront = false
         }
