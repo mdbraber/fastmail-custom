@@ -11,12 +11,12 @@ const session = {
 };
 
 // A stand-in for fetch: answers by method name, records every call.
-function fakeFetch(answer) {
+function fakeFetch(answer, sessionBody = session) {
     const calls = [];
     const fetch = async (url, init = {}) => {
         const body = init.body ? JSON.parse(init.body) : null;
         calls.push({ url: String(url), headers: init.headers, body });
-        if (String(url).endsWith('/session')) return { ok: true, status: 200, json: async () => session };
+        if (String(url).endsWith('/session')) return { ok: true, status: 200, json: async () => sessionBody };
         const responses = body.methodCalls.map(([method, args, id]) => {
             const [name, result] = answer(method, args, calls);
             return [name, result, id];
@@ -26,8 +26,8 @@ function fakeFetch(answer) {
     return { fetch, calls };
 }
 
-async function connected(answer) {
-    const { fetch, calls } = fakeFetch(answer);
+async function connected(answer, sessionBody) {
+    const { fetch, calls } = fakeFetch(answer, sessionBody);
     const client = new JMAPClient({ token: 'tok', fetch });
     await client.connect();
     return { client, calls };
@@ -224,4 +224,85 @@ test('a stream that has gone quiet is dropped so the loop can reconnect', async 
     });
     assert.equal(requests, 1);
     assert.match(warned[0], /nothing for 0.02s/);
+});
+
+// A session whose token also reads contacts, from an account of its own so
+// the two cannot be confused.
+const CONTACTS_URN = 'urn:ietf:params:jmap:contacts';
+const withContacts = {
+    ...session,
+    capabilities: { 'urn:ietf:params:jmap:core': {}, 'urn:ietf:params:jmap:mail': {}, [CONTACTS_URN]: {} },
+    accounts: {
+        acc1: { accountCapabilities: { 'urn:ietf:params:jmap:mail': {} } },
+        acc2: { accountCapabilities: { [CONTACTS_URN]: {} } },
+    },
+    primaryAccounts: { 'urn:ietf:params:jmap:mail': 'acc1', [CONTACTS_URN]: 'acc2' },
+};
+
+test('contacts access is read from the session, and the contacts account from primaryAccounts', async () => {
+    assert.equal((await connected(() => ['error', {}])).client.contactsAccountId, null);
+    assert.equal((await connected(() => ['error', {}], withContacts)).client.contactsAccountId, 'acc2');
+
+    const noCapability = { ...withContacts, capabilities: { 'urn:ietf:params:jmap:core': {}, 'urn:ietf:params:jmap:mail': {} } };
+    assert.equal((await connected(() => ['error', {}], noCapability)).client.contactsAccountId, null);
+
+    const noPrimary = { ...withContacts, primaryAccounts: { 'urn:ietf:params:jmap:mail': 'acc1' } };
+    assert.equal((await connected(() => ['error', {}], noPrimary)).client.contactsAccountId, null);
+
+    const accountWithout = { ...withContacts, accounts: { ...withContacts.accounts, acc2: { accountCapabilities: {} } } };
+    assert.equal((await connected(() => ['error', {}], accountWithout)).client.contactsAccountId, null);
+});
+
+test('contact cards are read from the contacts account with the contacts capability, page by page', async () => {
+    const all = Array.from({ length: 1200 }, (_, index) => `C${index}`);
+    const { client, calls } = await connected((method, args) => {
+        if (method === 'ContactCard/get' && args.ids.length === 0) return ['ContactCard/get', { state: 'cs1', list: [] }];
+        if (method === 'ContactCard/query') {
+            return ['ContactCard/query', { ids: all.slice(args.position, args.position + args.limit), position: args.position, total: all.length }];
+        }
+        if (method === 'ContactCard/get') return ['ContactCard/get', { state: 'cs1', list: args.ids.map((id) => ({ id, uid: id })) }];
+        return ['error', { type: 'unknownMethod' }];
+    }, withContacts);
+
+    const { cards, state } = await client.contactCards();
+    assert.equal(state, 'cs1');
+    assert.deepEqual(cards.map((card) => card.id), all);
+
+    const api = calls.slice(1).map((call) => call.body);
+    assert.ok(api.every((body) => JSON.stringify(body.using) === JSON.stringify(['urn:ietf:params:jmap:core', CONTACTS_URN])));
+    assert.ok(api.every((body) => body.methodCalls[0][1].accountId === 'acc2'));
+    assert.deepEqual(api[0].methodCalls[0], ['ContactCard/get', { accountId: 'acc2', ids: [] }, 'c0']);
+    const queries = api.filter((body) => body.methodCalls[0][0] === 'ContactCard/query').map((body) => body.methodCalls[0][1].position);
+    assert.deepEqual(queries, [0, 500, 1000]);
+    const gets = api.slice(1).filter((body) => body.methodCalls[0][0] === 'ContactCard/get').map((body) => body.methodCalls[0][1]);
+    assert.deepEqual(gets.map((args) => args.ids.length), [500, 500, 200]);
+    assert.deepEqual(gets[0].properties, ['id', 'uid', 'kind', 'members', 'emails']);
+});
+
+test('an account without cards reads as none, and a token without contacts is refused before asking', async () => {
+    const { client } = await connected((method) => (method === 'ContactCard/query'
+        ? ['ContactCard/query', { ids: [], position: 0, total: 0 }]
+        : ['ContactCard/get', { state: 'cs0', list: [] }]), withContacts);
+    assert.deepEqual(await client.contactCards(), { cards: [], state: 'cs0' });
+
+    const { client: mailOnly, calls } = await connected(() => ['error', {}]);
+    await assert.rejects(mailOnly.contactCards(), /cannot read contacts/);
+    assert.equal(calls.length, 1);
+});
+
+test('threads and their keywords are asked of the mail account, in helpings', async () => {
+    const { client, calls } = await connected((method, args) => (method === 'Thread/get'
+        ? ['Thread/get', { list: args.ids.map((id) => ({ id, emailIds: [`${id}-a`, `${id}-b`] })) }]
+        : ['Email/get', { list: args.ids.map((id) => ({ id, keywords: {} })) }]));
+
+    assert.deepEqual(await client.threads(['T1']), [{ id: 'T1', emailIds: ['T1-a', 'T1-b'] }]);
+    assert.deepEqual(calls.at(-1).body.methodCalls[0], ['Thread/get', { accountId: 'acc1', ids: ['T1'] }, 'c0']);
+    assert.deepEqual(calls.at(-1).body.using, ['urn:ietf:params:jmap:core', 'urn:ietf:params:jmap:mail']);
+
+    const ids = Array.from({ length: 700 }, (_, index) => `M${index}`);
+    assert.equal((await client.keywords(ids)).length, 700);
+    const asked = calls.slice(-2).map((call) => call.body.methodCalls[0][1]);
+    assert.deepEqual(asked.map((args) => args.ids.length), [500, 200]);
+    assert.deepEqual(asked[0].properties, ['keywords']);
+    assert.deepEqual(await client.threads([]), []);
 });

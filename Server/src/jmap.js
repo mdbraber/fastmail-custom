@@ -4,7 +4,9 @@
 export const SESSION_URL = 'https://api.fastmail.com/jmap/session';
 export const CORE = 'urn:ietf:params:jmap:core';
 export const MAIL = 'urn:ietf:params:jmap:mail';
+export const CONTACTS = 'urn:ietf:params:jmap:contacts';
 export const EMAIL_PROPERTIES = ['id', 'threadId', 'mailboxIds', 'keywords', 'from', 'subject', 'receivedAt'];
+export const CONTACT_CARD_PROPERTIES = ['id', 'uid', 'kind', 'members', 'emails'];
 // Fastmail's `maxObjectsInGet` is 500; asking for more fails the whole call.
 export const GET_CHUNK = 500;
 export const TIMEOUT_MS = 30_000;
@@ -26,6 +28,7 @@ export class JMAPClient {
         this.timeoutMs = timeoutMs;
         this.session = null;
         this.accountId = null;
+        this.contactsAccountId = null;
     }
 
     headers() {
@@ -52,6 +55,13 @@ export class JMAPClient {
         this.session = await response.json();
         this.accountId = this.session.primaryAccounts?.[MAIL] ?? null;
         if (!this.accountId) throw new JMAPError('session: no mail account');
+        // Contacts only when the token grants them: the capability in the
+        // session, a primary contacts account, and that account holding it
+        const contactsAccountId = this.session.primaryAccounts?.[CONTACTS] ?? null;
+        const granted = Boolean(this.session.capabilities?.[CONTACTS])
+            && typeof contactsAccountId === 'string'
+            && Boolean(this.session.accounts?.[contactsAccountId]?.accountCapabilities?.[CONTACTS]);
+        this.contactsAccountId = granted ? contactsAccountId : null;
         return this.session;
     }
 
@@ -111,15 +121,46 @@ export class JMAPClient {
         return { created, newState: state };
     }
 
-    async emails(ids) {
+    // A /get for any number of ids, in helpings Fastmail will accept, as one list.
+    async getInChunks(method, ids, args, using) {
         const list = [];
         for (let from = 0; from < ids.length; from += GET_CHUNK) {
-            const result = await this.call('Email/get', {
-                accountId: this.accountId, ids: ids.slice(from, from + GET_CHUNK), properties: EMAIL_PROPERTIES,
-            });
+            const result = await this.call(method, { ...args, ids: ids.slice(from, from + GET_CHUNK) }, using);
             list.push(...result.list);
         }
         return list;
+    }
+
+    async emails(ids) {
+        return this.getInChunks('Email/get', ids, { accountId: this.accountId, properties: EMAIL_PROPERTIES });
+    }
+
+    // Each thread with the ids of its messages: `{ id, emailIds }`.
+    async threads(ids) {
+        return this.getInChunks('Thread/get', ids, { accountId: this.accountId });
+    }
+
+    // Only the keywords of each message: `{ id, keywords }`.
+    async keywords(ids) {
+        return this.getInChunks('Email/get', ids, { accountId: this.accountId, properties: ['keywords'] });
+    }
+
+    // Every contact card of the contacts account, and the ContactCard state
+    // read before them: a change made while they are read then shows up as a
+    // newer state, and they are read again.
+    async contactCards() {
+        const accountId = this.contactsAccountId;
+        if (!accountId) throw new JMAPError('ContactCard: this token cannot read contacts');
+        const using = [CORE, CONTACTS];
+        const { state } = await this.call('ContactCard/get', { accountId, ids: [] }, using);
+        const ids = [];
+        for (;;) {
+            const page = await this.call('ContactCard/query', { accountId, position: ids.length, limit: GET_CHUNK, calculateTotal: true }, using);
+            ids.push(...page.ids);
+            if (page.ids.length === 0 || (Number.isInteger(page.total) && ids.length >= page.total)) break;
+        }
+        const cards = await this.getInChunks('ContactCard/get', ids, { accountId, properties: CONTACT_CARD_PROPERTIES }, using);
+        return { cards, state };
     }
 
     // The one write this makes. A patch rather than whole maps of mailboxes
