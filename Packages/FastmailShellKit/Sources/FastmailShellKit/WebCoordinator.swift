@@ -31,7 +31,9 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         startURL: URL,
         openExternally: @escaping @MainActor (URL) -> Void = { url in
             #if canImport(UIKit)
-            UIApplication.shared.open(url)
+            // The in-app browser for web links while its switch is on; the
+            // system for everything else, as before.
+            ExternalLinks.open(url)
             #else
             NSWorkspace.shared.open(url)
             #endif
