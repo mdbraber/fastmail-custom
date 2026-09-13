@@ -6281,7 +6281,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * drawn.
      */
     const panelClasses = () => {
-        const wanted = ['ModalOverlayView', 'ScrollView', 'View', 'CheckboxView', 'TextInputView', 'ButtonView'];
+        const wanted = ['ModalOverlayView', 'ScrollView', 'View', 'ToggleView', 'TextInputView', 'ButtonView'];
         const found = {};
         let missing = false;
 
@@ -6331,9 +6331,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * One option, drawn. A toggle is a checkbox carrying its hint as the
-     * description Fastmail already draws under a label; a text option is a
-     * field with the hint beneath it, and the multi-line one gets a textarea.
+     * One option, drawn. A toggle is Fastmail's switch, the control its own
+     * settings pages use, carrying its hint as the description it already
+     * draws under the label; a text option is a field with the hint beneath
+     * it, and the multi-line one gets a textarea.
      *
      * A clearable field shows "none" rather than its default as the
      * placeholder, because for those an empty box is ambiguous: never
@@ -6359,7 +6360,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const current = settingValue(option.key);
 
         if (typeof current === 'boolean') {
-            const box = new classes.CheckboxView({
+            const box = new classes.ToggleView({
                 label: option.title,
                 description: option.hint,
                 value: current
@@ -6445,6 +6446,81 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         };
         return register;
     };
+
+    /*
+     * The page Fastmail's Settings shows for Custom mode, built the way its
+     * own pages are: a PageView holding one SettingsPaneView, and in it one
+     * section per group with the heading on the left and the options on the
+     * right. The section markup is Display options' and Custom swipes', class
+     * for class, so the spacing, the dividers and the wrap to one column on a
+     * narrow screen are all theirs.
+     */
+    const SETTINGS_PAGE_ID = 'custommode';
+    const SETTINGS_PAGE_TITLE = 'Custom mode';
+
+    // The page needs these; the groupings editor's dialog also wants
+    // ModalOverlayView and ScrollView, but checks for them itself, so their
+    // absence costs that one button rather than the page.
+    const pageClasses = () => {
+        const all = FastMail.classes || {};
+        const required = ['PageView', 'SettingsPaneView', 'ToggleView', 'TextInputView', 'ButtonView', 'View'];
+        if (required.some(name => typeof all[name] !== 'function')) return null;
+        const found = {};
+        required.concat(['ModalOverlayView', 'ScrollView']).forEach((name) => {
+            if (typeof all[name] === 'function') found[name] = all[name];
+        });
+        return found;
+    };
+
+    const settingsSection = (group, rows) => {
+        const el = FastMail.el;
+        // The two inline widths are copied from Display options' and Custom
+        // swipes' own sections: without them the left column has no floor,
+        // and at a narrow width it collapses instead of wrapping above the
+        // options, breaking on the u-break-words heading one letter at a time.
+        return el('div.u-p-6.u-space-y-5#s-' + SETTINGS_PAGE_ID + '-' + group.id, [
+            el('div.u-flex.u-flex-wrap.u-mx-n6.u-my-n4', [
+                el('div.u-mx-6.u-my-4.u-space-y-5.u-flex-1', { style: 'min-width:200px' }, [
+                    el('h1.u-flex-auto.u-font-bold.u-text-2xl.u-trim.u-break-words.u-containSelection', [group.title])
+                ]),
+                el('div.u-mx-6.u-my-4.u-flex-major.u-space-y-8',
+                    { style: 'min-width:415px;min-width:min(415px, calc(100% - 48px))' }, rows)
+            ])
+        ]);
+    };
+
+    const settingsPane = (classes) => {
+        const register = settingRegister();
+        return new classes.SettingsPaneView({
+            draw() {
+                register.reset();
+                const sections = SETTING_GROUPS.map(group => settingsSection(group,
+                    settingsInGroup(group.id).map(option => sectionRow(classes, option, register))));
+                register.settle();
+                return sections;
+            },
+            // Leaving the page is when a closing dialog used to flush: what a
+            // field still has waiting is written now, on the key and value it
+            // captured, before the page's views are thrown away.
+            willLeaveDocument() {
+                try {
+                    register.flushPending();
+                } catch (error) {
+                    reportFault('a setting typed just before leaving the page may not have saved', error);
+                }
+                return classes.SettingsPaneView.prototype.willLeaveDocument.call(this);
+            }
+        });
+    };
+
+    const settingsPage = (classes) => new classes.PageView({
+        title: SETTINGS_PAGE_TITLE,
+        url: SETTINGS_PAGE_ID,
+        isTitleFromH1s: true,
+        isImmortal: false,
+        header: null,
+        content: [settingsPane(classes)]
+    });
 
     // Wide enough for a hint to read as a sentence, narrow enough to sit in a
     // laptop window. Below this the two columns become one.
@@ -6722,8 +6798,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // condition rows drag only inside a ScrollView, and its Escape and Enter
     // are answered by its own keyOutside.
     const editGrouping = (classes, grouping, done) => {
+        // Its dialog needs its own two classes; the page that holds the
+        // Edit button does not, so they are checked here rather than there.
         const Editor = FastMail.classes && FastMail.classes.GroupSettingsView;
-        if (typeof Editor !== 'function') {
+        if (typeof Editor !== 'function' || !classes.ModalOverlayView || !classes.ScrollView) {
             reportFault('Fastmail’s groupings editor is not available; edit the text instead');
             return;
         }
