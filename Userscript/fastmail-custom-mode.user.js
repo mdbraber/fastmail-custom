@@ -6516,24 +6516,32 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // ModalOverlayView and ScrollView, and the mobile build's back button
     // wants PageHeaderView, but each checks for its own class, so its
     // absence costs that one part rather than the page.
-    const pageClasses = () => {
+    const pageClasses = () => findClasses(
+        ['PageView', 'SettingsPaneView', 'ToggleView', 'TextInputView', 'ButtonView', 'View'],
+        ['ModalOverlayView', 'ScrollView', 'PageHeaderView']
+    );
+
+    // Fastmail's classes by name: nothing if a required one is missing,
+    // otherwise every required one and whichever optional ones exist. Each
+    // settings page asks for its own set.
+    const findClasses = (required, optional) => {
         const all = FastMail.classes || {};
-        const required = ['PageView', 'SettingsPaneView', 'ToggleView', 'TextInputView', 'ButtonView', 'View'];
         if (required.some(name => typeof all[name] !== 'function')) return null;
         const found = {};
-        required.concat(['ModalOverlayView', 'ScrollView', 'PageHeaderView']).forEach((name) => {
+        required.concat(optional).forEach((name) => {
             if (typeof all[name] === 'function') found[name] = all[name];
         });
         return found;
     };
 
-    const settingsSection = (group, rows) => {
+    // One section of a settings page, its id naming the page and the group.
+    const pageSection = (pageId, group, rows) => {
         const el = FastMail.el;
         // The two inline widths are copied from Display options' and Custom
         // swipes' own sections: without them the left column has no floor,
         // and at a narrow width it collapses instead of wrapping above the
         // options, breaking on the u-break-words heading one letter at a time.
-        return el('div.u-p-6.u-space-y-5#s-' + SETTINGS_PAGE_ID + '-' + group.id, [
+        return el('div.u-p-6.u-space-y-5#s-' + pageId + '-' + group.id, [
             el('div.u-flex.u-flex-wrap.u-mx-n6.u-my-n4', [
                 el('div.u-mx-6.u-my-4.u-space-y-5.u-flex-1', { style: 'min-width:200px' }, [
                     el('h1.u-flex-auto.u-font-bold.u-text-2xl.u-trim.u-break-words.u-containSelection', [group.title])
@@ -6543,6 +6551,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             ])
         ]);
     };
+
+    const settingsSection = (group, rows) => pageSection(SETTINGS_PAGE_ID, group, rows);
 
     const settingsPane = (classes) => {
         const register = settingRegister();
@@ -6579,10 +6589,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * binds isWithSidebar, rather than carrying it as a plain constant, is
      * how the mobile build is told apart from the desktop one.
      */
+    const isMobileSettings = (controller) => {
+        const bindings = controller && controller.__meta__ && controller.__meta__.bindings;
+        return !!(bindings && bindings.isWithSidebar);
+    };
+
     const settingsPageHeader = (classes, controller) => {
         try {
-            const bindings = controller && controller.__meta__ && controller.__meta__.bindings;
-            if (!bindings || !bindings.isWithSidebar || typeof classes.PageHeaderView !== 'function') return null;
+            if (!isMobileSettings(controller) || typeof classes.PageHeaderView !== 'function') return null;
 
             const header = new classes.PageHeaderView({
                 showBack: !controller.get('isWithSidebar'),
@@ -6608,14 +6622,24 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
-    const settingsPage = (classes, controller) => new classes.PageView({
-        title: SETTINGS_PAGE_TITLE,
-        url: SETTINGS_PAGE_ID,
-        isTitleFromH1s: true,
-        isImmortal: false,
-        header: settingsPageHeader(classes, controller),
-        content: [settingsPane(classes)]
-    });
+    // A settings page built the way Fastmail builds its own: titled from its
+    // headings, thrown away when left, with the mobile build's header. The
+    // header is made before the content, as it always was.
+    const settingsPageView = (classes, controller, id, title, makeContent) => {
+        const header = settingsPageHeader(classes, controller);
+        return new classes.PageView({
+            title,
+            url: id,
+            isTitleFromH1s: true,
+            isImmortal: false,
+            header,
+            content: makeContent()
+        });
+    };
+
+    const settingsPage = (classes, controller) => settingsPageView(
+        classes, controller, SETTINGS_PAGE_ID, SETTINGS_PAGE_TITLE, () => [settingsPane(classes)]
+    );
 
     /*
      * Reaching the page. Fastmail's Settings controller registers each of its
