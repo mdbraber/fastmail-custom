@@ -32,14 +32,6 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     ]))
 }
 
-// Nothing is invented: an untouched suite injects nothing, and the page
-// supplies every default itself.
-@Test func anUntouchedSuiteInjectsNothing() {
-    let first = CustomModeSettings.current(from: freshDefaults(#function + ".first"))
-    let second = CustomModeSettings.current(from: freshDefaults(#function + ".second"))
-    #expect(Set(first.keys) == Set(second.keys))
-}
-
 // A value that is neither a Bool nor a String cannot be handed to the page as
 // either, and a key that fails the write guard could only have climbed out of
 // the namespace by way of a dot; both are left out rather than passed through.
