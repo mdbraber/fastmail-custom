@@ -35,12 +35,9 @@ export class DeviceRegistry {
         return Object.keys(records).map((token) => ({ token, notify: storedChoice(records[token]) }));
     }
 
-    // Every token for the account, or only those whose choice is not off
-    // (alerts: true) or is off (alerts: false).
-    tokens(account, { alerts } = {}) {
-        return this.entries(account)
-            .filter(({ notify }) => alerts === undefined || alerts === (notify.mode !== 'off'))
-            .map(({ token }) => token);
+    // Every token for the account
+    tokens(account) {
+        return Object.keys(this.devices[account] || {});
     }
 
     // Registering again is how a device changes its mind

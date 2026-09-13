@@ -1,14 +1,6 @@
 // Which of the emails a notice brought deserve a banner, and what it says.
 // Pure: no clock, no network, so every rule here is a plain test.
 
-export function selectNotifiable(emails, { inboxId, notified }) {
-    return emails.filter((email) =>
-        email.mailboxIds?.[inboxId] === true
-        && !email.keywords?.$seen
-        && !email.keywords?.$draft
-        && !notified.has(email.id));
-}
-
 // The messages worth putting to each device's choice: unread, not a draft,
 // and not announced before. Where they are is the choice's business.
 export function selectFresh(emails, { notified }) {

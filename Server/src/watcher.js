@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { alertPayload, badgePayload, selectNotifiable } from './notify.js';
+import { alertPayload, badgePayload, matchesChoice, selectFresh } from './notify.js';
+import { MODES } from './choice.js';
 import { addressSets } from './contacts.js';
 import { rememberNotified, saveState } from './state.js';
 import { deviceOutcome } from './apns.js';
@@ -34,6 +35,8 @@ export class AccountWatcher {
         this.inboxId = null;
         this.badgeMailboxId = null;
         this.archiveMailboxId = null;
+        this.junkId = null;
+        this.trashId = null;
         // The account's contacts as two sets of lowercased addresses, and the
         // ContactCard state they were read at; empty without contacts access
         this.contactAddresses = new Set();
@@ -84,6 +87,9 @@ export class AccountWatcher {
         if (!this.badgeMailboxId) this.log.warn(`[${this.name}] no "${this.config.badgeLabel}" label: badges are off`);
         this.archiveMailboxId = mailboxes.find((m) => m.role === 'archive')?.id ?? null;
         if (!this.archiveMailboxId) this.log.warn(`[${this.name}] no Archive folder: the notification's Archive button is off`);
+        // Important leaves out what Fastmail filed as junk or deleted
+        this.junkId = mailboxes.find((m) => m.role === 'junk')?.id ?? null;
+        this.trashId = mailboxes.find((m) => m.role === 'trash')?.id ?? null;
         if (!this.hasContacts) this.log.warn(`[${this.name}] the token cannot read contacts: VIPs and contacts match nobody`);
         await this.loadContacts();
         if (!this.state.emailState) await this.resync();
@@ -227,26 +233,31 @@ export class AccountWatcher {
             return;
         }
         const emails = await this.jmap.emails(changes.created);
-        const fresh = selectNotifiable(emails, { inboxId: this.inboxId, notified: new Set(this.state.notified) });
+        const fresh = selectFresh(emails, { notified: new Set(this.state.notified) });
+        const devices = this.devices.entries(this.name);
+        const context = await this.contextFor(fresh, devices);
         const badge = await this.badgeCount();
+        const badgeChanged = badge !== null && badge !== this.state.badge;
 
-        for (const email of fresh) {
-            await this.broadcast(
-                alertPayload(email, { badge }),
-                { collapseId: email.id, alerts: true },
-            );
-        }
-        if (badge !== null && badge !== this.state.badge) {
-            // Devices with alerts on already got the count on the alert; the
-            // others only ever hear the count.
-            await this.broadcast(badgePayload(badge), { collapseId: 'badge', alerts: fresh.length ? false : undefined });
+        const alerted = new Set();
+        for (const { token, notify } of devices) {
+            const wanted = fresh.filter((email) => matchesChoice(notify, email, context));
+            let alive = true;
+            for (const email of wanted) {
+                alive = await this.send(token, alertPayload(email, { badge }), email.id);
+                if (!alive) break;
+                alerted.add(email.id);
+            }
+            // An alert carries the count; a device that got none hears it on its own
+            if (alive && !wanted.length && badgeChanged) await this.send(token, badgePayload(badge), 'badge');
         }
 
+        // Announced for the account: every fresh message has been put to every device
         this.state = rememberNotified(this.state, fresh.map((email) => email.id));
         this.state.emailState = changes.newState;
         this.state.badge = badge;
         await this.persist();
-        if (fresh.length) this.log.info(`[${this.name}] ${fresh.length} new (${source})`);
+        if (alerted.size) this.log.info(`[${this.name}] ${alerted.size} new (${source})`);
     }
 
     /*
@@ -374,23 +385,57 @@ export class AccountWatcher {
         return this.badgeMailboxId ? this.jmap.mailboxTotal(this.badgeMailboxId) : null;
     }
 
-    // To every device, or only those with alerts on (true) or off (false)
-    async broadcast(payload, { collapseId, alerts }) {
-        for (const token of this.devices.tokens(this.name, { alerts })) {
-            let result;
-            try {
-                result = await this.apns.send(token, payload, { topic: this.account.topic, collapseId });
-            } catch (error) {
-                this.log.warn(`[${this.name}] apns: ${error.message}`);
-                continue;
-            }
-            if (deviceOutcome(result.status, result.reason) === 'remove') {
-                await this.devices.remove(this.name, token);
-                this.log.info(`[${this.name}] dropped a dead device (${result.reason})`);
-            } else if (result.status !== 200) {
-                this.log.warn(`[${this.name}] apns ${result.status} ${result.reason ?? ''}`);
-            }
+    // What the rules need beyond the message itself. The followed threads
+    // cost two calls, so they are looked up only when a device asks for
+    // Important, and only for the threads of this batch.
+    async contextFor(fresh, devices) {
+        const wantsImportant = devices.some(({ notify }) => notify.mode === 'important');
+        return {
+            inboxId: this.inboxId,
+            junkId: this.junkId,
+            trashId: this.trashId,
+            vips: this.vipAddresses,
+            contacts: this.contactAddresses,
+            followedThreadIds: fresh.length && wantsImportant ? await this.followedThreads(fresh) : new Set(),
+        };
+    }
+
+    // The threads of these messages in which some message carries
+    // `$followed`. A lookup that fails costs the followed conversations of
+    // this batch, not its other alerts.
+    async followedThreads(emails) {
+        try {
+            const threads = await this.jmap.threads([...new Set(emails.map((email) => email.threadId).filter(Boolean))]);
+            const emailIds = [...new Set(threads.flatMap((thread) => thread.emailIds ?? []))];
+            const followed = new Set((await this.jmap.keywords(emailIds))
+                .filter((email) => email.keywords?.$followed)
+                .map((email) => email.id));
+            return new Set(threads
+                .filter((thread) => (thread.emailIds ?? []).some((id) => followed.has(id)))
+                .map((thread) => thread.id));
+        } catch (error) {
+            this.log.warn(`[${this.name}] followed conversations unreadable (${error.message})`);
+            return new Set();
         }
+    }
+
+    // One push to one device. False when APNs called the device dead and it
+    // was dropped, so the caller sends it nothing more.
+    async send(token, payload, collapseId) {
+        let result;
+        try {
+            result = await this.apns.send(token, payload, { topic: this.account.topic, collapseId });
+        } catch (error) {
+            this.log.warn(`[${this.name}] apns: ${error.message}`);
+            return true;
+        }
+        if (deviceOutcome(result.status, result.reason) === 'remove') {
+            await this.devices.remove(this.name, token);
+            this.log.info(`[${this.name}] dropped a dead device (${result.reason})`);
+            return false;
+        }
+        if (result.status !== 200) this.log.warn(`[${this.name}] apns ${result.status} ${result.reason ?? ''}`);
+        return true;
     }
 
     async persist() {
@@ -400,13 +445,18 @@ export class AccountWatcher {
     // /healthz is unauthenticated, so it says whether the machinery works and
     // nothing about the mail itself.
     status() {
+        const devices = this.devices.entries(this.name);
+        const modes = Object.fromEntries(MODES.map((mode) => [mode, 0]));
+        for (const { notify } of devices) modes[notify.mode] += 1;
         return {
             notices: this.notices,
             verified: this.notices === 'push' ? this.verified : null,
             lastNotice: this.lastNoticeAt,
-            devices: this.devices.tokens(this.name).length,
-            muted: this.devices.tokens(this.name, { alerts: false }).length,
+            devices: devices.length,
+            // What muted always meant: no alerts, the count still arrives
+            muted: modes.off,
             contacts: this.hasContacts,
+            modes,
         };
     }
 

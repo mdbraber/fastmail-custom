@@ -79,16 +79,6 @@ test('a registry file from before notify reads its alerts as inbox or off, witho
     assert.equal(await readFile(legacy, 'utf8'), text);
 });
 
-// Until the watcher sends per device it still asks for the devices with alerts on or off
-test('tokens still split on alerts, now read from the choice', async () => {
-    const registry = new DeviceRegistry(await scratch(), silent);
-    await registry.load();
-    await registry.register('personal', token, { notify: { mode: 'important', senders: 'everyone', mailboxIds: [] } });
-    await registry.register('personal', other, { notify: OFF });
-    assert.deepEqual(registry.tokens('personal', { alerts: true }), [token]);
-    assert.deepEqual(registry.tokens('personal', { alerts: false }), [other]);
-});
-
 // Two phones registering at once, or a registration racing a prune, would
 // otherwise write the same .tmp file and rename it out from under each other
 test('registrations that arrive together both survive', async () => {

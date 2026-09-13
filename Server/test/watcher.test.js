@@ -20,7 +20,7 @@ const arrival = (id, over = {}) => ({
 // test can change its mind after start(), which is where renewals happen.
 function fakeJMAP({
     emails = [], created = [], counts = { badge: 4 }, refusePush = false, changesError = null,
-    contactsAccountId = null, cards = [], cardState = 'cs1',
+    contactsAccountId = null, cards = [], cardState = 'cs1', threadMessages = {},
 } = {}) {
     const calls = [];
     const fake = {
@@ -35,6 +35,19 @@ function fakeJMAP({
             return { cards: fake.cards, state: fake.cardState };
         },
         fetch: async (url) => { calls.push(['eventsource', String(url)]); throw new Error('no network in tests'); },
+        // `threadMessages`: thread id → its messages with their keywords
+        threadsError: null,
+        threads: async (ids) => {
+            calls.push(['threads', ids]);
+            if (fake.threadsError) throw fake.threadsError;
+            return ids.map((id) => ({ id, emailIds: (threadMessages[id] ?? []).map((message) => message.id) }));
+        },
+        keywords: async (ids) => {
+            calls.push(['keywords', ids]);
+            return Object.values(threadMessages).flat()
+                .filter((message) => ids.includes(message.id))
+                .map(({ id, keywords }) => ({ id, keywords }));
+        },
         headers: () => ({ authorization: 'Bearer t' }),
         connect: async () => {},
         // `hidden` is Fastmail's own flag; bit 1 is "not in the folder list",
@@ -46,6 +59,8 @@ function fakeJMAP({
             { id: 'later', name: 'Later', role: null, hidden: 0 },
             { id: 'y2019', name: '2019', role: null, hidden: 1 },
             { id: 'archive', name: 'Archive', role: 'archive', hidden: 0 },
+            { id: 'junk', name: 'Spam', role: 'junk', hidden: 0 },
+            { id: 'trash', name: 'Trash', role: 'trash', hidden: 0 },
         ],
         patchEmail: async (id, patch) => {
             calls.push(['set', id, patch]);
@@ -77,12 +92,16 @@ function fakeAPNs(answer = () => ({ status: 200, reason: null })) {
     return { sent, send: async (token, payload, options) => { sent.push({ token, payload, ...options }); return answer(token); } };
 }
 
-function fakeDevices(tokens, muted = []) {
+const INBOX = { mode: 'inbox', senders: 'everyone', mailboxIds: [] };
+const OFF = { mode: 'off', senders: 'everyone', mailboxIds: [] };
+
+// Each token with its choice: inbox, unless `choices` names another
+function fakeDevices(tokens, choices = {}) {
     const removed = [];
     const live = () => tokens.filter((t) => !removed.includes(t));
     return {
         removed,
-        tokens: (_, { alerts } = {}) => live().filter((t) => alerts === undefined || alerts !== muted.includes(t)),
+        entries: () => live().map((token) => ({ token, notify: choices[token] ?? INBOX })),
         remove: async (_, t) => { removed.push(t); },
     };
 }
@@ -145,14 +164,15 @@ test('one new Inbox message becomes one alert per device, carrying the badge, an
     assert.equal(t.apns.sent[0].collapseId, 'M1');
     assert.equal(t.apns.sent[0].topic, account.topic);
 
+    // M2 was put to every device too, and matched none: it counts as announced
     const saved = await loadState(t.dir, 'personal', silent);
-    assert.deepEqual(saved, { emailState: 's1', notified: ['M1'], badge: 4 });
+    assert.deepEqual(saved, { emailState: 's1', notified: ['M1', 'M2'], badge: 4 });
 });
 
-test('a device with alerts off hears only the count, and the count still follows every change', async () => {
+test('a device whose choice is off hears only the count, and the count still follows every change', async () => {
     const created = ['M1'];
     const emails = [arrival('M1')];
-    const t = await setUp({ created, emails }, { devices: fakeDevices(['tok1', 'tok2'], ['tok2']) });
+    const t = await setUp({ created, emails }, { devices: fakeDevices(['tok1', 'tok2'], { tok2: OFF }) });
     assert.equal(t.watcher.status().devices, 2);
     assert.equal(t.watcher.status().muted, 1);
 
@@ -502,4 +522,120 @@ test('without contacts access nothing is read, the sets stay empty, and health s
     const withAccess = await setUp({ contactsAccountId: 'acc2', cards: addressBook() });
     assert.equal(withAccess.watcher.hasContacts, true);
     assert.equal(withAccess.watcher.status().contacts, true);
+});
+
+
+// Each device its own choice: the four side by side, on one batch. Ada is a
+// VIP, Bob a contact; M5's thread is followed through another message.
+const choices = {
+    'tok-inbox': INBOX,
+    'tok-important': { mode: 'important', senders: 'everyone', mailboxIds: [] },
+    'tok-custom': { mode: 'custom', senders: 'contacts', mailboxIds: ['kerk'] },
+    'tok-off': OFF,
+};
+const batch = () => ({
+    contactsAccountId: 'acc1',
+    cards: addressBook(),
+    created: ['M1', 'M2', 'M3', 'M4', 'M5', 'M6'],
+    emails: [
+        arrival('M1', { from: [{ email: 'stranger@example.net' }] }),
+        arrival('M2', { mailboxIds: { kerk: true }, from: [{ email: 'bob@example.net' }] }),
+        arrival('M3', { from: [{ name: 'Ada', email: 'ada@example.net' }] }),
+        arrival('M4', { mailboxIds: { junk: true }, from: [{ email: 'ADA@example.net' }] }),
+        arrival('M5', { mailboxIds: { later: true }, from: [{ email: 'stranger@example.net' }] }),
+        arrival('M6', { keywords: { $seen: true }, from: [{ email: 'ada@example.net' }] }),
+    ],
+    threadMessages: {
+        'T-M5': [{ id: 'M5', keywords: {} }, { id: 'M0', keywords: { $followed: true } }],
+    },
+});
+const newMail = (t) => t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+const heardBy = (t, tokens) => Object.fromEntries(tokens.map((token) => [
+    token, t.apns.sent.filter((s) => s.token === token).map((s) => [s.collapseId, s.payload.aps.badge]),
+]));
+
+test('each device hears the new messages its own choice matches', async () => {
+    const t = await setUp(batch(), { devices: fakeDevices(Object.keys(choices), choices) });
+    await newMail(t);
+    await settle(t);
+    assert.deepEqual(heardBy(t, Object.keys(choices)), {
+        'tok-inbox': [['M1', 4], ['M3', 4]],
+        'tok-important': [['M3', 4], ['M5', 4]],
+        'tok-custom': [['M2', 4]],
+        'tok-off': [],
+    });
+    const alert = t.apns.sent.find((s) => s.token === 'tok-custom');
+    assert.equal(alert.payload.aps.alert.title, 'bob@example.net');
+    assert.equal(alert.payload.url, 'https://app.fastmail.com/mail/Inbox/T-M2.M2');
+    assert.equal(alert.topic, account.topic);
+});
+
+test('a device that got no alert hears a changed count on its own; one that got an alert has it there', async () => {
+    const quiet = { ...choices, 'tok-quiet': { mode: 'custom', senders: 'vips', mailboxIds: ['kerk'] } };
+    const t = await setUp(batch(), { devices: fakeDevices(Object.keys(quiet), quiet) });
+    t.jmap.counts.badge = 5;
+    await newMail(t);
+    await settle(t);
+    assert.deepEqual(heardBy(t, Object.keys(quiet)), {
+        'tok-inbox': [['M1', 5], ['M3', 5]],
+        'tok-important': [['M3', 5], ['M5', 5]],
+        'tok-custom': [['M2', 5]],
+        'tok-off': [['badge', 5]],
+        'tok-quiet': [['badge', 5]],
+    });
+    assert.deepEqual(t.apns.sent.find((s) => s.token === 'tok-off').payload, { aps: { badge: 5 } });
+});
+
+test('followed threads are looked up only when a device asks for Important, and only for fresh messages', async () => {
+    const withoutImportant = { 'tok-inbox': INBOX, 'tok-custom': choices['tok-custom'] };
+    const t = await setUp(batch(), { devices: fakeDevices(Object.keys(withoutImportant), withoutImportant) });
+    await newMail(t);
+    await settle(t);
+    assert.equal(t.jmap.calls.filter((c) => c[0] === 'threads' || c[0] === 'keywords').length, 0);
+
+    const u = await setUp(batch(), { devices: fakeDevices(Object.keys(choices), choices) });
+    await newMail(u);
+    await settle(u);
+    assert.deepEqual(u.jmap.calls.filter((c) => c[0] === 'threads').map((c) => c[1]), [['T-M1', 'T-M2', 'T-M3', 'T-M4', 'T-M5']]);
+    assert.deepEqual(u.jmap.calls.filter((c) => c[0] === 'keywords').map((c) => c[1]), [['M5', 'M0']]);
+});
+
+test('a thread lookup that fails costs only the followed conversations', async () => {
+    const t = await setUp(batch(), { devices: fakeDevices(['tok-important'], choices) });
+    t.jmap.threadsError = new JMAPError('Thread/get: serverFail', { type: 'serverFail' });
+    await newMail(t);
+    await settle(t);
+    assert.deepEqual(t.apns.sent.map((s) => s.collapseId), ['M3']);
+});
+
+test('a device APNs calls dead in the middle of a batch is dropped and sent nothing more', async () => {
+    const apns = fakeAPNs((token) => (token === 'tok-inbox' ? { status: 410, reason: 'Unregistered' } : { status: 200, reason: null }));
+    const t = await setUp(batch(), { apns, devices: fakeDevices(Object.keys(choices), choices) });
+    t.jmap.counts.badge = 5;
+    await newMail(t);
+    await settle(t);
+    assert.deepEqual(t.devices.removed, ['tok-inbox']);
+    assert.deepEqual(heardBy(t, ['tok-inbox', 'tok-off']), { 'tok-inbox': [['M1', 5]], 'tok-off': [['badge', 5]] });
+});
+
+test('every fresh message is remembered for the account, whether any device was alerted or not', async () => {
+    const t = await setUp(batch(), { devices: fakeDevices(['tok-off'], choices) });
+    await newMail(t);
+    await settle(t);
+    assert.equal(t.apns.sent.length, 0);
+    assert.deepEqual((await loadState(t.dir, 'personal', silent)).notified, ['M1', 'M2', 'M3', 'M4', 'M5']);
+});
+
+test('health counts the devices per choice, and muted is the ones that are off', async () => {
+    const five = { ...choices, 'tok-off-2': OFF };
+    const t = await setUp(undefined, { devices: fakeDevices(Object.keys(five), five) });
+    assert.deepEqual(t.watcher.status(), {
+        notices: 'push',
+        verified: false,
+        lastNotice: null,
+        devices: 5,
+        muted: 2,
+        contacts: false,
+        modes: { off: 2, important: 1, inbox: 1, custom: 1 },
+    });
 });

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    selectNotifiable, selectFresh, senderAddress, matchesChoice, senderName, alertPayload, badgePayload, threadURL,
+    selectFresh, senderAddress, matchesChoice, senderName, alertPayload, badgePayload, threadURL,
 } from '../src/notify.js';
 
 const inbox = 'mbx-inbox';
@@ -14,21 +14,6 @@ const email = (over = {}) => ({
     subject: 'Engines',
     receivedAt: '2026-09-07T10:00:00Z',
     ...over,
-});
-
-test('a fresh unseen message in the Inbox notifies', () => {
-    const chosen = selectNotifiable([email()], { inboxId: inbox, notified: new Set() });
-    assert.deepEqual(chosen.map((e) => e.id), ['M1']);
-});
-
-test('outside the Inbox, seen, draft, or already announced do not', () => {
-    const candidates = [
-        email({ id: 'filed', mailboxIds: { 'mbx-other': true } }),
-        email({ id: 'seen', keywords: { $seen: true } }),
-        email({ id: 'draft', keywords: { $draft: true } }),
-        email({ id: 'done' }),
-    ];
-    assert.deepEqual(selectNotifiable(candidates, { inboxId: inbox, notified: new Set(['done']) }), []);
 });
 
 // The choices below decide where a message has to be; before them, only
