@@ -2433,17 +2433,53 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     /*
      * A slot's glyph for the settings panel's list, taken from where the bar
      * takes it: the button its registry holds under the slot's name. Pin
-     * answers with Pin's, the first name listed, since Unpin's is blank. Keep
-     * is the mode's own button and only a message actions bar registers it,
-     * so without one it is drawn from the shapes that button is drawn from.
-     * Null when nothing can be read, as before any bar has been drawn, and
-     * the list then shows the name alone.
+     * answers with Pin's, the first name listed, since Unpin's is blank.
+     *
+     * The panel is usually opened from Fastmail's Settings screen, where no
+     * mail toolbar is in the document to read. So each glyph read from a bar
+     * is also kept, one detached copy per verb for the session, and drawn
+     * from a fresh copy of that when no bar is there. Fastmail builds each
+     * icon in a module of its own, with no name to ask for it by, so a bar
+     * that has been drawn is the only place in the page to read them from.
+     * The copies are taken whenever a bar is dressed, which is whenever one
+     * is drawn.
+     *
+     * Keep is the mode's own button and only a message actions bar registers
+     * it, so without one it is drawn from the shapes that button is drawn
+     * from. Null when nothing can be read, as after a launch straight into
+     * Settings, and the list then shows the name alone.
      */
-    const slotIcon = (slot) => {
-        for (const name of SLOT_ACTION_NAMES[slot] || []) {
+    const rememberedSlotIcons = Object.create(null);
+
+    const barSlotIcon = (slot) => {
+        const names = Object.prototype.hasOwnProperty.call(SLOT_ACTION_NAMES, slot)
+            ? SLOT_ACTION_NAMES[slot] : [];
+        for (const name of names) {
             const icon = borrowedIcon(name);
             if (icon) return icon;
         }
+        return null;
+    };
+
+    // Keep is left out: it has shapes of its own to fall back on, and only a
+    // message actions bar could answer, so asking every other bar is wasted.
+    const rememberSlotIcons = () => {
+        try {
+            Object.keys(SLOT_ACTION_NAMES).forEach((slot) => {
+                if (slot === 'keep' || rememberedSlotIcons[slot]) return;
+                const icon = barSlotIcon(slot);
+                if (icon) rememberedSlotIcons[slot] = icon;
+            });
+        } catch (error) {
+            // Nothing to read yet; the next bar drawn is asked again
+        }
+    };
+
+    const slotIcon = (slot) => {
+        const live = barSlotIcon(slot);
+        if (live) return live;
+        const kept = rememberedSlotIcons[slot];
+        if (kept) return kept.cloneNode(true);
         return slot === 'keep' ? stateVerbIcon('keep') : null;
     };
 
@@ -2744,8 +2780,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * and a Pin that could toggle; was work created by writing to the drawn
      * bar instead of to the list it is drawn from. Taking the list over left
      * none of it to do.
+     *
+     * A bar being dressed is also a bar on screen, so its glyphs are copied
+     * here for the settings panel, which is mostly drawn where no bar is.
      */
     const dressToolbar = () => {
+        rememberSlotIcons();
         messageActionsBars().forEach(ownActionsConfig);
     };
 
