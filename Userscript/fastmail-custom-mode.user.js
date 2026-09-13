@@ -6182,12 +6182,49 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const isGroupMenu = (options) => (options || []).some(boundToGroupBy);
 
+    // Fastmail's own Custom… entry has no isSelected of its own; its icon is
+    // what follows groupBy, a tick while the grouping is custom.
+    const iconBoundToGroupBy = (option) => {
+        try {
+            const bindings = option && option.__meta__ && option.__meta__.bindings;
+            const binding = bindings && bindings.icon;
+            return !!binding && binding.fromPath === 'groupBy';
+        } catch (error) {
+            return false;
+        }
+    };
+
+    // Every option in this menu carries an icon, a tick on the chosen one and
+    // a blank of the same size on the rest, and the blank is what lines the
+    // labels up. Both are copied from Fastmail's own grouping options, one of
+    // which is always ticked, so the mode's entries match whatever Fastmail
+    // draws; if neither can be found the entries go without, as before.
+    const groupingIcons = (options) => {
+        const icons = { tick: null, blank: null };
+        options.forEach((option) => {
+            if (!boundToGroupBy(option) && !iconBoundToGroupBy(option)) return;
+            try {
+                const icon = option.get('icon');
+                const className = icon && typeof icon.getAttribute === 'function'
+                    ? icon.getAttribute('class') || '' : '';
+                if (!icons.tick && /\bi-tick\b/.test(className)) icons.tick = icon;
+                if (!icons.blank && /\bi-blank\b/.test(className)) icons.blank = icon;
+            } catch (error) {
+                // An option whose icon cannot be read is no sample
+            }
+        });
+        return icons;
+    };
+
     // Selected is worked out once rather than bound, because the menu is
     // built fresh every time it opens and thrown away when it closes.
-    const groupingOption = (definition, active) => {
+    const groupingOption = (definition, active, icons) => {
+        const isActive = definition.id === active;
+        const sample = isActive ? icons.tick : icons.blank;
         const option = new FastMail.classes.ButtonView({
             label: definition.name,
-            isSelected: definition.id === active,
+            icon: sample ? sample.cloneNode(true) : null,
+            isSelected: isActive,
             method: 'chooseItem',
             chooseItem() {
                 chooseGrouping(definition.id);
@@ -6211,15 +6248,31 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (!isGroupMenu(options)) return;
 
         const active = currentGroupingId();
+        const icons = groupingIcons(options);
         const entries = [];
         const labels = labelsGroupingFor(controller().get('mailbox'));
 
-        if (labels) entries.push(groupingOption(labels, active));
+        if (labels) entries.push(groupingOption(labels, active, icons));
         modeGroupings().forEach((definition) => {
-            entries.push(groupingOption(definition, active));
+            entries.push(groupingOption(definition, active, icons));
         });
 
         if (!entries.length) return;
+
+        // With one of the mode's own groupings chosen, the tick is that
+        // entry's; Fastmail's entries still tick whatever they read off the
+        // sort, so for this menu they wear the blank instead, and only one
+        // row is ticked.
+        if (icons.blank && entries.some(entry => entry.get('isSelected'))) {
+            options.forEach((option) => {
+                if (!boundToGroupBy(option) && !iconBoundToGroupBy(option)) return;
+                try {
+                    option.set('icon', icons.blank.cloneNode(true));
+                } catch (error) {
+                    // An entry that will not change keeps its own icon
+                }
+            });
+        }
 
         let last = -1;
         options.forEach((option, index) => {
