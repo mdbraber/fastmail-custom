@@ -1300,11 +1300,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ' opacity: 1; transform: translateX(-50%) translateY(0); }'
     ];
 
-    // The fallback panel's own styles. Unconditional, like the rules above,
-    // rather than gated on modeIsOn the way labelColourRules is: the plain
-    // panel can be opened with the mode off (openFallbackSettings does not
-    // check it), and a panel drawn with no styles at all would defeat the
-    // point of a fallback that is supposed to always be there.
+    // The fallback panel's own styles, added once by ensureSettingsPageStyles
+    // rather than run through updateStyles: the plain panel can be opened
+    // with the mode off (openFallbackSettings does not check it) and before
+    // mail has ever loaded, so these rules must not wait on either.
     const FALLBACK_PANEL_RULES = [
         '#custom-mode-fallback-settings {' +
         ' position: fixed; inset: 0; z-index: 2147483000;' +
@@ -1331,10 +1330,28 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // A sub-option on the settings page while the option it depends on is
     // off. Fastmail's own disabled switch greys only its control, and its
     // stylesheet has no class that dims a label and hint along with it; half
-    // is what its own disabled menu entries use. Unconditional, like the
-    // fallback's rules, since the page opens with the mode off too.
+    // is what its own disabled menu entries use. Added once by
+    // ensureSettingsPageStyles, alongside the fallback panel's own rules,
+    // for the same reason: the page opens with the mode off too, and before
+    // mail has ever loaded.
     const SUB_OPTION_DIMMED = 'custom-mode-dimmed';
     const SUB_OPTION_RULES = ['.' + SUB_OPTION_DIMMED + ' { opacity: 0.5; }'];
+
+    // The settings page's own two rule sets, in their own element rather
+    // than updateStyles': unlike inboxChipRules and labelColourRules, they
+    // need neither the mailbox store nor the mode to be known, so they can
+    // go up the moment the page can start, and there is nothing here for
+    // rememberStyles to remember for the next launch's head start. Added
+    // once; nothing here ever changes, so nothing later needs to update it.
+    const SETTINGS_STYLE_ID = STYLE_ID + '-settings';
+
+    const ensureSettingsPageStyles = () => {
+        if (document.getElementById(SETTINGS_STYLE_ID)) return;
+        document.body.appendChild(
+            FastMail.el('style', { type: 'text/css', id: SETTINGS_STYLE_ID },
+                [FALLBACK_PANEL_RULES.concat(SUB_OPTION_RULES).join('\n')])
+        );
+    };
 
     // The line is the stylesheet's half of the option; the gap it sits in is
     // the marking pass's, since only that can move a row the list has pinned.
@@ -1450,8 +1467,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             .concat(BADGE_UNREAD_RULES)
             .concat(TRIAGE_ICON_RULES)
             .concat(TOAST_RULES)
-            .concat(FALLBACK_PANEL_RULES)
-            .concat(SUB_OPTION_RULES)
             .join('\n');
         const existing = document.getElementById(STYLE_ID);
 
@@ -6599,20 +6614,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // Fastmail titles a stack entry from its own table of names, which
         // has none for this page. A function expression, not an arrow, so
         // arguments is the caller's own and every argument passes through,
-        // not only the three named here.
-        const make = controller.makeViewInstance;
-        controller.makeViewInstance = function (viewId, viewState, parent) {
-            const made = make.apply(this, arguments);
+        // not only the one named here.
+        controller.makeViewInstance = function (viewId) {
+            const made = originalMake.apply(this, arguments);
             if (viewId === SETTINGS_PAGE_ID && made) made.title = SETTINGS_PAGE_TITLE;
             return made;
         };
 
-        const restore = controller.restoreEncodedState;
         // A trailing slash is accepted, matching the start-up pattern above.
         const ownAddress = new RegExp('^' + SETTINGS_PAGE_ID + '/?(?:#(.*))?$');
-        controller.restoreEncodedState = function (encoded, params) {
+        controller.restoreEncodedState = function (encoded) {
             const match = ownAddress.exec(String(encoded == null ? '' : encoded));
-            if (!match) return restore.apply(this, arguments);
+            if (!match) return originalRestore.apply(this, arguments);
             this.go(SETTINGS_PAGE_ID, match[1] ? { anchor: match[1], nonce: Math.random() } : null);
             return this;
         };
@@ -6750,20 +6763,34 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // Reachable the moment Fastmail's own classes and router exist, well
     // before the mail controller a plain start() waits for: a cold reload
     // straight onto this page must not depend on mail ever having loaded.
-    // inboxChipRules, labelColourRules and sourceSeparatorRules were read for
-    // this: none needs the mail controller or a mailbox row, and
-    // labelColourRules' own guard already returns nothing while the mode is
-    // not yet known to be on, which start() corrects the moment it runs.
+    // updateStyles is left to start(): inboxChipRules needs the mailbox
+    // store, and labelColourRules needs modeIsOn, neither up yet this early,
+    // and rememberStyles would save an incomplete head start for the next
+    // launch's own early load. The settings page's own rules need neither,
+    // so they go up here instead, through ensureSettingsPageStyles.
     // Guarded so mail finishing later, and start() calling this again,
-    // starts nothing twice.
+    // starts nothing twice; each step reports its own fault rather than
+    // letting one throw stop the other two.
     let settingsPageStarted = false;
 
     const startSettingsPage = () => {
         if (settingsPageStarted) return;
         settingsPageStarted = true;
-        updateStyles();
-        watchSettingsApp();
-        watchSettingsList();
+        try {
+            ensureSettingsPageStyles();
+        } catch (error) {
+            reportFault('the settings page could not add its styles', error);
+        }
+        try {
+            watchSettingsApp();
+        } catch (error) {
+            reportFault('the settings page could not start watching Settings', error);
+        }
+        try {
+            watchSettingsList();
+        } catch (error) {
+            reportFault('the settings page could not start watching the sidebar list', error);
+        }
     };
 
     /*
