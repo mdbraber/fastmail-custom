@@ -99,10 +99,10 @@ struct BackendSettingsPage: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(backend.title)
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(Color.primary)
                                 Text(backend.host)
                                     .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.secondary)
                             }
                             Spacer()
                             if Backend.resolve(backendName) == backend {
