@@ -45,17 +45,51 @@ import Testing
     let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
     #expect(json["account"] as? String == "work")
     #expect(json["token"] as? String == "00abff")
-    #expect(json["alerts"] as? Bool == true, "alerts are on unless the app says otherwise")
-    #expect(json.count == 3)
+    #expect(json["alerts"] as? Bool == true, "inbox alerts unless the app says otherwise")
+    let notify = try #require(json["notify"] as? [String: Any])
+    #expect(notify["mode"] as? String == "inbox")
+    #expect(notify["senders"] as? String == "everyone")
+    #expect(notify["mailboxIds"] as? [String] == [])
+    #expect(json.count == 4)
 }
 
-@Test func theRegistrationCarriesTheAlertsSwitch() throws {
+// notify is the choice; alerts says the same as on or off, for a server that
+// predates notify and reads only alerts
+@Test func theRegistrationCarriesTheChoiceAndItsOnOffForOlderServers() throws {
     let config = try #require(PushConfig(host: "push.example.net", secret: "s3cret"))
-    let request = config.registration(account: "personal", deviceToken: Data([0x01]), alerts: false)
-    let body = try #require(request.httpBody)
-    let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
-    #expect(json["alerts"] as? Bool == false)
-    #expect(json["token"] as? String == "01")
+
+    let off = config.registration(account: "personal", deviceToken: Data([0x01]), choice: NotificationChoice(mode: .off))
+    let offBody = try #require(off.httpBody)
+    let offJSON = try #require(JSONSerialization.jsonObject(with: offBody) as? [String: Any])
+    #expect(offJSON["alerts"] as? Bool == false)
+    #expect((offJSON["notify"] as? [String: Any])?["mode"] as? String == "off")
+    #expect(offJSON["token"] as? String == "01")
+
+    let custom = config.registration(
+        account: "personal", deviceToken: Data([0x01]),
+        choice: NotificationChoice(mode: .custom, senders: .vips, mailboxIds: ["P2F", "P3V"])
+    )
+    let customBody = try #require(custom.httpBody)
+    let customJSON = try #require(JSONSerialization.jsonObject(with: customBody) as? [String: Any])
+    #expect(customJSON["alerts"] as? Bool == true)
+    let notify = try #require(customJSON["notify"] as? [String: Any])
+    #expect(notify["mode"] as? String == "custom")
+    #expect(notify["senders"] as? String == "vips")
+    #expect(notify["mailboxIds"] as? [String] == ["P2F", "P3V"])
+}
+
+@Test func theTokenIsLowercaseHex() {
+    #expect(PushConfig.hex(Data([0x00, 0xAB, 0xFF])) == "00abff")
+    #expect(PushConfig.hex(Data()) == "")
+}
+
+@Test func theContactsFlagIsReadFromTheRegistrationReply() {
+    func read(_ text: String) -> Bool? { PushConfig.contacts(fromRegistrationReply: Data(text.utf8)) }
+    #expect(read(#"{"ok":true,"notify":{"mode":"inbox","senders":"everyone","mailboxIds":[]},"contacts":true}"#) == true)
+    #expect(read(#"{"ok":true,"contacts":false}"#) == false)
+    #expect(read(#"{"ok":true,"alerts":true}"#) == nil, "a server from before the flag")
+    #expect(read(#"{"ok":true,"contacts":1}"#) == nil, "a number is not a flag")
+    #expect(read("not json") == nil)
 }
 
 // The Archive button asks the push server to do the work: the phone holds no

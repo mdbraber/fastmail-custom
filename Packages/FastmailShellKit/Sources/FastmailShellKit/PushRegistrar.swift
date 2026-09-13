@@ -19,21 +19,21 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     public override init() {
         super.init()
         Self.current = self
-        // The alerts switch, flipped in the sheet or in the Settings app,
-        // reaches the server through a fresh registration
+        // The old on/off switch becomes the first choice, before anything
+        // reads the choice
+        PushPreferences.migrate()
         NotificationCenter.default.addObserver(
             self, selector: #selector(defaultsChanged), name: UserDefaults.didChangeNotification, object: nil
         )
     }
 
     /// The notification's thread is not promised, so the work hops to the main
-    /// actor.
+    /// actor. A new notification choice is not handled here: the page is the
+    /// only thing that changes it, and it calls `choiceChanged()`.
     @objc private func defaultsChanged() {
         Task { @MainActor in
             // The badge label is one of these settings, and it names a shortcut
             HomeShortcuts.refresh()
-            guard let registrar = PushRegistrar.current, registrar.deviceToken != nil, PushPreferences.registrationDue() else { return }
-            await registrar.register()
         }
     }
 
@@ -128,6 +128,19 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         }
     }
 
+    /// Apple's device token as the push server files it, for the page's push
+    /// id line; nothing while the app has none.
+    public var pushTokenHex: String? {
+        deviceToken.map(PushConfig.hex)
+    }
+
+    /// Called once the Notifications page has saved a choice. A choice the
+    /// server already has sends nothing.
+    public func choiceChanged() {
+        guard deviceToken != nil, PushPreferences.registrationDue() else { return }
+        Task { await register() }
+    }
+
     public func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         self.deviceToken = deviceToken
         Task { await register() }
@@ -141,8 +154,8 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     private var again = false
 
     /// Tells the server about this device. One registration at a time: a
-    /// trigger that arrives while one is out (the switch flipped again, an
-    /// activation) is folded into a repeat that reads the switch afresh, so
+    /// trigger that arrives while one is out (the choice changed again, an
+    /// activation) is folded into a repeat that reads the choice afresh, so
     /// the last word the server hears is the current one.
     private func register() async {
         if inFlight != nil {
@@ -164,13 +177,19 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     private func send() async {
         guard let config, let account, let deviceToken else { return }
         registrationDue = false
-        let alerts = PushPreferences.alertsEnabled()
+        let choice = PushPreferences.choice()
         do {
-            let request = config.registration(account: account, deviceToken: deviceToken, alerts: alerts)
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let request = config.registration(account: account, deviceToken: deviceToken, choice: choice)
+            let (data, response) = try await URLSession.shared.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             registrationDue = !(200..<300).contains(status)
-            if registrationDue { print("[push] the push server answered \(status)") } else { PushPreferences.acknowledge(alerts: alerts) }
+            if registrationDue {
+                print("[push] the push server answered \(status)")
+            } else {
+                // What was sent is what is acknowledged; the reply says
+                // whether the server can read contacts, for the page's warning
+                PushPreferences.acknowledge(choice, contacts: PushConfig.contacts(fromRegistrationReply: data))
+            }
         } catch {
             registrationDue = true
             print("[push] the push server was unreachable: \(error.localizedDescription)")

@@ -1,25 +1,84 @@
 import Foundation
 
-/// The one notification choice the shell offers on the phone: alerts for new
-/// mail on this device, or none.
+/// This device's notification choice: one of the Notifications page's four
+/// boxed options, and for Custom the senders and labels. Kept in the app's own
+/// defaults, so Personal and Work each have theirs, and changed only by the
+/// page, through the `setNotifications` bridge action.
 public enum PushPreferences {
-    /// Shared with the Settings bundle and the in-app sheet.
-    public static let alertsKey = "push.alerts"
-    static let acknowledgedKey = "push.alertsAcknowledged"
+    public static let modeKey = "push.mode"
+    public static let sendersKey = "push.senders"
+    public static let mailboxIdsKey = "push.mailboxIds"
+    /// What the push server's last registration reply said about reading the
+    /// account's contacts; absent while no reply has said.
+    public static let contactsKey = "push.contacts"
+    /// The choice the push server last accepted, as JSON.
+    static let acknowledgedKey = "push.acknowledged"
+    /// The on/off switch the shell had before the page. Read once, to seed the
+    /// choice, and never written again.
+    static let legacyAlertsKey = "push.alerts"
+    static let legacyAcknowledgedKey = "push.alertsAcknowledged"
 
-    public static func alertsEnabled(in defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: alertsKey) as? Bool ?? true
+    /// Run at launch: a device that has never had a choice gets the one its
+    /// old switch meant. The old acknowledgement is dropped, so the choice is
+    /// registered once under its new name.
+    public static func migrate(in defaults: UserDefaults = .standard) {
+        guard defaults.object(forKey: modeKey) == nil else { return }
+        defaults.set(legacyMode(in: defaults).rawValue, forKey: modeKey)
+        defaults.removeObject(forKey: legacyAcknowledgedKey)
+    }
+
+    /// Off when the old switch was turned off; otherwise All in inbox, which
+    /// is what the switch did when on.
+    static func legacyMode(in defaults: UserDefaults) -> NotificationChoice.Mode {
+        (defaults.object(forKey: legacyAlertsKey) as? Bool ?? true) ? .inbox : .off
+    }
+
+    /// The saved choice. A value that is not one of the known names reads as
+    /// its default rather than failing.
+    public static func choice(in defaults: UserDefaults = .standard) -> NotificationChoice {
+        let mode = defaults.string(forKey: modeKey).flatMap(NotificationChoice.Mode.init(rawValue:))
+            ?? legacyMode(in: defaults)
+        let senders = defaults.string(forKey: sendersKey).flatMap(NotificationChoice.Senders.init(rawValue:))
+            ?? .everyone
+        let ids = defaults.array(forKey: mailboxIdsKey)?.compactMap { $0 as? String } ?? []
+        return NotificationChoice(mode: mode, senders: senders, mailboxIds: ids)
+    }
+
+    /// Senders and labels are kept whatever the mode, so leaving Custom and
+    /// coming back finds the list as it was.
+    public static func save(_ choice: NotificationChoice, in defaults: UserDefaults = .standard) {
+        defaults.set(choice.mode.rawValue, forKey: modeKey)
+        defaults.set(choice.senders.rawValue, forKey: sendersKey)
+        defaults.set(choice.mailboxIds, forKey: mailboxIdsKey)
+    }
+
+    public static func contacts(in defaults: UserDefaults = .standard) -> Bool? {
+        defaults.object(forKey: contactsKey) as? Bool
     }
 
     /// Whether the server's idea of this device is stale: nothing was ever
-    /// acknowledged, or the switch moved since.
+    /// acknowledged, or the choice changed since.
     public static func registrationDue(in defaults: UserDefaults = .standard) -> Bool {
-        guard let acknowledged = defaults.object(forKey: acknowledgedKey) as? Bool else { return true }
-        return acknowledged != alertsEnabled(in: defaults)
+        guard
+            let text = defaults.string(forKey: acknowledgedKey),
+            let acknowledged = try? JSONDecoder().decode(NotificationChoice.self, from: Data(text.utf8))
+        else { return true }
+        return acknowledged != choice(in: defaults)
     }
 
-    /// Called once the server answered a registration carrying `alerts`.
-    public static func acknowledge(alerts: Bool, in defaults: UserDefaults = .standard) {
-        defaults.set(alerts, forKey: acknowledgedKey)
+    /// Called once the server accepted a registration carrying `choice`. The
+    /// reply's contacts flag replaces the one kept, and a reply without one
+    /// makes it unknown.
+    public static func acknowledge(_ choice: NotificationChoice, contacts: Bool?, in defaults: UserDefaults = .standard) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        if let data = try? encoder.encode(choice), let text = String(data: data, encoding: .utf8) {
+            defaults.set(text, forKey: acknowledgedKey)
+        }
+        if let contacts {
+            defaults.set(contacts, forKey: contactsKey)
+        } else {
+            defaults.removeObject(forKey: contactsKey)
+        }
     }
 }
