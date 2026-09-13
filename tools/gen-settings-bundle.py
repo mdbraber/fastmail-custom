@@ -4,7 +4,7 @@
 Only the shell's own settings are here: the backend and the start page decide
 whether a page can load at all, and the alerts switch belongs beside iOS's own
 notification controls. Everything about the mail interface is in the page, in
-Custom mode's own settings panel, which is the same on every platform.
+Custom mode's own settings page, which is the same on every platform.
 
 This stays a generator rather than two checked-in plists because the two apps
 need identical copies, and `settingsBundleCarriesNoCustomModeRow` fails if

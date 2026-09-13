@@ -6528,6 +6528,21 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const installedControllers = new WeakSet();
 
+    // Every way of giving the page up goes through here, so a throw caught
+    // anywhere below means the same thing whichever branch caught it. A load
+    // that asked for this address directly is not left on whatever Settings
+    // opened to instead: it falls back to the plain panel.
+    const settingsPageUnavailable = () => {
+        settingsPageState = 'unavailable';
+        if (!openPageWhenInstalled) return;
+        openPageWhenInstalled = false;
+        try {
+            openFallbackSettings();
+        } catch (error) {
+            reportFault('the plain settings panel would not open either', error);
+        }
+    };
+
     const settingsContract = (controller) => {
         if (!controller || typeof controller.get !== 'function' ||
             typeof controller.register !== 'function' || typeof controller.go !== 'function' ||
@@ -6572,84 +6587,143 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const installSettingsPage = (controller, classes, found) => {
         controller.register(SETTINGS_PAGE_ID, () => settingsPage(classes));
 
+        // Kept so a throw below can put the controller back exactly as it
+        // was found. The registration above can stay either way: without
+        // the wraps that follow, nothing reaches it.
+        const hadOwnMake = Object.prototype.hasOwnProperty.call(controller, 'makeViewInstance');
+        const hadOwnRestore = Object.prototype.hasOwnProperty.call(controller, 'restoreEncodedState');
+        const originalMake = controller.makeViewInstance;
+        const originalRestore = controller.restoreEncodedState;
+        const originalContent = found.group.content;
+
         // Fastmail titles a stack entry from its own table of names, which
-        // has none for this page.
+        // has none for this page. A function expression, not an arrow, so
+        // arguments is the caller's own and every argument passes through,
+        // not only the three named here.
         const make = controller.makeViewInstance;
         controller.makeViewInstance = function (viewId, viewState, parent) {
-            const made = make.call(this, viewId, viewState, parent);
+            const made = make.apply(this, arguments);
             if (viewId === SETTINGS_PAGE_ID && made) made.title = SETTINGS_PAGE_TITLE;
             return made;
         };
 
         const restore = controller.restoreEncodedState;
-        const ownAddress = new RegExp('^' + SETTINGS_PAGE_ID + '(?:#(.*))?$');
+        // A trailing slash is accepted, matching the start-up pattern above.
+        const ownAddress = new RegExp('^' + SETTINGS_PAGE_ID + '/?(?:#(.*))?$');
         controller.restoreEncodedState = function (encoded, params) {
             const match = ownAddress.exec(String(encoded == null ? '' : encoded));
-            if (!match) return restore.call(this, encoded, params);
+            if (!match) return restore.apply(this, arguments);
             this.go(SETTINGS_PAGE_ID, match[1] ? { anchor: match[1], nonce: Math.random() } : null);
             return this;
         };
 
-        ensureSettingsEntry(found);
+        try {
+            ensureSettingsEntry(found);
+        } catch (error) {
+            if (hadOwnMake) controller.makeViewInstance = originalMake; else delete controller.makeViewInstance;
+            if (hadOwnRestore) controller.restoreEncodedState = originalRestore; else delete controller.restoreEncodedState;
+            if (found.group.content !== originalContent) {
+                found.group.content = originalContent;
+                try {
+                    found.sources.setOptions();
+                } catch (setOptionsError) {
+                    reportFault('the sidebar could not be put back after a failed install', setOptionsError);
+                }
+            }
+            throw error;
+        }
     };
 
     const ensureSettingsPage = () => {
         if (settingsPageState === 'unavailable') return;
 
-        // SettingsPaneView arrives with Settings' own module, which loads
-        // only once Settings has been opened; at start-up neither it nor the
-        // controller exists yet. The controller is looked up first, so a
-        // fresh load waits rather than judging the classes too early and
-        // latching 'unavailable' for the rest of the session.
-        const router = FastMail.router;
-        const controller = router && typeof router.getAppController === 'function'
-            ? router.getAppController('settings') : null;
-        if (!controller) return;
+        // Nothing below this line may escape: a throw here must never stop
+        // whatever called in, be that Fastmail's own app switch or start().
+        let controller = null;
+        try {
+            // SettingsPaneView arrives with Settings' own module, which loads
+            // only once Settings has been opened; at start-up neither it nor
+            // the controller exists yet. The controller is looked up first,
+            // so a fresh load waits rather than judging the classes too
+            // early and latching 'unavailable' for the rest of the session.
+            const router = FastMail.router;
+            controller = router && typeof router.getAppController === 'function'
+                ? router.getAppController('settings') : null;
+            if (!controller) return;
 
-        const classes = pageClasses();
-        if (!classes) {
-            settingsPageState = 'unavailable';
-            return;
-        }
-
-        const found = settingsContract(controller);
-        if (!found) {
-            if (!installedControllers.has(controller)) settingsPageState = 'unavailable';
-            return;
-        }
-
-        if (installedControllers.has(controller)) {
-            // Fastmail may rebuild its groups; the entry goes back if so.
-            ensureSettingsEntry(found);
-        } else {
-            try {
-                installSettingsPage(controller, classes, found);
-            } catch (error) {
-                settingsPageState = 'unavailable';
-                reportFault('the Custom mode settings page could not be added; using the plain panel', error);
+            const classes = pageClasses();
+            if (!classes) {
+                settingsPageUnavailable();
                 return;
             }
-            installedControllers.add(controller);
-            settingsPageState = 'installed';
-        }
 
-        if (openPageWhenInstalled) {
-            openPageWhenInstalled = false;
-            controller.go(SETTINGS_PAGE_ID);
+            // A contract miss is not necessarily final: Settings may still
+            // be mid-build. dressSettingsList's own rule gives the page up
+            // once the list is actually on screen and still waiting.
+            const found = settingsContract(controller);
+            if (!found) return;
+
+            if (installedControllers.has(controller)) {
+                // Fastmail may rebuild its groups; the entry goes back if so.
+                ensureSettingsEntry(found);
+            } else {
+                try {
+                    installSettingsPage(controller, classes, found);
+                } catch (error) {
+                    settingsPageUnavailable();
+                    reportFault('the Custom mode settings page could not be added; using the plain panel', error);
+                    return;
+                }
+                installedControllers.add(controller);
+                settingsPageState = 'installed';
+            }
+
+            if (openPageWhenInstalled) {
+                openPageWhenInstalled = false;
+                // Good for one load that landed on this address while
+                // Settings was already showing; once the app has moved on,
+                // an install finishing late must not follow it there.
+                if (router.get('app') === 'settings') {
+                    try {
+                        controller.go(SETTINGS_PAGE_ID);
+                    } catch (error) {
+                        reportFault('could not go to the Custom mode settings page', error);
+                    }
+                }
+            }
+        } catch (error) {
+            reportFault('the Custom mode settings page ran into a problem; the plain panel stands in', error);
+            // A controller already installed stays installed: this was one
+            // failed refresh, not a reason to give up under someone already
+            // looking at the page.
+            if (controller && !installedControllers.has(controller)) settingsPageUnavailable();
         }
     };
 
     const watchSettingsApp = () => {
         const router = FastMail.router;
         if (router && typeof router.addObserverForKey === 'function') {
-            router.addObserverForKey('app', { check: () => ensureSettingsPage() }, 'check');
+            router.addObserverForKey('app', {
+                check: () => {
+                    // Good for one install onto this address; once the app
+                    // has moved on to anything but Settings itself loading,
+                    // an install finishing late must not follow it there.
+                    try {
+                        const app = router.get('app');
+                        if (app !== 'settings' && app !== 'loading') openPageWhenInstalled = false;
+                    } catch (error) {
+                        reportFault('could not tell which app is showing', error);
+                    }
+                    ensureSettingsPage();
+                }
+            }, 'check');
         }
         ensureSettingsPage();
     };
 
     const openSettings = () => {
-        ensureSettingsPage();
         try {
+            ensureSettingsPage();
             const router = FastMail.router;
             if (settingsPageState !== 'unavailable' && router &&
                 typeof router.restoreEncodedState === 'function') {
@@ -6671,6 +6745,25 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             reportFault('the plain settings panel would not open either', error);
             return false;
         }
+    };
+
+    // Reachable the moment Fastmail's own classes and router exist, well
+    // before the mail controller a plain start() waits for: a cold reload
+    // straight onto this page must not depend on mail ever having loaded.
+    // inboxChipRules, labelColourRules and sourceSeparatorRules were read for
+    // this: none needs the mail controller or a mailbox row, and
+    // labelColourRules' own guard already returns nothing while the mode is
+    // not yet known to be on, which start() corrects the moment it runs.
+    // Guarded so mail finishing later, and start() calling this again,
+    // starts nothing twice.
+    let settingsPageStarted = false;
+
+    const startSettingsPage = () => {
+        if (settingsPageStarted) return;
+        settingsPageStarted = true;
+        updateStyles();
+        watchSettingsApp();
+        watchSettingsList();
     };
 
     /*
@@ -7406,7 +7499,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         // The list is on screen, so Settings has loaded; a controller that is
         // still not there to install into is as good as missing.
-        if (settingsPageState === 'waiting') settingsPageState = 'unavailable';
+        if (settingsPageState === 'waiting') settingsPageUnavailable();
 
         // With the page installed, the entry Fastmail draws is the way in,
         // and a copy left from before would put Custom mode in the list twice.
@@ -7497,8 +7590,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         patchShortcuts();
         updateStyles();
         installAppBadge();
-        watchSettingsApp();
-        watchSettingsList();
+        startSettingsPage();
 
         // A rotation, a split view or a window dragged narrower all change
         // how many verbs fit on the bar
@@ -7564,11 +7656,32 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         console.log(`Custom mode ${modeIsOn ? 'on' : 'off'}; window.customMode.toggleMode() to switch it`);
     };
 
+    // What startSettingsPage needs, and no more; checked the same defensive
+    // way isReady is, since a half-built FastMail can throw on a property
+    // that is not there yet. Fastmail's own classes and router are up long
+    // before mail is, so this passes well ahead of isReady.
+    const settingsPageCanStart = () => {
+        try {
+            return !!(
+                window.FastMail &&
+                FastMail.router && typeof FastMail.router.getAppController === 'function' &&
+                FastMail.classes &&
+                typeof FastMail.el === 'function' &&
+                document.body
+            );
+        } catch (error) {
+            return false;
+        }
+    };
+
     const mainObserver = new MutationObserver(() => {
+        if (settingsPageCanStart()) startSettingsPage();
         if (!isReady()) return;
         mainObserver.disconnect();
         start();
     });
+
+    if (settingsPageCanStart()) startSettingsPage();
 
     if (isReady()) {
         start();
