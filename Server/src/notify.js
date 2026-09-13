@@ -56,6 +56,8 @@ export function senderName(email) {
 
 // Where the message is opened: the Inbox, whatever labels the message
 // carries. A banner is read where the mail arrives, not where it is filed.
+// Measured in the Mac app on 2026-09-13: this address also opens a
+// message that is not in the Inbox, as Important and Custom alerts need.
 export function threadURL(email) {
     const conversation = `${encodeURIComponent(email.threadId)}.${encodeURIComponent(email.id)}`;
     return `https://app.fastmail.com/mail/Inbox/${conversation}`;
