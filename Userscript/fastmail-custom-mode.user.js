@@ -6609,15 +6609,22 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const ensureSettingsPage = () => {
         if (settingsPageState === 'unavailable') return;
+
+        // SettingsPaneView arrives with Settings' own module, which loads
+        // only once Settings has been opened; at start-up neither it nor the
+        // controller exists yet. The controller is looked up first, so a
+        // fresh load waits rather than judging the classes too early and
+        // latching 'unavailable' for the rest of the session.
+        const router = FastMail.router;
+        const controller = router && typeof router.getAppController === 'function'
+            ? router.getAppController('settings') : null;
+        if (!controller) return;
+
         const classes = pageClasses();
         if (!classes) {
             settingsPageState = 'unavailable';
             return;
         }
-        const router = FastMail.router;
-        const controller = router && typeof router.getAppController === 'function'
-            ? router.getAppController('settings') : null;
-        if (!controller) return;
 
         const found = settingsContract(controller);
         if (!found) {
@@ -6665,6 +6672,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 return true;
             }
         } catch (error) {
+            // The flag is only good for the install that was about to
+            // happen; left true, an unrelated later visit to Settings would
+            // be redirected here instead of wherever it meant to go.
+            openPageWhenInstalled = false;
             reportFault('could not go to the Custom mode settings page; showing the plain one', error);
         }
         try {
