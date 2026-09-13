@@ -1,113 +1,51 @@
 const api = globalThis.browser || globalThis.chrome;
 
-// Kept in step with the userscript's DEFAULT_SETTINGS and background.js
-const DEFAULT_SETTINGS = {
-    labelColours: true,
-    labelColoursSidebarOnly: true,
-    labelColoursSkipTriage: true,
-    dragAdditive: true,
-    hideInboxLabel: true,
-    stripLabelPrefix: true,
-    labelsShortcut: true,
-    labelsSidebarOnly: true,
-    labelsAutoSave: true,
-    stickyInboxFilter: true,
-    filteredLabelCounts: true,
-    groupings: 'by age (urgent first)\n  Triage = in:Triage OR is:unread\n  Pinned = is:pinned\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n  This month = after:1m\n  Older',
-    backToListAfterTriage: true,
-    triageLabel: 'Triage',
-    snoozeKey: 'w',
-    snoozeDefault: '2w',
-    snoozeTime: '08:00',
-    urgentKey: 's',
-    bottomBarSlots: 'Snooze, Pin, Keep, Archive, Labels, Move, Delete',
-    bottomBarItems: '',
-    topBarItems: '',
-    excludedLabels: 'Later, Feedbin',
-    contactGroupLabels: '',
-    appBadgeLabel: 'Triage',
-    swapArchiveExpand: true,
-    sidebarSeparators: true,
-    hideLoneExpando: true
+// The settings are drawn in the page now, by the payload, so the popup's one
+// job is to open them there. Nothing is stored or read here.
+const TARGET_PATTERN = /^https:\/\/app\.(beta\.)?fastmail\.com\//;
+
+const button = document.getElementById('open');
+const note = document.getElementById('note');
+
+const activeTab = async () => {
+    const tabs = await api.tabs.query({ active: true, currentWindow: true });
+    return tabs[0] || null;
 };
 
-const inputs = Object.keys(DEFAULT_SETTINGS).map((key) => [key, document.getElementById(key)]);
+const open = async () => {
+    const tab = await activeTab();
+    if (!tab || !tab.url || !TARGET_PATTERN.test(tab.url)) {
+        note.textContent = 'Open a Fastmail tab first; the settings live in the page.';
+        button.disabled = true;
+        return;
+    }
 
-// A suboption only means anything while the option above it is on, so it
-// follows its parent rather than sitting there looking available
-const subs = Array.from(document.querySelectorAll('label.sub')).map((row) => ({
-    row,
-    input: row.querySelector('input'),
-    parent: document.getElementById(row.dataset.parent)
-}));
-
-const syncSubs = () => {
-    subs.forEach(({ row, input, parent }) => {
-        const on = !!parent && parent.checked;
-        input.disabled = !on;
-        row.classList.toggle('is-disabled', !on);
-    });
-};
-
-// A textarea is not type "text", and the checkbox branch would read its
-// checked property, which is undefined; so the question is asked once, here.
-const isTextInput = (input) => input.type === 'text' || input.tagName === 'TEXTAREA';
-
-const load = async () => {
-    const stored = await api.storage.local.get('settings');
-    const settings = Object.assign({}, DEFAULT_SETTINGS, stored.settings || {});
-
-    inputs.forEach(([key, input]) => {
-        if (isTextInput(input)) input.value = settings[key] || '';
-        else input.checked = !!settings[key];
-    });
-    syncSubs();
-};
-
-const save = async () => {
-    const settings = {};
-    inputs.forEach(([key, input]) => {
-        settings[key] = isTextInput(input) ? input.value.trim() : input.checked;
+    // The injected function reports whether it actually reached the payload's
+    // export, so the popup only closes once the panel has really opened;
+    // closing on a guard it never got past would make the click look ignored.
+    // executeScript resolves one result per targeted frame, and this call
+    // only ever targets the tab's main frame, so the first entry is it.
+    const results = await api.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: 'MAIN',
+        func: () => {
+            if (window.customMode && window.customMode.openSettings) {
+                window.customMode.openSettings();
+                return true;
+            }
+            return false;
+        }
     });
 
-    syncSubs();
-
-    // Writing here is what notifies the background script, which pushes the
-    // change into any open Fastmail tab
-    await api.storage.local.set({ settings });
+    if (results && results[0] && results[0].result) {
+        window.close();
+    } else {
+        note.textContent = 'Custom mode has not loaded in this tab yet. Reload the page and try again.';
+    }
 };
 
-// Writing settings wakes the background script, which pushes them into every
-// open Fastmail tab and rebuilds the grouped list there; a textarea firing
-// input on every keystroke would do that once per character. Coalesced into
-// one write once typing pauses, rather than one write per keystroke. If the
-// popup is dismissed inside that window with no blur — a close that tears
-// the context down outright — the pending write would be lost, so hiding or
-// tearing down the page flushes it immediately instead of waiting out the
-// timer. change still saves straight away, for the blur case.
-let saveTimer = null;
-
-const scheduleSave = () => {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(save, 450);
-};
-
-const flushSave = () => {
-    if (saveTimer === null) return;
-    clearTimeout(saveTimer);
-    saveTimer = null;
-    save();
-};
-
-inputs.forEach(([, input]) => {
-    input.addEventListener('change', save);
-    if (input.tagName === 'TEXTAREA') input.addEventListener('input', scheduleSave);
+button.addEventListener('click', () => {
+    open().catch((error) => {
+        note.textContent = 'Could not open the settings: ' + error.message;
+    });
 });
-
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushSave();
-});
-
-window.addEventListener('pagehide', flushSave);
-
-load();
