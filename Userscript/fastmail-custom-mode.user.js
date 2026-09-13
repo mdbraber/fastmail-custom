@@ -6268,7 +6268,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * A clearable field shows "none" rather than its default as the
      * placeholder, because for those an empty box is ambiguous: never
      * touched, or emptied on purpose, and the two mean opposite things.
+     *
+     * A sub-option sits in under the option it depends on. The indent is
+     * Fastmail's own padding class, on a view of its own around the row, so
+     * the row keeps the classes Fastmail gave it. The plain fallback panel
+     * stays flat.
      */
+    const SUB_OPTION_INDENT = 'u-pl-6';
+
+    const underParent = (classes, option, row) => (option.parent
+        ? new classes.View({ className: SUB_OPTION_INDENT, draw: () => [row] })
+        : row);
+
     const settingRow = (classes, option, register) => {
         const el = FastMail.el;
         const current = settingValue(option.key);
@@ -6286,7 +6297,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 }
             }, 'changed');
             register.add(option, box);
-            return box;
+            return underParent(classes, option, box);
         }
 
         const debounced = debouncedWrite();
@@ -6303,10 +6314,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         register.add(option, field);
         register.trackFlush(debounced.flush);
 
-        return new classes.View({
+        return underParent(classes, option, new classes.View({
             className: 'u-space-y-1',
             draw: () => [field, el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint])]
-        });
+        }));
     };
 
     /*
