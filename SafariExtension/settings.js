@@ -20,9 +20,10 @@ const open = async () => {
         return;
     }
 
-    // The injected function reports whether it actually reached the payload's
-    // export, so the popup only closes once the panel has really opened;
-    // closing on a guard it never got past would make the click look ignored.
+    // The injected function reports whether the payload's export went to the
+    // settings page or opened the plain panel, so the popup only closes once
+    // one of them has; closing on a guard it never got past would make the
+    // click look ignored.
     // executeScript resolves one result per targeted frame, and this call
     // only ever targets the tab's main frame, so the first entry is it.
     const results = await api.scripting.executeScript({
@@ -30,8 +31,7 @@ const open = async () => {
         world: 'MAIN',
         func: () => {
             if (window.customMode && window.customMode.openSettings) {
-                window.customMode.openSettings();
-                return true;
+                return window.customMode.openSettings() !== false;
             }
             return false;
         }

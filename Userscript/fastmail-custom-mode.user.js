@@ -6522,6 +6522,160 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         content: [settingsPane(classes)]
     });
 
+    /*
+     * Reaching the page. Fastmail's Settings controller registers each of its
+     * own pages by id, and lists it from a sources controller whose groups are
+     * plain arrays of entries; Display options is registered this way. So is
+     * this page, once the controller exists: Fastmail loads Settings the first
+     * time it is opened, so that may be at start-up or much later.
+     *
+     * Everything relied on is checked first. If any of it is missing, nothing
+     * is registered or wrapped, and the copied sidebar row and the plain panel
+     * stand in: a renamed method must not cost the way into the settings.
+     */
+    let settingsPageState = 'waiting';
+
+    // Fastmail sends an address it does not know to its default page, which
+    // may rewrite the address before the controller exists to be taught this
+    // one; so a load straight onto the page is remembered from the start.
+    let openPageWhenInstalled = new RegExp('^/settings/' + SETTINGS_PAGE_ID + '(?:/|$)').test(location.pathname);
+
+    const installedControllers = new WeakSet();
+
+    const settingsContract = (controller) => {
+        if (!controller || typeof controller.get !== 'function' ||
+            typeof controller.register !== 'function' || typeof controller.go !== 'function' ||
+            typeof controller.makeViewInstance !== 'function' ||
+            typeof controller.restoreEncodedState !== 'function') return null;
+        const sources = controller.get('sources');
+        if (!sources || typeof sources.get !== 'function' || typeof sources.setOptions !== 'function') return null;
+        const groups = sources.get('sourceGroups');
+        const group = Array.isArray(groups) && groups.find(one => one && Array.isArray(one.content) &&
+            one.content.some(entry => entry && entry.id === 'actions'));
+        if (!group) return null;
+        const actions = group.content.find(entry => entry && entry.id === 'actions');
+        if (typeof actions.get !== 'function' || typeof actions.constructor !== 'function') return null;
+        return { sources, group };
+    };
+
+    // Custom mode's funnel, the glyph the Triage row wears, given the classes
+    // a Settings entry's icon carries. Fastmail calls this each time it draws
+    // the row, so each call makes a fresh one.
+    const settingsEntryIcon = () => {
+        const stock = document.createElementNS(SVG_NS, 'svg');
+        stock.setAttribute('class', 'u-standardicon v-Icon');
+        return filterGlyph(stock);
+    };
+
+    /*
+     * The entry is made by the constructor Fastmail's own entries come from,
+     * because searching Settings reads each entry's name through get(). And
+     * the group gets a new array rather than a splice: setOptions hands the
+     * list the group's array itself, and the same array handed back again is
+     * not a change the list redraws for.
+     */
+    const ensureSettingsEntry = ({ sources, group }) => {
+        if (group.content.some(entry => entry && entry.id === SETTINGS_PAGE_ID)) return;
+        const at = group.content.findIndex(entry => entry && entry.id === 'actions') + 1;
+        const Entry = group.content[at - 1].constructor;
+        const entry = new Entry({ id: SETTINGS_PAGE_ID, name: SETTINGS_PAGE_TITLE, icon: settingsEntryIcon });
+        group.content = group.content.slice(0, at).concat([entry], group.content.slice(at));
+        sources.setOptions();
+    };
+
+    const installSettingsPage = (controller, classes, found) => {
+        controller.register(SETTINGS_PAGE_ID, () => settingsPage(classes));
+
+        // Fastmail titles a stack entry from its own table of names, which
+        // has none for this page.
+        const make = controller.makeViewInstance;
+        controller.makeViewInstance = function (viewId, viewState, parent) {
+            const made = make.call(this, viewId, viewState, parent);
+            if (viewId === SETTINGS_PAGE_ID && made) made.title = SETTINGS_PAGE_TITLE;
+            return made;
+        };
+
+        const restore = controller.restoreEncodedState;
+        const ownAddress = new RegExp('^' + SETTINGS_PAGE_ID + '(?:#(.*))?$');
+        controller.restoreEncodedState = function (encoded, params) {
+            const match = ownAddress.exec(String(encoded == null ? '' : encoded));
+            if (!match) return restore.call(this, encoded, params);
+            this.go(SETTINGS_PAGE_ID, match[1] ? { anchor: match[1], nonce: Math.random() } : null);
+            return this;
+        };
+
+        ensureSettingsEntry(found);
+    };
+
+    const ensureSettingsPage = () => {
+        if (settingsPageState === 'unavailable') return;
+        const classes = pageClasses();
+        if (!classes) {
+            settingsPageState = 'unavailable';
+            return;
+        }
+        const router = FastMail.router;
+        const controller = router && typeof router.getAppController === 'function'
+            ? router.getAppController('settings') : null;
+        if (!controller) return;
+
+        const found = settingsContract(controller);
+        if (!found) {
+            if (!installedControllers.has(controller)) settingsPageState = 'unavailable';
+            return;
+        }
+
+        if (installedControllers.has(controller)) {
+            // Fastmail may rebuild its groups; the entry goes back if so.
+            ensureSettingsEntry(found);
+        } else {
+            try {
+                installSettingsPage(controller, classes, found);
+            } catch (error) {
+                settingsPageState = 'unavailable';
+                reportFault('the Custom mode settings page could not be added; using the plain panel', error);
+                return;
+            }
+            installedControllers.add(controller);
+            settingsPageState = 'installed';
+        }
+
+        if (openPageWhenInstalled) {
+            openPageWhenInstalled = false;
+            controller.go(SETTINGS_PAGE_ID);
+        }
+    };
+
+    const watchSettingsApp = () => {
+        const router = FastMail.router;
+        if (router && typeof router.addObserverForKey === 'function') {
+            router.addObserverForKey('app', { check: () => ensureSettingsPage() }, 'check');
+        }
+        ensureSettingsPage();
+    };
+
+    const openSettings = () => {
+        ensureSettingsPage();
+        try {
+            const router = FastMail.router;
+            if (settingsPageState !== 'unavailable' && router &&
+                typeof router.restoreEncodedState === 'function') {
+                if (settingsPageState === 'waiting') openPageWhenInstalled = true;
+                router.restoreEncodedState('settings/' + SETTINGS_PAGE_ID);
+                return true;
+            }
+        } catch (error) {
+            reportFault('could not go to the Custom mode settings page; showing the plain one', error);
+        }
+        try {
+            openFallbackSettings();
+            return true;
+        } catch (error) {
+            reportFault('the plain settings panel would not open either', error);
+            return false;
+        }
+    };
+
     // Wide enough for a hint to read as a sentence, narrow enough to sit in a
     // laptop window. Below this the two columns become one.
     const PANEL_WIDTH = 620;
@@ -7375,11 +7529,27 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const dressSettingsList = () => {
+        ensureSettingsPage();
         const found = settingsSourceList();
         if (!found) return;
         const { list, swipes, offline } = found;
+        const copied = list.querySelector('.' + SETTINGS_ROW_CLASS);
 
-        if (list.querySelector('.' + SETTINGS_ROW_CLASS)) {
+        // The list is on screen, so Settings has loaded; a controller that is
+        // still not there to install into is as good as missing.
+        if (settingsPageState === 'waiting') settingsPageState = 'unavailable';
+
+        // With the page installed, the entry Fastmail draws is the way in,
+        // and a copy left from before would put Custom mode in the list twice.
+        if (settingsPageState === 'installed') {
+            if (copied) {
+                (copied.closest('li') || copied).remove();
+                fixListHeight(list, swipes);
+            }
+            return;
+        }
+
+        if (copied) {
             fixListHeight(list, swipes);
             return;
         }
@@ -7399,7 +7569,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         link.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
-            openSettingsPanel();
+            openFallbackSettings();
         });
 
         list.insertBefore(clone, offline);
@@ -7458,6 +7628,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         patchShortcuts();
         updateStyles();
         installAppBadge();
+        watchSettingsApp();
         watchSettingsList();
 
         // A rotation, a split view or a window dragged narrower all change
@@ -7493,7 +7664,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             labelsGrouping: labelsGroupingFor,
             currentGroupingId,
             chooseGrouping,
-            openSettings: openSettingsPanel,
+            openSettings,
             // Called by the extension when the settings change, so options take
             // effect without a reload
             applySettings: (next) => {
