@@ -828,4 +828,30 @@ final class HarnessTests: XCTestCase {
         let reply = await bridge.handle(body: message)
         XCTAssertNotNil(reply.error)
     }
+
+    // Its positive twin, which every toggle the apps write depends on: a real
+    // JavaScript true crosses the live bridge as a genuine CFBoolean, passes
+    // the same guard, and is stored as a Bool. Stored in a throwaway suite of
+    // its own, the way the app's own handler stores into the standard one, so
+    // nothing reaches the user's real defaults.
+    func testSetSettingWithARealJavaScriptTrueIsStoredAsABool() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, "window.native.setSetting('labelColours', true); true;")
+        try await waitUntil { self.received.contains { $0["action"] as? String == "setting" } }
+        let message = try XCTUnwrap(received.first { $0["action"] as? String == "setting" })
+        let suite = "HarnessTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let bridge = NativeBridge(
+            expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+            onSetting: { key, value in defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key)) }
+        )
+        let reply = await bridge.handle(body: message)
+        XCTAssertNil(reply.error)
+        let stored = try XCTUnwrap(defaults.object(forKey: "customMode.labelColours"))
+        XCTAssertEqual(CFGetTypeID(stored as CFTypeRef), CFBooleanGetTypeID())
+        XCTAssertEqual(stored as? Bool, true)
+    }
 }
