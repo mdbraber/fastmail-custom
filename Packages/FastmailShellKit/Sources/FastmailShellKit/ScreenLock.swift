@@ -3,6 +3,12 @@ import LocalAuthentication
 import SwiftUI
 import UIKit
 
+/// A window remembered without keeping it alive: if it is deallocated, the
+/// slot behaves as never having held one.
+private struct WeakWindow {
+    weak var window: UIWindow?
+}
+
 /// The screen lock on iPhone and iPad: asks with Face ID, Touch ID or the
 /// passcode, and keeps an opaque cover over the app while it is locked or not
 /// in front. ScreenLockState decides when; this carries it out.
@@ -16,9 +22,14 @@ public final class ScreenLock: ObservableObject {
     @Published public private(set) var state: ScreenLockState
     private var isInFront = false
     private let defaults: UserDefaults
-    /// Held while an ask is out, so the context lives until it answers.
-    private var context: LAContext?
+    /// Held while the unlock ask is out, so the context lives until it answers.
+    private var unlockContext: LAContext?
+    /// Held while the switch's ask is out, so the context lives until it answers.
+    private var enableContext: LAContext?
     private var coverWindows: [UIWindow] = []
+    /// Each covered scene's key window from just before the cover took it, so
+    /// it can be made key again once the cover comes down.
+    private var previousKeyWindows: [WeakWindow] = []
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -73,8 +84,8 @@ public final class ScreenLock: ObservableObject {
     /// only reachable with the app open.
     public func setEnabled(_ on: Bool) {
         guard on else {
-            defaults.set(false, forKey: DevicePreferences.screenLockKey)
             objectWillChange.send()
+            defaults.set(false, forKey: DevicePreferences.screenLockKey)
             return
         }
         let context = LAContext()
@@ -82,13 +93,13 @@ public final class ScreenLock: ObservableObject {
             objectWillChange.send()
             return
         }
-        self.context = context
+        enableContext = context
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Turn on the screen lock") { [weak self] succeeded, _ in
             Task { @MainActor in
                 guard let self else { return }
-                self.context = nil
-                if succeeded { self.defaults.set(true, forKey: DevicePreferences.screenLockKey) }
+                self.enableContext = nil
                 self.objectWillChange.send()
+                if succeeded { self.defaults.set(true, forKey: DevicePreferences.screenLockKey) }
             }
         }
     }
@@ -99,16 +110,16 @@ public final class ScreenLock: ObservableObject {
             // The passcode was removed after the lock was turned on, so
             // nothing can ask: the app opens and the switch goes off.
             state.cannotAsk()
-            defaults.set(false, forKey: DevicePreferences.screenLockKey)
             objectWillChange.send()
+            defaults.set(false, forKey: DevicePreferences.screenLockKey)
             updateCover()
             return
         }
-        self.context = context
+        unlockContext = context
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock your mail") { [weak self] succeeded, _ in
             Task { @MainActor in
                 guard let self else { return }
-                self.context = nil
+                self.unlockContext = nil
                 self.state.finishedAsking(succeeded: succeeded)
                 self.updateCover()
             }
@@ -119,15 +130,29 @@ public final class ScreenLock: ObservableObject {
         guard state.coversContent(isInFront: isInFront, lockEnabled: isEnabled) else {
             for window in coverWindows { window.isHidden = true }
             coverWindows.removeAll()
+            // Give each scene its keyboard and VoiceOver focus back, if the
+            // window that held it is still around and still attached.
+            for previous in previousKeyWindows {
+                if let window = previous.window, window.windowScene != nil {
+                    window.makeKey()
+                }
+            }
+            previousKeyWindows.removeAll()
             return
         }
         guard coverWindows.isEmpty else { return }
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         for scene in scenes {
+            previousKeyWindows.append(WeakWindow(window: scene.keyWindow))
             let window = UIWindow(windowScene: scene)
             window.windowLevel = .alert + 1
-            window.rootViewController = UIHostingController(rootView: LockCover(lock: self))
-            window.isHidden = false
+            let hosting = UIHostingController(rootView: LockCover(lock: self))
+            // Modal to VoiceOver too, so it cannot reach the mail behind it.
+            hosting.view.accessibilityViewIsModal = true
+            window.rootViewController = hosting
+            // Key, not just visible, so the keyboard and VoiceOver land here
+            // rather than on the app's window behind it.
+            window.makeKeyAndVisible()
             coverWindows.append(window)
         }
     }
