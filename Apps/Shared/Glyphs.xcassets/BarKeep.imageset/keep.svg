@@ -1,9 +1,0 @@
-<!-- The mode's own verb: an arrow going down into an open tray, drawn
-     from the same points STATE_VERB_SHAPES gives the button on the bar -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
-     fill="none" stroke="#000000" stroke-width="1.5"
-     stroke-linecap="round" stroke-linejoin="round">
-  <line x1="12" y1="4.4" x2="12" y2="13.6"/>
-  <polyline points="7.6 9.2 12 13.6 16.4 9.2"/>
-  <polyline points="5.2 12.6 5.2 19.6 18.8 19.6 18.8 12.6"/>
-</svg>
