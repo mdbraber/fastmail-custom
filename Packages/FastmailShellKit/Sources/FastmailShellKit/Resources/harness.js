@@ -533,7 +533,7 @@
 
         // Cloned from Custom swipes so the row matches, then made the shell's:
         // a fresh icon, a new label, no id to collide, and a click that opens
-        // the settings sheet instead of routing to a Fastmail settings pane.
+        // the Device settings page instead of routing to a Fastmail settings pane.
         var clone = swipes.cloneNode(true);
         clone.removeAttribute('id');
         var link = clone.querySelector('a') || clone;

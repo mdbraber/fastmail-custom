@@ -79,6 +79,15 @@ public struct AppShell: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            #if canImport(UIKit)
+            // Over the whole screen, entering from the right, with the web
+            // view still loaded beneath it.
+            if settings.isPresented {
+                DeviceSettingsPage(onClose: { settings.close() })
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
+            }
+            #endif
         }
         .animation(.default, value: model.banner)
         .animation(.default, value: downloads.items)
@@ -105,9 +114,6 @@ public struct AppShell: View {
             route(target)
         }
         #if canImport(UIKit)
-        .sheet(isPresented: $settings.isPresented) {
-            MobileSettingsSheet(profile: profile)
-        }
         .onAppear {
             // The registrar asks for permission at launch; this puts the last
             // badge back once the app is on screen, and opens the notification
