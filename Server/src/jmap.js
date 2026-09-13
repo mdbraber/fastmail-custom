@@ -28,7 +28,7 @@ export class JMAPClient {
         this.timeoutMs = timeoutMs;
         this.session = null;
         this.accountId = null;
-        this.contactsAccountId = null;
+        this.contactsAccountIds = [];
     }
 
     headers() {
@@ -37,6 +37,9 @@ export class JMAPClient {
 
     get apiUrl() { return this.session?.apiUrl; }
     get eventSourceUrl() { return this.session?.eventSourceUrl; }
+    // The first of contactsAccountIds (the primary one, when granted), so
+    // existing callers that know of only one contacts account keep working.
+    get contactsAccountId() { return this.contactsAccountIds[0] ?? null; }
 
     // Every call is bounded. Looks at the change log never overlap, so one
     // socket left hanging would hold up every notice after it.
@@ -56,12 +59,17 @@ export class JMAPClient {
         this.accountId = this.session.primaryAccounts?.[MAIL] ?? null;
         if (!this.accountId) throw new JMAPError('session: no mail account');
         // Contacts only when the token grants them: the capability in the
-        // session, a primary contacts account, and that account holding it
-        const contactsAccountId = this.session.primaryAccounts?.[CONTACTS] ?? null;
-        const granted = Boolean(this.session.capabilities?.[CONTACTS])
-            && typeof contactsAccountId === 'string'
-            && Boolean(this.session.accounts?.[contactsAccountId]?.accountCapabilities?.[CONTACTS]);
-        this.contactsAccountId = granted ? contactsAccountId : null;
+        // session, and then every account that holds it, not only the
+        // primary one, because a token often also reads a shared address
+        // book that carries no mail of its own. The primary contacts
+        // account, if among them, leads the list.
+        const granted = this.session.capabilities?.[CONTACTS]
+            ? Object.entries(this.session.accounts ?? {})
+                .filter(([, account]) => Boolean(account?.accountCapabilities?.[CONTACTS]))
+                .map(([id]) => id)
+            : [];
+        const primary = this.session.primaryAccounts?.[CONTACTS] ?? null;
+        this.contactsAccountIds = granted.includes(primary) ? [primary, ...granted.filter((id) => id !== primary)] : granted;
         return this.session;
     }
 
@@ -145,12 +153,12 @@ export class JMAPClient {
         return this.getInChunks('Email/get', ids, { accountId: this.accountId, properties: ['keywords'] });
     }
 
-    // Every contact card of the contacts account, and the ContactCard state
-    // read before them: a change made while they are read then shows up as a
-    // newer state, and they are read again.
-    async contactCards() {
-        const accountId = this.contactsAccountId;
-        if (!accountId) throw new JMAPError('ContactCard: this token cannot read contacts');
+    // Every contact card of one contacts account (the primary one, unless
+    // told otherwise), and the ContactCard state read before them: a change
+    // made while they are read then shows up as a newer state, and they are
+    // read again.
+    async contactCards(accountId = this.contactsAccountIds[0]) {
+        if (!this.contactsAccountIds.includes(accountId)) throw new JMAPError('ContactCard: this token cannot read contacts');
         const using = [CORE, CONTACTS];
         const { state } = await this.call('ContactCard/get', { accountId, ids: [] }, using);
         const ids = [];

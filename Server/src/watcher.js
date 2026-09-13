@@ -37,11 +37,13 @@ export class AccountWatcher {
         this.archiveMailboxId = null;
         this.junkId = null;
         this.trashId = null;
-        // The account's contacts as two sets of lowercased addresses, and the
-        // ContactCard state they were read at; empty without contacts access
+        // The contacts of every address book the token can read, as two sets
+        // of lowercased addresses that are the union across those accounts,
+        // and the ContactCard state each account was read at (by account
+        // id); empty without contacts access
         this.contactAddresses = new Set();
         this.vipAddresses = new Set();
-        this.contactsState = null;
+        this.contactsStates = {};
         this.contactsDue = false;
         this.notices = null;
         this.callbackSecret = null;
@@ -60,7 +62,7 @@ export class AccountWatcher {
     get name() { return this.account.name; }
     get deviceClientId() { return `fastmail-push-${this.name}`; }
     // Known once the session is read; false until then
-    get hasContacts() { return Boolean(this.jmap.contactsAccountId); }
+    get hasContacts() { return this.jmap.contactsAccountIds.length > 0; }
     // ContactCard only with contacts access: a subscription naming a type
     // the token may not read would be refused
     get types() { return this.hasContacts ? [...MAIL_TYPES, CONTACT_TYPE] : MAIL_TYPES; }
@@ -194,9 +196,12 @@ export class AccountWatcher {
         if (body?.['@type'] === 'StateChange') {
             const mail = body.changed?.[this.jmap.accountId];
             // A notice names each changed type with its new state; the cards
-            // are read again only when theirs is not the state already read
-            const cards = this.hasContacts ? body.changed?.[this.jmap.contactsAccountId]?.[CONTACT_TYPE] : undefined;
-            const cardsChanged = cards !== undefined && cards !== this.contactsState;
+            // of an account are read again only when its state is not the
+            // one already read there, and any one of the accounts qualifies
+            const cardsChanged = this.jmap.contactsAccountIds.some((id) => {
+                const cards = body.changed?.[id]?.[CONTACT_TYPE];
+                return cards !== undefined && cards !== this.contactsStates[id];
+            });
             if (cardsChanged) this.contactsDue = true;
             if (cardsChanged || (mail && MAIL_TYPES.some((type) => type in mail))) this.notice('change');
         }
@@ -358,23 +363,37 @@ export class AccountWatcher {
         };
     }
 
-    // Both address sets, read afresh. Cards that cannot be read leave the
-    // sets as they were and are tried again at the next look, so a hiccup
-    // at Fastmail costs VIP alerts for a while, never every alert.
+    // Both address sets, read afresh from every address book the token can
+    // read, and unioned: the sets of each account are built from that
+    // account's own cards, never from every account's cards pooled
+    // together, because each account has its own VIPs group. A read that
+    // fails, in any one account, leaves every set and state exactly as they
+    // were and is tried again at the next look, so a hiccup at Fastmail
+    // costs VIP alerts for a while, never every alert, and never half a
+    // union.
     async loadContacts() {
         this.contactsDue = false;
         if (!this.hasContacts) {
             this.contactAddresses = new Set();
             this.vipAddresses = new Set();
+            this.contactsStates = {};
             return;
         }
         try {
-            const { cards, state } = await this.jmap.contactCards();
-            const { contacts, vips } = addressSets(cards);
+            const contacts = new Set();
+            const vips = new Set();
+            const states = {};
+            for (const accountId of this.jmap.contactsAccountIds) {
+                const { cards, state } = await this.jmap.contactCards(accountId);
+                const sets = addressSets(cards);
+                for (const address of sets.contacts) contacts.add(address);
+                for (const address of sets.vips) vips.add(address);
+                states[accountId] = state;
+            }
             this.contactAddresses = contacts;
             this.vipAddresses = vips;
-            this.contactsState = state;
-            this.log.info(`[${this.name}] contacts read: ${contacts.size} addresses, ${vips.size} VIP`);
+            this.contactsStates = states;
+            this.log.info(`[${this.name}] contacts read: ${contacts.size} addresses, ${vips.size} VIP from ${this.jmap.contactsAccountIds.length} address books`);
         } catch (error) {
             this.contactsDue = true;
             this.log.warn(`[${this.name}] contacts unreadable (${error.message}); trying again at the next look`);

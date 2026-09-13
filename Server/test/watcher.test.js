@@ -20,19 +20,22 @@ const arrival = (id, over = {}) => ({
 // test can change its mind after start(), which is where renewals happen.
 function fakeJMAP({
     emails = [], created = [], counts = { badge: 4 }, refusePush = false, changesError = null,
-    contactsAccountId = null, cards = [], cardState = 'cs1', threadMessages = {},
+    contactsAccountIds = [], books = {}, threadMessages = {},
 } = {}) {
     const calls = [];
     const fake = {
         calls, counts, refusePush, onCreate: null,
         accountId: 'acc1', eventSourceUrl: 'https://api.example.net/jmap/event/',
-        // `cards`, `cardState` and `cardsError` are properties so a test can
-        // change the address book between looks
-        contactsAccountId, cards, cardState, cardsError: null,
-        contactCards: async () => {
-            calls.push(['contacts']);
-            if (fake.cardsError) throw fake.cardsError;
-            return { cards: fake.cards, state: fake.cardState };
+        // One address book per contacts account id: `{ cards, state, error }`.
+        // `books` is keyed the same way as the real `contactsAccountIds`, and
+        // a test may reach into `fake.books[id]` between looks to change an
+        // address book or make one fail.
+        contactsAccountIds, books: { ...books },
+        contactCards: async (accountId) => {
+            calls.push(['contacts', accountId]);
+            const book = fake.books[accountId] ?? {};
+            if (book.error) throw book.error;
+            return { cards: book.cards ?? [], state: book.state ?? null };
         },
         fetch: async (url) => { calls.push(['eventsource', String(url)]); throw new Error('no network in tests'); },
         // `threadMessages`: thread id → its messages with their keywords
@@ -449,12 +452,12 @@ test('ContactCard is subscribed to only when the token can read contacts', async
     const without = await setUp();
     assert.deepEqual(without.jmap.calls.find((c) => c[0] === 'subscribe')[3], ['Email', 'Mailbox']);
 
-    const withAccess = await setUp({ contactsAccountId: 'acc2' });
+    const withAccess = await setUp({ contactsAccountIds: ['acc2'] });
     assert.deepEqual(withAccess.jmap.calls.find((c) => c[0] === 'subscribe')[3], ['Email', 'Mailbox', 'ContactCard']);
 
     // The event source asks for the same types
     const plain = await setUp({ refusePush: true });
-    const fallback = await setUp({ refusePush: true, contactsAccountId: 'acc2' });
+    const fallback = await setUp({ refusePush: true, contactsAccountIds: ['acc2'] });
     try {
         assert.equal(new URL(plain.jmap.calls.find((c) => c[0] === 'eventsource')[1]).searchParams.get('types'), 'Email,Mailbox');
         assert.equal(new URL(fallback.jmap.calls.find((c) => c[0] === 'eventsource')[1]).searchParams.get('types'), 'Email,Mailbox,ContactCard');
@@ -465,14 +468,14 @@ test('ContactCard is subscribed to only when the token can read contacts', async
 });
 
 test('the contact sets are built from the cards and the VIPs group when the watcher starts', async () => {
-    const t = await setUp({ contactsAccountId: 'acc2', cards: addressBook() });
+    const t = await setUp({ contactsAccountIds: ['acc2'], books: { acc2: { cards: addressBook(), state: 'cs1' } } });
     assert.deepEqual([...t.watcher.contactAddresses].sort(), ['ada@example.net', 'bob@example.net']);
     assert.deepEqual([...t.watcher.vipAddresses], ['ada@example.net']);
-    assert.equal(t.watcher.contactsState, 'cs1');
+    assert.deepEqual(t.watcher.contactsStates, { acc2: 'cs1' });
 });
 
 test('a ContactCard change reads the cards again; a notice carrying the state already read does not', async () => {
-    const t = await setUp({ contactsAccountId: 'acc2', cards: addressBook() });
+    const t = await setUp({ contactsAccountIds: ['acc2'], books: { acc2: { cards: addressBook(), state: 'cs1' } } });
     const reads = () => t.jmap.calls.filter((c) => c[0] === 'contacts').length;
     assert.equal(reads(), 1);
 
@@ -482,13 +485,15 @@ test('a ContactCard change reads the cards again; a notice carrying the state al
     assert.equal(t.jmap.calls.filter((c) => c[0] === 'changes').length, 0);
 
     // Bob becomes a VIP; the notice names the contacts account, not the mail one
-    t.jmap.cards = [...addressBook().slice(0, 2), { id: 'id-vips', uid: 'vips', kind: 'group', members: { ada: true, bob: true } }];
-    t.jmap.cardState = 'cs2';
+    t.jmap.books.acc2 = {
+        cards: [...addressBook().slice(0, 2), { id: 'id-vips', uid: 'vips', kind: 'group', members: { ada: true, bob: true } }],
+        state: 'cs2',
+    };
     await t.watcher.receive({ '@type': 'StateChange', changed: { acc2: { ContactCard: 'cs2' } } });
     await settle(t);
     assert.equal(reads(), 2);
     assert.deepEqual([...t.watcher.vipAddresses].sort(), ['ada@example.net', 'bob@example.net']);
-    assert.equal(t.watcher.contactsState, 'cs2');
+    assert.deepEqual(t.watcher.contactsStates, { acc2: 'cs2' });
 
     // The same kind of type under the mail account's id is not ours to read
     await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { ContactCard: 'cs3' } } });
@@ -497,14 +502,14 @@ test('a ContactCard change reads the cards again; a notice carrying the state al
 });
 
 test('cards that cannot be read are tried again at the next look', async () => {
-    const t = await build({ contactsAccountId: 'acc2', cards: addressBook() });
-    t.jmap.cardsError = new JMAPError('ContactCard/query: serverFail', { type: 'serverFail' });
+    const t = await build({ contactsAccountIds: ['acc2'], books: { acc2: { cards: addressBook(), state: 'cs1' } } });
+    t.jmap.books.acc2.error = new JMAPError('ContactCard/query: serverFail', { type: 'serverFail' });
     await t.watcher.start();
     assert.equal(t.watcher.notices, 'push', 'the mail is watched regardless');
     assert.equal(t.watcher.vipAddresses.size, 0);
     assert.equal(t.watcher.contactsDue, true);
 
-    t.jmap.cardsError = null;
+    t.jmap.books.acc2.error = null;
     t.watcher.notice('poll');
     await settle(t);
     assert.deepEqual([...t.watcher.vipAddresses], ['ada@example.net']);
@@ -512,16 +517,78 @@ test('cards that cannot be read are tried again at the next look', async () => {
 });
 
 test('without contacts access nothing is read, the sets stay empty, and health says so', async () => {
-    const without = await setUp({ cards: addressBook() });
+    const without = await setUp({ books: { acc2: { cards: addressBook() } } });
     assert.equal(without.jmap.calls.filter((c) => c[0] === 'contacts').length, 0);
     assert.equal(without.watcher.vipAddresses.size, 0);
     assert.equal(without.watcher.contactAddresses.size, 0);
     assert.equal(without.watcher.hasContacts, false);
     assert.equal(without.watcher.status().contacts, false);
 
-    const withAccess = await setUp({ contactsAccountId: 'acc2', cards: addressBook() });
+    const withAccess = await setUp({ contactsAccountIds: ['acc2'], books: { acc2: { cards: addressBook(), state: 'cs1' } } });
     assert.equal(withAccess.watcher.hasContacts, true);
     assert.equal(withAccess.watcher.status().contacts, true);
+});
+
+// Task 5b: a token typically reads two address books (its own primary one
+// and a second, contacts-only account), and VIPs live in only one of them.
+test('contacts and VIPs are the union of every address book the token can read, built per account', async () => {
+    const first = [
+        person('carol', 'carol@example.net'),
+        { id: 'id-vips', uid: 'vips', kind: 'group', members: {} },
+    ];
+    const t = await setUp({
+        contactsAccountIds: ['acc2', 'acc3'],
+        books: { acc2: { cards: first, state: 'cs-a' }, acc3: { cards: addressBook(), state: 'cs-b' } },
+    });
+    assert.deepEqual([...t.watcher.contactAddresses].sort(), ['ada@example.net', 'bob@example.net', 'carol@example.net']);
+    // acc2's own (empty) VIPs group does not erase acc3's VIP
+    assert.deepEqual([...t.watcher.vipAddresses], ['ada@example.net']);
+    assert.deepEqual(t.watcher.contactsStates, { acc2: 'cs-a', acc3: 'cs-b' });
+});
+
+test('a ContactCard change on either account reloads; matching states on both do not', async () => {
+    const t = await setUp({
+        contactsAccountIds: ['acc2', 'acc3'],
+        books: { acc2: { cards: [], state: 'cs-a' }, acc3: { cards: addressBook(), state: 'cs-b' } },
+    });
+    const reads = () => t.jmap.calls.filter((c) => c[0] === 'contacts').length;
+    assert.equal(reads(), 2, 'one read per account at start-up');
+
+    // Both notices name the states already read: nothing to reload
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc2: { ContactCard: 'cs-a' }, acc3: { ContactCard: 'cs-b' } } });
+    await settle(t);
+    assert.equal(reads(), 2);
+
+    // The second account alone moves to a new state
+    t.jmap.books.acc3 = { cards: addressBook(), state: 'cs-b2' };
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc3: { ContactCard: 'cs-b2' } } });
+    await settle(t);
+    assert.equal(reads(), 4, 'a reload reads every account again, not only the one that changed');
+    assert.deepEqual(t.watcher.contactsStates, { acc2: 'cs-a', acc3: 'cs-b2' });
+});
+
+test('one address book failing to read keeps every set and state as they were, until the next look succeeds', async () => {
+    const t = await setUp({
+        contactsAccountIds: ['acc2', 'acc3'],
+        books: { acc2: { cards: addressBook(), state: 'cs-a' }, acc3: { cards: [], state: 'cs-b' } },
+    });
+    assert.deepEqual([...t.watcher.vipAddresses], ['ada@example.net']);
+
+    // acc3 changes, but this time it cannot be read
+    t.jmap.books.acc3 = { cards: [], state: 'cs-b2', error: new JMAPError('ContactCard/query: serverFail', { type: 'serverFail' }) };
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc3: { ContactCard: 'cs-b2' } } });
+    await settle(t);
+    // Nothing replaced: the previous sets and states, from both accounts, stand
+    assert.deepEqual([...t.watcher.vipAddresses], ['ada@example.net']);
+    assert.deepEqual(t.watcher.contactsStates, { acc2: 'cs-a', acc3: 'cs-b' });
+    assert.equal(t.watcher.contactsDue, true);
+
+    // Fixed: the next look reads every account again and succeeds
+    t.jmap.books.acc3.error = null;
+    t.watcher.notice('poll');
+    await settle(t);
+    assert.deepEqual(t.watcher.contactsStates, { acc2: 'cs-a', acc3: 'cs-b2' });
+    assert.equal(t.watcher.contactsDue, false);
 });
 
 
@@ -534,8 +601,8 @@ const choices = {
     'tok-off': OFF,
 };
 const batch = () => ({
-    contactsAccountId: 'acc1',
-    cards: addressBook(),
+    contactsAccountIds: ['acc1'],
+    books: { acc1: { cards: addressBook(), state: 'cs1' } },
     created: ['M1', 'M2', 'M3', 'M4', 'M5', 'M6'],
     emails: [
         arrival('M1', { from: [{ email: 'stranger@example.net' }] }),

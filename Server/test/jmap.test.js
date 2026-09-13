@@ -226,31 +226,45 @@ test('a stream that has gone quiet is dropped so the loop can reconnect', async 
     assert.match(warned[0], /nothing for 0.02s/);
 });
 
-// A session whose token also reads contacts, from an account of its own so
-// the two cannot be confused.
+// A session whose token also reads contacts, from accounts of its own so
+// they cannot be confused with the mail account. Two accounts carry the
+// capability, and the primary one (acc2) is listed second among them, to
+// prove it is picked out by `primaryAccounts` rather than by being first.
 const CONTACTS_URN = 'urn:ietf:params:jmap:contacts';
 const withContacts = {
     ...session,
     capabilities: { 'urn:ietf:params:jmap:core': {}, 'urn:ietf:params:jmap:mail': {}, [CONTACTS_URN]: {} },
     accounts: {
         acc1: { accountCapabilities: { 'urn:ietf:params:jmap:mail': {} } },
+        acc3: { accountCapabilities: { [CONTACTS_URN]: {} } },
         acc2: { accountCapabilities: { [CONTACTS_URN]: {} } },
     },
     primaryAccounts: { 'urn:ietf:params:jmap:mail': 'acc1', [CONTACTS_URN]: 'acc2' },
 };
 
-test('contacts access is read from the session, and the contacts account from primaryAccounts', async () => {
+test('contactsAccountIds lists every account with the capability, the primary one first', async () => {
+    assert.deepEqual((await connected(() => ['error', {}])).client.contactsAccountIds, []);
     assert.equal((await connected(() => ['error', {}])).client.contactsAccountId, null);
-    assert.equal((await connected(() => ['error', {}], withContacts)).client.contactsAccountId, 'acc2');
 
-    const noCapability = { ...withContacts, capabilities: { 'urn:ietf:params:jmap:core': {}, 'urn:ietf:params:jmap:mail': {} } };
-    assert.equal((await connected(() => ['error', {}], noCapability)).client.contactsAccountId, null);
+    const { client } = await connected(() => ['error', {}], withContacts);
+    assert.deepEqual(client.contactsAccountIds, ['acc2', 'acc3']);
+    assert.equal(client.contactsAccountId, 'acc2');
 
+    // No primary contacts account named: the accounts with the capability
+    // still count, in `session.accounts` key order
     const noPrimary = { ...withContacts, primaryAccounts: { 'urn:ietf:params:jmap:mail': 'acc1' } };
-    assert.equal((await connected(() => ['error', {}], noPrimary)).client.contactsAccountId, null);
+    assert.deepEqual((await connected(() => ['error', {}], noPrimary)).client.contactsAccountIds, ['acc3', 'acc2']);
 
-    const accountWithout = { ...withContacts, accounts: { ...withContacts.accounts, acc2: { accountCapabilities: {} } } };
-    assert.equal((await connected(() => ['error', {}], accountWithout)).client.contactsAccountId, null);
+    // Neither account carries the capability
+    const accountWithout = { ...withContacts, accounts: { ...withContacts.accounts, acc2: { accountCapabilities: {} }, acc3: { accountCapabilities: {} } } };
+    assert.deepEqual((await connected(() => ['error', {}], accountWithout)).client.contactsAccountIds, []);
+});
+
+test('contactsAccountIds is empty without the capability in the session itself, even when accounts carry it', async () => {
+    const noCapability = { ...withContacts, capabilities: { 'urn:ietf:params:jmap:core': {}, 'urn:ietf:params:jmap:mail': {} } };
+    const { client } = await connected(() => ['error', {}], noCapability);
+    assert.deepEqual(client.contactsAccountIds, []);
+    assert.equal(client.contactsAccountId, null);
 });
 
 test('contact cards are read from the contacts account with the contacts capability, page by page', async () => {
@@ -288,6 +302,29 @@ test('an account without cards reads as none, and a token without contacts is re
     const { client: mailOnly, calls } = await connected(() => ['error', {}]);
     await assert.rejects(mailOnly.contactCards(), /cannot read contacts/);
     assert.equal(calls.length, 1);
+});
+
+test('contactCards reads whichever account it is given, not only the primary', async () => {
+    const { client, calls } = await connected((method, args) => {
+        if (method === 'ContactCard/get' && args.ids.length === 0) return ['ContactCard/get', { state: 'cs3', list: [] }];
+        if (method === 'ContactCard/query') return ['ContactCard/query', { ids: [], position: 0, total: 0 }];
+        return ['error', { type: 'unknownMethod' }];
+    }, withContacts);
+
+    assert.deepEqual(await client.contactCards('acc3'), { cards: [], state: 'cs3' });
+    const api = calls.slice(1).map((call) => call.body);
+    assert.ok(api.every((body) => body.methodCalls[0][1].accountId === 'acc3'));
+    assert.ok(api.some((body) => body.methodCalls[0][0] === 'ContactCard/query'));
+    assert.ok(api.some((body) => body.methodCalls[0][0] === 'ContactCard/get'));
+});
+
+test('contactCards refuses an account id the token was not given access to', async () => {
+    // Answers succeed for any account, so a rejection can only come from the
+    // client itself refusing the id, not from the fake fetch
+    const { client } = await connected((method) => (method === 'ContactCard/query'
+        ? ['ContactCard/query', { ids: [], position: 0, total: 0 }]
+        : ['ContactCard/get', { state: 'cs0', list: [] }]), withContacts);
+    await assert.rejects(client.contactCards('not-a-contacts-account'), (error) => error instanceof JMAPError);
 });
 
 test('threads and their keywords are asked of the mail account, in helpings', async () => {

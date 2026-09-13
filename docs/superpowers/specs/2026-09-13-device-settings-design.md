@@ -331,8 +331,11 @@ when some device on the account has `important`.
 ### Contacts and VIPs
 
 - **The source.** With a token that grants `urn:ietf:params:jmap:contacts`,
-  the server reads every contact card of the primary contacts account with
-  `ContactCard/get`.
+  the server reads every contact card, with `ContactCard/get`, of every
+  account the token can read contacts in, the primary contacts account
+  first. The contact and VIP sets are the union of each account's own sets,
+  built separately per account rather than from every account's cards
+  pooled together, because each account has its own VIPs group.
 - **The two address sets** are kept in memory:
   - **Contact addresses:** every address on a card whose `kind` is not
     `group`.
