@@ -6574,6 +6574,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return { sources, group };
     };
 
+    // A miss before this is true may be Settings still building; a miss
+    // once it is true means Fastmail has changed.
+    const settingsGroupsBuilt = (controller) => {
+        if (!controller || typeof controller.get !== 'function') return false;
+        const sources = controller.get('sources');
+        if (!sources || typeof sources.get !== 'function') return false;
+        const groups = sources.get('sourceGroups');
+        return Array.isArray(groups) && groups.length > 0 &&
+            groups.some(one => one && Array.isArray(one.content) && one.content.length > 0);
+    };
+
     // Custom mode's funnel, the glyph the Triage row wears, given the classes
     // a Settings entry's icon carries. Fastmail calls this each time it draws
     // the row, so each call makes a fresh one.
@@ -6671,10 +6682,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             }
 
             // A contract miss is not necessarily final: Settings may still
-            // be mid-build. dressSettingsList's own rule gives the page up
-            // once the list is actually on screen and still waiting.
+            // be mid-build. Once its sidebar groups exist, a controller not
+            // yet installed gives the page up here instead of waiting
+            // forever; an installed controller is left to try again later.
             const found = settingsContract(controller);
-            if (!found) return;
+            if (!found) {
+                if (!installedControllers.has(controller) && settingsGroupsBuilt(controller)) {
+                    settingsPageUnavailable();
+                }
+                return;
+            }
 
             if (installedControllers.has(controller)) {
                 // Fastmail may rebuild its groups; the entry goes back if so.
