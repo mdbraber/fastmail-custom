@@ -21,7 +21,7 @@ const api = globalThis.browser || globalThis.chrome;
 
 // The page world cannot see this content script, and cannot see extension
 // storage either; but both see the DOM. Stamping the root element at document
-// start is how the settings panel knows there is an extension here to write
+// start is how the settings page knows there is an extension here to write
 // through, before it has drawn anything.
 document.documentElement.dataset.customModeHost = 'extension';
 
@@ -90,7 +90,7 @@ if (shouldHide) {
 let pendingWrite = Promise.resolve();
 
 /*
-The settings panel runs in the page world, which has no route to extension
+The settings page runs in the page world, which has no route to extension
 storage. It posts to its own window and this carries the value across.
 
 Any script on this origin could post the same message. The origin is

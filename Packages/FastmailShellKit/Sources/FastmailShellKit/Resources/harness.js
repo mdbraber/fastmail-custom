@@ -773,9 +773,9 @@
         return Promise.resolve(badgeCount());
     };
 
-    // A Custom mode setting the page's own settings panel has changed. The
-    // key is bare: the shell owns the namespace it is stored under, so the
-    // page cannot name anything outside it.
+    // A Custom mode setting the settings page has changed. The key is bare:
+    // the shell owns the namespace it is stored under, so the page cannot
+    // name anything outside it.
     window.native.setSetting = function (key, value) {
         return post('setting', { key: key, value: value });
     };

@@ -146,7 +146,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // key rather than a second spelling of it.
     const LOCAL_SETTINGS_KEY = 'custom-mode-settings';
 
-    // A plain browser tab has no host to store settings in, so the panel
+    // A plain browser tab has no host to store settings in, so the page
     // keeps them here. A tab that does have a host never writes this, so an
     // old copy cannot outrank what the host injected.
     const localSettings = () => {
@@ -168,7 +168,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * The option catalogue
      * ----------------------------------------------------------------
      *
-     * Canonical, and the only one. The settings panel is drawn from this, and
+     * Canonical, and the only one. The settings page is drawn from this, and
      * neither host holds a copy: the apps and the extension handle the
      * customMode. namespace without knowing what is in it, so adding an
      * option means adding one entry here and nothing anywhere else.
@@ -372,14 +372,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     settings = resolveSettings(settings);
 
     /*
-     * Where a changed setting goes. The panel runs in the page, which owns
-     * none of the three stores, so it hands the value to whichever host is
-     * here: the shell apps expose window.native, the extension leaves a mark
-     * on the root element and listens for a posted message, and a plain
-     * browser tab has neither and keeps its own copy.
+     * Where a changed setting goes. The page owns none of the three stores,
+     * so it hands the value to whichever host is here: the shell apps expose
+     * window.native, the extension leaves a mark on the root element and
+     * listens for a posted message, and a plain browser tab has neither and
+     * keeps its own copy.
      *
      * Each host echoes the change back through applySettings, so the local
-     * object is updated here only so that the panel and the mode agree before
+     * object is updated here only so that the page and the mode agree before
      * the round trip lands.
      */
     const hostIsExtension = () =>
@@ -1301,10 +1301,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     ];
 
     // The fallback panel's own styles. Unconditional, like the rules above,
-    // rather than gated on modeIsOn the way labelColourRules is: the panel
-    // can be opened with the mode off (openSettingsPanel does not check it),
-    // and a panel drawn with no styles at all would defeat the point of a
-    // fallback that is supposed to always be there.
+    // rather than gated on modeIsOn the way labelColourRules is: the plain
+    // panel can be opened with the mode off (openFallbackSettings does not
+    // check it), and a panel drawn with no styles at all would defeat the
+    // point of a fallback that is supposed to always be there.
     const FALLBACK_PANEL_RULES = [
         '#custom-mode-fallback-settings {' +
         ' position: fixed; inset: 0; z-index: 2147483000;' +
@@ -1328,8 +1328,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         '.custom-mode-fallback-note { opacity: 0.7; }'
     ];
 
-    // A sub-option in the settings panel while the option it depends on is
-    // off. Fastmail's own disabled checkbox greys only its box, and its
+    // A sub-option on the settings page while the option it depends on is
+    // off. Fastmail's own disabled switch greys only its control, and its
     // stylesheet has no class that dims a label and hint along with it; half
     // is what its own disabled menu entries use. Unconditional, like the
     // fallback's rules, since the panel opens with the mode off too.
@@ -1541,7 +1541,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * non-blank line the reading throws away is listed beside the blocks: all
      * of a block whose name was already taken, a group line missing its name
      * or its search, and a bucket name that a later one in the same block
-     * replaced. The settings panel needs both. Its list writes the text back
+     * replaced. The settings page needs both. Its list writes the text back
      * from what the text parses to, so any of these would be deleted by that
      * write, most likely from under someone still typing them.
      */
@@ -2440,11 +2440,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * A slot's glyph for the settings panel's list, taken from where the bar
+     * A slot's glyph for the settings page's list, taken from where the bar
      * takes it: the button its registry holds under the slot's name. Pin
      * answers with Pin's, the first name listed, since Unpin's is blank.
      *
-     * The panel is usually opened from Fastmail's Settings screen, where no
+     * The page is usually opened from Fastmail's Settings screen, where no
      * mail toolbar is in the document to read. So each glyph read from a bar
      * is also kept, one detached copy per verb for the session, and drawn
      * from a fresh copy of that when no bar is there. Fastmail builds each
@@ -2791,7 +2791,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * none of it to do.
      *
      * A bar being dressed is also a bar on screen, so its glyphs are copied
-     * here for the settings panel, which is mostly drawn where no bar is.
+     * here for the settings page, which is mostly drawn where no bar is.
      */
     const dressToolbar = () => {
         rememberSlotIcons();
@@ -6266,34 +6266,20 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * ----------------------------------------------------------------
-     * The settings panel
+     * The settings page
      * ----------------------------------------------------------------
      *
-     * Every Custom mode option, drawn in the page from Fastmail's own view
-     * classes, so one panel serves the Mac app, the phone, the extension and
-     * a plain tab. The native screens keep only what has to be reachable when
-     * no page will load: the backend, the start page and notifications.
+     * Every Custom mode option, drawn from Fastmail's own view classes as a
+     * page registered with Fastmail's Settings controller, so one page
+     * serves the Mac app, the phone, the extension and a plain tab. The
+     * native screens keep only what has to be reachable when no page will
+     * load: the backend, the start page and notifications.
      *
-     * These are the classes a row, and the frame it scrolls in, cannot be
-     * drawn without. They are looked up once, together, rather than as each
-     * is needed: a panel that fails halfway leaves a modal on screen with
-     * nothing in it, and the fallback has to be chosen before anything is
-     * drawn.
+     * If a class the page needs, or a method the Settings controller needs
+     * to be taught, turns out to be missing, nothing is registered: the
+     * plain panel, reached from a copied row in the sidebar, is the
+     * fallback then.
      */
-    const panelClasses = () => {
-        const wanted = ['ModalOverlayView', 'ScrollView', 'View', 'ToggleView', 'TextInputView', 'ButtonView'];
-        const found = {};
-        let missing = false;
-
-        wanted.forEach((name) => {
-            const Class = FastMail.classes && FastMail.classes[name];
-            if (typeof Class !== 'function') missing = true;
-            found[name] = Class;
-        });
-
-        return missing ? null : found;
-    };
-
     // Writing on every keystroke would send one message per character, and
     // each one comes back through applySettings and rebuilds the grouped
     // list. Coalesced into one write once typing pauses. The same interval
@@ -6303,7 +6289,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     /*
      * The key and value are captured at the moment of the keystroke rather
      * than re-read from the field later, because flush() runs when the
-     * panel is closing: by then the field it came from may already be
+     * page is being left: by then the field it came from may already be
      * destroyed, and a value read off a destroyed view is not the one that
      * was typed.
      */
@@ -6402,14 +6388,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * so each row registers itself and the parent's state is applied to the
      * whole set once its group has finished drawing.
      *
-     * Switching groups throws the old rows away and builds fresh ones, so the
+     * A redraw throws the old rows away and builds fresh ones, so the
      * register is reset before each build rather than kept: a stale view left
      * in it belongs to a group no longer on screen, and settling against it
      * would mean nothing.
      *
-     * The panel's pending field writes live here too, rather than in a
+     * The page's pending field writes live here too, rather than in a
      * second object: it is already the one thing threaded through every row
-     * for the life of the open panel, unlike the views map above, which is
+     * for the life of the page, unlike the views map above, which is
      * thrown away on every redraw while a debounce timer from a group no
      * longer on screen may still be waiting.
      */
@@ -6499,9 +6485,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 register.settle();
                 return sections;
             },
-            // Leaving the page is when a closing dialog used to flush: what a
-            // field still has waiting is written now, on the key and value it
-            // captured, before the page's views are thrown away.
+            // Leaving the page is when whatever a field still has waiting
+            // gets flushed: written now, on the key and value it captured,
+            // before the page's views are thrown away.
             willLeaveDocument() {
                 try {
                     register.flushPending();
@@ -6686,15 +6672,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             return false;
         }
     };
-
-    // Wide enough for a hint to read as a sentence, narrow enough to sit in a
-    // laptop window. Below this the two columns become one.
-    const PANEL_WIDTH = 620;
-    const PANEL_STACKS_BELOW = 700;
-
-    // { modal, register } while a panel is open, so closeSettingsPanel can
-    // flush pending writes and tear the right modal down; null otherwise.
-    let openPanel = null;
 
     /*
      * A list you can put in order. Fastmail's own splits editor already has
@@ -7007,7 +6984,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     /*
      * Nothing here writes from the groupings as they were when the list was
      * drawn. The text field below saves the setting without redrawing the
-     * list, and the host can push a new value in while the panel is open, so
+     * list, and the host can push a new value in while the page is open, so
      * a list drawn a minute ago may show groupings since typed away and miss
      * ones since typed in; a write made from that picture puts it back.
      *
@@ -7233,7 +7210,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     edit: null, remove: null
                 }));
                 // Laid over the order as it is at the press, not as drawn: the
-                // host can push a new one in while the panel is open.
+                // host can push a new one in while the page is open.
                 const list = reorderList(classes, items, (order) => {
                     writeSetting('bottomBarSlots',
                         mergeOrder(orderedSlots(), order).map(pretty).join(', '));
@@ -7372,135 +7349,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         document.body.appendChild(overlay);
     };
 
-    const settingsPanelView = (classes, register) => {
-        const el = FastMail.el;
-        const stacked = !!(FastMail.isMobile ||
-            (FastMail.root && FastMail.root.get('pxWidth') < PANEL_STACKS_BELOW));
-
-        let chosen = SETTING_GROUPS[0].id;
-
-        const rowsFor = (groupId) => settingsInGroup(groupId)
-            .map(option => sectionRow(classes, option, register));
-
-        // Every redraw rebuilds its rows from nothing, so the register is
-        // cleared first and settled against whatever it ends up holding:
-        // the only rows left after this are the ones just built, for
-        // whichever group is now on screen.
-        const body = new classes.View({
-            // Fastmail's u-flex-1 also sets width: 0, which only a flex row
-            // grows back: beside the sidebar it fills the rest, but stacked,
-            // in a plain block, it squeezes every row to its longest word.
-            className: (stacked ? '' : 'u-flex-1 ') + 'u-space-y-4 u-overflow-y-auto',
-            draw: () => {
-                register.reset();
-                const rows = stacked
-                    ? SETTING_GROUPS.reduce((out, group) => out.concat(
-                        [el('h2.u-trim.u-font-bold', [group.title])], rowsFor(group.id)), [])
-                    : [el('h2.u-trim.u-font-bold', [titleOf(chosen)])].concat(rowsFor(chosen));
-                register.settle();
-                return rows;
-            }
-        });
-
-        const choose = (groupId) => {
-            chosen = groupId;
-            body.viewNeedsRedraw();
-        };
-
-        const sidebar = new classes.View({
-            className: 'u-flex-none u-space-y-1',
-            layout: { width: 170 },
-            draw: () => SETTING_GROUPS.map(group => new classes.ButtonView({
-                type: 'v-Button--subtle v-Button--sizeM',
-                label: group.title,
-                target: { go: () => choose(group.id) },
-                method: 'go'
-            }))
-        });
-
-        return new classes.View({
-            className: 'u-p-8 u-space-y-5',
-            draw: () => [
-                el('h1.u-trim.u-text-2xl.u-font-bold', ['Custom mode']),
-                stacked
-                    ? body
-                    : new classes.View({
-                        className: 'u-flex u-space-x-5',
-                        draw: () => [sidebar, body]
-                    }),
-                new classes.ButtonView({
-                    type: 'v-Button--standard v-Button--sizeM',
-                    label: 'Done',
-                    target: { close: () => closeSettingsPanel() },
-                    method: 'close'
-                })
-            ]
-        });
-    };
-
-    const titleOf = (groupId) =>
-        (SETTING_GROUPS.filter(group => group.id === groupId)[0] || {}).title || '';
-
-    const closeSettingsPanel = () => {
-        if (!openPanel) return;
-        const { modal, register } = openPanel;
-        openPanel = null;
-
-        // Whatever is mid-debounce is spent now, on the key and value it
-        // captured when typed, before the view that supplied them is gone.
-        try {
-            register.flushPending();
-        } catch (error) {
-            reportFault('a setting typed just before closing may not have saved');
-        }
-
-        // Hiding is all: the promise openSettingsPanel took from show()
-        // settles on it, and takes the panel apart from there.
-        try {
-            modal.hide();
-        } catch (error) {
-            reportFault('the settings panel would not close');
-        }
-    };
-
-    const openSettingsPanel = () => {
-        if (openPanel) return;
-
-        const classes = panelClasses();
-        if (!classes) {
-            openFallbackSettings();
-            return;
-        }
-
-        let dialog = null;
-        try {
-            const register = settingRegister();
-            dialog = framedModal(classes, settingsPanelView(classes, register), PANEL_WIDTH,
-                (event) => { if (event.key === 'Escape') closeSettingsPanel(); });
-            // Recorded before show(), not after: anything from here on that
-            // throws has already put something on screen, and
-            // closeSettingsPanel is what knows how to take it back off.
-            openPanel = { modal: dialog.modal, register };
-            dialog.modal.show().then(dialog.takeApart);
-        } catch (error) {
-            closeSettingsPanel();
-            // A throw inside show() comes before the promise that would have
-            // taken the panel apart was handed back, so that is done here.
-            if (dialog) dialog.takeApart();
-            reportFault('the settings panel would not open; showing the plain one');
-            openFallbackSettings();
-        }
-    };
-
     /*
-     * Fastmail's own Settings screen is where someone goes looking, so the
-     * panel is opened from there. The shells add a "Device settings" row to
-     * the same list from harness.js; this one is the userscript's own row,
-     * with its own class and label, so the two can coexist on the phone
-     * without fighting over which is present. Unlike harness.js's row, this
-     * one is not skipped under Electron: harness.js's own settings still
-     * open from the app menu there, but once the native tabs are gone this
-     * panel is the only way into these settings on the Mac too.
+     * Fastmail's own Settings screen is where someone goes looking, so a
+     * copied row sits there too, for when the real entry could not be
+     * installed. The shells add a "Device settings" row to the same list
+     * from harness.js; this one is the userscript's own row, with its own
+     * class and label, so the two can coexist on the phone without fighting
+     * over which is present. Unlike harness.js's row, this one is not
+     * skipped under Electron: harness.js's own settings still open from the
+     * app menu there, but once the native tabs are gone this copied row is
+     * the only fallback into these settings on the Mac too.
      *
      * Found the way harness.js finds it, since Fastmail names this list
      * nothing more specific than any other source list: every
