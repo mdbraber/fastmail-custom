@@ -137,6 +137,29 @@ private let nonMatchingHeader = """
     #endif
 }
 
+#if os(macOS)
+// The remote debugging switch is the phone's; the Mac's views stay inspectable.
+@Test @MainActor func theMacsMainWebViewStaysInspectable() {
+    let loader = StubLoader(resources: [
+        "harness.js": "HARNESS",
+        "userscript.js": nonMatchingHeader + "\nBODY"
+    ])
+    let model = ShellModel()
+    let profile = Profile(
+        id: "test",
+        displayName: "Test",
+        startURL: URL(string: "https://127.0.0.1:1/")!,
+        overlayScriptName: nil,
+        urlScheme: "test",
+        accountID: nil
+    )
+    let container = WebContainer(profile: profile, model: model, loader: loader)
+    let coordinator = WebCoordinator(model: model, startURL: profile.startURL)
+    let webView = container.makeWebView(coordinator: coordinator)
+    #expect(webView.isInspectable)
+}
+#endif
+
 // Handoff offers whatever the window is showing, so the model has to keep up
 // with a page Fastmail swaps in without a load.
 @Test @MainActor func theModelFollowsThePageTheWindowIsShowing() async throws {
