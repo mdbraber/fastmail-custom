@@ -1332,7 +1332,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // off. Fastmail's own disabled switch greys only its control, and its
     // stylesheet has no class that dims a label and hint along with it; half
     // is what its own disabled menu entries use. Unconditional, like the
-    // fallback's rules, since the panel opens with the mode off too.
+    // fallback's rules, since the page opens with the mode off too.
     const SUB_OPTION_DIMMED = 'custom-mode-dimmed';
     const SUB_OPTION_RULES = ['.' + SUB_OPTION_DIMMED + ' { opacity: 0.5; }'];
 
@@ -6288,10 +6288,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * The key and value are captured at the moment of the keystroke rather
-     * than re-read from the field later, because flush() runs when the
-     * page is being left: by then the field it came from may already be
-     * destroyed, and a value read off a destroyed view is not the one that
-     * was typed.
+     * than re-read from the field later, because flush() runs when the page
+     * is being left or the plain panel is closing: by then the field it
+     * came from may already be destroyed, and a value read off a destroyed
+     * view is not the one that was typed.
      */
     const debouncedWrite = () => {
         let timer = null;
