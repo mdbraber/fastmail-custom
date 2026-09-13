@@ -56,6 +56,10 @@ public struct AppShell: View {
             WebContainer(profile: live, model: model, loadURL: launchURL)
                 .ignoresSafeArea()
                 .id(backendName)
+                #if canImport(UIKit)
+                // Beneath Device settings, VoiceOver keeps to the page in front
+                .accessibilityHidden(settings.isPresented)
+                #endif
             if let banner = model.banner {
                 HStack(alignment: .top) {
                     Text(banner)
