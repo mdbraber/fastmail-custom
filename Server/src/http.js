@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { isDeviceToken } from './devices.js';
+import { registrationChoice } from './choice.js';
 
 const BODY_LIMIT = 64 * 1024;
 
@@ -35,11 +36,12 @@ async function route({ config, watchers, devices }, request, response) {
         if (!body || typeof body.account !== 'string' || !Object.hasOwn(watchers, body.account) || !isDeviceToken(body.token)) {
             return reply(response, 400, { error: 'account and token required' });
         }
-        // The device's own switch: absent means on; anything else must be a real boolean
-        const alerts = body.alerts === undefined ? true : body.alerts;
-        if (typeof alerts !== 'boolean') return reply(response, 400, { error: 'alerts must be true or false' });
-        await devices.register(body.account, body.token, { alerts });
-        return reply(response, 200, { ok: true, alerts });
+        // The device's choice; an app build from before it sends only its switch
+        const { notify, error } = registrationChoice(body);
+        if (error) return reply(response, 400, { error });
+        await devices.register(body.account, body.token, { notify });
+        // Whether the account's token can read contacts: without, VIPs and contacts match nobody
+        return reply(response, 200, { ok: true, notify, contacts: watchers[body.account].hasContacts === true });
     }
 
     // The buttons on a notification. The phone has no Fastmail credentials of

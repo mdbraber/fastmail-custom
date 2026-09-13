@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fromAlerts, storedChoice } from './choice.js';
 
 // Apple says not to assume a device token's length, only that it is hex.
 const TOKEN = /^[0-9a-f]{32,512}$/i;
@@ -27,16 +28,24 @@ export class DeviceRegistry {
         }
     }
 
-    // Every token for the account, or only those with alerts on (true) or
-    // off (false). A record from before the switch existed has alerts on.
-    tokens(account, { alerts } = {}) {
+    // Every device of the account with the choice it registered. A record
+    // from before `notify` reads through its `alerts`.
+    entries(account) {
         const records = this.devices[account] || {};
-        return Object.keys(records).filter((token) => alerts === undefined || alerts === (records[token]?.alerts !== false));
+        return Object.keys(records).map((token) => ({ token, notify: storedChoice(records[token]) }));
     }
 
-    // Registering again is how a device changes its mind about alerts
-    async register(account, token, { alerts = true } = {}) {
-        (this.devices[account] ??= {})[token.toLowerCase()] = { registeredAt: new Date().toISOString(), alerts };
+    // Every token for the account, or only those whose choice is not off
+    // (alerts: true) or is off (alerts: false).
+    tokens(account, { alerts } = {}) {
+        return this.entries(account)
+            .filter(({ notify }) => alerts === undefined || alerts === (notify.mode !== 'off'))
+            .map(({ token }) => token);
+    }
+
+    // Registering again is how a device changes its mind
+    async register(account, token, { notify = fromAlerts(true) } = {}) {
+        (this.devices[account] ??= {})[token.toLowerCase()] = { registeredAt: new Date().toISOString(), notify };
         await this.save();
     }
 

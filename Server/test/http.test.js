@@ -5,6 +5,8 @@ import { createServer } from '../src/http.js';
 const silent = { warn() {}, info() {}, error() {} };
 const token = 'c'.repeat(64);
 const sealedNotice = { '@type': 'StateChange', changed: { acc1: { Email: 's7' } } };
+const INBOX = { mode: 'inbox', senders: 'everyone', mailboxIds: [] };
+const OFF = { mode: 'off', senders: 'everyone', mailboxIds: [] };
 
 async function running() {
     const received = [];
@@ -12,6 +14,7 @@ async function running() {
     const watchers = {
         personal: {
             callbackSecret: 'abc123',
+            hasContacts: true,
             status: () => ({ notices: 'push', verified: true, lastNotice: null, devices: 1 }),
             receive: async (body) => { received.push(body); },
             // The real one unseals RFC 8291; here "sealed" is the only body that opens
@@ -29,8 +32,14 @@ async function running() {
     const server = createServer({ config: { deviceSecret: 's3cret' }, watchers, devices, log: silent });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
-    return { base, received, registered, done, close: () => new Promise((resolve) => server.close(resolve)) };
+    return { base, watchers, received, registered, done, close: () => new Promise((resolve) => server.close(resolve)) };
 }
+
+const register = (s, body) => fetch(`${s.base}/devices`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer s3cret' },
+    body: JSON.stringify(body),
+});
 
 test('healthz reports every account', async () => {
     const s = await running();
@@ -53,23 +62,81 @@ test('device registration needs the bearer, a known account and a real token', a
     assert.equal((await post({ authorization: 'Bearer s3cret' }, { account: ['personal'], token })).status, 400);
     const ok = await post({ authorization: 'Bearer s3cret' }, { account: 'personal', token });
     assert.equal(ok.status, 200);
-    assert.deepEqual(await ok.json(), { ok: true, alerts: true });
-    assert.deepEqual(s.registered, [['personal', token, { alerts: true }]]);
+    assert.deepEqual(await ok.json(), { ok: true, notify: INBOX, contacts: true });
+    assert.deepEqual(s.registered, [['personal', token, { notify: INBOX }]]);
     await s.close();
 });
 
-test('a registration can turn alerts off for that device, and only with a real boolean', async () => {
+test('an older app build registers with alerts alone: true is inbox, false is off, anything else refused', async () => {
     const s = await running();
-    const post = (body) => fetch(`${s.base}/devices`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer s3cret' }, body: JSON.stringify(body) });
     try {
-        assert.equal((await post({ account: 'personal', token, alerts: 'no' })).status, 400);
-        assert.equal((await post({ account: 'personal', token, alerts: 0 })).status, 400);
-        assert.equal((await post({ account: 'personal', token, alerts: null })).status, 400);
+        assert.equal((await register(s, { account: 'personal', token, alerts: 'no' })).status, 400);
+        assert.equal((await register(s, { account: 'personal', token, alerts: 0 })).status, 400);
+        const refused = await register(s, { account: 'personal', token, alerts: null });
+        assert.equal(refused.status, 400);
+        assert.deepEqual(await refused.json(), { error: 'alerts must be true or false' });
         assert.equal(s.registered.length, 0);
-        const off = await post({ account: 'personal', token, alerts: false });
+
+        const on = await register(s, { account: 'personal', token, alerts: true });
+        assert.deepEqual(await on.json(), { ok: true, notify: INBOX, contacts: true });
+        const off = await register(s, { account: 'personal', token, alerts: false });
         assert.equal(off.status, 200);
-        assert.deepEqual(await off.json(), { ok: true, alerts: false });
-        assert.deepEqual(s.registered, [['personal', token, { alerts: false }]]);
+        assert.deepEqual(await off.json(), { ok: true, notify: OFF, contacts: true });
+        assert.deepEqual(s.registered, [['personal', token, { notify: INBOX }], ['personal', token, { notify: OFF }]]);
+    } finally {
+        await s.close();
+    }
+});
+
+test('a registration carrying notify is stored and answered normalised', async () => {
+    const s = await running();
+    try {
+        const custom = await register(s, { account: 'personal', token, notify: { mode: 'custom', senders: 'vips', mailboxIds: ['P2F', 'P3V'] } });
+        assert.equal(custom.status, 200);
+        const choice = { mode: 'custom', senders: 'vips', mailboxIds: ['P2F', 'P3V'] };
+        assert.deepEqual(await custom.json(), { ok: true, notify: choice, contacts: true });
+
+        const important = await register(s, { account: 'personal', token, notify: { mode: 'important' } });
+        const filled = { mode: 'important', senders: 'everyone', mailboxIds: [] };
+        assert.deepEqual(await important.json(), { ok: true, notify: filled, contacts: true });
+        assert.deepEqual(s.registered, [['personal', token, { notify: choice }], ['personal', token, { notify: filled }]]);
+    } finally {
+        await s.close();
+    }
+});
+
+test('each malformed notify field is a 400 naming it, and nothing is stored', async () => {
+    const s = await running();
+    try {
+        const cases = [
+            [{ notify: null }, /^notify /],
+            [{ notify: { senders: 'vips' } }, /^notify\.mode /],
+            [{ notify: { mode: 'loud' } }, /^notify\.mode /],
+            [{ notify: { mode: 'custom', senders: 'friends' } }, /^notify\.senders /],
+            [{ notify: { mode: 'custom', mailboxIds: 'P2F' } }, /^notify\.mailboxIds /],
+            [{ notify: { mode: 'custom', mailboxIds: [''] } }, /^notify\.mailboxIds /],
+            [{ notify: { mode: 'custom', mailboxIds: Array.from({ length: 201 }, (_, index) => `M${index}`) } }, /^notify\.mailboxIds /],
+        ];
+        for (const [extra, pattern] of cases) {
+            const response = await register(s, { account: 'personal', token, ...extra });
+            assert.equal(response.status, 400, JSON.stringify(extra).slice(0, 80));
+            assert.match((await response.json()).error, pattern);
+        }
+        assert.equal(s.registered.length, 0);
+    } finally {
+        await s.close();
+    }
+});
+
+test('with both fields notify wins, and the reply says whether contacts can be read', async () => {
+    const s = await running();
+    try {
+        const both = await register(s, { account: 'personal', token, alerts: true, notify: { mode: 'off' } });
+        assert.deepEqual(await both.json(), { ok: true, notify: OFF, contacts: true });
+
+        s.watchers.personal.hasContacts = false;
+        const without = await register(s, { account: 'personal', token, alerts: false, notify: { mode: 'important' } });
+        assert.deepEqual(await without.json(), { ok: true, notify: { mode: 'important', senders: 'everyone', mailboxIds: [] }, contacts: false });
     } finally {
         await s.close();
     }

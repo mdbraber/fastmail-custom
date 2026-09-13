@@ -1,13 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { DeviceRegistry, isDeviceToken } from '../src/devices.js';
 
 const silent = { warn() {}, info() {}, error() {} };
 const token = 'a'.repeat(64);
+const other = 'b'.repeat(64);
 const scratch = async () => path.join(await mkdtemp(path.join(os.tmpdir(), 'devices-')), 'devices.json');
+const INBOX = { mode: 'inbox', senders: 'everyone', mailboxIds: [] };
+const OFF = { mode: 'off', senders: 'everyone', mailboxIds: [] };
 
 test('a device token is hex of a plausible length', () => {
     assert.equal(isDeviceToken(token), true);
@@ -22,12 +25,12 @@ test('registrations persist, per account, and can be removed', async () => {
     const registry = new DeviceRegistry(file, silent);
     await registry.load();
     await registry.register('personal', token.toUpperCase());
-    await registry.register('work', 'b'.repeat(64));
+    await registry.register('work', other);
 
     const again = new DeviceRegistry(file, silent);
     await again.load();
     assert.deepEqual(again.tokens('personal'), [token]);
-    assert.deepEqual(again.tokens('work'), ['b'.repeat(64)]);
+    assert.deepEqual(again.tokens('work'), [other]);
     assert.deepEqual(again.tokens('other'), []);
 
     await again.remove('personal', token.toUpperCase());
@@ -35,35 +38,55 @@ test('registrations persist, per account, and can be removed', async () => {
     assert.deepEqual(again.tokens('personal'), []);
 });
 
-test('alerts can be turned off per device, survive a reload, and are on for records that predate the switch', async () => {
+test('each device keeps its own choice, stored as notify, across a reload', async () => {
     const file = await scratch();
-    const muted = 'b'.repeat(64);
+    const custom = { mode: 'custom', senders: 'vips', mailboxIds: ['P2F', 'P3V'] };
     const registry = new DeviceRegistry(file, silent);
     await registry.load();
     await registry.register('personal', token);
-    await registry.register('personal', muted.toUpperCase(), { alerts: false });
+    await registry.register('personal', other.toUpperCase(), { notify: custom });
 
-    assert.deepEqual(registry.tokens('personal').sort(), [token, muted].sort());
-    assert.deepEqual(registry.tokens('personal', { alerts: true }), [token]);
-    assert.deepEqual(registry.tokens('personal', { alerts: false }), [muted]);
-    assert.deepEqual(registry.tokens('work', { alerts: false }), []);
+    assert.deepEqual(registry.entries('personal'), [{ token, notify: INBOX }, { token: other, notify: custom }]);
+    assert.deepEqual(registry.entries('work'), []);
+
+    const stored = JSON.parse(await readFile(file, 'utf8'));
+    assert.deepEqual(Object.keys(stored.personal[other]).sort(), ['notify', 'registeredAt']);
+    assert.deepEqual(stored.personal[other].notify, custom);
 
     const again = new DeviceRegistry(file, silent);
     await again.load();
-    assert.deepEqual(again.tokens('personal', { alerts: false }), [muted]);
+    assert.deepEqual(again.entries('personal'), [{ token, notify: INBOX }, { token: other, notify: custom }]);
 
-    // The switch flips back with a plain re-registration
-    await again.register('personal', muted, { alerts: true });
-    assert.deepEqual(again.tokens('personal', { alerts: false }), []);
-    await again.register('personal', muted);
-    assert.deepEqual(again.tokens('personal', { alerts: true }).sort(), [token, muted].sort());
+    // Registering again replaces the choice
+    await again.register('personal', other, { notify: OFF });
+    assert.deepEqual(again.entries('personal')[1], { token: other, notify: OFF });
+});
 
+test('a registry file from before notify reads its alerts as inbox or off, without being rewritten', async () => {
     const legacy = await scratch();
-    await writeFile(legacy, JSON.stringify({ personal: { [token]: { registeredAt: '2026-09-01T00:00:00Z' } } }));
+    const text = JSON.stringify({
+        personal: {
+            [token]: { registeredAt: '2026-09-01T00:00:00Z' },
+            [other]: { registeredAt: '2026-09-02T00:00:00Z', alerts: false },
+        },
+        work: { ['c'.repeat(64)]: { registeredAt: '2026-09-03T00:00:00Z', alerts: true } },
+    }, null, 2);
+    await writeFile(legacy, text);
     const old = new DeviceRegistry(legacy, silent);
     await old.load();
-    assert.deepEqual(old.tokens('personal', { alerts: true }), [token]);
-    assert.deepEqual(old.tokens('personal', { alerts: false }), []);
+    assert.deepEqual(old.entries('personal'), [{ token, notify: INBOX }, { token: other, notify: OFF }]);
+    assert.deepEqual(old.entries('work'), [{ token: 'c'.repeat(64), notify: INBOX }]);
+    assert.equal(await readFile(legacy, 'utf8'), text);
+});
+
+// Until the watcher sends per device it still asks for the devices with alerts on or off
+test('tokens still split on alerts, now read from the choice', async () => {
+    const registry = new DeviceRegistry(await scratch(), silent);
+    await registry.load();
+    await registry.register('personal', token, { notify: { mode: 'important', senders: 'everyone', mailboxIds: [] } });
+    await registry.register('personal', other, { notify: OFF });
+    assert.deepEqual(registry.tokens('personal', { alerts: true }), [token]);
+    assert.deepEqual(registry.tokens('personal', { alerts: false }), [other]);
 });
 
 // Two phones registering at once, or a registration racing a prune, would
@@ -72,11 +95,11 @@ test('registrations that arrive together both survive', async () => {
     const file = await scratch();
     const registry = new DeviceRegistry(file, silent);
     await registry.load();
-    await Promise.all([registry.register('personal', token), registry.register('personal', 'b'.repeat(64))]);
+    await Promise.all([registry.register('personal', token), registry.register('personal', other)]);
 
     const again = new DeviceRegistry(file, silent);
     await again.load();
-    assert.deepEqual(again.tokens('personal').sort(), [token, 'b'.repeat(64)].sort());
+    assert.deepEqual(again.tokens('personal').sort(), [token, other].sort());
 });
 
 test('an unreadable registry starts empty', async () => {
