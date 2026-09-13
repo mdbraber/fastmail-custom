@@ -19,9 +19,6 @@
         "default_title": "Custom mode",
         "default_popup": "settings.html"
     },
-    "options_ui": {
-        "page": "settings.html"
-    },
     "host_permissions": [
         "https://app.fastmail.com/*",
         "https://app.beta.fastmail.com/*"

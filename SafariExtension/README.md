@@ -43,7 +43,7 @@ userscripts have no `browser.scripting`. See
 | `manifest.json` | MV3 manifest, scoped to `app.fastmail.com` and `app.beta.fastmail.com` |
 | `background.js` | Injects the payload with `world: "MAIN"` on page load |
 | `early.js` | Content script at `document_start`, replaying last load's styles |
-| `settings.html` / `settings.js` | The options popup |
+| `settings.html` / `settings.js` | The toolbar popup; opens the settings panel drawn in the Fastmail page |
 | `fastmail-custom-mode.js` | Symlink to the userscript, which is the payload |
 
 The payload guards against running twice, so a duplicate injection is harmless.
@@ -135,4 +135,5 @@ shells and the mailto chooser joined them under `com.mdbraber.fastmail-custom`
 the bare identifier is a prefix the whole family shares rather than one
 app's name. Safari keys an extension's enabled state and its stored settings
 to that identifier, so each rename presents this as a new extension: enable
-it again in Safari's settings, and set the options once more.
+it again in Safari's settings, and open the settings panel from the toolbar
+button to set it up again.
