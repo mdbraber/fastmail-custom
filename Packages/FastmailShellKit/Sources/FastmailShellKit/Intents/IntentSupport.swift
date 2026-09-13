@@ -28,6 +28,19 @@ public enum IntentSupport {
         return view
     }
 
+    /// The page for an action that reads from it or runs against it. On
+    /// iPhone and iPad nothing is read or run while the screen lock is up, or
+    /// would be the moment the app is in front again, so a Shortcut cannot
+    /// return the mail behind the lock.
+    private static func unlockedWebView() throws -> WKWebView {
+        #if canImport(UIKit)
+        if ScreenLock.shared.holdsLinks {
+            throw IntentSupportError("Open and unlock the app first.")
+        }
+        #endif
+        return try webView()
+    }
+
     private struct LinkStrings: Sendable {
         let url: String
         let title: String
@@ -53,7 +66,7 @@ public enum IntentSupport {
     }
 
     public static func currentLink() async throws -> MailLink {
-        let view = try webView()
+        let view = try unlockedWebView()
         let strings: LinkStrings?
         do {
             strings = try await evaluate(
@@ -88,7 +101,7 @@ public enum IntentSupport {
     }
 
     public static func runJavaScript(_ script: String) async throws -> String {
-        let view = try webView()
+        let view = try unlockedWebView()
         do {
             return try await evaluate(script, arguments: [:], in: view) { Self.text(from: $0) }
         } catch let error as IntentSupportError {
@@ -99,7 +112,7 @@ public enum IntentSupport {
     }
 
     public static func runAction(named name: String) async throws {
-        let view = try webView()
+        let view = try unlockedWebView()
         do {
             _ = try await evaluate(
                 "return await window.native.runAction(name);",
@@ -126,7 +139,14 @@ public enum IntentSupport {
         guard let target, LinkRouter.isFastmailHost(target.host) else {
             throw IntentSupportError("Only Fastmail paths can be opened.")
         }
+        #if canImport(UIKit)
+        // Handed to the shell as a home screen shortcut hands its page, so
+        // AppShell routes it like any link from outside, and while the screen
+        // lock is up it waits until the lock has opened.
+        PendingLinks.shared.open(target)
+        #else
         try webView().load(URLRequest(url: target))
+        #endif
     }
 
     nonisolated static func text(from value: Any?) -> String {
