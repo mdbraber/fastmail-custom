@@ -16,6 +16,9 @@ Settings live in extension storage, which the page world cannot read, so they
 are written onto the page immediately before the payload is injected. Changing
 one pushes it straight to any open Fastmail tab rather than waiting for a
 reload.
+
+The settings are edited in the page, by the payload's own panel, which reaches
+this storage through early.js. Nothing here knows what the settings are.
 */
 
 const api = globalThis.browser || globalThis.chrome;
@@ -26,68 +29,13 @@ const TARGETS = ['https://app.fastmail.com/*', 'https://app.beta.fastmail.com/*'
 const TARGET_PATTERN = /^https:\/\/app\.(beta\.)?fastmail\.com\//;
 const PAYLOAD = 'fastmail-custom-mode.js';
 
-// Kept in step with the userscript's DEFAULT_SETTINGS and settings.js
-const DEFAULT_SETTINGS = {
-    labelColours: true,
-    labelColoursSidebarOnly: true,
-    labelColoursSkipTriage: true,
-    dragAdditive: true,
-    hideInboxLabel: true,
-    stripLabelPrefix: true,
-    labelsShortcut: true,
-    labelsSidebarOnly: true,
-    labelsAutoSave: true,
-    stickyInboxFilter: true,
-    filteredLabelCounts: true,
-    groupings: 'by age (urgent first)\n  Triage = in:Triage OR is:unread\n  Pinned = is:pinned\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n  This month = after:1m\n  Older',
-    backToListAfterTriage: true,
-    triageLabel: 'Triage',
-    snoozeKey: 'w',
-    snoozeDefault: '2w',
-    snoozeTime: '08:00',
-    urgentKey: 's',
-    bottomBarSlots: 'Snooze, Pin, Keep, Archive, Labels, Move, Delete',
-    bottomBarItems: '',
-    topBarItems: '',
-    excludedLabels: 'Later, Feedbin',
-    contactGroupLabels: '',
-    appBadgeLabel: 'Triage',
-    swapArchiveExpand: true,
-    sidebarSeparators: true,
-    hideLoneExpando: true
-};
-
+// Whatever is stored, as it is. The page carries the catalogue and every
+// default, so there is nothing to merge here and nothing to keep in step:
+// this script does not know which settings exist, and does not need to.
 const getSettings = async () => {
     const stored = await api.storage.local.get('settings');
-    return Object.assign({}, DEFAULT_SETTINGS, stored.settings || {});
+    return stored.settings || {};
 };
-
-// Settings saved under 2.x keep keys 3.0 no longer has, and two whose default
-// moved: the badge label was Inbox, the bar had nine slots.
-const SETTINGS_VERSION = 3;
-const LEGACY_DEFAULTS = {
-    appBadgeLabel: 'Inbox',
-    bottomBarSlots: 'Snooze, Pin, Archive, Labels, Keep, Waiting, Someday, Delete, Move'
-};
-
-const migrateSettings = async () => {
-    const stored = await api.storage.local.get(['settings', 'settingsVersion']);
-    if (stored.settingsVersion === SETTINGS_VERSION) return;
-
-    const next = {};
-    Object.keys(stored.settings || {}).forEach((key) => {
-        if (!(key in DEFAULT_SETTINGS)) return;
-        const value = stored.settings[key];
-        next[key] = (key in LEGACY_DEFAULTS && value === LEGACY_DEFAULTS[key])
-            ? DEFAULT_SETTINGS[key]
-            : value;
-    });
-    await api.storage.local.set({ settings: next, settingsVersion: SETTINGS_VERSION });
-};
-
-migrateSettings().catch((error) => {
-    console.error('Custom mode: could not migrate settings', error);
-});
 
 const inject = async (tabId) => {
     const settings = await getSettings();
