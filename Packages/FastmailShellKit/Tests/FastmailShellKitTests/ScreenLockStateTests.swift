@@ -133,3 +133,21 @@ private func unlocked() -> ScreenLockState {
         #expect(method.canLock)
     }
 }
+
+// Sent to the background while Face ID is asking, the prompt is cancelled and
+// its reply arrives as a failure; coming back asks again, however soon
+@Test func anAskInterruptedByTheBackgroundAsksAgainOnReturn() {
+    for away: TimeInterval in [5, 120] {
+        var state = ScreenLockState(lockEnabled: true)
+        _ = state.becameActive(at: start, lockEnabled: true)
+        #expect(state.isAsking)
+        state.enteredBackground(at: start.addingTimeInterval(1))
+        state.finishedAsking(succeeded: false)
+        #expect(!state.isAsking, "away \(away)s")
+        #expect(state.isLocked, "away \(away)s")
+        let asked = state.becameActive(at: start.addingTimeInterval(1 + away), lockEnabled: true)
+        #expect(asked, "away \(away)s")
+        let unlock = state.unlockTapped()
+        #expect(!unlock, "already asking, away \(away)s")
+    }
+}
