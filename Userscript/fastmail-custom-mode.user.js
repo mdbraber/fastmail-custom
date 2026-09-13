@@ -6537,7 +6537,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     this.set('showBack', !controller.get('isWithSidebar'));
                 },
                 destroy() {
-                    controller.removeObserverForKey('isWithSidebar', this, 'isWithSidebarDidChange');
+                    // A header that cannot let go of its observer still has to
+                    // come apart, or the page's other views stay behind with it.
+                    try {
+                        controller.removeObserverForKey('isWithSidebar', this, 'isWithSidebarDidChange');
+                    } catch (error) {
+                        reportFault('the settings page could not stop following the sidebar', error);
+                    }
                     classes.PageHeaderView.prototype.destroy.call(this);
                 }
             });
