@@ -5,17 +5,11 @@ struct SettingsView: View {
     let profile: Profile
 
     var body: some View {
-        TabView {
-            GeneralSettingsView(profile: profile)
-                .tabItem { Label(CustomModeSettings.Group.general.title, systemImage: CustomModeSettings.Group.general.systemImage) }
-            // One tab per custom-mode group, driven by the same catalog the
-            // form and the page injection read.
-            ForEach(CustomModeSettings.Group.inboxGroups, id: \.self) { group in
-                CustomModeGroupView(group: group)
-                    .tabItem { Label(group.title, systemImage: group.systemImage) }
-            }
-        }
-        .frame(width: 500, height: 560)
+        // Only the shell's own settings are here now. Everything about the
+        // mail interface is in the page, under Fastmail's own Settings, where
+        // one panel serves the Mac, the phone and Safari alike.
+        GeneralSettingsView(profile: profile)
+            .frame(width: 500, height: 460)
     }
 }
 
@@ -92,11 +86,6 @@ private struct GeneralSettingsView: View {
                 Text("Downloads")
             }
             #endif
-            // The app badge is a catalog setting but belongs with the
-            // app-level General controls rather than in an custom-mode tab.
-            Section {
-                CustomModeSettingsForm(group: .general)
-            }
         }
         .formStyle(.grouped)
     }
@@ -120,17 +109,4 @@ private struct GeneralSettingsView: View {
         }
     }
     #endif
-}
-
-// The form itself lives in FastmailShellKit (SettingsUI.swift), shared with
-// the phone's in-app sheet; this file only gives one group the macOS tab frame.
-private struct CustomModeGroupView: View {
-    let group: CustomModeSettings.Group
-
-    var body: some View {
-        Form {
-            CustomModeSettingsForm(group: group)
-        }
-        .formStyle(.grouped)
-    }
 }

@@ -124,12 +124,10 @@ public enum HomeShortcuts {
         return components.url
     }
 
-    /// The badge label as the app has it: the stored value, or the catalog's.
+    /// The badge label as the app has it: the stored value, or the default.
     public static func badgeLabel(in defaults: UserDefaults = .standard) -> String {
-        guard let option = CustomModeSettings.options.first(where: { $0.key == "appBadgeLabel" }) else { return "" }
-        if let stored = defaults.string(forKey: option.defaultsKey) { return stored }
-        if case .text(let fallback) = option.defaultValue { return fallback }
-        return ""
+        defaults.string(forKey: CustomModeSettings.defaultsKey(for: "appBadgeLabel"))
+            ?? CustomModeSettings.badgeLabelDefault
     }
 }
 
