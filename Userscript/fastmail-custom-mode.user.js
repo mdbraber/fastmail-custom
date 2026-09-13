@@ -1328,6 +1328,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         '.custom-mode-fallback-note { opacity: 0.7; }'
     ];
 
+    // A sub-option in the settings panel while the option it depends on is
+    // off. Fastmail's own disabled checkbox greys only its box, and its
+    // stylesheet has no class that dims a label and hint along with it; half
+    // is what its own disabled menu entries use. Unconditional, like the
+    // fallback's rules, since the panel opens with the mode off too.
+    const SUB_OPTION_DIMMED = 'custom-mode-dimmed';
+    const SUB_OPTION_RULES = ['.' + SUB_OPTION_DIMMED + ' { opacity: 0.5; }'];
+
     // The line is the stylesheet's half of the option; the gap it sits in is
     // the marking pass's, since only that can move a row the list has pinned.
     const sourceSeparatorRules = () =>
@@ -1443,6 +1451,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             .concat(TRIAGE_ICON_RULES)
             .concat(TOAST_RULES)
             .concat(FALLBACK_PANEL_RULES)
+            .concat(SUB_OPTION_RULES)
             .join('\n');
         const existing = document.getElementById(STYLE_ID);
 
@@ -6332,14 +6341,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      *
      * A sub-option sits in under the option it depends on. The indent is
      * Fastmail's own padding class, on a view of its own around the row, so
-     * the row keeps the classes Fastmail gave it. The plain fallback panel
-     * stays flat.
+     * the row keeps the classes Fastmail gave it. That view is also what dims
+     * the whole row while the parent is off, since the row's own disabled
+     * state greys only its input. The plain fallback panel stays flat.
      */
     const SUB_OPTION_INDENT = 'u-pl-6';
 
-    const underParent = (classes, option, row) => (option.parent
-        ? new classes.View({ className: SUB_OPTION_INDENT, draw: () => [row] })
-        : row);
+    const underParent = (classes, option, row, register) => {
+        if (!option.parent) return row;
+        const holder = new classes.View({ className: SUB_OPTION_INDENT, draw: () => [row] });
+        register.hold(option, holder);
+        return holder;
+    };
 
     const settingRow = (classes, option, register) => {
         const el = FastMail.el;
@@ -6358,7 +6371,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 }
             }, 'changed');
             register.add(option, box);
-            return underParent(classes, option, box);
+            return underParent(classes, option, box, register);
         }
 
         const debounced = debouncedWrite();
@@ -6378,7 +6391,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return underParent(classes, option, new classes.View({
             className: 'u-space-y-1',
             draw: () => [field, el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint])]
-        }));
+        }), register);
     };
 
     /*
@@ -6401,22 +6414,32 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      */
     const settingRegister = () => {
         let views = {};
+        let holders = {};
         const flushers = [];
+        // The input greys itself, and its holder dims the label and hint with
+        // it. The class goes on the holder's layer directly, which nothing
+        // rewrites once that view is drawn.
+        const follow = (key, on) => {
+            views[key].set('isDisabled', !on);
+            const holder = holders[key];
+            if (holder) holder.get('layer').classList.toggle(SUB_OPTION_DIMMED, !on);
+        };
         const register = {
             add: (option, view) => { views[option.key] = view; },
-            reset: () => { views = {}; },
+            hold: (option, holder) => { holders[option.key] = holder; },
+            reset: () => { views = {}; holders = {}; },
             trackFlush: (flush) => { flushers.push(flush); },
             flushPending: () => { flushers.forEach((flush) => flush()); },
             parentChanged: (key, on) => {
                 SETTINGS.forEach((option) => {
                     if (option.parent !== key || !views[option.key]) return;
-                    views[option.key].set('isDisabled', !on);
+                    follow(option.key, !!on);
                 });
             },
             settle: () => {
                 SETTINGS.forEach((option) => {
                     if (!option.parent || !views[option.key]) return;
-                    views[option.key].set('isDisabled', !settingValue(option.parent));
+                    follow(option.key, !!settingValue(option.parent));
                 });
             }
         };
