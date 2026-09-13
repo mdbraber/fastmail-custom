@@ -9,6 +9,53 @@ export function selectNotifiable(emails, { inboxId, notified }) {
         && !notified.has(email.id));
 }
 
+// The messages worth putting to each device's choice: unread, not a draft,
+// and not announced before. Where they are is the choice's business.
+export function selectFresh(emails, { notified }) {
+    return emails.filter((email) =>
+        !email.keywords?.$seen
+        && !email.keywords?.$draft
+        && !notified.has(email.id));
+}
+
+// The first sender's address, lowercased so a VIP matches however it is written.
+export function senderAddress(email) {
+    const address = email.from?.[0]?.email;
+    return typeof address === 'string' && address ? address.toLowerCase() : null;
+}
+
+const carries = (email, id) => Boolean(id) && email.mailboxIds?.[id] === true;
+
+/*
+ * Whether one device's choice wants a banner for one fresh message.
+ *
+ * `context` holds what the message alone does not say: `inboxId`, `junkId`
+ * and `trashId` (null when the account has none), the sets `vips` and
+ * `contacts` of lowercased addresses, and `followedThreadIds`, the threads
+ * in which some message carries `$followed`.
+ */
+export function matchesChoice(notify, email, context) {
+    const sender = senderAddress(email);
+    switch (notify?.mode) {
+    case 'inbox':
+        return carries(email, context.inboxId);
+    case 'important': {
+        const discarded = carries(email, context.junkId) || carries(email, context.trashId);
+        const vip = sender !== null && context.vips.has(sender);
+        const followed = Boolean(email.keywords?.$followed) || context.followedThreadIds.has(email.threadId);
+        return (!discarded && vip) || followed;
+    }
+    case 'custom': {
+        if (!notify.mailboxIds.some((id) => carries(email, id))) return false;
+        if (notify.senders === 'contacts') return sender !== null && context.contacts.has(sender);
+        if (notify.senders === 'vips') return sender !== null && context.vips.has(sender);
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
 export function senderName(email) {
     const from = email.from?.[0];
     if (!from) return 'Unknown sender';
