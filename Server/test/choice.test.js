@@ -12,6 +12,13 @@ test('a full choice is kept as sent', () => {
     );
 });
 
+test('mailboxIds keeps repeats and their order, not just distinct values', () => {
+    assert.deepEqual(
+        normaliseNotify({ mode: 'custom', mailboxIds: ['b', 'a', 'b'] }),
+        { notify: { mode: 'custom', senders: 'everyone', mailboxIds: ['b', 'a', 'b'] } },
+    );
+});
+
 test('senders and mailboxIds are filled in when absent', () => {
     assert.deepEqual(normaliseNotify({ mode: 'important' }), { notify: { mode: 'important', senders: 'everyone', mailboxIds: [] } });
     assert.deepEqual(normaliseNotify({ mode: 'custom', mailboxIds: [] }), { notify: { mode: 'custom', senders: 'everyone', mailboxIds: [] } });

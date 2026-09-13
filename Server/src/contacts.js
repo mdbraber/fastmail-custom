@@ -1,8 +1,9 @@
 // Contact cards (JSContact, RFC 9553, as JMAP serves them in RFC 9610) into
 // the two sets of addresses the rules ask about. Pure.
 
-// Fastmail keeps VIPs as a group card with this uid in the primary contacts
-// account; its `members` name cards by uid, not by id.
+// Fastmail keeps VIPs as a group card with this uid; its `members` name
+// cards by uid, not by id. The sets below are built per contacts account:
+// the watcher reads every account the token can see and unions them.
 export const VIPS_UID = 'vips';
 
 const addressesOn = (card) => Object.values(card?.emails ?? {})

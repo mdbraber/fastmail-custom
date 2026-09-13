@@ -36,6 +36,11 @@ test('the sender address is the first from, lowercased, or nothing', () => {
     assert.equal(senderAddress(email({ from: [{ name: 'No address' }] })), null);
 });
 
+test('the sender address is trimmed before it is lowercased, and an all-blank address is none', () => {
+    assert.equal(senderAddress(email({ from: [{ name: 'Ada', email: ' Ada@Example.NET ' }] })), 'ada@example.net');
+    assert.equal(senderAddress(email({ from: [{ name: 'Blank', email: '   ' }] })), null);
+});
+
 const JUNK = 'mbx-junk';
 const TRASH = 'mbx-trash';
 const LABEL = 'mbx-label';

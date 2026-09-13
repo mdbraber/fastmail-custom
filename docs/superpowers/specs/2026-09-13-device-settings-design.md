@@ -63,7 +63,10 @@ These facts were read from the running Mac app, from Fastmail's mobile code
   not listed.
 - **VIPs and followed conversations.**
   - Fastmail keeps VIPs as a contact card with `kind: "group"` and
-    `uid: "vips"` in the primary contacts account.
+    `uid: "vips"`. The primary contacts account's `vips` group is empty; the
+    populated one (18 members) is in a second, shared contacts-only account
+    that both tokens can see. The server therefore reads every contacts
+    account.
   - A followed conversation carries the `$followed` keyword on its messages.
 - **The push server** (`Server/`):
   - **Registration:** a device registers with `POST /devices`

@@ -13,7 +13,9 @@ export function selectFresh(emails, { notified }) {
 // The first sender's address, lowercased so a VIP matches however it is written.
 export function senderAddress(email) {
     const address = email.from?.[0]?.email;
-    return typeof address === 'string' && address ? address.toLowerCase() : null;
+    if (typeof address !== 'string') return null;
+    const trimmed = address.trim();
+    return trimmed ? trimmed.toLowerCase() : null;
 }
 
 const carries = (email, id) => Boolean(id) && email.mailboxIds?.[id] === true;

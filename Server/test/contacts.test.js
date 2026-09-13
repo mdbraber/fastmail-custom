@@ -51,3 +51,41 @@ test('no cards, no addresses', () => {
     assert.equal(contacts.size, 0);
     assert.equal(vips.size, 0);
 });
+
+test('malformed cards, emails and members are skipped, not thrown on', () => {
+    const messy = [
+        {
+            id: 'id-ada',
+            uid: 'ada',
+            kind: 'individual',
+            emails: {
+                e0: {},
+                e1: { address: 42 },
+                e2: null,
+                e3: { address: '   ' },
+                e4: { address: '  Ada@Example.NET ' },
+            },
+        },
+        { id: 'id-null-emails', uid: 'null-emails', kind: 'individual', emails: null },
+        { id: 'id-no-emails', uid: 'no-emails', kind: 'individual' },
+        {
+            id: 'id-vips',
+            uid: 'vips',
+            kind: 'group',
+            members: { ada: true, ghost: true, blank: null },
+        },
+        null,
+    ];
+    let result;
+    assert.doesNotThrow(() => { result = addressSets(messy); });
+    assert.deepEqual([...result.contacts], ['ada@example.net']);
+    assert.deepEqual([...result.vips], ['ada@example.net']);
+
+    // A vips group whose members is null outright, not an object, also
+    // survives, contributing no members.
+    const nullMembers = addressSets([
+        { id: 'id-ada', uid: 'ada', kind: 'individual', emails: { e0: { address: 'ada@example.net' } } },
+        { id: 'id-vips', uid: 'vips', kind: 'group', members: null },
+    ]);
+    assert.deepEqual([...nullMembers.vips], []);
+});
