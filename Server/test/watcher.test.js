@@ -18,12 +18,23 @@ const arrival = (id, over = {}) => ({
 
 // `refusePush` and `onCreate` are properties rather than options only so a
 // test can change its mind after start(), which is where renewals happen.
-function fakeJMAP({ emails = [], created = [], counts = { badge: 4 }, refusePush = false, changesError = null } = {}) {
+function fakeJMAP({
+    emails = [], created = [], counts = { badge: 4 }, refusePush = false, changesError = null,
+    contactsAccountId = null, cards = [], cardState = 'cs1',
+} = {}) {
     const calls = [];
     const fake = {
         calls, counts, refusePush, onCreate: null,
         accountId: 'acc1', eventSourceUrl: 'https://api.example.net/jmap/event/',
-        fetch: async () => { throw new Error('no network in tests'); },
+        // `cards`, `cardState` and `cardsError` are properties so a test can
+        // change the address book between looks
+        contactsAccountId, cards, cardState, cardsError: null,
+        contactCards: async () => {
+            calls.push(['contacts']);
+            if (fake.cardsError) throw fake.cardsError;
+            return { cards: fake.cards, state: fake.cardState };
+        },
+        fetch: async (url) => { calls.push(['eventsource', String(url)]); throw new Error('no network in tests'); },
         headers: () => ({ authorization: 'Bearer t' }),
         connect: async () => {},
         // `hidden` is Fastmail's own flag; bit 1 is "not in the folder list",
@@ -50,8 +61,8 @@ function fakeJMAP({ emails = [], created = [], counts = { badge: 4 }, refusePush
         emails: async (ids) => emails.filter((e) => ids.includes(e.id)),
         pushSubscriptions: async () => [{ id: 'old', deviceClientId: 'fastmail-push-personal' }],
         destroyPushSubscription: async (id) => { calls.push(['destroy', id]); },
-        createPushSubscription: async ({ url, keys }) => {
-            calls.push(['subscribe', url, keys]);
+        createPushSubscription: async ({ url, keys, types }) => {
+            calls.push(['subscribe', url, keys, types]);
             await fake.onCreate?.();
             if (fake.refusePush) throw new JMAPError('PushSubscription/set: forbidden', { type: 'forbidden' });
             return { id: 'sub1', expires: new Date(Date.now() + 3600 * 1000).toISOString() };
@@ -402,4 +413,93 @@ test('an archive that will not go through is reported rather than swallowed', as
 test('an action on a message that is gone says so', async () => {
     const t = await setUp({ emails: [] });
     await assert.rejects(() => t.watcher.pin('M1'), /no such message/);
+});
+
+
+// Contacts and VIPs. The tokens may or may not read contacts, and the
+// watcher has to work either way.
+const person = (uid, address) => ({ id: `id-${uid}`, uid, kind: 'individual', emails: { e1: { address } } });
+const addressBook = () => [
+    person('ada', 'Ada@Example.net'),
+    person('bob', 'bob@example.net'),
+    { id: 'id-vips', uid: 'vips', kind: 'group', members: { ada: true } },
+];
+
+test('ContactCard is subscribed to only when the token can read contacts', async () => {
+    const without = await setUp();
+    assert.deepEqual(without.jmap.calls.find((c) => c[0] === 'subscribe')[3], ['Email', 'Mailbox']);
+
+    const withAccess = await setUp({ contactsAccountId: 'acc2' });
+    assert.deepEqual(withAccess.jmap.calls.find((c) => c[0] === 'subscribe')[3], ['Email', 'Mailbox', 'ContactCard']);
+
+    // The event source asks for the same types
+    const plain = await setUp({ refusePush: true });
+    const fallback = await setUp({ refusePush: true, contactsAccountId: 'acc2' });
+    try {
+        assert.equal(new URL(plain.jmap.calls.find((c) => c[0] === 'eventsource')[1]).searchParams.get('types'), 'Email,Mailbox');
+        assert.equal(new URL(fallback.jmap.calls.find((c) => c[0] === 'eventsource')[1]).searchParams.get('types'), 'Email,Mailbox,ContactCard');
+    } finally {
+        plain.watcher.stop();
+        fallback.watcher.stop();
+    }
+});
+
+test('the contact sets are built from the cards and the VIPs group when the watcher starts', async () => {
+    const t = await setUp({ contactsAccountId: 'acc2', cards: addressBook() });
+    assert.deepEqual([...t.watcher.contactAddresses].sort(), ['ada@example.net', 'bob@example.net']);
+    assert.deepEqual([...t.watcher.vipAddresses], ['ada@example.net']);
+    assert.equal(t.watcher.contactsState, 'cs1');
+});
+
+test('a ContactCard change reads the cards again; a notice carrying the state already read does not', async () => {
+    const t = await setUp({ contactsAccountId: 'acc2', cards: addressBook() });
+    const reads = () => t.jmap.calls.filter((c) => c[0] === 'contacts').length;
+    assert.equal(reads(), 1);
+
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc2: { ContactCard: 'cs1' } } });
+    await settle(t);
+    assert.equal(reads(), 1);
+    assert.equal(t.jmap.calls.filter((c) => c[0] === 'changes').length, 0);
+
+    // Bob becomes a VIP; the notice names the contacts account, not the mail one
+    t.jmap.cards = [...addressBook().slice(0, 2), { id: 'id-vips', uid: 'vips', kind: 'group', members: { ada: true, bob: true } }];
+    t.jmap.cardState = 'cs2';
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc2: { ContactCard: 'cs2' } } });
+    await settle(t);
+    assert.equal(reads(), 2);
+    assert.deepEqual([...t.watcher.vipAddresses].sort(), ['ada@example.net', 'bob@example.net']);
+    assert.equal(t.watcher.contactsState, 'cs2');
+
+    // The same kind of type under the mail account's id is not ours to read
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { ContactCard: 'cs3' } } });
+    await settle(t);
+    assert.equal(reads(), 2);
+});
+
+test('cards that cannot be read are tried again at the next look', async () => {
+    const t = await build({ contactsAccountId: 'acc2', cards: addressBook() });
+    t.jmap.cardsError = new JMAPError('ContactCard/query: serverFail', { type: 'serverFail' });
+    await t.watcher.start();
+    assert.equal(t.watcher.notices, 'push', 'the mail is watched regardless');
+    assert.equal(t.watcher.vipAddresses.size, 0);
+    assert.equal(t.watcher.contactsDue, true);
+
+    t.jmap.cardsError = null;
+    t.watcher.notice('poll');
+    await settle(t);
+    assert.deepEqual([...t.watcher.vipAddresses], ['ada@example.net']);
+    assert.equal(t.watcher.contactsDue, false);
+});
+
+test('without contacts access nothing is read, the sets stay empty, and health says so', async () => {
+    const without = await setUp({ cards: addressBook() });
+    assert.equal(without.jmap.calls.filter((c) => c[0] === 'contacts').length, 0);
+    assert.equal(without.watcher.vipAddresses.size, 0);
+    assert.equal(without.watcher.contactAddresses.size, 0);
+    assert.equal(without.watcher.hasContacts, false);
+    assert.equal(without.watcher.status().contacts, false);
+
+    const withAccess = await setUp({ contactsAccountId: 'acc2', cards: addressBook() });
+    assert.equal(withAccess.watcher.hasContacts, true);
+    assert.equal(withAccess.watcher.status().contacts, true);
 });

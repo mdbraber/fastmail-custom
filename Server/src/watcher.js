@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { alertPayload, badgePayload, selectNotifiable } from './notify.js';
+import { addressSets } from './contacts.js';
 import { rememberNotified, saveState } from './state.js';
 import { deviceOutcome } from './apns.js';
 import { eventSourceURL, runEventSource } from './jmap.js';
@@ -12,7 +13,8 @@ export const SUBSCRIPTION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // More created ids than this since the last look means the server was away
 // long enough that announcing them all would be noise, not news.
 export const BACKLOG_CAP = 500;
-const TYPES = ['Email', 'Mailbox'];
+const MAIL_TYPES = ['Email', 'Mailbox'];
+const CONTACT_TYPE = 'ContactCard';
 
 const realTimers = { setTimeout, clearTimeout, setInterval, clearInterval };
 
@@ -32,6 +34,12 @@ export class AccountWatcher {
         this.inboxId = null;
         this.badgeMailboxId = null;
         this.archiveMailboxId = null;
+        // The account's contacts as two sets of lowercased addresses, and the
+        // ContactCard state they were read at; empty without contacts access
+        this.contactAddresses = new Set();
+        this.vipAddresses = new Set();
+        this.contactsState = null;
+        this.contactsDue = false;
         this.notices = null;
         this.callbackSecret = null;
         this.pushSubscriptionId = null;
@@ -48,6 +56,11 @@ export class AccountWatcher {
 
     get name() { return this.account.name; }
     get deviceClientId() { return `fastmail-push-${this.name}`; }
+    // Known once the session is read; false until then
+    get hasContacts() { return Boolean(this.jmap.contactsAccountId); }
+    // ContactCard only with contacts access: a subscription naming a type
+    // the token may not read would be refused
+    get types() { return this.hasContacts ? [...MAIL_TYPES, CONTACT_TYPE] : MAIL_TYPES; }
 
     // Connects, and keeps trying every RETRY_MS if Fastmail will not have us.
     async start() {
@@ -71,6 +84,8 @@ export class AccountWatcher {
         if (!this.badgeMailboxId) this.log.warn(`[${this.name}] no "${this.config.badgeLabel}" label: badges are off`);
         this.archiveMailboxId = mailboxes.find((m) => m.role === 'archive')?.id ?? null;
         if (!this.archiveMailboxId) this.log.warn(`[${this.name}] no Archive folder: the notification's Archive button is off`);
+        if (!this.hasContacts) this.log.warn(`[${this.name}] the token cannot read contacts: VIPs and contacts match nobody`);
+        await this.loadContacts();
         if (!this.state.emailState) await this.resync();
         await this.subscribe();
         this.pollTimer = this.timers.setInterval(() => this.notice('poll'), POLL_MS);
@@ -114,7 +129,7 @@ export class AccountWatcher {
         const { id, expires } = await this.jmap.createPushSubscription({
             deviceClientId: this.deviceClientId,
             url: `${this.config.publicUrl}/jmap/${this.name}/${this.callbackSecret}`,
-            types: TYPES,
+            types: this.types,
             expires: new Date(Date.now() + SUBSCRIPTION_TTL_MS).toISOString(),
             keys: subscriptionKeys(this.pushKeys),
         });
@@ -138,7 +153,7 @@ export class AccountWatcher {
     startEventSource() {
         if (!this.jmap.eventSourceUrl) throw new Error('the session has no event source');
         runEventSource({
-            url: eventSourceURL(this.jmap.eventSourceUrl, { types: TYPES }),
+            url: eventSourceURL(this.jmap.eventSourceUrl, { types: this.types }),
             headers: this.jmap.headers(),
             onStateChange: (change) => this.receive(change),
             signal: this.abort.signal,
@@ -171,8 +186,13 @@ export class AccountWatcher {
             return;
         }
         if (body?.['@type'] === 'StateChange') {
-            const changed = body.changed?.[this.jmap.accountId];
-            if (changed && TYPES.some((type) => type in changed)) this.notice('change');
+            const mail = body.changed?.[this.jmap.accountId];
+            // A notice names each changed type with its new state; the cards
+            // are read again only when theirs is not the state already read
+            const cards = this.hasContacts ? body.changed?.[this.jmap.contactsAccountId]?.[CONTACT_TYPE] : undefined;
+            const cardsChanged = cards !== undefined && cards !== this.contactsState;
+            if (cardsChanged) this.contactsDue = true;
+            if (cardsChanged || (mail && MAIL_TYPES.some((type) => type in mail))) this.notice('change');
         }
     }
 
@@ -190,6 +210,8 @@ export class AccountWatcher {
     }
 
     async process(source) {
+        // Before the mail, so a VIP added a moment ago already counts
+        if (this.contactsDue) await this.loadContacts();
         let changes;
         try {
             changes = await this.jmap.emailChanges(this.state.emailState);
@@ -325,6 +347,29 @@ export class AccountWatcher {
         };
     }
 
+    // Both address sets, read afresh. Cards that cannot be read leave the
+    // sets as they were and are tried again at the next look, so a hiccup
+    // at Fastmail costs VIP alerts for a while, never every alert.
+    async loadContacts() {
+        this.contactsDue = false;
+        if (!this.hasContacts) {
+            this.contactAddresses = new Set();
+            this.vipAddresses = new Set();
+            return;
+        }
+        try {
+            const { cards, state } = await this.jmap.contactCards();
+            const { contacts, vips } = addressSets(cards);
+            this.contactAddresses = contacts;
+            this.vipAddresses = vips;
+            this.contactsState = state;
+            this.log.info(`[${this.name}] contacts read: ${contacts.size} addresses, ${vips.size} VIP`);
+        } catch (error) {
+            this.contactsDue = true;
+            this.log.warn(`[${this.name}] contacts unreadable (${error.message}); trying again at the next look`);
+        }
+    }
+
     async badgeCount() {
         return this.badgeMailboxId ? this.jmap.mailboxTotal(this.badgeMailboxId) : null;
     }
@@ -361,6 +406,7 @@ export class AccountWatcher {
             lastNotice: this.lastNoticeAt,
             devices: this.devices.tokens(this.name).length,
             muted: this.devices.tokens(this.name, { alerts: false }).length,
+            contacts: this.hasContacts,
         };
     }
 
