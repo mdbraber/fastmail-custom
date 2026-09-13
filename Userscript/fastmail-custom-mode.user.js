@@ -2199,7 +2199,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return svg;
     };
 
-    // The app's own glyph, taken from the button that owns it.
+    // The app's own glyph, taken from the button that owns it. A button draws
+    // its icon node as it stands, so this is the glyph the bar shows. Given a
+    // class, only a glyph carrying it will do.
     const borrowedIcon = (name, className) => {
         try {
             const view = registeredToolbarView(name);
@@ -2208,7 +2210,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
             const copy = icon.cloneNode(true);
             const classes = (copy.getAttribute('class') || '').split(/\s+/);
-            return classes.indexOf(className) === -1 ? null : copy;
+            return className && classes.indexOf(className) === -1 ? null : copy;
         } catch (error) {
             return null;
         }
@@ -2269,6 +2271,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ]
     };
 
+    const stateVerbIcon = (kind) => standardIcon('i-' + kind, STATE_VERB_SHAPES[kind]);
+
     // Dispatched a tick later so the More popover has finished closing: Keep
     // sends an unfiled conversation to the Labels sheet, and two menus
     // fighting over the same moment is how taps get eaten
@@ -2279,7 +2283,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         const option = new FastMail.classes.ButtonView({
             label: label,
-            icon: standardIcon('i-' + kind, STATE_VERB_SHAPES[kind]),
+            icon: stateVerbIcon(kind),
             target: { run },
             method: 'run'
         });
@@ -2424,6 +2428,23 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         move: ['move'],
         'delete': ['trash'],
         keep: ['keep']
+    };
+
+    /*
+     * A slot's glyph for the settings panel's list, taken from where the bar
+     * takes it: the button its registry holds under the slot's name. Pin
+     * answers with Pin's, the first name listed, since Unpin's is blank. Keep
+     * is the mode's own button and only a message actions bar registers it,
+     * so without one it is drawn from the shapes that button is drawn from.
+     * Null when nothing can be read, as before any bar has been drawn, and
+     * the list then shows the name alone.
+     */
+    const slotIcon = (slot) => {
+        for (const name of SLOT_ACTION_NAMES[slot] || []) {
+            const icon = borrowedIcon(name);
+            if (icon) return icon;
+        }
+        return slot === 'keep' ? stateVerbIcon('keep') : null;
     };
 
     // The verbs that mark a list as the message actions.
@@ -6399,6 +6420,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // where Fastmail's own row gets there with its taller menu button.
     const REORDER_ROW_HEIGHT = 49;
 
+    // What `.v-Button > .v-Icon` makes a glyph on the bar.
+    const BAR_GLYPH_SIZE = '22px';
+
     const reorderRowParts = (classes, item, move, draggable) => {
         const el = FastMail.el;
         const parts = [];
@@ -6406,6 +6430,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (draggable) {
             parts.push(el('div.u-flex-none.u-select-none',
                 { style: 'margin-top:-6px;cursor: grab' }, ['⣶']));
+        }
+        // Drawn afresh each time, since a node can be in only one row; a row
+        // with no glyph to show carries its name alone. Fastmail's stylesheet
+        // sizes an icon only inside the thing holding it, so outside a button
+        // this one is given the size a button on the bar gives it.
+        const icon = item.icon ? item.icon() : null;
+        if (icon) {
+            icon.style.width = BAR_GLYPH_SIZE;
+            icon.style.height = BAR_GLYPH_SIZE;
+            parts.push(el('div.u-flex-none', { style: 'line-height:0' }, [icon]));
         }
         parts.push(el('div.u-flex-1.u-truncate', { style: 'line-height:32px' }, [item.label]));
         parts.push(new classes.ButtonView({
@@ -6887,8 +6921,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             draw: () => {
                 const names = orderedSlots();
                 const pretty = (name) => name.charAt(0).toUpperCase() + name.slice(1);
+                // Each verb beside the glyph the bar draws for it.
                 const items = names.map(name => ({
-                    id: name, label: pretty(name), edit: null, remove: null
+                    id: name, label: pretty(name), icon: () => slotIcon(name),
+                    edit: null, remove: null
                 }));
                 // Laid over the order as it is at the press, not as drawn: the
                 // host can push a new one in while the panel is open.
