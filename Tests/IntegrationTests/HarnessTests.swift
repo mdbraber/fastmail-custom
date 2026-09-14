@@ -486,7 +486,7 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(title, "Row subject")
     }
 
-    private func buildSettingsList() -> String {
+    private func buildSettingsList(withCustomMode: Bool = false) -> String {
         """
         (function () {
           var ul = document.createElement('ul');
@@ -508,6 +508,7 @@ final class HarnessTests: XCTestCase {
           }
           ul.appendChild(item('Notifications', '/settings/notifications'));
           ul.appendChild(item('Custom swipes', '/settings/actions'));
+          \(withCustomMode ? "ul.appendChild(item('Custom mode', '/settings/custommode'));" : "")
           ul.appendChild(item('Offline', '/settings/offline'));
           document.body.appendChild(ul);
         })();
@@ -538,6 +539,56 @@ final class HarnessTests: XCTestCase {
         // Added once, even as the DOM keeps changing.
         _ = try await evaluate(webView, "document.body.appendChild(document.createElement('div')); true")
         try await Task.sleep(nanoseconds: 250_000_000)
+        let count = try await evaluate(
+            webView, "document.querySelectorAll('.fmshell-device-settings').length"
+        ) as? Int
+        XCTAssertEqual(count, 1)
+    }
+
+    func testDeviceSettingsFollowsCustomMode() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, buildSettingsList(withCustomMode: true))
+        try await waitUntil {
+            (try await self.evaluate(
+                self.webView, "document.querySelectorAll('.fmshell-device-settings').length"
+            ) as? Int ?? 0) >= 1
+        }
+        let labels = try await settingsLabels(webView)
+        XCTAssertEqual(labels, "Notifications,Custom swipes,Custom mode,Device settings,Offline")
+    }
+
+    // Custom mode's entry is drawn only once its page installs, and can land
+    // below a Device settings row that went in first.
+    func testDeviceSettingsMovesUnderCustomModeWhenItArrivesLater() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, buildSettingsList())
+        try await waitUntil {
+            (try await self.evaluate(
+                self.webView, "document.querySelectorAll('.fmshell-device-settings').length"
+            ) as? Int ?? 0) >= 1
+        }
+        _ = try await evaluate(webView, """
+        (function () {
+          var ul = document.querySelector('.v-Sources-list');
+          var li = document.createElement('li');
+          var a = document.createElement('a');
+          a.className = 'app-source';
+          a.setAttribute('href', '/settings/custommode');
+          var span = document.createElement('span');
+          span.className = 'u-truncate';
+          span.textContent = 'Custom mode';
+          a.appendChild(span);
+          li.appendChild(a);
+          ul.insertBefore(li, ul.lastElementChild);
+        })();
+        true;
+        """)
+        try await waitUntil {
+            try await self.settingsLabels(self.webView)
+                == "Notifications,Custom swipes,Custom mode,Device settings,Offline"
+        }
         let count = try await evaluate(
             webView, "document.querySelectorAll('.fmshell-device-settings').length"
         ) as? Int

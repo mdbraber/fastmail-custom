@@ -498,35 +498,47 @@
     }
 
     // The shell's own settings live in Fastmail's Settings screen, as a Device
-    // settings row between Custom swipes and Offline.
+    // settings row right after Custom mode, or between Custom swipes and
+    // Offline while Custom mode has no row.
     function dressSettingsList() {
         // On the Mac the shell's own settings open from the app menu and ⌘, so
         // the Settings screen needs no row for them; the row belongs only
         // where there is no native way in, the phone and iPad.
         if (/Electron\//.test(navigator.userAgent)) return;
         var lists = document.querySelectorAll('ul.v-Sources-list');
-        var list, swipes, offline;
+        var list, swipes, offline, customMode;
         for (var i = 0; i < lists.length && !list; i += 1) {
             var foundSwipes = null;
             var foundOffline = null;
+            var foundCustomMode = null;
             [].forEach.call(lists[i].children, function (li) {
                 var link = li.querySelector('a.app-source');
                 if (!link) return;
                 var text = collapse(link.textContent).toLowerCase();
                 if (text === 'custom swipes') foundSwipes = li;
                 if (text === 'offline') foundOffline = li;
+                if (text === 'custom mode') foundCustomMode = li;
             });
             if (foundSwipes && foundOffline) {
                 list = lists[i];
                 swipes = foundSwipes;
                 offline = foundOffline;
+                customMode = foundCustomMode;
             }
         }
         if (!list) return;
         // Fastmail sizes the list with an inline pixel height for its collapse
         // animation (row count times a fixed row height); an extra row
         // overflows it and the next section's header laps the last row.
-        if (list.querySelector('.fmshell-device-settings')) {
+        var existing = list.querySelector('.fmshell-device-settings');
+        if (existing) {
+            // Custom mode's entry is drawn once its page installs, which can
+            // be after this row went in, and Fastmail's list may then put it
+            // below this row; the row goes back under it.
+            var row = existing.closest('li') || existing;
+            if (customMode && row.previousElementSibling !== customMode) {
+                list.insertBefore(row, customMode.nextSibling);
+            }
             fixListHeight(list, swipes);
             return;
         }
