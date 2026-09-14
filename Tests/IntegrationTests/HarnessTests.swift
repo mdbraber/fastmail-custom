@@ -165,6 +165,34 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(withoutElectronType, "undefined")
     }
 
+    // Fastmail's Mail preferences page asks whether it is the default email
+    // app before it draws, and its switch asks to become it. The shells leave
+    // that to macOS, so the answer is always no and the switch does nothing;
+    // neither may throw, or the page never draws. The answer is a promise,
+    // since a bare false reaches the page's switch as on.
+    func testElectronShimAnswersTheDefaultEmailAppQuestionsWithoutThrowing() async throws {
+        webView = try makeWebView(
+            userScript: "", metadata: Self.meta(),
+            applicationName: WebContainer.electronUserAgentToken
+        )
+        try await load(webView)
+        _ = try await evaluate(webView, """
+        window.__isDefault = 'pending';
+        var answer = window.electron.getIsDefaultApp();
+        window.__isPromise = !!answer && typeof answer.then === 'function';
+        Promise.resolve(answer).then(function (value) { window.__isDefault = value; });
+        window.electron.setIsDefaultApp(true);
+        true;
+        """)
+        try await waitUntil {
+            try await self.evaluate(self.webView, "window.__isDefault !== 'pending'") as? Bool == true
+        }
+        let summary = try await evaluate(webView, """
+        [String(window.__isPromise), String(window.__isDefault === false)].join(',')
+        """) as? String
+        XCTAssertEqual(summary, "true,true")
+    }
+
     func testDocumentIdleScriptRunsAtDocumentEndTiming() async throws {
         let script = "window.__readyStateWhenRun = document.readyState;"
         webView = try makeWebView(userScript: script, metadata: Self.meta())

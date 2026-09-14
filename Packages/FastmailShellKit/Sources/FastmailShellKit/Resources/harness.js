@@ -951,7 +951,16 @@
             },
             setTitleBarOverlay: function () {},
             featuresSupported: {},
-            checkForUpdate: function () { return Promise.resolve(); }
+            checkForUpdate: function () { return Promise.resolve(); },
+            // Mail preferences asks before it draws whether this is the
+            // default email app, and its switch asks to become it. Which app
+            // opens mailto links is left to macOS, so the answer is always no
+            // and the switch does nothing; a missing method threw instead and
+            // the page never drew. The answer has to be a promise, as
+            // Fastmail's own app gives it: the page waits on it together with
+            // its preferences, and a bare false reaches the switch as on.
+            getIsDefaultApp: function () { return Promise.resolve(false); },
+            setIsDefaultApp: function () {}
         };
 
         // A click, back to the worker that wrote the notification: it
