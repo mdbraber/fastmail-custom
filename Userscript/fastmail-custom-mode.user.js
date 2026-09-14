@@ -96,10 +96,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // And the badge counts the same set the filtered list shows, rather
         // than everything the label has ever held.
         filteredLabelCounts: true,
-        // The groupings offered in Fastmail's Group menu beyond its own five
-        // and the automatic Labels one. A block each: a line naming it, then
-        // indented Name = search lines, then a bare line for the rest.
-        groupings: 'by age (urgent first)\n  Triage = in:Triage OR is:unread\n  Pinned = is:pinned\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n  This month = after:1m\n  Older',
+        // The groupings offered in Fastmail's Group menu between None, which
+        // stays Fastmail's own, and Custom…, which does too. A block each: a
+        // line naming it, then indented Name = search lines, then a bare
+        // line for the rest. "by age", "pinned first" and "unread first" ship
+        // here rather than staying Fastmail's fixed three of the same names,
+        // so all of them can be renamed, reordered, edited or removed the
+        // same way as a grouping of the user's own; add a Triage group to
+        // "by age" for what used to be a separate urgency-first version of
+        // it.
+        groupings: 'by age\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n' +
+            '  This month = after:1m\n  Older\n\npinned first\n  Pinned = is:pinned\n\n' +
+            'unread first\n  Unread = is:unread',
         // Filing steps on to the next message only while that message is
         // still in triage; the run is over otherwise, and the list is where
         // it ends.
@@ -130,8 +138,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         topBarItems: '',
         // How many of the user's own groupings come before the automatic
         // Labels grouping in the Group menu; empty means all the way at the
-        // front, which is today's fixed behaviour.
-        labelsGroupingIndex: '',
+        // front. Starts at 3, after the shipped "by age", "pinned first" and
+        // "unread first", so a fresh install draws in that order; editing
+        // the list from Settings keeps it in step from then on.
+        labelsGroupingIndex: '3',
         // The automatic Labels grouping's own groups, written as one block of
         // groupings is, with the line "Labels = *labels*" standing where the
         // group per label goes; the block's first line is the name the Group
@@ -291,7 +301,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'groupings', group: 'grouping', clearable: true, multiline: true,
             title: 'Group presets',
-            hint: 'Each one is offered in a mailbox’s Group menu beside Fastmail’s own. Labels makes a group for each label; edit it to add groups of your own before or after those. Groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Edit also renames a grouping; renaming one of your own loses it on the mailboxes using it, renaming Labels does not.'
+            hint: 'Each one is offered in a mailbox’s Group menu between None and Custom…, which stay Fastmail’s own; everything between them, including “by age”, “pinned first” and “unread first”, is yours to rename, reorder, edit or remove. Labels makes a group for each label; edit it to add groups of your own before or after those. Groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Edit also renames a grouping; renaming one of your own loses it on the mailboxes using it, renaming Labels does not.'
         },
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
@@ -1623,7 +1633,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * mailbox. The mode adds two kinds of its own and stores no definition
      * on the mailbox: "labels", built from the label tree and shaped by
      * settings.labelsGrouping, and one per block of settings.groupings, under
-     * the id "split:" and its name.
+     * the id "split:" and its name — "by age", "pinned first" and "unread
+     * first" among them by default, standing in for isTodayWeekMonth,
+     * isPinned and isUnread, which the Group menu no longer offers (see
+     * addGroupings).
+     * Those three native values are still safe in a mailbox's stored sort:
+     * calculateSplits is only wrapped for "labels" and "split:" ids, so a
+     * mailbox already grouped isTodayWeekMonth, isPinned or isUnread keeps
+     * grouping that way, Fastmail's own logic and all; there is simply no
+     * ticked entry for it any more, and None is the only menu route back.
      *
      * A value Fastmail does not know is safe in that sort: its own
      * calculateSplits returns null for one, no category sort is built, and
@@ -1645,8 +1663,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const LABELS_MARKER = { name: 'Labels', query: '*labels*' };
     const isLabelsMarker = (category) => !!category && category.query === LABELS_MARKER.query;
 
-    // What the Labels grouping is called until it is renamed.
-    const LABELS_GROUPING_NAME = 'Labels';
+    // What the Labels grouping is called until it is renamed — lowercase, to
+    // match "by age", "pinned first" and "unread first" beside it in the menu.
+    const LABELS_GROUPING_NAME = 'labels';
 
     /*
      * The settings text, as blocks: every grouping it holds, finished or not.
@@ -6504,6 +6523,21 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (!modeIsOn) return;
         if (options.some(option => option && option.customGroupingOption)) return;
         if (!isGroupMenu(options)) return;
+
+        // Fastmail's own four bound to groupBy are always None first, then
+        // by age, pinned first and unread first; only None is left standing
+        // here, since "by age", "pinned first" and "unread first" are drawn
+        // from settings.groupings instead, further down, where they can be
+        // renamed, reordered, edited or removed like any grouping of the
+        // user's own. Spliced out from the end so removing one never moves
+        // an index still to be checked.
+        const stockGroupBy = [];
+        options.forEach((option, index) => {
+            if (boundToGroupBy(option)) stockGroupBy.push(index);
+        });
+        for (let at = stockGroupBy.length - 1; at >= 1; at -= 1) {
+            options.splice(stockGroupBy[at], 1);
+        }
 
         const active = currentGroupingId();
         const icons = groupingIcons(options);
