@@ -310,17 +310,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'bottomBarSlots', group: 'bottomBar',
             title: 'Action bar actions',
-            hint: 'In order; the bar along the bottom on iPhone, and across the top of a message on iPad and the Mac. What fits shows, the rest go under More.'
-        },
-        {
-            key: 'bottomBarItems', group: 'bottomBar', clearable: true,
-            title: 'Items on the bottom bar',
-            hint: 'How many verbs the bar along the bottom of the screen draws before More. Empty fits as many as it can measure.'
-        },
-        {
-            key: 'topBarItems', group: 'bottomBar', clearable: true,
-            title: 'Items on the top bar',
-            hint: 'The same count for the bar across the top of a message, on iPad and on the Mac. Empty fits as many as it can measure.'
+            hint: 'In order, with two dividers you can drag: the blue one cuts the bar along the bottom on iPhone, the purple one cuts the bar across the top of a message on iPad and the Mac. Above a divider shows on its bar; from the divider down goes under More.'
         }
     ];
 
@@ -2447,41 +2437,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * How many verbs fit.
+     * How many verbs the bar draws before More: a divider's position in the
+     * settings page's drag list, in orderedSlots() order, kept as a plain
+     * count rather than a name so a slot dragged past it moves itself in or
+     * out without anything here noticing which slot it was.
      *
-     * The bar can measure its own buttons; it is how the wide layout decides
-     * what to show, and measuring is a request: measureViews draws them once
-     * off-screen and writes every width down. So the answer can be counted
-     * rather than estimated, one real width at a time against the real space,
-     * with room kept for More.
-     *
-     * A thumb-sized slot is the fallback, for before the measuring has
-     * happened or for a name that has no width on file. It is only ever an
-     * estimate: these buttons are not all one width, and none of them is this
-     * width; they measure 64 and 75 on the phone this was guessed for. Which
-     * is why it is the fallback and not the rule.
+     * The bar used to measure its own buttons and fit as many as the width
+     * allowed; the setting now always carries an explicit count instead, so
+     * nothing here reads a width or a button's size. Empty or unreadable
+     * still means something — every verb shown, nothing under More — rather
+     * than falling back to measuring, so a value nobody has set yet behaves
+     * the same on every screen size.
      */
-    const SLOT_WIDTH = 76;
-
-    const barWidth = (toolbar) => {
-        try {
-            const layer = toolbar.get('layer');
-            if (layer && layer.offsetWidth) return layer.offsetWidth;
-        } catch (error) {
-            // Not drawn yet
-        }
-        return window.innerWidth || 375;
-    };
-
-    // Written down once per bar, and again if the buttons are redrawn at a
-    // different size. Cheap, and nothing else reads a layout while it runs.
-    const measureBar = (toolbar) => {
-        try {
-            if (typeof toolbar.measureViews === 'function') toolbar.measureViews();
-        } catch (error) {
-            reportFault('could not measure the bar', error);
-        }
-    };
 
     /*
      * Which of the two bars this is.
@@ -2503,46 +2470,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
-    // The count asked for, or nothing when the setting is empty and the bar
-    // should go on measuring for itself. A number that is not one is nothing:
-    // half a button is not an answer, and neither is none at all.
-    const askedBarItems = (toolbar) => {
+    // The count asked for. Empty or unreadable means every verb this bar
+    // has, which is also the starting count until somebody has dragged the
+    // divider: a value nobody has chosen yet should hide nothing that a
+    // choice would have kept.
+    const askedBarItems = (toolbar, names) => {
         const raw = barIsAtTop(toolbar) ? settings.topBarItems : settings.bottomBarItems;
         const count = parseInt(String(raw == null ? '' : raw).trim(), 10);
-        return count > 0 ? count : 0;
+        return count >= 0 ? count : names.length;
     };
 
-    const barCapacity = (toolbar, names) => {
-        // A count that was asked for beats one that was measured
-        const asked = askedBarItems(toolbar);
-        if (asked) return asked;
-
-        const width = barWidth(toolbar);
-        const widths = toolbar && toolbar._widths;
-
-        if (names && widths && widths.overflow) {
-            let room = width - widths.overflow;
-            try {
-                room -= toolbar.get('minimumGap') || 0;
-            } catch (error) {
-                // The default is nothing
-            }
-
-            let fits = 0;
-            for (const name of names) {
-                const measured = widths[name];
-                // A width nobody has taken: stop counting rather than guess
-                // past it, since everything after it is unknown too
-                if (!measured || measured > room) break;
-                room -= measured;
-                fits += 1;
-            }
-
-            if (fits) return fits;
-        }
-
-        return Math.max(1, Math.floor(width / SLOT_WIDTH) - 1);
-    };
+    const barCapacity = (toolbar, names) => askedBarItems(toolbar, names);
 
     /*
      * Saying what the bar holds, rather than rearranging what it drew.
@@ -2865,14 +2803,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // for is a hole in the drawn bar, and the redraw walks straight
             // into it.
             registerModeViews(toolbar);
-            // Measured before the list is first asked for, so the cut is
-            // counted from real widths rather than the fallback estimate
-            measureBar(toolbar);
             toolbar.actionsConfig = wrapped;
             toolbar.customOwnsConfig = true;
 
-            // How many fit is a width, so the list is worth recomputing when
-            // the width moves, a rotation, or the reading pane opening
+            // The bar's own list can still change size (a rotation, the
+            // reading pane opening); recomputed here so a stale arrangement
+            // is never left on screen, even though the cut itself no longer
+            // depends on width.
             toolbar.addObserverForKey('pxWidth', configWatcher, 'widthDidChange');
             toolbar.computedPropertyDidChange('actionsConfig');
             return true;
@@ -7746,17 +7683,30 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             parts.push(el('div.u-flex-none.u-select-none',
                 { style: 'margin-top:-6px;cursor: grab' }, ['⣶']));
         }
-        // Drawn afresh each time, since a node can be in only one row; a row
-        // with no glyph to show carries its name alone. Fastmail's stylesheet
-        // sizes an icon only inside the thing holding it, so outside a button
-        // this one is given the size a button on the bar gives it.
-        const icon = item.icon ? item.icon() : null;
-        if (icon) {
-            icon.style.width = BAR_GLYPH_SIZE;
-            icon.style.height = BAR_GLYPH_SIZE;
-            parts.push(el('div.u-flex-none', { style: 'line-height:0' }, [icon]));
+        if (item.isDivider) {
+            // A colored bar stands in for the icon a divider has none of, so
+            // it reads as a different kind of row rather than a verb drawn
+            // with no glyph. Two dividers, two colors, so which is which
+            // never depends on reading the label.
+            parts.push(el('div.u-flex-none',
+                { style: 'width:22px;height:4px;margin-top:14px;border-radius:2px;background:' + item.color },
+                []));
+            parts.push(el('div.u-flex-1.u-truncate',
+                { style: 'line-height:32px;color:' + item.color + ';font-weight:600' }, [item.label]));
+        } else {
+            // Drawn afresh each time, since a node can be in only one row; a
+            // row with no glyph to show carries its name alone. Fastmail's
+            // stylesheet sizes an icon only inside the thing holding it, so
+            // outside a button this one is given the size a button on the
+            // bar gives it.
+            const icon = item.icon ? item.icon() : null;
+            if (icon) {
+                icon.style.width = BAR_GLYPH_SIZE;
+                icon.style.height = BAR_GLYPH_SIZE;
+                parts.push(el('div.u-flex-none', { style: 'line-height:0' }, [icon]));
+            }
+            parts.push(el('div.u-flex-1.u-truncate', { style: 'line-height:32px' }, [item.label]));
         }
-        parts.push(el('div.u-flex-1.u-truncate', { style: 'line-height:32px' }, [item.label]));
         parts.push(new classes.ButtonView({
             type: 'v-Button--subtle v-Button--sizeM v-Button--iconOnly',
             label: 'Move up',
@@ -8224,11 +8174,71 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * The bar's verbs, in the order the bar takes them. orderedSlots already
-     * turns the setting into a complete list — it lowercases, renames the old
-     * "file" to "keep", drops what it does not know and appends what the
-     * saved value failed to mention — so nothing new is needed to read it.
+     * The bar's verbs, in the order the bar takes them, with two dividers
+     * laid over the same list: everything above a divider is drawn on that
+     * bar, everything from the divider down goes under More. orderedSlots
+     * already turns the setting into a complete list — it lowercases,
+     * renames the old "file" to "keep", drops what it does not know and
+     * appends what the saved value failed to mention — so nothing new is
+     * needed to read the verbs themselves.
+     *
+     * A divider is a row like any other in the same drag list, so dragging a
+     * verb past it moves the verb in or out of view, and dragging the
+     * divider itself changes the count directly; both write through the
+     * same order. A divider's own id never becomes part of bottomBarSlots —
+     * only the count it lands at does, in bottomBarItems or topBarItems.
      */
+    const BAR_DIVIDERS = [
+        {
+            id: '__customModeBottomBarDivider', settingKey: 'bottomBarItems',
+            label: 'Bottom bar (iPhone) — shown above, More below', color: '#3b82f6'
+        },
+        {
+            id: '__customModeTopBarDivider', settingKey: 'topBarItems',
+            label: 'Top bar (iPad & Mac) — shown above, More below', color: '#a855f7'
+        }
+    ];
+    const BAR_DIVIDER_IDS = BAR_DIVIDERS.map(divider => divider.id);
+
+    // Where a count from the setting lands among the verbs: clamped to the
+    // list's own length, and every verb when the setting is empty or
+    // unreadable, matching what the bar itself falls back to.
+    const dividerCount = (names, raw) => {
+        const count = parseInt(String(raw == null ? '' : raw).trim(), 10);
+        return count >= 0 ? Math.max(0, Math.min(count, names.length)) : names.length;
+    };
+
+    /*
+     * Lays dividers over an ordered list of ids at their target counts.
+     * Spliced in from the highest target down, so an earlier insertion never
+     * shifts where a not-yet-placed, lower target belongs — inserting at a
+     * higher index first leaves every lower index exactly where it was.
+     * Two dividers sharing a target insert in the order given; since each is
+     * spliced into the position the previous one now sits at, the one given
+     * later ends up first (the lower index, the one shown above).
+     */
+    const withDividers = (names, dividers) => {
+        const ids = names.slice();
+        dividers
+            .map((divider, order) => Object.assign({}, divider, { order }))
+            .sort((one, other) => (other.at - one.at) || (other.order - one.order))
+            .forEach((divider) => { ids.splice(divider.at, 0, divider.id); });
+        return ids;
+    };
+
+    // The reverse of withDividers: from a combined order, the verb-only
+    // order and each divider's new count — how many verbs sit before it.
+    const splitDividers = (order, names, dividerIds) => {
+        const isVerb = (id) => names.indexOf(id) !== -1;
+        const verbOrder = order.filter(isVerb);
+        const counts = {};
+        dividerIds.forEach((id) => {
+            const at = order.indexOf(id);
+            counts[id] = at === -1 ? verbOrder.length : order.slice(0, at).filter(isVerb).length;
+        });
+        return { verbOrder, counts };
+    };
+
     const barSlotsSection = (classes) => {
         const el = FastMail.el;
         const option = settingFor('bottomBarSlots');
@@ -8238,16 +8248,31 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             draw: () => {
                 const names = orderedSlots();
                 const pretty = (name) => name.charAt(0).toUpperCase() + name.slice(1);
-                // Each verb beside the glyph the bar draws for it.
-                const items = names.map(name => ({
-                    id: name, label: pretty(name), icon: () => slotIcon(name),
-                    edit: null, remove: null
-                }));
-                // Laid over the order as it is at the press, not as drawn: the
-                // host can push a new one in while the page is open.
+
+                const itemById = {};
+                names.forEach((name) => {
+                    itemById[name] = { id: name, label: pretty(name), icon: () => slotIcon(name), edit: null, remove: null };
+                });
+                BAR_DIVIDERS.forEach((divider) => {
+                    itemById[divider.id] = {
+                        id: divider.id, label: divider.label, isDivider: true, color: divider.color,
+                        icon: null, edit: null, remove: null
+                    };
+                });
+
+                // Laid over the order as it is at the press, not as drawn:
+                // the host can push a new one in while the page is open.
+                const dividersAt = BAR_DIVIDERS.map(divider =>
+                    Object.assign({}, divider, { at: dividerCount(names, settings[divider.settingKey]) }));
+                const order = withDividers(names, dividersAt);
+                const items = order.map(id => itemById[id]);
+
                 const list = reorderList(classes, items, (order) => {
-                    writeSetting('bottomBarSlots',
-                        mergeOrder(orderedSlots(), order).map(pretty).join(', '));
+                    const { verbOrder, counts } = splitDividers(order, names, BAR_DIVIDER_IDS);
+                    writeSetting('bottomBarSlots', mergeOrder(orderedSlots(), verbOrder).map(pretty).join(', '));
+                    BAR_DIVIDERS.forEach((divider) => {
+                        writeSetting(divider.settingKey, String(counts[divider.id]));
+                    });
                     holder.viewNeedsRedraw();
                 });
                 return [
