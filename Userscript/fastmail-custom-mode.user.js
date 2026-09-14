@@ -6620,16 +6620,46 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const settingsSection = (group, rows) => pageSection(SETTINGS_PAGE_ID, group, rows);
 
-    const settingsPane = (classes) => {
+    // The row of tabs across the top of the Mac's Custom mode settings page:
+    // one group showing at a time, so most of what used to make this page
+    // scroll is simply not drawn. The phone and the iPad stack every group
+    // instead, unchanged, which is where the scrolling already belonged —
+    // Fastmail's own mobile Settings pages scroll too.
+    const settingsTabBar = (classes, selectedGroupId, select) =>
+        FastMail.el('div.u-flex.u-flex-wrap.u-gap-1.u-px-6.u-pt-6', SETTING_GROUPS.map(group =>
+            new classes.ButtonView({
+                type: (group.id === selectedGroupId ? 'v-Button--standard' : 'v-Button--subtle') + ' v-Button--sizeM',
+                label: group.title,
+                target: { go: () => select(group.id) },
+                method: 'go'
+            })
+        ));
+
+    const settingsPane = (classes, controller) => {
         const register = settingRegister();
-        return new classes.SettingsPaneView({
+        const showTabs = !isMobileSettings(controller);
+        let selectedGroupId = SETTING_GROUPS[0].id;
+
+        const pane = new classes.SettingsPaneView({
             draw() {
                 register.reset();
-                const sections = SETTING_GROUPS.map(group => settingsSection(group,
+                const visibleGroups = showTabs
+                    ? SETTING_GROUPS.filter(group => group.id === selectedGroupId)
+                    : SETTING_GROUPS;
+                const sections = visibleGroups.map(group => settingsSection(group,
                     syncRows(classes, group).concat(
                         settingsInGroup(group.id).map(option => sectionRow(classes, option, register)))));
                 register.settle();
-                return sections;
+
+                if (!showTabs) return sections;
+
+                const select = (id) => {
+                    if (id === selectedGroupId) return;
+                    register.flushPending();
+                    selectedGroupId = id;
+                    pane.viewNeedsRedraw();
+                };
+                return [settingsTabBar(classes, selectedGroupId, select)].concat(sections);
             },
             // Leaving the page is when whatever a field still has waiting
             // gets flushed: written now, on the key and value it captured,
@@ -6643,6 +6673,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 return classes.SettingsPaneView.prototype.willLeaveDocument.call(this);
             }
         });
+        return pane;
     };
 
     /*
@@ -6705,7 +6736,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const settingsPage = (classes, controller) => settingsPageView(
-        classes, controller, SETTINGS_PAGE_ID, SETTINGS_PAGE_TITLE, () => [settingsPane(classes)]
+        classes, controller, SETTINGS_PAGE_ID, SETTINGS_PAGE_TITLE, () => [settingsPane(classes, controller)]
     );
 
     /*
