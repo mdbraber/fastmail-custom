@@ -177,7 +177,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * twenty-seven, and settingValue reads it from there.
      */
     const SETTING_GROUPS = [
-        { id: 'general', title: 'General' },
         { id: 'appearance', title: 'Appearance' },
         { id: 'labelsFiling', title: 'Labels & keeping' },
         { id: 'grouping', title: 'Groups' },
@@ -188,7 +187,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const SETTINGS = [
         {
-            key: 'appBadgeLabel', group: 'general', clearable: true,
+            key: 'appBadgeLabel', group: 'labelsFiling', clearable: true,
             title: 'Badge label',
             hint: 'The app icon shows how many conversations carry this label. Empty uses the Inbox count.'
         },
@@ -514,9 +513,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return holder;
     };
 
-    // What goes ahead of a group's own options
+    // What goes ahead of a group's own options: the switch, at the top of
+    // whichever group is first, so it is the first thing on the page
+    // regardless of which group that is.
     const syncRows = (classes, group) =>
-        group.id === 'general' && syncState() ? [syncRow(classes)] : [];
+        group.id === SETTING_GROUPS[0].id && syncState() ? [syncRow(classes)] : [];
 
     const refreshSyncRow = () => {
         const state = syncState();
