@@ -13,7 +13,9 @@
     "permissions": [
         "scripting",
         "tabs",
-        "storage"
+        "storage",
+        "nativeMessaging",
+        "alarms"
     ],
     "action": {
         "default_title": "Custom mode",

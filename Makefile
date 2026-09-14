@@ -54,7 +54,7 @@ EXTENSION_DIR = SafariExtension/App/Fastmail Custom Mode
 EXTENSION_APP = Fastmail Custom Mode.app
 
 build-extension:
-	cd "$(EXTENSION_DIR)" && xcodebuild -project "Fastmail Custom Mode.xcodeproj" -scheme "Fastmail Custom Mode" -configuration Release -derivedDataPath build build
+	cd "$(EXTENSION_DIR)" && xcodebuild -project "Fastmail Custom Mode.xcodeproj" -scheme "Fastmail Custom Mode" -configuration Release -derivedDataPath build -allowProvisioningUpdates build
 
 install-extension: build-extension
 	rm -rf "/Applications/$(EXTENSION_APP)"

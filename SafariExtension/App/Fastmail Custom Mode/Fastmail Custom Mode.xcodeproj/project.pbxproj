@@ -17,6 +17,7 @@
 		6BD49784302BA54200196E0B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6BD49783302BA54200196E0B /* Assets.xcassets */; };
 		6BD4978B302BA54200196E0B /* Fastmail Custom Mode Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6BD4978A302BA54200196E0B /* Fastmail Custom Mode Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6BD49790302BA54200196E0B /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD4978F302BA54200196E0B /* SafariWebExtensionHandler.swift */; };
+		1E7B5DFFC1A1FE242E63E437 /* SettingsSyncRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 381268564FF4103EF87FE214 /* SettingsSyncRules.swift */; };
 		6BD497A4302BA54200196E0B /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 6BD4979C302BA54200196E0B /* background.js */; };
 		6BD497A5302BA54200196E0B /* images in Resources */ = {isa = PBXBuildFile; fileRef = 6BD4979D302BA54200196E0B /* images */; };
 		6BD497A6302BA54200196E0B /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 6BD4979E302BA54200196E0B /* README.md */; };
@@ -64,6 +65,8 @@
 		6BD49785302BA54200196E0B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6BD4978A302BA54200196E0B /* Fastmail Custom Mode Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Fastmail Custom Mode Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6BD4978F302BA54200196E0B /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		381268564FF4103EF87FE214 /* SettingsSyncRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SettingsSyncRules.swift; path = ../../../Packages/FastmailShellKit/Sources/FastmailShellKit/SettingsSyncRules.swift; sourceTree = SOURCE_ROOT; };
+		490BF15CE0D0922353BD3F7D /* Fastmail Custom Mode Extension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Fastmail Custom Mode Extension.entitlements"; sourceTree = "<group>"; };
 		6BD49791302BA54200196E0B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6BD4979C302BA54200196E0B /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = Resources/background.js; sourceTree = "<group>"; };
 		6BD4979D302BA54200196E0B /* images */ = {isa = PBXFileReference; lastKnownFileType = folder; name = images; path = Resources/images; sourceTree = "<group>"; };
@@ -141,6 +144,8 @@
 				6BD4979B302BA54200196E0B /* Resources */,
 				6BD4978F302BA54200196E0B /* SafariWebExtensionHandler.swift */,
 				6BD49791302BA54200196E0B /* Info.plist */,
+				490BF15CE0D0922353BD3F7D /* Fastmail Custom Mode Extension.entitlements */,
+				381268564FF4103EF87FE214 /* SettingsSyncRules.swift */,
 			);
 			path = "Fastmail Custom Mode Extension";
 			sourceTree = "<group>";
@@ -288,6 +293,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6BD49790302BA54200196E0B /* SafariWebExtensionHandler.swift in Sources */,
+				1E7B5DFFC1A1FE242E63E437 /* SettingsSyncRules.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -442,6 +448,7 @@
 		6BD49795302BA54200196E0B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Fastmail Custom Mode Extension/Fastmail Custom Mode Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = D3S5M885YQ;
 				CURRENT_PROJECT_VERSION = 1;
@@ -477,6 +484,7 @@
 		6BD49796302BA54200196E0B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Fastmail Custom Mode Extension/Fastmail Custom Mode Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = D3S5M885YQ;
 				CURRENT_PROJECT_VERSION = 1;
