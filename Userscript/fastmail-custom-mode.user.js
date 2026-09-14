@@ -286,7 +286,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'groupings', group: 'grouping', clearable: true, multiline: true,
             title: 'Your groupings',
-            hint: 'One block each: a line naming the grouping, then indented “Name = search” lines, then a bare line for everything else. Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Renaming a grouping loses it on the mailboxes using it.'
+            hint: 'Each one is offered in a mailbox’s Group menu beside Fastmail’s own. Its groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Renaming a grouping loses it on the mailboxes using it.'
         },
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
@@ -1648,25 +1648,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      *
      * Of two blocks sharing a name the first wins: the second is parsed into
      * a grouping that is never kept, so its lines are consumed rather than
-     * reopening the first or derailing everything after it.
-     *
-     * A block with no groups yet is returned like any other, and every other
-     * non-blank line the reading throws away is listed beside the blocks: all
-     * of a block whose name was already taken, a group line missing its name
-     * or its search, and a bucket name that a later one in the same block
-     * replaced. The settings page needs both. Its list writes the text back
-     * from what the text parses to, so any of these would be deleted by that
-     * write, most likely from under someone still typing them.
+     * reopening the first or derailing everything after it. A group line
+     * missing its name or its search is skipped.
      */
     const readGroupingBlocks = (text) => {
         const groupings = [];
-        const discarded = [];
         const taken = {};
         let current = null;
-        // Whether the open block is the one kept under its name, and the
-        // bucket line it has named so far.
-        let kept = false;
-        let bucketLine = null;
 
         String(text || '').split('\n').forEach((raw) => {
             const line = raw.trim();
@@ -1690,43 +1678,29 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     categories: [],
                     otherName: OTHER_NAME
                 };
-                kept = !taken[id];
-                bucketLine = null;
-                if (kept) {
+                if (!taken[id]) {
                     taken[id] = true;
                     groupings.push(current);
-                } else {
-                    discarded.push({ line: line, grouping: line, reason: 'duplicate' });
                 }
                 return;
             }
 
-            if (!kept) discarded.push({ line: line, grouping: current.name, reason: 'duplicate' });
-
             if (divider === -1) {
-                if (kept && bucketLine !== null) {
-                    discarded.push({ line: bucketLine, grouping: current.name, reason: 'replaced' });
-                }
-                bucketLine = line;
                 current.otherName = line;
                 return;
             }
 
             const name = line.slice(0, divider).trim();
             const query = line.slice(divider + 1).trim();
-            if (name && query) {
-                current.categories.push({ name: name, query: query });
-            } else if (kept) {
-                discarded.push({ line: line, grouping: current.name, reason: 'unfinished' });
-            }
+            if (name && query) current.categories.push({ name: name, query: query });
         });
 
-        return { blocks: groupings, discarded: discarded };
+        return groupings;
     };
 
     // The groupings the text defines. A block with no groups is dropped, since
     // a grouping that groups nothing is a menu entry that does nothing.
-    const parseGroupings = (text) => readGroupingBlocks(text).blocks.filter(one => one.categories.length);
+    const parseGroupings = (text) => readGroupingBlocks(text).filter(one => one.categories.length);
 
     /*
      * The inverse of parseGroupings: an array of groupings back to the text
@@ -6592,7 +6566,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * One option, drawn. A toggle is Fastmail's switch, the control its own
      * settings pages use, carrying its hint as the description it already
      * draws under the label; a text option is a field with the hint beneath
-     * it, and the multi-line one gets a textarea.
+     * it.
      *
      * A clearable field shows "none" rather than its default as the
      * placeholder, because for those an empty box is ambiguous: never
@@ -6637,9 +6611,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const field = new classes.TextInputView({
             label: option.title,
             placeholder: option.clearable ? 'none' : String(DEFAULT_SETTINGS[option.key] || ''),
-            value: String(current),
-            isMultiline: !!option.multiline,
-            isExpanding: !!option.multiline
+            value: String(current)
         });
         field.addObserverForKey('value', {
             changed: () => debounced.write(option.key, field.get('value'))
@@ -8076,7 +8048,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // Edit button does not, so they are checked here rather than there.
         const Editor = FastMail.classes && FastMail.classes.GroupSettingsView;
         if (typeof Editor !== 'function' || !classes.ModalOverlayView || !classes.ScrollView) {
-            reportFault('Fastmail’s groupings editor is not available; edit the text instead');
+            reportFault('Fastmail’s groupings editor is not available here');
             return;
         }
 
@@ -8115,75 +8087,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * Nothing here writes from the groupings as they were when the list was
-     * drawn. The text field below saves the setting without redrawing the
-     * list, and the host can push a new value in while the page is open, so
-     * a list drawn a minute ago may show groupings since typed away and miss
-     * ones since typed in; a write made from that picture puts it back.
-     *
-     * So each action first saves whatever a field still has waiting, then
-     * parses the setting afresh, finds its grouping by name rather than by a
-     * position that may have moved, and writes from that. The list redraws
-     * after it writes, but not while someone types, since a redraw throws the
-     * field away under the cursor; a label that lags the text costs nothing
-     * now that no action reads one.
-     *
-     * And an action refuses outright while writing the text back would lose
-     * any line of it: a grouping with no groups yet, or any line the reading
-     * discards. The write is made from what the parser keeps, so whatever it
-     * leaves out would be deleted from under whoever is still typing it. A
-     * refusal writes nothing, and redraws nothing but its own notice, since a
-     * redraw of the section would replace the field holding the text.
-     *
-     * The notice is the section's own line rather than a fault. A fault is
-     * shown once per page load, so a second press of the same button would
-     * seem to do nothing at all; the notice is drawn again on every refusal,
-     * and cleared by the next action that goes ahead.
+     * drawn: the host can push a new value in while the page is open, so a
+     * list drawn a minute ago may show groupings since removed elsewhere and
+     * miss ones since added. So each action parses the setting afresh, finds
+     * its grouping by name rather than by a position that may have moved, and
+     * writes from that.
      */
-    const groupingsSection = (classes, register) => {
+    const groupingsSection = (classes) => {
         const el = FastMail.el;
         const option = settingFor('groupings');
-        let showText = false;
 
-        // Drawn in a view of its own, so that saying something redraws only
-        // the notice and never the text field beside it.
-        let notice = '';
-        let noticeView = null;
-        const say = (text) => {
-            if (!text && !notice) return;
-            notice = text;
-            if (noticeView) noticeView.viewNeedsRedraw();
-        };
-
-        // The first thing a write would lose, in words; '' when it loses nothing.
-        const problemIn = (read) => {
-            const empty = read.blocks.filter(one => !one.categories.length)[0];
-            if (empty) {
-                return 'Finish or remove the grouping “' + empty.name +
-                    '” in the text before changing the list.';
-            }
-            const lost = read.discarded[0];
-            if (!lost) return '';
-            if (lost.reason === 'duplicate') {
-                return 'The grouping “' + lost.grouping +
-                    '” appears twice; rename or remove one before changing the list.';
-            }
-            if (lost.reason === 'replaced') {
-                return '“' + lost.grouping + '” has two lines naming everything else, “' +
-                    lost.line + '” among them; remove one before changing the list.';
-            }
-            return 'The line “' + lost.line + '” under “' + lost.grouping +
-                '” is unfinished; finish or remove it before changing the list.';
-        };
-
-        // The groupings as they stand, or null while writing them back would
-        // lose something typed; the notice says which, or is cleared.
-        const current = () => {
-            register.flushPending();
-            const text = settingValue('groupings');
-            const problem = problemIn(readGroupingBlocks(text));
-            say(problem);
-            return problem ? null : parseGroupings(text);
-        };
+        const current = () => parseGroupings(settingValue('groupings'));
         const named = (groupings, name) => groupings.filter(one => one.name === name)[0] || null;
 
         const redraw = () => holder.viewNeedsRedraw();
@@ -8194,7 +8108,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         const reorder = (order) => {
             const now = current();
-            if (!now) return false;
             const names = now.map(one => one.name);
             const at = order.indexOf(LABELS_GROUPING);
             const nameOrder = order.filter(id => id !== LABELS_GROUPING);
@@ -8207,7 +8120,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         const remove = (name) => {
             const now = current();
-            if (!now) return;
             if (!named(now, name)) {
                 redraw();
                 return;
@@ -8217,32 +8129,22 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         // The editor is seeded with the grouping as it stands at the press,
         // and its save is laid over the setting as it stands at the save. A
-        // grouping renamed or deleted in between is not brought back. It
-        // refuses to open while the text is unfinished, rather than letting
-        // somebody edit only to be refused at Save.
+        // grouping renamed or deleted in between is not brought back.
         const edit = (name) => {
-            const before = current();
-            if (!before) return;
-            const seed = named(before, name);
+            const seed = named(current(), name);
             if (!seed) {
                 redraw();
                 return;
             }
             editGrouping(classes, seed, (value) => {
                 // Saved down to nothing, it would vanish from the list at the
-                // next parse; removing it is the list's job, and says so. As a
-                // fault, since this happens inside Fastmail's dialog where the
-                // notice cannot be seen, and in the notice too, so that it is
-                // still there once the dialog has gone.
+                // next parse; removing it is the list's job, and says so.
                 if (!value.categories || !value.categories.length) {
                     reportFault('a grouping needs at least one group; remove “' + name +
                         '” from the list instead');
-                    say('A grouping needs at least one group; remove “' + name +
-                        '” from the list instead.');
                     return;
                 }
                 const now = current();
-                if (!now) return;
                 const at = now.map(one => one.name).indexOf(name);
                 if (at === -1) {
                     reportFault('“' + name + '” is no longer in your groupings, so its edit was not saved');
@@ -8262,7 +8164,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // second Add under the same name would add nothing.
         const add = () => {
             const now = current();
-            if (!now) return;
             let name = NEW_GROUPING_NAME;
             for (let count = 2; named(now, name); count += 1) name = NEW_GROUPING_NAME + ' ' + count;
             save(now.concat([{
@@ -8301,33 +8202,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     method: 'go'
                 });
 
-                // Saved before it goes, so the list it leaves behind is current.
-                const toggle = new classes.ButtonView({
-                    type: 'v-Button--subtle v-Button--sizeM',
-                    label: showText ? 'Hide the text' : 'Edit as text',
-                    target: { go: () => {
-                        register.flushPending();
-                        showText = !showText;
-                        redraw();
-                    } },
-                    method: 'go'
-                });
-
-                noticeView = new classes.View({
-                    draw: () => (notice
-                        ? [el('p.u-trim.u-text-sm.u-color-error',
-                            { role: 'status', style: 'margin-top:8px' }, [notice])]
-                        : [])
-                });
-
-                const parts = [
+                return [
                     el('h3.u-trim.u-font-bold', [option.title]),
-                    el('div', [list, noticeView]),
-                    addButton, toggle
+                    list,
+                    addButton,
+                    el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint])
                 ];
-                if (showText) parts.push(settingRow(classes, option, register));
-                parts.push(el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint]));
-                return parts;
             }
         });
 
@@ -8456,7 +8336,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const editSnoozePreset = (classes, preset, done) => {
         if (!classes.ModalOverlayView || !classes.ScrollView ||
             !classes.TextInputView || !classes.ButtonView) {
-            reportFault('a dialog is not available; edit the text instead');
+            reportFault('the snooze preset dialog is not available here');
             return;
         }
 
@@ -8621,7 +8501,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // Three options are lists rather than fields; everything else is a row.
     const sectionRow = (classes, option, register) => {
-        if (option.key === 'groupings') return groupingsSection(classes, register);
+        if (option.key === 'groupings') return groupingsSection(classes);
         if (option.key === 'bottomBarSlots') return barSlotsSection(classes);
         if (option.key === 'snoozePresets') return snoozePresetsSection(classes);
         return settingRow(classes, option, register);
