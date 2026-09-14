@@ -142,17 +142,28 @@ aggregateTargets:
       - Work
       - Mailto
 
+# After every build, from Xcode or xcodebuild, the build folder's copy is
+# unregistered again, so Shortcuts, AppleScript and links keep reaching the app
+# in /Applications. tools/claim-installed-apps.sh says why.
 schemes:
   Personal:
     build:
       targets:
         Personal: all
+      postActions:
+        - name: Leave the app in /Applications the registered one
+          settingsTarget: Personal
+          script: '"$SRCROOT/tools/claim-installed-apps.sh"'
     run:
       config: Debug
   Work:
     build:
       targets:
         Work: all
+      postActions:
+        - name: Leave the app in /Applications the registered one
+          settingsTarget: Work
+          script: '"$SRCROOT/tools/claim-installed-apps.sh"'
     run:
       config: Debug
   All:

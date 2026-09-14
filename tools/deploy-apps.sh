@@ -42,17 +42,9 @@ for app in $APPS; do
 done
 
 echo "=== install macOS ==="
-make install-macos || { echo "MACOS INSTALL FAILED"; exit 1; }
-
-# A build re-registers the DerivedData copies with LaunchServices, which then
-# hands scheme and mailto links to a copy inside a build directory. Unregister
-# those and re-assert the installed ones.
-LS=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
-BP=$(xcodebuild -project FastmailShell.xcodeproj -scheme Personal -destination 'platform=macOS' -configuration Release -showBuildSettings 2>/dev/null | awk '/ BUILT_PRODUCTS_DIR/ {print $3; exit}')
-for app in mdbraber.com nexthealth.nl; do
-  [ -n "$BP" ] && "$LS" -u "$BP/$app.app" >/dev/null 2>&1
-  "$LS" -f "/Applications/$app.app" >/dev/null 2>&1
-done
+# Installing also leaves the installed copies the only registered ones, so
+# links, AppleScript and Shortcuts reach them rather than a build folder's.
+make install-macos CHECK_APPS= || { echo "MACOS INSTALL FAILED"; exit 1; }
 echo "MACOS OK"
 
 # A running shell reads userscript.js from its bundle at launch, so it keeps
@@ -63,6 +55,13 @@ for app in mdbraber.com nexthealth.nl; do
     echo "relaunched $app"
   fi
 done
+
+# Check that Shortcuts and AppleScript reach the new copies, now the shells
+# run from them (install-macos was told to leave this to here). A failure is
+# not a reason to keep the phones waiting, so it is said here and decides the
+# exit at the end.
+macos_check=0
+tools/check-installed-apps.sh || { macos_check=1; echo "MACOS CHECK FAILED"; }
 
 # Every paired device, or the ones named in the environment. Read from the
 # listing's own "available (paired)" column rather than from the JSON, whose
@@ -166,6 +165,10 @@ for try in $(seq 1 $TRIES); do
         echo "skipped (not reachable): ${line%% *}"
       done
       echo "installed on ${#seen} device(s): ${(k)seen}"
+      if [ $macos_check -ne 0 ]; then
+        echo "ALL INSTALLED, BUT THE MAC APPS FAILED THEIR CHECK (see above)"
+        exit 1
+      fi
       echo "ALL INSTALLED"
       exit 0
     fi

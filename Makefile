@@ -2,7 +2,7 @@ PROJECT = FastmailShell.xcodeproj
 LSREGISTER = /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/ available/ {print $$3; exit}')
 
-.PHONY: generate test build-macos install-macos forget-builds build-ios install-ios build-extension install-extension install deploy clean
+.PHONY: generate test build-macos install-macos forget-builds check-apps build-ios install-ios build-extension install-extension install deploy clean
 
 generate:
 	xcodegen generate
@@ -18,23 +18,30 @@ build-macos: generate
 	xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release -allowProvisioningUpdates build
 	xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release -allowProvisioningUpdates build
 
+# Installing ends by checking that Shortcuts and AppleScript reach the new
+# copies. deploy passes CHECK_APPS= and checks after relaunching the apps
+# instead, so a failed check cannot keep the phones from their install.
+CHECK_APPS ?= tools/check-installed-apps.sh
+
 install-macos: build-macos
 	rm -rf "/Applications/mdbraber.com.app" "/Applications/nexthealth.nl.app"
 	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/mdbraber.com.app" /Applications/
 	cp -R "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/nexthealth.nl.app" /Applications/
-	$(MAKE) forget-builds
+	tools/claim-installed-apps.sh --register
+	$(CHECK_APPS)
 
-# Building an app registers it, so the copy in Xcode's build folder claims the
-# same bundle identifier as the installed one. Then a Fastmail link, or a page
-# handed over from another device, can open the build instead of the app.
+# Building an app registers it, so the copy in a build folder claims the same
+# bundle identifier as the installed one. Then a Fastmail link, an AppleScript
+# or a Shortcuts action can reach the build instead of the app, and deleting
+# the build takes the app's actions out of Shortcuts. The Personal and Work
+# schemes run this after every build; it is here for everything else.
 forget-builds:
-	@for scheme in Personal Work; do \
-		dir="$$(xcodebuild -project $(PROJECT) -scheme $$scheme -destination 'platform=macOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')"; \
-		for app in "$$dir"/*.app; do \
-			[ -d "$$app" ] && $(LSREGISTER) -u "$$app" >/dev/null 2>&1 || true; \
-		done; \
-	done
-	@echo "Only /Applications now claims the apps' bundle identifiers"
+	tools/claim-installed-apps.sh
+
+# Shortcuts and AppleScript reach the installed Mac apps, and Shortcuts lists
+# their actions
+check-apps:
+	tools/check-installed-apps.sh
 
 build-ios: generate
 	xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release -allowProvisioningUpdates build
@@ -55,10 +62,12 @@ EXTENSION_APP = Fastmail Custom Mode.app
 
 build-extension:
 	cd "$(EXTENSION_DIR)" && xcodebuild -project "Fastmail Custom Mode.xcodeproj" -scheme "Fastmail Custom Mode" -configuration Release -derivedDataPath build -allowProvisioningUpdates build
+	tools/claim-installed-apps.sh
 
 install-extension: build-extension
 	rm -rf "/Applications/$(EXTENSION_APP)"
 	cp -R "$(EXTENSION_DIR)/build/Build/Products/Release/$(EXTENSION_APP)" /Applications/
+	tools/claim-installed-apps.sh --register
 	@echo "Installed /Applications/$(EXTENSION_APP); enable it in Safari's Extensions settings"
 
 install: install-macos install-ios install-extension
