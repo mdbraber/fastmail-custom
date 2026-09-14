@@ -125,6 +125,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // either was asked for
         bottomBarItems: '',
         topBarItems: '',
+        // How many of the user's own groupings come before the automatic
+        // Labels grouping in the Group menu; empty means all the way at the
+        // front, which is today's fixed behaviour.
+        labelsGroupingIndex: '',
         // Shown in the sidebar but worked as piles, not queues: never filed
         // into, never stripped by archive
         excludedLabels: 'Later, Feedbin',
@@ -1768,6 +1772,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     }).join('\n\n');
 
     const modeGroupings = () => parseGroupings(settings.groupings);
+
+    // How many of the user's own groupings come before the automatic Labels
+    // grouping in the menu; every one of them when the setting is empty or
+    // unreadable, which is today's fixed "Labels always first" behaviour. A
+    // stored value is clamped to the current grouping count so a grouping
+    // deleted since the index was set cannot push it out of range.
+    const labelsGroupingIndex = (groupingCount) => {
+        const raw = parseInt(String(settings.labelsGroupingIndex || '').trim(), 10);
+        return raw >= 0 ? Math.min(raw, groupingCount) : 0;
+    };
 
     /*
      * A group per label under this one.
@@ -6345,13 +6359,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         const active = currentGroupingId();
         const icons = groupingIcons(options);
-        const entries = [];
+        const custom = modeGroupings();
         const labels = labelsGroupingFor(controller().get('mailbox'));
-
-        if (labels) entries.push(groupingOption(labels, active, icons));
-        modeGroupings().forEach((definition) => {
-            entries.push(groupingOption(definition, active, icons));
-        });
+        const definitions = labels
+            ? custom.slice(0, labelsGroupingIndex(custom.length))
+                .concat([labels])
+                .concat(custom.slice(labelsGroupingIndex(custom.length)))
+            : custom;
+        const entries = definitions.map(definition => groupingOption(definition, active, icons));
 
         if (!entries.length) return;
 
@@ -8104,7 +8119,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const reorder = (order) => {
             const now = current();
             if (!now) return false;
-            save(mergeOrder(now.map(one => one.name), order).map(name => named(now, name)));
+            const names = now.map(one => one.name);
+            const at = order.indexOf(LABELS_GROUPING);
+            const nameOrder = order.filter(id => id !== LABELS_GROUPING);
+            const newIndex = at === -1
+                ? names.length
+                : order.slice(0, at).filter(id => names.indexOf(id) !== -1).length;
+            writeSetting('labelsGroupingIndex', String(newIndex));
+            save(mergeOrder(names, nameOrder).map(name => named(now, name)));
         };
 
         const remove = (name) => {
@@ -8187,6 +8209,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     edit: () => edit(one.name),
                     remove: () => remove(one.name)
                 }));
+                items.splice(labelsGroupingIndex(groupings.length), 0, {
+                    id: LABELS_GROUPING,
+                    label: 'Labels — automatic, one group per label here',
+                    edit: null,
+                    remove: null
+                });
 
                 const list = reorderList(classes, items, reorder);
 
