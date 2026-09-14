@@ -290,7 +290,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         },
         {
             key: 'groupings', group: 'grouping', clearable: true, multiline: true,
-            title: 'Your groupings',
+            title: 'Group presets',
             hint: 'Each one is offered in a mailbox’s Group menu beside Fastmail’s own. Labels makes a group for each label; edit it to add groups of your own before or after those. Groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Edit also renames a grouping; renaming one of your own loses it on the mailboxes using it, renaming Labels does not.'
         },
         {
@@ -8050,7 +8050,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * Your groupings, as a list rather than as text. Opening one raises
+     * Group presets, as a list. Opening one raises
      * Fastmail's own splits editor, seeded with that grouping instead of a
      * mailbox's: a stand-in controller answers sortSource with an object
      * holding our categories, and catches the save.
@@ -8231,7 +8231,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             .concat(names.filter(name => !rank.has(name)));
     };
 
-    const NEW_GROUPING_NAME = 'New grouping';
+    const NEW_GROUPING_NAME = 'New group preset';
 
     /*
      * Nothing here writes from the groupings as they were when the list was
@@ -8344,20 +8344,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // Drawn from, and never written from.
                 const groupings = parseGroupings(settingValue('groupings'));
 
+                // Names alone, as the snooze presets show theirs; the groups
+                // are for each one's Edit dialog.
                 const items = groupings.map(one => ({
                     id: one.name,
-                    label: one.name + ' — ' + one.categories.length +
-                        (one.categories.length === 1 ? ' group' : ' groups'),
+                    label: one.name,
                     edit: () => edit(one.name),
                     remove: () => remove(one.name)
                 }));
-                const shaped = labelsGroupingSettings();
-                const ownGroups = shaped.categories.length - 1;
                 items.splice(labelsGroupingIndex(groupings.length), 0, {
                     id: LABELS_GROUPING,
-                    label: shaped.name + ' — a group per label' + (ownGroups
-                        ? ' and ' + ownGroups + (ownGroups === 1 ? ' other' : ' others')
-                        : ''),
+                    label: labelsGroupingSettings().name,
                     edit: editLabels,
                     remove: null
                 });
@@ -8366,7 +8363,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 const addButton = new classes.ButtonView({
                     type: 'v-Button--standard v-Button--sizeM',
-                    label: 'Add a grouping',
+                    label: 'Add a group preset',
                     target: { go: add },
                     method: 'go'
                 });
