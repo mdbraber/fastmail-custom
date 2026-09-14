@@ -135,9 +135,11 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     }
 
     /// Called once the Notifications page has saved a choice. A choice the
-    /// server already has sends nothing.
+    /// server already has sends nothing, unless a registration is out: that
+    /// one may carry a choice since taken back, which the saved choice now
+    /// matches, so the repeat is what puts the server right.
     public func choiceChanged() {
-        guard deviceToken != nil, PushPreferences.registrationDue() else { return }
+        guard deviceToken != nil, inFlight != nil || PushPreferences.registrationDue() else { return }
         Task { await register() }
     }
 
@@ -167,10 +169,12 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
                 again = false
                 await send()
             } while again
+            // In the same job as the last look at `again`, so a trigger
+            // cannot land between them and be dropped
+            inFlight = nil
         }
         inFlight = task
         await task.value
-        inFlight = nil
     }
 
     /// A failure is remembered and tried again on the next activation, never shown.

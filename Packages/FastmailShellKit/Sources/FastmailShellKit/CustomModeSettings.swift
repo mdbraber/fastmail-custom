@@ -4,7 +4,8 @@ import WebKit
 /// The Custom mode userscript's settings, mirrored natively.
 public enum CustomModeSettings {
     /// Where every Custom mode setting lives in UserDefaults. Prefixed so the
-    /// shell's own keys (backend, startView, push.alerts) and the page's
+    /// shell's own keys (backend, startView, push.mode, push.senders,
+    /// push.mailboxIds, push.contacts and push.acknowledged) and the page's
     /// cannot collide, and so the page can be given the whole namespace
     /// without being given anything else.
     public static let keyPrefix = "customMode."
