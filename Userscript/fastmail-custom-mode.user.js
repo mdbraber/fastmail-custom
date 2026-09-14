@@ -6717,12 +6717,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const SETTINGS_PAGE_TITLE = 'Custom mode';
 
     // The page needs these; the groupings editor's dialog also wants
-    // ModalOverlayView and ScrollView, and the mobile build's back button
-    // wants PageHeaderView, but each checks for its own class, so its
-    // absence costs that one part rather than the page.
+    // ModalOverlayView and ScrollView, the mobile build's back button wants
+    // PageHeaderView, and a list row's "…" menu wants MenuButtonView and
+    // MenuView, but each checks for its own class, so its absence costs that
+    // one part rather than the page.
     const pageClasses = () => findClasses(
         ['PageView', 'SettingsPaneView', 'ToggleView', 'TextInputView', 'ButtonView', 'View'],
-        ['ModalOverlayView', 'ScrollView', 'PageHeaderView']
+        ['ModalOverlayView', 'ScrollView', 'PageHeaderView', 'MenuButtonView', 'MenuView']
     );
 
     // Fastmail's classes by name: nothing if a required one is missing,
@@ -7786,34 +7787,81 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * A list you can put in order. Fastmail's own splits editor already has
      * one — SplitConditionItemView carries the whole drag protocol, mouse and
      * touch — so a row here is one of those, drawing our parts where it would
-     * draw a search.
+     * draw a search, and ending in the same "…" menu its rows end in.
      *
-     * If that row cannot be made, the rows still list and still reorder,
-     * with a pair of buttons each. The dragging rows carry the same buttons,
-     * because there is no keyboard path to a drag.
+     * If that row cannot be made, the rows still list, and still edit and
+     * remove, but no longer reorder.
      */
 
     // An icon-only button draws its label into a span the app's own stylesheet
     // gives no height and no opacity, so one handed no icon is a blank box
-    // thirty-six pixels wide. These are the chevrons the app draws elsewhere,
-    // so the two moves look like the rest of the page rather than like text.
-    const MOVE_SHAPES = {
-        up: [['polyline', { points: '6.25 14.88 12 9.13 17.75 14.88' }]],
-        down: [['polyline', { points: '17.75 9.13 12 14.88 6.25 9.13' }]]
-    };
+    // thirty-six pixels wide. This is the glyph Fastmail's own editor gives
+    // the "…" button at the end of each of its rows.
+    const MORE_SHAPES = [
+        ['circle', { fill: 'currentColor', cx: '12', cy: '12', r: '0.75' }],
+        ['circle', { fill: 'currentColor', cx: '18', cy: '12', r: '0.75' }],
+        ['circle', { fill: 'currentColor', cx: '6', cy: '12', r: '0.75' }]
+    ];
 
     // The height Fastmail's own editor gives these rows. A dragging list puts
     // each row at its index times this, so no row may grow past it, and the
     // label is truncated rather than left to wrap onto a second line. Nor may
     // a row fall short of it: the rows sit apart by this pitch whatever their
-    // own height, so the label is given a button's height to fill it out,
-    // where Fastmail's own row gets there with its taller menu button.
+    // own height, so the label is given a button's height to fill out a row
+    // with no "…" menu, where the others get there with the menu button.
     const REORDER_ROW_HEIGHT = 49;
 
     // What `.v-Button > .v-Icon` makes a glyph on the bar.
     const BAR_GLYPH_SIZE = '22px';
 
-    const reorderRowParts = (classes, item, move, draggable) => {
+    /*
+     * A row's Edit and Remove, behind the "…" button Fastmail's own groupings
+     * editor ends each of its rows with: the same button, glyph, label and
+     * menu. Fastmail's menu is thrown away each time it closes, so a fresh
+     * one is made each time it opens; and its row keeps the popover
+     * placement the button works out for where it sits on screen, with the
+     * menu's right edge against the button's, so this one does too. Without
+     * the menu classes, the two are plain buttons on the row instead.
+     */
+    const rowActions = (classes, item) => {
+        const actions = [];
+        if (item.edit) actions.push({ label: 'Edit', go: item.edit });
+        if (item.remove) actions.push({ label: 'Remove', go: item.remove });
+        if (!actions.length) return [];
+
+        const Button = classes.MenuButtonView;
+        const Menu = classes.MenuView;
+        if (!Button || !Menu) {
+            return actions.map(action => new classes.ButtonView({
+                type: 'v-Button--subtle v-Button--sizeM',
+                label: action.label, target: action, method: 'go'
+            }));
+        }
+
+        const menu = () => new Menu({
+            options: actions.map(action => new classes.ButtonView({
+                label: action.label, target: action, method: 'go'
+            }))
+        });
+        return [FastMail.el('div.u-flex', [new Button({
+            type: 'v-Button--subtle v-Button--sizeM v-Button--iconOnly v-Button--circular',
+            icon: standardIcon('i-morehorizontal', MORE_SHAPES),
+            label: 'More',
+            destroyMenuViewOnClose: true,
+            activate: function () {
+                if (!this.get('isActive') && !this.get('isDisabled')) {
+                    this.set('menuView', menu());
+                    const placed = Button.prototype.popOverOptions;
+                    this.popOverOptions = Object.assign({},
+                        typeof placed === 'function' ? placed.call(this) : placed,
+                        { alignEdge: 'right' });
+                }
+                return Button.prototype.activate.apply(this, arguments);
+            }
+        })])];
+    };
+
+    const reorderRowParts = (classes, item, draggable) => {
         const el = FastMail.el;
         const parts = [];
         // Fastmail's own grip, so that a row that drags looks like one.
@@ -7841,27 +7889,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             }
             parts.push(el('div.u-flex-1.u-truncate', { style: 'line-height:32px' }, [item.label]));
         }
-        parts.push(new classes.ButtonView({
-            type: 'v-Button--subtle v-Button--sizeM v-Button--iconOnly',
-            label: 'Move up',
-            icon: standardIcon('i-chevronup', MOVE_SHAPES.up),
-            target: { go: () => move(item.id, -1) }, method: 'go'
-        }));
-        parts.push(new classes.ButtonView({
-            type: 'v-Button--subtle v-Button--sizeM v-Button--iconOnly',
-            label: 'Move down',
-            icon: standardIcon('i-chevrondown', MOVE_SHAPES.down),
-            target: { go: () => move(item.id, 1) }, method: 'go'
-        }));
-        if (item.edit) parts.push(new classes.ButtonView({
-            type: 'v-Button--subtle v-Button--sizeM',
-            label: 'Edit', target: { go: item.edit }, method: 'go'
-        }));
-        if (item.remove) parts.push(new classes.ButtonView({
-            type: 'v-Button--subtle v-Button--sizeM',
-            label: 'Remove', target: { go: item.remove }, method: 'go'
-        }));
-        return parts;
+        return parts.concat(rowActions(classes, item));
     };
 
     /*
@@ -7891,7 +7919,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * write that onOrder refuses redraws nothing, so the rows are put back
      * where they were by hand.
      */
-    const reorderDragList = (classes, items, move, onOrder) => {
+    const reorderDragList = (classes, items, onOrder) => {
         const found = FastMail.classes || {};
         const Row = found.SplitConditionItemView;
         const List = found.ListView;
@@ -7915,7 +7943,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             const RowView = function (properties) {
                 return new Row(Object.assign({}, properties, {
                     draw: function () {
-                        return reorderRowParts(classes, byId[this.get('content').get('id')], move, true);
+                        return reorderRowParts(classes, byId[this.get('content').get('id')], true);
                     },
                     setIndex: function (to, from) {
                         Row.prototype.setIndex.call(this, to, from);
@@ -7955,28 +7983,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const reorderList = (classes, items, onOrder) => {
-        const order = items.map(item => item.id);
-
-        // onOrder answers false when it refused to write. The order kept here
-        // then goes back to the one on screen, so the next move starts from
-        // what the list shows rather than from a move that never happened.
-        const move = (id, by) => {
-            const at = order.indexOf(id);
-            const to = at + by;
-            if (at === -1 || to < 0 || to >= order.length) return;
-            const before = order.slice();
-            order.splice(to, 0, order.splice(at, 1)[0]);
-            if (onOrder(order.slice()) === false) order.splice(0, order.length, ...before);
-        };
-
-        const dragging = reorderDragList(classes, items, move, onOrder);
+        const dragging = reorderDragList(classes, items, onOrder);
         if (dragging) return dragging;
 
         return new classes.View({
             className: 'u-list-body u-list-body--borders',
             draw: () => items.map(item => new classes.View({
                 className: 'u-list-item u-flex u-items-center u-space-x-2',
-                draw: () => reorderRowParts(classes, item, move, false)
+                draw: () => reorderRowParts(classes, item, false)
             }))
         });
     };
