@@ -117,8 +117,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // part of this setting.
         snoozePresets: 'This Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
             'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
-        // The pin-toggle key, in Fastmail's own key spelling.
-        urgentKey: 's',
         // The action bar's verbs, as one ordered list over all of them: the
         // bar takes as many leading ones as fit; More always keeps a slot,
         // and the rest wait inside More, in the same order. One list for
@@ -183,7 +181,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * option means adding one entry here and nothing anywhere else.
      *
      * The default is not repeated: DEFAULT_SETTINGS above already carries all
-     * twenty-seven, and settingValue reads it from there.
+     * of them, and settingValue reads it from there.
      */
     const SETTING_GROUPS = [
         { id: 'appearance', title: 'Appearance' },
@@ -294,11 +292,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
             title: 'Snooze presets',
             hint: 'Fastmail’s own Snooze button and shortcut (b) offer these instead of its own list, numbered so 1, 2, 3… picks one. Each needs a Date — today, tomorrow, this weekend, next week, a count and unit (2w, in 2 weeks), or a date as YYYY-MM-DD — and a Time. “Choose a date and time…” is always added last.'
-        },
-        {
-            key: 'urgentKey', group: 'keyboard',
-            title: 'Pin key',
-            hint: 'Pins or unpins the selection.'
         },
         {
             key: 'swapArchiveExpand', group: 'keyboard',
@@ -5338,6 +5331,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // not the two have traded places.
     const ARCHIVE_ALT_KEY = 'h';
 
+    // Fastmail's own pin key, claimed so that pinning goes through the mode's
+    // verb while the mode is on.
+    const PIN_KEY = 's';
+
     // Registrations made before the patch below was installed keep the stock
     // binding, so move those across once.
     const swapExistingKeys = (kb, register) => {
@@ -5363,11 +5360,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // look their verb up here on every press, so a rebuilt map retargets keys
     // already claimed
     const claimedRun = {};
-
-    const sanitizedKey = (value, fallback) => {
-        const key = String(value || '').trim();
-        return key || fallback;
-    };
 
     const wantedClaims = () => {
         const wanted = {
@@ -5400,7 +5392,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         wanted[ARCHIVE_ALT_KEY] = archive;
         if (settings.swapArchiveExpand) wanted[ARCHIVE_KEY] = archive;
 
-        wanted[sanitizedKey(settings.urgentKey, 's')] = () => runVerb('urgent', null);
+        wanted[PIN_KEY] = () => runVerb('urgent', null);
 
         return wanted;
     };
