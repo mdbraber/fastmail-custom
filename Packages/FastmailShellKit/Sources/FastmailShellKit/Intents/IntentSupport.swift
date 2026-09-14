@@ -66,7 +66,12 @@ public enum IntentSupport {
     }
 
     public static func currentLink() async throws -> MailLink {
-        let view = try unlockedWebView()
+        try await currentLink(in: try unlockedWebView())
+    }
+
+    /// The same, read from a given page: the Mac's menu bar asks the window
+    /// in front, not whichever page an action from Shortcuts would reach.
+    public static func currentLink(in view: WKWebView) async throws -> MailLink {
         let strings: LinkStrings?
         do {
             strings = try await evaluate(
@@ -112,7 +117,10 @@ public enum IntentSupport {
     }
 
     public static func runAction(named name: String) async throws {
-        let view = try unlockedWebView()
+        try await runAction(named: name, in: try unlockedWebView())
+    }
+
+    public static func runAction(named name: String, in view: WKWebView) async throws {
         do {
             _ = try await evaluate(
                 "return await window.native.runAction(name);",

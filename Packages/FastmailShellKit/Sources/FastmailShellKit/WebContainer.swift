@@ -258,6 +258,10 @@ public extension Notification.Name {
     static let fmshellCompose = Notification.Name("fmshellCompose")
     static let fmshellComposeInTab = Notification.Name("fmshellComposeInTab")
     static let fmshellInspect = Notification.Name("fmshellInspect")
+    static let fmshellCopyURL = Notification.Name("fmshellCopyURL")
+    static let fmshellCopyTitle = Notification.Name("fmshellCopyTitle")
+    static let fmshellCopyMarkdownLink = Notification.Name("fmshellCopyMarkdownLink")
+    static let fmshellSearch = Notification.Name("fmshellSearch")
 }
 
 /// A page action asked for from outside, run against the web view once the
@@ -428,6 +432,72 @@ final class CommandRelay {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.openInspector() }
         })
+        // What the Shortcuts actions offer, from the menu bar as well
+        observers.append(center.addObserver(
+            forName: .fmshellCopyURL, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.copyCurrentLink(.url) }
+        })
+        observers.append(center.addObserver(
+            forName: .fmshellCopyTitle, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.copyCurrentLink(.title) }
+        })
+        observers.append(center.addObserver(
+            forName: .fmshellCopyMarkdownLink, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.copyCurrentLink(.markdown) }
+        })
+        observers.append(center.addObserver(
+            forName: .fmshellSearch, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.runPageAction(named: "search") }
+        })
+    }
+
+    enum LinkPart {
+        case url, title, markdown
+    }
+
+    // Read the way Get URL, Get Title and Get Current Link read it, so the
+    // address copied is the same canonical one they hand back; and when
+    // there is nothing to read, the line says what they would have said.
+    private func copyCurrentLink(_ part: LinkPart) {
+        ifKey { webView in
+            Task { @MainActor [model] in
+                do {
+                    let link = try await IntentSupport.currentLink(in: webView)
+                    let text: String
+                    switch part {
+                    case .url: text = link.url.absoluteString
+                    case .title: text = link.title
+                    case .markdown: text = link.markdown
+                    }
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(text, forType: .string)
+                } catch let error as IntentSupportError {
+                    model.show(error.message)
+                } catch {
+                    model.show(error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    // A script action, as Run Script Action runs it
+    private func runPageAction(named name: String) {
+        ifKey { webView in
+            Task { @MainActor [model] in
+                do {
+                    try await IntentSupport.runAction(named: name, in: webView)
+                } catch let error as IntentSupportError {
+                    model.show(error.message)
+                } catch {
+                    model.show(error.localizedDescription)
+                }
+            }
+        }
     }
 
     deinit {

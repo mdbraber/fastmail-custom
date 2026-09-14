@@ -167,6 +167,25 @@ public struct ShellCommands: Commands {
                 NotificationCenter.default.post(name: .fmshellShare, object: nil)
             }
         }
+        // What the Shortcuts actions read and run, for the window in front
+        CommandGroup(after: .pasteboard) {
+            Divider()
+            Button("Copy URL") {
+                NotificationCenter.default.post(name: .fmshellCopyURL, object: nil)
+            }
+            Button("Copy Title") {
+                NotificationCenter.default.post(name: .fmshellCopyTitle, object: nil)
+            }
+            Button("Copy Markdown Link") {
+                NotificationCenter.default.post(name: .fmshellCopyMarkdownLink, object: nil)
+            }
+        }
+        CommandGroup(after: .textEditing) {
+            Button("Search") {
+                NotificationCenter.default.post(name: .fmshellSearch, object: nil)
+            }
+            .keyboardShortcut("f", modifiers: [.command, .option])
+        }
     }
 }
 #endif
