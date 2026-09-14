@@ -2,12 +2,6 @@ import AppIntents
 import FastmailShellKit
 import Foundation
 
-struct ShellIntentsPackage: AppIntentsPackage {
-    static var includedPackages: [any AppIntentsPackage.Type] {
-        [FastmailShellIntents.self]
-    }
-}
-
 struct RegisteredActionOptions: DynamicOptionsProvider {
     func results() async throws -> [String] {
         UserDefaults.standard.stringArray(forKey: IntentSupport.actionNamesKey) ?? []
@@ -34,7 +28,7 @@ struct GetCurrentLink: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<MailLink> {
-        .result(value: try await IntentSupport.currentLink())
+        .result(value: MailLink(try await IntentSupport.currentLink()))
     }
 }
 

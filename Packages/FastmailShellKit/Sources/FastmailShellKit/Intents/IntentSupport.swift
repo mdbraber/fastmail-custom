@@ -2,8 +2,6 @@ import AppIntents
 import Foundation
 import WebKit
 
-public struct FastmailShellIntents: AppIntentsPackage {}
-
 public struct IntentSupportError: Error, CustomLocalizedStringResourceConvertible {
     public let message: String
 
@@ -65,13 +63,13 @@ public enum IntentSupport {
         }
     }
 
-    public static func currentLink() async throws -> MailLink {
+    public static func currentLink() async throws -> CurrentLink {
         try await currentLink(in: try unlockedWebView())
     }
 
     /// The same, read from a given page: the Mac's menu bar asks the window
     /// in front, not whichever page an action from Shortcuts would reach.
-    public static func currentLink(in view: WKWebView) async throws -> MailLink {
+    public static func currentLink(in view: WKWebView) async throws -> CurrentLink {
         let strings: LinkStrings?
         do {
             strings = try await evaluate(
@@ -97,12 +95,7 @@ public enum IntentSupport {
         }
         // The page's own address names whichever server this shell talks to,
         // and both shells talk to beta.
-        let canonical = Backend.canonical(url)
-        let link = MailLink()
-        link.url = canonical
-        link.title = strings.title
-        link.markdown = MailLink.markdown(title: strings.title, url: canonical)
-        return link
+        return CurrentLink(url: Backend.canonical(url), title: strings.title)
     }
 
     public static func runJavaScript(_ script: String) async throws -> String {
