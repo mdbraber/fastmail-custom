@@ -310,7 +310,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'bottomBarSlots', group: 'bottomBar',
             title: 'Action bar actions',
-            hint: 'In order, with two dividers you can drag: the blue one cuts the bar along the bottom on iPhone, the purple one cuts the bar across the top of a message on iPad and the Mac. Above a divider shows on its bar; from the divider down goes under More.'
+            hint: 'In order, with a separator you can drag: everything above shows on this device’s action bar, everything from the separator down goes under More. The phone and the iPad or Mac each keep their own count, set from that device’s own settings.'
         }
     ];
 
@@ -7715,15 +7715,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 { style: 'margin-top:-6px;cursor: grab' }, ['⣶']));
         }
         if (item.isDivider) {
-            // A colored bar stands in for the icon a divider has none of, so
-            // it reads as a different kind of row rather than a verb drawn
-            // with no glyph. Two dividers, two colors, so which is which
-            // never depends on reading the label.
-            parts.push(el('div.u-flex-none',
-                { style: 'width:22px;height:4px;margin-top:14px;border-radius:2px;background:' + item.color },
-                []));
-            parts.push(el('div.u-flex-1.u-truncate',
-                { style: 'line-height:32px;color:' + item.color + ';font-weight:600' }, [item.label]));
+            // A dash stands in for the icon a divider has none of, and the
+            // label reads subdued, like a hint rather than a verb, so it
+            // never competes with the actions it sits among.
+            parts.push(el('div.u-flex-none.u-color-unimportant', { style: 'line-height:32px' }, ['—']));
+            parts.push(el('div.u-flex-1.u-truncate.u-color-unimportant', { style: 'line-height:32px' }, [item.label]));
         } else {
             // Drawn afresh each time, since a node can be in only one row; a
             // row with no glyph to show carries its name alone. Fastmail's
@@ -8205,31 +8201,30 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * The bar's verbs, in the order the bar takes them, with two dividers
-     * laid over the same list: everything above a divider is drawn on that
-     * bar, everything from the divider down goes under More. orderedSlots
-     * already turns the setting into a complete list — it lowercases,
-     * renames the old "file" to "keep", drops what it does not know and
-     * appends what the saved value failed to mention — so nothing new is
-     * needed to read the verbs themselves.
+     * The bar's verbs, in the order the bar takes them, with a divider laid
+     * over the same list: everything above it is drawn on this device's own
+     * bar, everything from it down goes under More. orderedSlots already
+     * turns the setting into a complete list — it lowercases, renames the
+     * old "file" to "keep", drops what it does not know and appends what the
+     * saved value failed to mention — so nothing new is needed to read the
+     * verbs themselves.
      *
-     * A divider is a row like any other in the same drag list, so dragging a
-     * verb past it moves the verb in or out of view, and dragging the
+     * The divider is a row like any other in the same drag list, so dragging
+     * a verb past it moves the verb in or out of view, and dragging the
      * divider itself changes the count directly; both write through the
-     * same order. A divider's own id never becomes part of bottomBarSlots —
-     * only the count it lands at does, in bottomBarItems or topBarItems.
+     * same order. Its own id never becomes part of bottomBarSlots — only the
+     * count it lands at does, in bottomBarItems or topBarItems.
+     *
+     * Only one of the two counts is this device's own: bottomBarItems is the
+     * phone's, topBarItems is the iPad's and the Mac's (isTabletLayout is
+     * the same width check the bar itself reads its "at top or at bottom"
+     * layout from). The other count still exists and still syncs; a device
+     * it belongs to shows and edits it from its own settings page instead.
      */
-    const BAR_DIVIDERS = [
-        {
-            id: '__customModeBottomBarDivider', settingKey: 'bottomBarItems',
-            label: 'Bottom bar (iPhone) — shown above, More below', color: '#3b82f6'
-        },
-        {
-            id: '__customModeTopBarDivider', settingKey: 'topBarItems',
-            label: 'Top bar (iPad & Mac) — shown above, More below', color: '#a855f7'
-        }
-    ];
-    const BAR_DIVIDER_IDS = BAR_DIVIDERS.map(divider => divider.id);
+    const ownBarDivider = () => (isTabletLayout()
+        ? { id: '__customModeBarDivider', settingKey: 'topBarItems' }
+        : { id: '__customModeBarDivider', settingKey: 'bottomBarItems' });
+    const DIVIDER_LABEL = 'Separator (below in Menu)';
 
     // Where a count from the setting lands among the verbs: clamped to the
     // list's own length, and every verb when the setting is empty or
@@ -8280,30 +8275,27 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 const names = orderedSlots();
                 const pretty = (name) => name.charAt(0).toUpperCase() + name.slice(1);
 
+                const divider = ownBarDivider();
+
                 const itemById = {};
                 names.forEach((name) => {
                     itemById[name] = { id: name, label: pretty(name), icon: () => slotIcon(name), edit: null, remove: null };
                 });
-                BAR_DIVIDERS.forEach((divider) => {
-                    itemById[divider.id] = {
-                        id: divider.id, label: divider.label, isDivider: true, color: divider.color,
-                        icon: null, edit: null, remove: null
-                    };
-                });
+                itemById[divider.id] = {
+                    id: divider.id, label: DIVIDER_LABEL, isDivider: true,
+                    icon: null, edit: null, remove: null
+                };
 
                 // Laid over the order as it is at the press, not as drawn:
                 // the host can push a new one in while the page is open.
-                const dividersAt = BAR_DIVIDERS.map(divider =>
-                    Object.assign({}, divider, { at: dividerCount(names, settings[divider.settingKey]) }));
-                const order = withDividers(names, dividersAt);
+                const at = dividerCount(names, settings[divider.settingKey]);
+                const order = withDividers(names, [Object.assign({}, divider, { at })]);
                 const items = order.map(id => itemById[id]);
 
                 const list = reorderList(classes, items, (order) => {
-                    const { verbOrder, counts } = splitDividers(order, names, BAR_DIVIDER_IDS);
+                    const { verbOrder, counts } = splitDividers(order, names, [divider.id]);
                     writeSetting('bottomBarSlots', mergeOrder(orderedSlots(), verbOrder).map(pretty).join(', '));
-                    BAR_DIVIDERS.forEach((divider) => {
-                        writeSetting(divider.settingKey, String(counts[divider.id]));
-                    });
+                    writeSetting(divider.settingKey, String(counts[divider.id]));
                     holder.viewNeedsRedraw();
                 });
                 return [
