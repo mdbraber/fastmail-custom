@@ -110,12 +110,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // Fastmail's own Snooze button and shortcut (b) open this list
         // instead of its own presets, one per line as "Name = Date @ Time";
         // Date is a keyword (today, tomorrow, this weekend, next week) and
-        // blank is today, Time is HH:MM and blank falls back to the time
-        // below. "Choose a date and time…" is always appended, last, and
-        // opens Fastmail's own picker; it is not part of this setting.
-        snoozePresets: 'This Evening = @ 19:00\nTomorrow = tomorrow\n' +
-            'This weekend = this weekend\nNext week = next week',
-        snoozeTime: '08:00',
+        // Time is HH:MM, both always given. "Choose a date and time…" is
+        // always appended, last, and opens Fastmail's own picker; it is not
+        // part of this setting.
+        snoozePresets: 'This Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
+            'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
         // The pin-toggle key, in Fastmail's own key spelling.
         urgentKey: 's',
         // The action bar's verbs, as one ordered list over all of them: the
@@ -292,12 +291,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
             title: 'Snooze presets',
-            hint: 'Fastmail’s own Snooze button and shortcut (b) offer these instead of its own list, numbered so 1, 2, 3… picks one. Each has a Date (today, tomorrow, this weekend, next week; blank is today) and a Time (blank uses the default below). “Choose a date and time…” is always added last.'
-        },
-        {
-            key: 'snoozeTime', group: 'snooze',
-            title: 'Default snooze time',
-            hint: 'What a preset with no time of its own uses, as HH:MM.'
+            hint: 'Fastmail’s own Snooze button and shortcut (b) offer these instead of its own list, numbered so 1, 2, 3… picks one. Each needs a Date (today, tomorrow, this weekend, next week, or a date as YYYY-MM-DD) and a Time. “Choose a date and time…” is always added last.'
         },
         {
             key: 'urgentKey', group: 'keyboard',
@@ -3526,9 +3520,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         };
     };
 
-    // "Name = Date @ Time", one per line. Forgiving, like parseGroupings: a
-    // line with no "=" is skipped rather than guessed at, and a name with
-    // nothing else on the line is just today at the fallback time.
+    // "Name = Date @ Time", one per line. The settings page always writes
+    // both halves, but reading stays forgiving, like parseGroupings: a line
+    // with no "=" is skipped rather than guessed at, and a name with
+    // nothing else on the line resolves to today at 8am, the same defaults
+    // snoozeDateKeyword and parseSnoozeTime fall back to for anything else
+    // unread.
     const parseSnoozePresets = (text) => String(text || '').split('\n')
         .map(raw => raw.trim())
         .filter(Boolean)
@@ -3563,9 +3560,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * A preset's Date keyword resolved against `now`: blank or "today"
-     * changes nothing, "tomorrow" is the next day, and "this weekend" /
-     * "next week" are the next Saturday or Monday that is not today.
+     * A preset's Date resolved against `now`: "today" changes nothing,
+     * "tomorrow" is the next day, "this weekend" / "next week" are the next
+     * Saturday or Monday that is not today, and anything shaped like
+     * YYYY-MM-DD is a literal calendar date, parsed by its parts rather
+     * than handed to `new Date(string)`, whose format support varies by
+     * engine. Anything else unread is today, the same as an empty Date
+     * would be, since every preset is required to have one.
      *
      * The weekend and week rules are not this mode's own convention: they
      * are Fastmail's own, read off FutureTimeMenuView.drawOptions in its
@@ -3581,28 +3582,37 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      */
     const snoozeDateKeyword = (now, keyword) => {
         const target = new Date(now.getTime());
-        switch (String(keyword || '').trim().toLowerCase()) {
+        const word = String(keyword || '').trim().toLowerCase();
+        switch (word) {
             case 'tomorrow':
                 target.setDate(target.getDate() + 1);
-                break;
+                return target;
             case 'this weekend':
             case 'next weekend':
                 target.setDate(target.getDate() + snoozeWeekdayOffset(now.getDay(), 6));
-                break;
+                return target;
             case 'next week':
                 target.setDate(target.getDate() + snoozeWeekdayOffset(now.getDay(), 1));
-                break;
+                return target;
             default:
-            // '', 'today', or anything unread: today, same as a blank Date
+            // Falls through to the literal-date check below
         }
+        const literal = /^(\d{4})-(\d{2})-(\d{2})$/.exec(word);
+        if (literal) {
+            target.setFullYear(parseInt(literal[1], 10), parseInt(literal[2], 10) - 1, parseInt(literal[3], 10));
+        }
+        // '', 'today', or anything else unread: today, same as literal did
+        // not match
         return target;
     };
 
     // The wall-clock moment a preset proposes: its Date keyword, at its own
-    // Time, or the setting below where either is blank.
-    const snoozePresetTarget = (now, preset, fallbackTime) => {
+    // Time. Both are required of every preset; parseSnoozeTime's own
+    // "unreadable is 8am" is a parser's safety net for a malformed line,
+    // not a setting to fall back on.
+    const snoozePresetTarget = (now, preset) => {
         const target = snoozeDateKeyword(now, preset.date);
-        const time = preset.time ? parseSnoozeTime(preset.time) : fallbackTime;
+        const time = parseSnoozeTime(preset.time);
         target.setHours(time.hours, time.minutes, 0, 0);
         return target;
     };
@@ -3619,6 +3629,38 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             return false;
         }
     })[0] || null;
+
+    // The small, subdued text Fastmail's own preset rows carry beside the
+    // name: the time, with the weekday added once the target is not today
+    // and the calendar date too once it is a week or more out. Read off
+    // Fastmail's own bundle (FutureTimeMenuView.drawOption in
+    // NewEvent.mod.js) rather than invented here — its own two booleans,
+    // `i >= s` and `i >= s + 6048e5` (today at midnight, and a week past
+    // that), decide the same thing this mirrors with plain Date math.
+    const snoozePresetRightText = (now, target) => {
+        const todayEnd = new Date(now.getTime());
+        todayEnd.setHours(24, 0, 0, 0);
+        const showWeekday = target.getTime() >= todayEnd.getTime();
+        const showDate = target.getTime() >= todayEnd.getTime() + 6048e5;
+        const weekday = showWeekday ? target.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' : '';
+        const date = showDate ? target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' : '';
+        const time = target.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        return weekday + date + time;
+    };
+
+    // A preset row's label: the name on the left, its resolved time (and
+    // weekday/date where they matter) subdued on the right — the same
+    // two-part div Fastmail's own drawOption builds, so a replaced preset
+    // reads exactly like a stock one did. A plain string label (no `right`)
+    // is for "Choose a date and time…", which has nothing to resolve yet.
+    const snoozePresetLabel = (name, right) => {
+        if (!right) return name;
+        const el = FastMail.el;
+        return el('div.u-flex.u-space-x-2.u-whitespace-nowrap', [
+            el('p.u-flex-grow', [name]),
+            el('p.u-flex-none.u-color-unimportant', [right])
+        ]);
+    };
 
     const snoozePresetOption = (shortcut, label, run) => {
         const option = new FastMail.classes.ButtonView({
@@ -3648,12 +3690,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const futureTimeMenuView = custom.get('target');
 
         const now = new Date();
-        const fallbackTime = parseSnoozeTime(settings.snoozeTime);
         const presets = parseSnoozePresets(settings.snoozePresets);
 
         const entries = presets.map((preset, index) => {
-            const target = snoozePresetTarget(now, preset, fallbackTime);
-            return snoozePresetOption(String(index + 1), preset.name,
+            const target = snoozePresetTarget(now, preset);
+            const label = snoozePresetLabel(preset.name, snoozePresetRightText(now, target));
+            return snoozePresetOption(String(index + 1), label,
                 () => controller().actions.snooze(null, target));
         });
 
@@ -8434,7 +8476,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }, 'changed');
 
         const dateField = new classes.TextInputView({
-            placeholder: 'today, tomorrow, this weekend, next week', value: preset.date
+            placeholder: 'today, tomorrow, this weekend, next week, or YYYY-MM-DD', value: preset.date
         });
         dateField.addObserverForKey('value', {
             changed: () => onField('date', dateField.get('value'))
@@ -8496,8 +8538,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             save(copy);
         };
 
+        // Date and Time are both required, so a fresh row starts with real
+        // values rather than blanks the user would have to notice and fill
+        // in before it means anything.
         const add = (presets) => {
-            save(presets.concat([{ name: NEW_SNOOZE_PRESET_NAME, date: '', time: '' }]));
+            save(presets.concat([{ name: NEW_SNOOZE_PRESET_NAME, date: 'today', time: '08:00' }]));
         };
 
         const holder = new classes.View({
