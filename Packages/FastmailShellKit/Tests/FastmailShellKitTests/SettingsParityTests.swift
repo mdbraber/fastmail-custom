@@ -46,8 +46,9 @@ private let repoRoot = URL(fileURLWithPath: #filePath)
 }
 
 // background.js never builds a store key; the native part does, through the
-// shared rules. What the scripts must agree on is which settings stay on the
-// Mac and what an account id looks like.
+// shared rules, deciding on its own whether a key lands in the plain or the
+// device-type key space. What the scripts must agree on is what an account id
+// looks like.
 @Test func theSafariExtensionsScriptsAgreeWithTheSyncRules() throws {
     let background = try String(
         contentsOf: repoRoot.appendingPathComponent("SafariExtension/background.js"),
@@ -57,14 +58,6 @@ private let repoRoot = URL(fileURLWithPath: #filePath)
         contentsOf: repoRoot.appendingPathComponent("SafariExtension/early.js"),
         encoding: .utf8
     )
-
-    let line = try #require(
-        background.split(separator: "\n").first { $0.hasPrefix("const LOCAL_ONLY_KEYS = ") },
-        "background.js no longer declares LOCAL_ONLY_KEYS"
-    )
-    let names = line.split(separator: "'").enumerated().filter { $0.offset % 2 == 1 }.map { String($0.element) }
-    #expect(names.count == SettingsSyncRules.localOnlyKeys.count)
-    #expect(Set(names) == SettingsSyncRules.localOnlyKeys)
 
     let pattern = "const ACCOUNT_ID_PATTERN = /^[A-Za-z0-9_-]{1,\(SettingsSyncRules.maxAccountIdLength)}$/;"
     #expect(background.contains(pattern))

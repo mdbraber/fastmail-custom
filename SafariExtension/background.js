@@ -46,9 +46,8 @@ const TARGETS = ['https://app.fastmail.com/*', 'https://app.beta.fastmail.com/*'
 const TARGET_PATTERN = /^https:\/\/app\.(beta\.)?fastmail\.com\//;
 const PAYLOAD = 'fastmail-custom-mode.js';
 
-// Both must match SettingsSyncRules.swift, which the native part compiles and
-// which composes the store keys; SettingsParityTests reads these two lines.
-const LOCAL_ONLY_KEYS = ['bottomBarItems', 'topBarItems'];
+// Must match SettingsSyncRules.swift, which the native part compiles and
+// which composes the store keys; SettingsParityTests reads this line.
 const ACCOUNT_ID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
 
 // Safari hands every native message to this extension's own native part,
@@ -146,7 +145,6 @@ const syncedOnly = (settings) => {
     const clean = {};
     Object.keys(settings || {}).forEach((key) => {
         const value = settings[key];
-        if (LOCAL_ONLY_KEYS.includes(key)) return;
         if (typeof value === 'boolean' || typeof value === 'string') clean[key] = value;
     });
     return clean;
@@ -157,10 +155,10 @@ iCloud's settings for one account.
 
 The first time, iCloud wins when it holds any: its values replace the synced
 ones here, and a synced setting it lacks is removed, so the page shows the
-default; the bar lengths stay. When it holds none, this set stays as it is,
-and the account is joined without uploading anything, so a Mac that has not
-received iCloud's settings yet cannot overwrite them. After that each answer
-overwrites the settings iCloud holds.
+default. When it holds none, this set stays as it is, and the account is
+joined without uploading anything, so a Mac that has not received iCloud's
+settings yet cannot overwrite them. After that each answer overwrites the
+settings iCloud holds.
 */
 const pullAccount = async (accountId) => {
     if (!isAccountId(accountId) || !isSyncOn(await readStored())) return;
@@ -185,16 +183,9 @@ const pullAccount = async (accountId) => {
         const joined = stored.joinedAccounts || [];
         const isJoined = joined.includes(accountId);
         const current = settingsFor(stored, accountId);
-        let next;
-        if (isJoined || !Object.keys(incoming).length) {
-            next = Object.assign({}, current, incoming);
-        } else {
-            next = {};
-            LOCAL_ONLY_KEYS.forEach((key) => {
-                if (Object.prototype.hasOwnProperty.call(current, key)) next[key] = current[key];
-            });
-            Object.assign(next, incoming);
-        }
+        const next = (isJoined || !Object.keys(incoming).length)
+            ? Object.assign({}, current, incoming)
+            : Object.assign({}, incoming);
 
         const update = {};
         const byAccount = stored.settingsByAccount || {};
@@ -219,7 +210,7 @@ const pullOpenTabs = async () => {
 // One setting the page changed, which early.js has already saved. Only an
 // account that has had its first sync sends anything.
 const sendSetting = async (accountId, key, value) => {
-    if (!isAccountId(accountId) || LOCAL_ONLY_KEYS.includes(key)) return;
+    if (!isAccountId(accountId)) return;
     const stored = await readStored();
     if (!isSyncOn(stored) || !(stored.joinedAccounts || []).includes(accountId)) return;
     try {

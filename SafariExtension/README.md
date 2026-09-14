@@ -65,7 +65,10 @@ the host app does not.
 - The first time an account syncs here, iCloud's settings win when it holds
   any. Otherwise the set here stays, and only later changes are sent, one at
   a time.
-- `bottomBarItems` and `topBarItems` stay on this Mac.
+- `bottomBarItems` and `topBarItems` sync too, but per device type rather than
+  per account: every Mac (Safari here, plus the Personal and Work apps) shares
+  one value, separate from the one every iPhone shares and the one every iPad
+  shares. Safari shares the Mac apps' bucket, not one of its own.
 - The "Sync settings with iCloud" switch on Custom mode's settings page is
   kept as `syncEnabled`, for Safari on this Mac only. Turning it off keeps
   every setting and forgets every first sync; turning it on takes iCloud's
