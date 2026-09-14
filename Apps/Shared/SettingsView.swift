@@ -56,9 +56,6 @@ private struct GeneralSettingsView: View {
                         Text(mode.title).tag(mode.rawValue)
                     }
                 }
-                Text(ComposeMode(rawValue: composeMode)?.hint ?? "")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             } header: {
                 Text("Compose")
             } footer: {
