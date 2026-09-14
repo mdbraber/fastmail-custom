@@ -92,6 +92,9 @@ Made with the user on 2026-09-14.
   - folded groupings
   - the replayed early styles
 - **First sync:** iCloud wins.
+- **Switch:** a "Sync settings with iCloud" switch on Custom mode's settings
+  page, kept per app and per device, never synced, and on by default.
+- **Turning syncing back on:** iCloud wins again, as on a first sync.
 
 ## Part 1: storage and rules
 
@@ -243,6 +246,45 @@ Made with the user on 2026-09-14.
     `SettingsParityTests` already reads the userscript, and fails when they
     disagree with the Swift component.
 
+## Part 4: the sync switch
+
+- **The switch.** Custom mode's settings page gains a "Sync settings with
+  iCloud" switch at the top of its general section. Its hint reads: "Keeps
+  these settings the same on your other devices for this Fastmail account. The
+  bar lengths stay on each device. Turning syncing on takes the settings
+  already in iCloud."
+- **One per host, never synced.**
+  - The Personal app, the Work app and Safari each have their own switch on
+    each device, covering every account in that app.
+  - The switch is on by default.
+  - The apps store it as `settingsSync.enabled` in `UserDefaults`, outside the
+    `customMode.` namespace. Safari stores it as `syncEnabled` in
+    `storage.local`.
+- **Only where syncing exists.**
+  - A host that can sync injects `window.__customModeSync = {enabled}` next to
+    `window.__customModeSettings`: the apps at document start, Safari at tab
+    load.
+  - The page shows the switch only when that object exists, so a plain browser
+    tab never shows it.
+  - The host sets the object again with each `applySettings` push, so the switch
+    follows a change made in another window of the same app.
+- **Changing it.**
+  - In the apps, the page calls `window.native.setSettingsSync(enabled)`. This
+    posts a new bridge action `settingsSync` with `{enabled}`, which accepts a
+    real boolean only.
+  - In Safari, the page posts `{source: 'custom-mode', kind: 'sync', enabled}`,
+    and `early.js` passes it to the background script.
+- **Turning it off.**
+  - The host stops reading from and writing to the store. The apps ignore
+    external changes and skip store writes; Safari sends no `get` or `set`.
+  - Every setting keeps its current local value.
+  - All joined flags are cleared: `settingsSync.joined.*` in the apps,
+    `joinedAccounts` in Safari.
+- **Turning it on.** The host joins the current account again, as in Part 1.
+  iCloud wins when it holds settings for the account, so changes made while
+  syncing was off are replaced. Otherwise an app uploads its settings and
+  Safari keeps its set.
+
 ## Testing
 
 - **Package tests** (Swift Testing, fake store, throwaway `UserDefaults`
@@ -262,6 +304,10 @@ Made with the user on 2026-09-14.
     over-long or badly formed ones.
   - **Parity.** The extension's local-only list and key format match the Swift
     component.
+  - **The switch.** Turning sync off stops every read and write to the store
+    and clears the joined flags; turning it on joins again. The switch's key
+    is never synced or injected as a setting. The `settingsSync` bridge
+    action accepts only a boolean.
 - **Integration test** (XCTest): `window.native.account` reaches the bridge.
 - **iOS build check**, as for earlier plans.
 - **Checks on the user's devices:**
@@ -271,6 +317,9 @@ Made with the user on 2026-09-14.
   - A setting changed in Safari arrives on the iPhone, and one changed on the
     iPhone arrives in Safari: on tab focus, or within 5 minutes.
   - The bar lengths stay different per device.
+  - With syncing turned off on the iPhone, a change there stays on the
+    iPhone. Turning it back on brings back iCloud's settings.
+  - The switch does not appear in a plain browser tab.
 
 ## Risks
 
@@ -284,8 +333,8 @@ Made with the user on 2026-09-14.
     upload over the real settings.
   - The initial-sync notice and the 30-second rule reduce this. Safari avoids it
     by never uploading a whole set.
-- **Changes before joining.** A setting changed on a device before it joins is
-  replaced by iCloud's value when iCloud has one.
+- **Changes before joining.** A setting changed on a device before it joins,
+  or while syncing is off, is replaced by iCloud's value when iCloud has one.
 - **Rate limits.** iCloud may delay frequent writes. Text fields already wait
   450 ms before writing, and checkboxes write once per click.
 
@@ -296,5 +345,4 @@ Made with the user on 2026-09-14.
   early styles.
 - Plain browser tabs without a host, and Safari on iOS (no iOS extension
   exists).
-- A switch to turn syncing off.
 - The shell's own device settings and notification choices.
