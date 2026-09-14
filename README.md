@@ -40,7 +40,8 @@ cannot reach on its own: real windows, notifications, downloads and links.
 **Keyboard**
 
 - ⌨️ **Single-key actions**: keep, snooze or pin with one keystroke.
-- ⏰ **Snooze defaults**: set when snoozed mail comes back.
+- ⏰ **Snooze presets**: your own list of times on Fastmail's own Snooze
+  button, one whose time has passed greyed out rather than offered.
 
 **Sidebar and colours**
 
@@ -48,6 +49,8 @@ cannot reach on its own: real windows, notifications, downloads and links.
 - 🔻 **Triage icon**: the triage label is a funnel, so the queue stands out.
 - 🔢 **Inbox-only counts**: a label counts its Inbox mail, not everything kept under it.
 - 🎨 **Label colours**: on the message rows, or in the sidebar only.
+- 🗃️ **Group presets**: split a mailbox by age, pinned, unread or your
+  labels, or write groups of your own — edit any of them from Settings.
 
 **Windows and writing**
 
@@ -63,9 +66,18 @@ cannot reach on its own: real windows, notifications, downloads and links.
 - 📮 **mailto handling**: mail links open in the right account.
 - 🤝 **Handoff**: carry on with the same message on your other device, or in
   its browser.
-- 🔔 **Push notifications**: new mail arrives with Archive, Later and Pin on it.
-- 🤖 **Shortcuts and AppleScript**: drive the app from your own scripts.
-- ⚙️ **Shared settings**: the same settings on Mac, iPhone and in Safari.
+- 🔔 **Push notifications**: choose Off, Important, All in Inbox or labels of
+  your own per device; a banner carries Archive, Later and Pin.
+- 📱 **Home screen shortcuts**: long-press the icon on iPhone or iPad for
+  Inbox, your triage label, Compose and Search.
+- 🔒 **App lock**: iPhone and iPad can ask for Face ID, Touch ID or your
+  passcode before mail shows.
+- 🌐 **In-app browser**: links leaving the app can open in one instead of
+  Safari, when you turn that on.
+- 🤖 **Shortcuts, AppleScript and the menu bar**: drive the app from your own
+  scripts, or the Mac's own Edit menu.
+- ⚙️ **Shared settings**: the same settings on Mac, iPhone and in Safari,
+  kept in sync through iCloud when you turn that on.
 
 ## What is in here
 
@@ -84,13 +96,14 @@ than just enabled.
 **Shell apps** (`Apps/`, `Packages/FastmailShellKit/`) are native wrappers around
 the web app for macOS and iOS, one per account, sharing a Swift package. They
 add the things a website cannot: proper windows and tabs, a compose window,
-notifications, downloads, share extensions, mailto handling, Handoff between
-devices and AppleScript support. `Apps/Mailto` is a small iOS app that sends
-mailto links to whichever account you pick.
+notifications, downloads, share extensions, mailto handling, an app lock,
+Handoff between devices and AppleScript support. `Apps/Mailto` is a small iOS
+app that sends mailto links to whichever account you pick.
 
-**Push server** (`Server/`) sends new-mail pushes to the iOS apps. It watches
-each mailbox over JMAP and sends an Apple Push Notification for what lands in
-the Inbox, so the API tokens live on the server rather than on the phone. See
+**Push server** (`Server/`) sends new-mail pushes to the iOS apps: one alert
+per device for what its own notification choice asks for, everything,
+important senders and VIPs, or labels you pick, reading contacts and VIPs
+over JMAP so the API tokens live on the server rather than on the phone. See
 `Server/README.md`.
 
 ## Building
@@ -103,6 +116,7 @@ make generate        # write the Xcode project from project.yml
 make test            # package, integration and server tests, plus a syntax check
 make install-macos   # build both macOS apps into /Applications
 make install-ios     # install onto a paired device (DEVICE=… to choose one)
+make deploy          # both of the above, everywhere: /Applications and every paired iOS device
 make install-extension
 ```
 
