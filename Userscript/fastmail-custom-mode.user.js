@@ -6858,7 +6858,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 changed(value);
             }
         });
-        return { view: list, show: (next) => list.set('value', next.slice()) };
+        return {
+            view: list,
+            show: (next) => {
+                // The same ids in the same order: a refresh, and nothing to redraw
+                const shown = list.get('value');
+                if (Array.isArray(shown) && shown.join('\n') === next.join('\n')) return;
+                list.set('value', next.slice());
+            }
+        };
     };
 
     // The same list from parts that are always there: the list's own markup,
