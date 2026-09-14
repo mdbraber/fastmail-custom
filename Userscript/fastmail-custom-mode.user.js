@@ -109,9 +109,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         triageLabel: 'Triage',
         // Fastmail's own Snooze button and shortcut (b) open this list
         // instead of its own presets, one per line as "Name = Date @ Time";
-        // Date is a keyword (today, tomorrow, this weekend, next week) and
-        // Time is HH:MM, both always given. "Choose a date and time…" is
-        // always appended, last, and opens Fastmail's own picker; it is not
+        // Date is a keyword (today, tomorrow, this weekend, next week), a
+        // count and a unit short or written out (2w, in 2 weeks), or a date
+        // as YYYY-MM-DD. Time is HH:MM, both always given. "Choose a date
+        // and time…" is always appended, last, and opens Fastmail's own
+        // picker; it is not
         // part of this setting.
         snoozePresets: 'This Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
             'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
@@ -291,7 +293,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
             title: 'Snooze presets',
-            hint: 'Fastmail’s own Snooze button and shortcut (b) offer these instead of its own list, numbered so 1, 2, 3… picks one. Each needs a Date (today, tomorrow, this weekend, next week, or a date as YYYY-MM-DD) and a Time. “Choose a date and time…” is always added last.'
+            hint: 'Fastmail’s own Snooze button and shortcut (b) offer these instead of its own list, numbered so 1, 2, 3… picks one. Each needs a Date — today, tomorrow, this weekend, next week, a count and unit (2w, in 2 weeks), or a date as YYYY-MM-DD — and a Time. “Choose a date and time…” is always added last.'
         },
         {
             key: 'urgentKey', group: 'keyboard',
@@ -3559,14 +3561,23 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return add === 0 ? 7 : add;
     };
 
+    // "2w", "14d", "1m", or the same written out, "in 2 weeks", "in 14
+    // days", "in 1 month" - the count-and-unit shape this mode's old single
+    // snoozeDefault setting used, kept as one more way to write a Date, a
+    // plain offset from now rather than anchored to a weekday the way
+    // "next week" is.
+    const SNOOZE_PERIOD = /^(?:in\s+)?(\d+)\s*(d(?:ays?)?|w(?:eeks?)?|m(?:onths?)?)$/i;
+
     /*
      * A preset's Date resolved against `now`: "today" changes nothing,
      * "tomorrow" is the next day, "this weekend" / "next week" are the next
-     * Saturday or Monday that is not today, and anything shaped like
-     * YYYY-MM-DD is a literal calendar date, parsed by its parts rather
-     * than handed to `new Date(string)`, whose format support varies by
-     * engine. Anything else unread is today, the same as an empty Date
-     * would be, since every preset is required to have one.
+     * Saturday or Monday that is not today, a count and a unit (short, as
+     * "2w", or written out, as "in 2 weeks") is that many days, weeks or
+     * months from now, and anything shaped like YYYY-MM-DD is a literal
+     * calendar date, parsed by its parts rather than handed to `new
+     * Date(string)`, whose format support varies by engine. Anything else
+     * unread is today, the same as an empty Date would be, since every
+     * preset is required to have one.
      *
      * The weekend and week rules are not this mode's own convention: they
      * are Fastmail's own, read off FutureTimeMenuView.drawOptions in its
@@ -3595,7 +3606,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 target.setDate(target.getDate() + snoozeWeekdayOffset(now.getDay(), 1));
                 return target;
             default:
-            // Falls through to the literal-date check below
+            // Falls through to the period and literal-date checks below
+        }
+        const period = SNOOZE_PERIOD.exec(word);
+        if (period) {
+            const count = parseInt(period[1], 10);
+            const unit = period[2].charAt(0).toLowerCase();
+            if (unit === 'd') target.setDate(target.getDate() + count);
+            else if (unit === 'w') target.setDate(target.getDate() + count * 7);
+            else target.setMonth(target.getMonth() + count);
+            return target;
         }
         const literal = /^(\d{4})-(\d{2})-(\d{2})$/.exec(word);
         if (literal) {
@@ -8476,7 +8496,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }, 'changed');
 
         const dateField = new classes.TextInputView({
-            placeholder: 'today, tomorrow, this weekend, next week, or YYYY-MM-DD', value: preset.date
+            placeholder: 'today, tomorrow, 2w, in 2 weeks, or YYYY-MM-DD', value: preset.date
         });
         dateField.addObserverForKey('value', {
             changed: () => onField('date', dateField.get('value'))
