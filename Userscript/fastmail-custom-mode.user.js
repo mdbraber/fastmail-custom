@@ -3705,8 +3705,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ]);
     };
 
-    const snoozePresetOption = (shortcut, label, run) => {
+    // A disabled option is greyed out, and neither a click nor its number
+    // chooses it: the same isDisabled Fastmail's own drawOption sets on This
+    // evening once it is past six.
+    const snoozePresetOption = (shortcut, label, run, disabled) => {
         const option = new FastMail.classes.ButtonView({
+            isDisabled: !!disabled,
             shortcut: shortcut,
             label: label,
             target: { run: run },
@@ -3749,9 +3753,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 name: preset.name, target: snoozePresetTarget(now, preset)
             })));
 
+        // A time already gone cannot be snoozed until, so it is offered
+        // greyed out rather than hidden, keeping every number where it was.
         const entries = presets.map((preset, index) => snoozePresetOption(String(index + 1),
             snoozePresetLabel(preset.name, snoozePresetRightText(now, preset.target)),
-            () => controller().actions.snooze(null, preset.target)));
+            () => controller().actions.snooze(null, preset.target),
+            preset.target.getTime() <= now.getTime()));
 
         if (futureTimeMenuView && typeof futureTimeMenuView.showCustomPicker === 'function') {
             entries.push(snoozePresetOption(String(entries.length + 1), CHOOSE_SNOOZE_DATE_LABEL,
