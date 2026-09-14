@@ -428,3 +428,60 @@ private func replyObject(_ reply: BridgeReply) throws -> [String: Any] {
     #expect(reply.value == nil)
     #expect(opened == 1)
 }
+
+// MARK: Settings sync
+
+@Test @MainActor func accountActionHandsOnAValidAccountId() async {
+    var reported: [String] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onAccount: { reported.append($0) }
+    )
+    let reply = await bridge.handle(body: ["action": "account", "payload": ["accountId": "u1234abcd"]])
+    #expect(reply.error == nil)
+    #expect(reported == ["u1234abcd"])
+}
+
+// The id becomes part of every store key, so anything that could not be one
+// is refused before the app hears of it
+@Test @MainActor func accountActionRefusesEmptyOverlongAndBadlyFormedIds() async {
+    var reported: [String] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onAccount: { reported.append($0) }
+    )
+    let payloads: [[String: Any]] = [
+        [:],
+        ["accountId": ""],
+        ["accountId": String(repeating: "a", count: 33)],
+        ["accountId": "u1234.abcd"],
+        ["accountId": "u1234 abcd"],
+        ["accountId": "ü1234abcd"],
+        ["accountId": NSNumber(value: 1234)],
+    ]
+    for payload in payloads {
+        let reply = await bridge.handle(body: ["action": "account", "payload": payload])
+        #expect(reply.error != nil, "\(payload) should be refused")
+    }
+    #expect(reported.isEmpty)
+}
+
+// JavaScript's 1 and true both cross as NSNumber; only a real boolean counts
+@Test @MainActor func settingsSyncActionTakesARealBooleanOnly() async {
+    var received: [Bool] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+        onSettingsSync: { received.append($0) }
+    )
+    let on = await bridge.handle(body: ["action": "settingsSync", "payload": ["enabled": true]])
+    let off = await bridge.handle(body: ["action": "settingsSync", "payload": ["enabled": false]])
+    #expect(on.error == nil)
+    #expect(off.error == nil)
+    for value in [NSNumber(value: 1), NSNumber(value: 0), "true", [:] as [String: String]] as [Any] {
+        let reply = await bridge.handle(body: ["action": "settingsSync", "payload": ["enabled": value]])
+        #expect(reply.error != nil)
+    }
+    let missing = await bridge.handle(body: ["action": "settingsSync", "payload": [:]])
+    #expect(missing.error != nil)
+    #expect(received == [true, false])
+}

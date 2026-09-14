@@ -62,23 +62,39 @@ public enum CustomModeSettings {
         return json
     }
 
+    /// What tells the page that its host can sync these settings, and
+    /// whether the host's switch is on. Nothing where no sync component was
+    /// installed, so the page draws no switch there.
+    static func syncLine(_ syncEnabled: Bool?) -> String {
+        guard let syncEnabled else { return "" }
+        return "\nwindow.__customModeSync = {\"enabled\":\(syncEnabled)};"
+    }
+
     /// Writes the settings global before anything else runs, so the payload
     /// finds it when it starts; the WKUserScript counterpart of the Safari
     /// extension injecting settings ahead of its payload.
     @MainActor
-    public static func bootstrapScript(from defaults: UserDefaults = .standard) -> WKUserScript {
+    public static func bootstrapScript(
+        from defaults: UserDefaults = .standard,
+        syncEnabled: Bool? = nil
+    ) -> WKUserScript {
         WKUserScript(
-            source: "window.__customModeSettings = \(json(from: defaults));",
+            source: "window.__customModeSettings = \(json(from: defaults));" + syncLine(syncEnabled),
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         )
     }
 
-    /// Pushes the settings into a page that is already running. The global is
-    /// refreshed as well so a payload injected later still reads the latest.
-    public static func applyScriptSource(from defaults: UserDefaults = .standard) -> String {
+    /// Pushes the settings into a page that is already running. The globals
+    /// are refreshed as well so a payload injected later still reads the
+    /// latest, and the sync switch's state is in place before the page is
+    /// told to apply.
+    public static func applyScriptSource(
+        from defaults: UserDefaults = .standard,
+        syncEnabled: Bool? = nil
+    ) -> String {
         """
-        window.__customModeSettings = \(json(from: defaults));
+        window.__customModeSettings = \(json(from: defaults));\(syncLine(syncEnabled))
         if (window.customMode) window.customMode.applySettings(window.__customModeSettings);
         """
     }

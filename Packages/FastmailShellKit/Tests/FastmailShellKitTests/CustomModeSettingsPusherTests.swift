@@ -35,3 +35,16 @@ import Testing
     #expect(CustomModeSettings.json(from: defaults) == before)
     defaults.removePersistentDomain(forName: suite)
 }
+
+// The switch is not a setting, so a flip leaves the settings as they were;
+// the pusher compares the whole script, which carries the switch
+@Test func aFlippedSyncSwitchIsPushedAndAnUnchangedOneIsNot() {
+    let suite = "pusher-sync-switch-test"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    let on = CustomModeSettings.applyScriptSource(from: defaults, syncEnabled: true)
+    let off = CustomModeSettings.applyScriptSource(from: defaults, syncEnabled: false)
+    #expect(CustomModeSettingsPusher.shouldPush(off, after: on, force: false))
+    #expect(!CustomModeSettingsPusher.shouldPush(off, after: off, force: false))
+    defaults.removePersistentDomain(forName: suite)
+}

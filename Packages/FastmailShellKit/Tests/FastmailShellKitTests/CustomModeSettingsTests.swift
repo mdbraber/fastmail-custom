@@ -71,3 +71,28 @@ private func freshDefaults(_ name: String) -> UserDefaults {
     #expect(script.isForMainFrameOnly)
     #expect(script.source.hasPrefix("window.__customModeSettings = {"))
 }
+
+// Only a host that can sync says so; a page told nothing draws no switch.
+// Where it is said, it is said before the page is asked to apply.
+@Test func theApplyScriptCarriesTheSyncSwitchOnlyWhereThereIsOne() throws {
+    let defaults = freshDefaults(#function)
+    #expect(!CustomModeSettings.applyScriptSource(from: defaults).contains("__customModeSync"))
+
+    let on = CustomModeSettings.applyScriptSource(from: defaults, syncEnabled: true)
+    #expect(on.contains(#"window.__customModeSync = {"enabled":true};"#))
+    let sync = try #require(on.range(of: "window.__customModeSync"))
+    let apply = try #require(on.range(of: "applySettings"))
+    #expect(sync.lowerBound < apply.lowerBound)
+
+    let off = CustomModeSettings.applyScriptSource(from: defaults, syncEnabled: false)
+    #expect(off.contains(#"window.__customModeSync = {"enabled":false};"#))
+}
+
+@Test @MainActor func theBootstrapCarriesTheSyncSwitchOnlyWhereThereIsOne() {
+    let defaults = freshDefaults(#function)
+    #expect(!CustomModeSettings.bootstrapScript(from: defaults).source.contains("__customModeSync"))
+
+    let script = CustomModeSettings.bootstrapScript(from: defaults, syncEnabled: false)
+    #expect(script.source.hasPrefix("window.__customModeSettings = {"))
+    #expect(script.source.hasSuffix(#"window.__customModeSync = {"enabled":false};"#))
+}

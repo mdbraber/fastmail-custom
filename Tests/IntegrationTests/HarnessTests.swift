@@ -855,6 +855,43 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(stored as? Bool, true)
     }
 
+    // MARK: Settings sync
+
+    func testAccountReachesTheBridge() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        _ = try await evaluate(webView, "window.native.account('u1234abcd'); true;")
+        try await waitUntil { self.received.contains { $0["action"] as? String == "account" } }
+        let message = try XCTUnwrap(received.first { $0["action"] as? String == "account" })
+        let payload = try XCTUnwrap(message["payload"] as? [String: Any])
+        XCTAssertEqual(payload["accountId"] as? String, "u1234abcd")
+    }
+
+    // What really crosses for a JavaScript false and a JavaScript 1, fed to
+    // the bridge the app runs: the switch takes the boolean and refuses the
+    // number, for the reason testSetSettingWithARealJavaScriptOneIsRefused
+    // gives.
+    func testSetSettingsSyncCrossesAsARealBooleanOnly() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        let sent = { self.received.filter { $0["action"] as? String == "settingsSync" } }
+        _ = try await evaluate(webView, "window.native.setSettingsSync(false); true;")
+        try await waitUntil { sent().count == 1 }
+        _ = try await evaluate(webView, "window.native.setSettingsSync(1); true;")
+        try await waitUntil { sent().count == 2 }
+
+        var handed: [Bool] = []
+        let bridge = NativeBridge(
+            expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
+            onSettingsSync: { handed.append($0) }
+        )
+        let boolean = await bridge.handle(body: sent()[0])
+        let number = await bridge.handle(body: sent()[1])
+        XCTAssertNil(boolean.error)
+        XCTAssertNotNil(number.error)
+        XCTAssertEqual(handed, [false])
+    }
+
     // MARK: The Notifications page
 
     // The page is for the phone and the iPad; the Mac keeps Fastmail's own,

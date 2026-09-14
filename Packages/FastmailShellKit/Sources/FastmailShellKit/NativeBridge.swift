@@ -35,6 +35,10 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     /// saved, or nothing where there is no such page.
     private let onSetNotifications: @MainActor (NotificationChoice) -> NotificationChoice?
     private let onOpenNotificationSettings: @MainActor () -> Void
+    /// The Fastmail account the page is on, already checked, for settings sync.
+    private let onAccount: @MainActor (String) -> Void
+    /// The settings page's "Sync settings with iCloud" switch.
+    private let onSettingsSync: @MainActor (Bool) -> Void
 
     public init(
         expectedHost: String,
@@ -54,7 +58,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onCompose: @escaping @MainActor (String) -> String = { _ in ComposeMode.inline.rawValue },
         onNotificationState: @escaping @MainActor () async -> NotificationState? = { nil },
         onSetNotifications: @escaping @MainActor (NotificationChoice) -> NotificationChoice? = { _ in nil },
-        onOpenNotificationSettings: @escaping @MainActor () -> Void = {}
+        onOpenNotificationSettings: @escaping @MainActor () -> Void = {},
+        onAccount: @escaping @MainActor (String) -> Void = { _ in },
+        onSettingsSync: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
@@ -74,6 +80,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onNotificationState = onNotificationState
         self.onSetNotifications = onSetNotifications
         self.onOpenNotificationSettings = onOpenNotificationSettings
+        self.onAccount = onAccount
+        self.onSettingsSync = onSettingsSync
     }
 
     static func rect(from values: [Double]) -> CGRect? {
@@ -222,6 +230,26 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             }
         case "openNotificationSettings":
             onOpenNotificationSettings()
+            return BridgeReply(value: nil, error: nil)
+        case "account":
+            // The id becomes part of every store key, so it is checked here
+            guard
+                let accountId = payload["accountId"] as? String,
+                SettingsSyncRules.isValidAccountId(accountId)
+            else {
+                return BridgeReply(value: nil, error: "account payload has no usable accountId")
+            }
+            onAccount(accountId)
+            return BridgeReply(value: nil, error: nil)
+        case "settingsSync":
+            // A real boolean only, for the reason the setting action gives
+            guard
+                let number = payload["enabled"] as? NSNumber,
+                CFGetTypeID(number as CFTypeRef) == CFBooleanGetTypeID()
+            else {
+                return BridgeReply(value: nil, error: "settingsSync enabled must be a boolean")
+            }
+            onSettingsSync(number.boolValue)
             return BridgeReply(value: nil, error: nil)
         default:
             return BridgeReply(value: nil, error: "unknown action: \(action)")

@@ -780,6 +780,18 @@
         return post('setting', { key: key, value: value });
     };
 
+    // Which Fastmail account the page is on, so the app keeps synced
+    // settings with their own account. The app checks the id.
+    window.native.account = function (accountId) {
+        return post('account', { accountId: accountId });
+    };
+
+    // The settings page's "Sync settings with iCloud" switch. The app takes
+    // a real boolean only.
+    window.native.setSettingsSync = function (enabled) {
+        return post('settingsSync', { enabled: enabled });
+    };
+
     // The Notifications page's way to the app, on the phone and the iPad. The
     // Mac keeps Fastmail's own page, so under the Electron user agent there
     // is none, and the userscript leaves Fastmail's page alone there.

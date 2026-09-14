@@ -515,17 +515,21 @@ final class BadgePuller {
 @MainActor
 final class CustomModeSettingsPusher {
     private weak var webView: WKWebView?
+    /// Whether the app's sync switch is on, or nothing where the app cannot
+    /// sync. Asked afresh for every push.
+    private let syncEnabled: @MainActor () -> Bool?
     // Written once in init, read again only from deinit; never concurrently
     private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
     private var pushTask: Task<Void, Never>?
-    /// The settings last pushed into the running page, or nothing while it
-    /// has only what it was built with.
+    /// The script last pushed into the running page, settings and switch
+    /// together, or nothing while it has only what it was built with.
     private var pushed: String?
     /// Whether the push waiting to go was asked for regardless of change.
     private var forceNext = false
 
-    init(webView: WKWebView) {
+    init(webView: WKWebView, syncEnabled: @escaping @MainActor () -> Bool? = { nil }) {
         self.webView = webView
+        self.syncEnabled = syncEnabled
         let center = NotificationCenter.default
         observers.append(center.addObserver(
             forName: UserDefaults.didChangeNotification,
@@ -573,15 +577,15 @@ final class CustomModeSettingsPusher {
         pushTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled, let self else { return }
-            let settings = CustomModeSettings.json(from: .standard)
+            // The whole script is compared, not the settings alone: the sync
+            // switch lives outside them, and a flip made in one window has to
+            // reach the others
+            let script = CustomModeSettings.applyScriptSource(from: .standard, syncEnabled: self.syncEnabled())
             let force = self.forceNext
             self.forceNext = false
-            guard Self.shouldPush(settings, after: self.pushed, force: force) else { return }
-            self.pushed = settings
-            self.webView?.evaluateJavaScript(
-                CustomModeSettings.applyScriptSource(),
-                completionHandler: nil
-            )
+            guard Self.shouldPush(script, after: self.pushed, force: force) else { return }
+            self.pushed = script
+            self.webView?.evaluateJavaScript(script, completionHandler: nil)
         }
     }
 }
