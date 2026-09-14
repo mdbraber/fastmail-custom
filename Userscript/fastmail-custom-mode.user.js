@@ -411,6 +411,135 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
+     * Settings sync. A host that can keep these settings in iCloud, which is
+     * the apps and the Safari extension, says so by setting
+     * window.__customModeSync = {enabled} beside the settings, and sets it
+     * again before every applySettings. A plain browser tab has no such
+     * object, so it draws no switch.
+     *
+     * The host keeps each Fastmail account's settings apart, so the page
+     * tells it which account it is, once per load. Fastmail's session can
+     * arrive after its router and classes, so the page asks again every half
+     * second for a minute and then lets go; a page that never learns its
+     * account keeps its settings on this device, as before.
+     */
+    const SYNC_TITLE = 'Sync settings with iCloud';
+    const SYNC_HINT = 'Keeps these settings the same on your other devices for this Fastmail account. ' +
+        'The bar lengths stay on each device. Turning syncing on takes the settings already in iCloud.';
+    const ACCOUNT_REPORT_DELAY = 500;
+    const ACCOUNT_REPORT_TRIES = 120;
+
+    const syncState = () => {
+        const sync = window.__customModeSync;
+        return sync && typeof sync.enabled === 'boolean' ? sync : null;
+    };
+
+    // The host's echo comes back through applySettings; the state changes
+    // here first, so the switch and the page agree until it lands.
+    const writeSyncEnabled = (enabled) => {
+        window.__customModeSync = { enabled: enabled };
+
+        if (window.native && typeof window.native.setSettingsSync === 'function') {
+            window.native.setSettingsSync(enabled);
+            return;
+        }
+
+        if (hostIsExtension()) {
+            window.postMessage(
+                { source: 'custom-mode', kind: 'sync', enabled: enabled },
+                location.origin
+            );
+        }
+    };
+
+    const reportAccount = (accountId) => {
+        if (window.native && typeof window.native.account === 'function') {
+            window.native.account(accountId);
+            return;
+        }
+
+        if (hostIsExtension()) {
+            window.postMessage(
+                { source: 'custom-mode', kind: 'account', accountId: accountId },
+                location.origin
+            );
+        }
+    };
+
+    let accountReportStarted = false;
+
+    const reportAccountWhenKnown = () => {
+        if (accountReportStarted) return;
+        accountReportStarted = true;
+        let tries = 0;
+        const attempt = () => {
+            let accountId = null;
+            try {
+                accountId = window.FastMail ? primaryMailAccountId() : null;
+            } catch (error) {
+                accountId = null;
+            }
+            if (typeof accountId === 'string' && accountId) {
+                reportAccount(accountId);
+                return;
+            }
+            tries += 1;
+            if (tries < ACCOUNT_REPORT_TRIES) setTimeout(attempt, ACCOUNT_REPORT_DELAY);
+        };
+        attempt();
+    };
+
+    /*
+     * The switch, at the top of the general section, in a view of its own so
+     * that a change made in another window redraws the switch and nothing
+     * else on the page. A switch just flipped here already shows what the
+     * host will echo back, so that echo redraws nothing.
+     */
+    let syncRowView = null;
+    let syncRowShown = null;
+
+    const syncRow = (classes) => {
+        const holder = new classes.View({
+            draw: () => {
+                const state = syncState();
+                syncRowShown = state ? state.enabled : null;
+                if (!state) return [];
+
+                const box = new classes.ToggleView({
+                    label: SYNC_TITLE,
+                    description: SYNC_HINT,
+                    value: state.enabled
+                });
+                box.addObserverForKey('value', {
+                    changed: () => {
+                        const enabled = !!box.get('value');
+                        syncRowShown = enabled;
+                        writeSyncEnabled(enabled);
+                    }
+                }, 'changed');
+                return [box];
+            }
+        });
+        syncRowView = holder;
+        return holder;
+    };
+
+    // What goes ahead of a group's own options
+    const syncRows = (classes, group) =>
+        group.id === 'general' && syncState() ? [syncRow(classes)] : [];
+
+    const refreshSyncRow = () => {
+        const state = syncState();
+        const shown = state ? state.enabled : null;
+        if (!syncRowView || shown === syncRowShown) return;
+        try {
+            if (syncRowView.get('isInDocument')) syncRowView.viewNeedsRedraw();
+        } catch (error) {
+            reportFault('the iCloud sync switch could not be redrawn', error);
+        }
+    };
+
+    /*
      * ----------------------------------------------------------------
      * State
      * ----------------------------------------------------------------
@@ -6560,7 +6689,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             draw() {
                 register.reset();
                 const sections = SETTING_GROUPS.map(group => settingsSection(group,
-                    settingsInGroup(group.id).map(option => sectionRow(classes, option, register))));
+                    syncRows(classes, group).concat(
+                        settingsInGroup(group.id).map(option => sectionRow(classes, option, register)))));
                 register.settle();
                 return sections;
             },
@@ -8403,6 +8533,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         updateStyles();
         installAppBadge();
         startSettingsPage();
+        reportAccountWhenKnown();
 
         // A rotation, a split view or a window dragged narrower all change
         // how many verbs fit on the bar
@@ -8462,6 +8593,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 updateStyles();
                 updateInboxLabelVisibility();
                 refresh();
+                // The host sets its sync switch's state before each push
+                refreshSyncRow();
             }
         };
 
@@ -8486,14 +8619,22 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
+    // The account is reported as soon as the settings page can start, since a
+    // load straight onto Settings may never reach start()
     const mainObserver = new MutationObserver(() => {
-        if (settingsPageCanStart()) startSettingsPage();
+        if (settingsPageCanStart()) {
+            startSettingsPage();
+            reportAccountWhenKnown();
+        }
         if (!isReady()) return;
         mainObserver.disconnect();
         start();
     });
 
-    if (settingsPageCanStart()) startSettingsPage();
+    if (settingsPageCanStart()) {
+        startSettingsPage();
+        reportAccountWhenKnown();
+    }
 
     if (isReady()) {
         start();
