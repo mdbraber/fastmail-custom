@@ -111,9 +111,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // instead of its own presets, one per line as "Name = Date @ Time";
         // Date is a keyword (today, tomorrow, this weekend, next week), a
         // count and a unit short or written out (2w, in 2 weeks), or a date
-        // as YYYY-MM-DD. Time is HH:MM, both always given. "Choose a date
-        // and time…" is always appended, last, and opens Fastmail's own
-        // picker; it is not
+        // as YYYY-MM-DD. Time is HH:MM, both always given. "Later today",
+        // four hours from now, always comes first, and "Choose a date and
+        // time…", which opens Fastmail's own picker, always last; neither is
         // part of this setting.
         snoozePresets: 'This Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
             'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
@@ -295,7 +295,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
             title: 'Snooze presets',
-            hint: 'Fastmail’s own Snooze button and shortcut (b) offer these instead of its own list, numbered so 1, 2, 3… picks one. Each needs a Date — today, tomorrow, this weekend, next week, a count and unit (2w, in 2 weeks), or a date as YYYY-MM-DD — and a Time. “Choose a date and time…” is always added last.'
+            hint: 'Fastmail’s own Snooze button and shortcut (b) offer these instead of its own list, numbered so 1, 2, 3… picks one. Each needs a Date — today, tomorrow, this weekend, next week, a count and unit (2w, in 2 weeks), or a date as YYYY-MM-DD — and a Time. “Later today”, four hours from now, is always added first, and “Choose a date and time…” last.'
         },
         {
             key: 'swapArchiveExpand', group: 'keyboard',
@@ -3527,6 +3527,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * Custom… option's target and method (showCustomPicker), taken off
      * whichever stock option still carries them before they are replaced,
      * so it opens the very same real picker Fastmail's own entry did.
+     *
+     * "Later today" is not a preset either: it always comes first, four
+     * hours from whenever the menu is drawn.
      */
 
     // "08:00". Anything unreadable is eight in the morning.
@@ -3673,7 +3676,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // Fastmail's own bundle (FutureTimeMenuView.drawOption in
     // NewEvent.mod.js) rather than invented here — its own two booleans,
     // `i >= s` and `i >= s + 6048e5` (today at midnight, and a week past
-    // that), decide the same thing this mirrors with plain Date math.
+    // that), decide the same thing this mirrors with plain Date math. The
+    // time is on the 24-hour clock, as a preset's own Time is written,
+    // whatever clock the browser's locale would use.
     const snoozePresetRightText = (now, target) => {
         const todayEnd = new Date(now.getTime());
         todayEnd.setHours(24, 0, 0, 0);
@@ -3681,7 +3686,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const showDate = target.getTime() >= todayEnd.getTime() + 6048e5;
         const weekday = showWeekday ? target.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' : '';
         const date = showDate ? target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' : '';
-        const time = target.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        const time = String(target.getHours()).padStart(2, '0') + ':' +
+            String(target.getMinutes()).padStart(2, '0');
         return weekday + date + time;
     };
 
@@ -3712,6 +3718,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const CHOOSE_SNOOZE_DATE_LABEL = 'Choose a date and time…';
 
+    // Always first, whatever the presets say: four hours from when the menu
+    // is drawn, to the minute.
+    const LATER_TODAY_LABEL = 'Later today';
+    const LATER_TODAY_HOURS = 4;
+
+    const laterTodayTarget = (now) => {
+        const target = new Date(now.getTime() + LATER_TODAY_HOURS * 36e5);
+        target.setSeconds(0, 0);
+        return target;
+    };
+
     // Replaces Fastmail's own preset list with this mode's, through the
     // same patched MenuView.prototype.draw as addGroupings (see patchMenus
     // below): options is the plain array FutureTimeMenuView built, and
@@ -3727,21 +3744,20 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const futureTimeMenuView = custom.get('target');
 
         const now = new Date();
-        const presets = parseSnoozePresets(settings.snoozePresets);
+        const presets = [{ name: LATER_TODAY_LABEL, target: laterTodayTarget(now) }]
+            .concat(parseSnoozePresets(settings.snoozePresets).map(preset => ({
+                name: preset.name, target: snoozePresetTarget(now, preset)
+            })));
 
-        const entries = presets.map((preset, index) => {
-            const target = snoozePresetTarget(now, preset);
-            const label = snoozePresetLabel(preset.name, snoozePresetRightText(now, target));
-            return snoozePresetOption(String(index + 1), label,
-                () => controller().actions.snooze(null, target));
-        });
+        const entries = presets.map((preset, index) => snoozePresetOption(String(index + 1),
+            snoozePresetLabel(preset.name, snoozePresetRightText(now, preset.target)),
+            () => controller().actions.snooze(null, preset.target)));
 
         if (futureTimeMenuView && typeof futureTimeMenuView.showCustomPicker === 'function') {
             entries.push(snoozePresetOption(String(entries.length + 1), CHOOSE_SNOOZE_DATE_LABEL,
                 () => futureTimeMenuView.showCustomPicker()));
         }
 
-        if (!entries.length) return;
         options.splice(0, options.length, ...entries);
     };
 
@@ -8517,14 +8533,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * Your snooze presets, a drag-reorderable list built the same way
      * groupingsSection builds its own (reorderList, names as ids, a dialog
      * to edit one, discrete add/remove/reorder actions that read the
-     * setting fresh and write it back whole). There is no raw-text mode
-     * here the way groupings has one: three short fields a row need no
-     * second way to edit them.
+     * setting fresh and write it back whole).
      *
-     * "Choose a date and time…" is drawn last, always, and is not part of
-     * the setting at all - see addSnoozePresets, which appends it itself
-     * whenever the menu is actually built - so there is nothing here for it
-     * to move, edit or remove.
+     * "Later today" is drawn first and "Choose a date and time…" last,
+     * always, and neither is part of the setting at all - see
+     * addSnoozePresets, which adds both itself whenever the menu is actually
+     * built - so there is nothing here for them to move, edit or remove.
      */
     const snoozePresetsSection = (classes) => {
         const el = FastMail.el;
@@ -8592,6 +8606,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 const list = reorderList(classes, items, reorder);
 
+                const laterRow = el('div.u-list-item.u-color-unimportant',
+                    [LATER_TODAY_LABEL + ' — in ' + LATER_TODAY_HOURS + ' hours']);
                 const customRow = el('div.u-list-item.u-color-unimportant', [CHOOSE_SNOOZE_DATE_LABEL]);
 
                 const addButton = new classes.ButtonView({
@@ -8602,7 +8618,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 return [
                     el('h3.u-trim.u-font-bold', [option.title]),
-                    el('div', [list, customRow]),
+                    el('div', [laterRow, list, customRow]),
                     addButton,
                     el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint])
                 ];
