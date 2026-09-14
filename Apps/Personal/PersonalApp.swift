@@ -8,6 +8,12 @@ struct PersonalApp: App {
     @UIApplicationDelegateAdaptor(PushRegistrar.self) private var pushRegistrar
     #endif
 
+    init() {
+        // One for the whole app, before its first window: Custom mode's
+        // settings follow each Fastmail account to your other devices
+        CustomModeSettingsSync.install()
+    }
+
     var body: some Scene {
         WindowGroup(id: "main") {
             AppShell(profile: profile)

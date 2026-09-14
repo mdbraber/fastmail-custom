@@ -221,3 +221,28 @@ private let nonMatchingHeader = """
         ) == nil
     )
 }
+
+// Tests install no sync component, and neither does the Mailto app: such a
+// page is told nothing about syncing, so it draws no switch
+@Test @MainActor func withoutASyncComponentThePageIsToldNothingAboutSync() {
+    #expect(CustomModeSettingsSync.current == nil)
+    let loader = StubLoader(resources: [
+        "harness.js": "HARNESS",
+        "userscript.js": nonMatchingHeader + "\nBODY"
+    ])
+    let model = ShellModel()
+    let profile = Profile(
+        id: "test",
+        displayName: "Test",
+        startURL: URL(string: "https://127.0.0.1:1/")!,
+        overlayScriptName: nil,
+        urlScheme: "test",
+        accountID: nil
+    )
+    let container = WebContainer(profile: profile, model: model, loader: loader)
+    let coordinator = WebCoordinator(model: model, startURL: profile.startURL)
+    let webView = container.makeWebView(coordinator: coordinator)
+    let bootstrap = webView.configuration.userContentController.userScripts[0]
+    #expect(bootstrap.source.hasPrefix("window.__customModeSettings = {"))
+    #expect(!bootstrap.source.contains("__customModeSync"))
+}

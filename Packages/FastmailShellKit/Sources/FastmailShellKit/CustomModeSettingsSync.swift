@@ -245,3 +245,34 @@ public final class CustomModeSettingsSync {
         }
     }
 }
+
+extension NSUbiquitousKeyValueStore: KeyValueStore {}
+
+@MainActor
+public extension CustomModeSettingsSync {
+    /// The one the app installed, or nothing where none was: the tests, the
+    /// integration tests and the Mailto app.
+    private(set) static var current: CustomModeSettingsSync?
+
+    /// Makes the app's sync component on iCloud's own store and starts it;
+    /// the same one when called again. The app's entry point calls this, so
+    /// it exists before the first window builds its web view.
+    @discardableResult
+    static func install() -> CustomModeSettingsSync {
+        if let current { return current }
+        let sync = CustomModeSettingsSync(
+            defaults: .standard,
+            store: NSUbiquitousKeyValueStore.default,
+            hasICloudIdentity: { FileManager.default.ubiquityIdentityToken != nil },
+            schedule: { delay, work in
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    work()
+                }
+            }
+        )
+        current = sync
+        sync.start()
+        return sync
+    }
+}

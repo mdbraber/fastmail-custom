@@ -118,6 +118,8 @@ public struct WebContainer {
             onOpenSettings: { SettingsPresenter.shared.open() },
             onSetting: { key, value in
                 UserDefaults.standard.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
+                // Saved first; iCloud gets it once this account has joined
+                CustomModeSettingsSync.current?.localChanged(key: key, value: value)
                 #if canImport(UIKit)
                 // The home-screen quick actions are built from the badge
                 // label. They are rebuilt when the app comes forward, which
@@ -172,6 +174,14 @@ public struct WebContainer {
                 #if canImport(UIKit)
                 NotificationSettings.openSystemSettings()
                 #endif
+            },
+            // Settings sync, where the app installed it; nothing happens
+            // without it
+            onAccount: { accountId in
+                CustomModeSettingsSync.current?.accountReported(accountId)
+            },
+            onSettingsSync: { enabled in
+                CustomModeSettingsSync.current?.setEnabled(enabled)
             }
         )
         configuration.userContentController.addScriptMessageHandler(
@@ -182,8 +192,10 @@ public struct WebContainer {
 
         // Settings go in ahead of every other script: the userscript reads
         // window.__customModeSettings the moment it starts.
+        // With the sync switch's state where the app can sync, so the page
+        // draws the switch from the start
         configuration.userContentController.addUserScript(
-            CustomModeSettings.bootstrapScript()
+            CustomModeSettings.bootstrapScript(syncEnabled: CustomModeSettingsSync.current?.isEnabled)
         )
 
         do {
@@ -213,7 +225,10 @@ public struct WebContainer {
         webView.isInspectable = WebInspection.isAllowed()
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
-        coordinator.settingsPusher = CustomModeSettingsPusher(webView: webView)
+        coordinator.settingsPusher = CustomModeSettingsPusher(
+            webView: webView,
+            syncEnabled: { CustomModeSettingsSync.current?.isEnabled }
+        )
         coordinator.sharePresenter = SharePresenter(model: model, webView: webView)
         coordinator.linkLoader = LinkLoader(model: model, webView: webView)
         coordinator.actionRunner = ActionRunner(model: model, webView: webView)

@@ -10,5 +10,10 @@
     <string>$(AppIdentifierPrefix)$(CFBundleIdentifier)</string>
     <key>com.apple.developer.team-identifier</key>
     <string>$(DEVELOPMENT_TEAM)</string>
+    <!-- Custom mode's settings in iCloud key-value storage. One store for
+         the Personal and Work apps and the Safari extension, which keep
+         each Fastmail account apart by key. -->
+    <key>com.apple.developer.ubiquity-kvstore-identifier</key>
+    <string>$(TeamIdentifierPrefix)com.mdbraber.fastmail-custom.personal</string>
 </dict>
 </plist>
