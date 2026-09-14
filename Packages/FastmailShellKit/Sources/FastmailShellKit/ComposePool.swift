@@ -539,10 +539,18 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         return container
     }
 
+    // A window opened for a page Fastmail asked for shares its own
+    // WKUserContentController with the page that asked, rather than getting
+    // one of its own; that page hands out the same controller again for
+    // every message it pops out, so a second popout must not add the
+    // handler again or WKUserContentController raises "already added".
+    private static var watchedControllers: Set<ObjectIdentifier> = []
+
     private static func watchRecipients(
         in controller: WKUserContentController,
         reportingTo handler: ComposeWindows
     ) {
+        guard watchedControllers.insert(ObjectIdentifier(controller)).inserted else { return }
         controller.add(handler, name: "fmshellRecipients")
         // Every frame, not only the page's own: a message's body is shown in
         // one of its own, and printing is asked for from in there.

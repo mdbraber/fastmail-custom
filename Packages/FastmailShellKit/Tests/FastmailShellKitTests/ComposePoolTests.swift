@@ -136,6 +136,7 @@ private final class FakeWindow {}
 
 #if canImport(AppKit) && !targetEnvironment(macCatalyst)
 import AppKit
+import WebKit
 
 @MainActor
 private func makePlainWindow() -> NSWindow {
@@ -270,5 +271,16 @@ private func makePlainWindow() -> NSWindow {
     #expect(ComposeWindows.windowTitle(composing: true, pageTitle: "Compose message") == "New Message")
     #expect(ComposeWindows.windowTitle(composing: false, pageTitle: "Lunch") == "Lunch")
     #expect(ComposeWindows.windowTitle(composing: false, pageTitle: "") == "New Message")
+}
+
+// The page a popout is asked from hands out its own WKWebViewConfiguration
+// again for every message it pops out, closed or not; WKUserContentController
+// raises an uncatchable exception on a second addScriptMessageHandler for the
+// same name, which used to crash the app the second time someone used the
+// popout button.
+@Test @MainActor func aSecondPopoutFromTheSamePageDoesNotReaddTheSameHandler() {
+    let configuration = WKWebViewConfiguration()
+    _ = ComposeWindows.shared.window(for: configuration, size: NSSize(width: 400, height: 400))
+    _ = ComposeWindows.shared.window(for: configuration, size: NSSize(width: 400, height: 400))
 }
 #endif
