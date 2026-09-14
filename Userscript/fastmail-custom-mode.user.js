@@ -8437,75 +8437,101 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return holder;
     };
 
+    // The list row's own label: a plain summary, since "Name — Date @
+    // Time" says exactly what a preset resolves to without computing it
+    // against "now" the way the menu's own two-part label does.
+    const snoozePresetSummary = (preset) =>
+        preset.name + ' — ' + (preset.date || 'today') + ' @ ' + (preset.time || '08:00');
+
+    // Edited in a dialog of its own, the same shell editGrouping's own
+    // editor sits in (framedModal, read off Fastmail's bundle) - just with
+    // three plain fields as its content instead of Fastmail's splits
+    // editor, which three short fields have no use for.
+    const editSnoozePreset = (classes, preset, done) => {
+        if (!classes.ModalOverlayView || !classes.ScrollView ||
+            !classes.TextInputView || !classes.ButtonView) {
+            reportFault('a dialog is not available; edit the text instead');
+            return;
+        }
+
+        const el = FastMail.el;
+        let saved = null;
+
+        const nameField = new classes.TextInputView({ placeholder: 'Name', value: preset.name });
+        const dateField = new classes.TextInputView({
+            placeholder: 'today, tomorrow, 2w, in 2 weeks, or YYYY-MM-DD', value: preset.date
+        });
+        const timeField = new classes.TextInputView({ placeholder: 'HH:MM', value: preset.time });
+
+        const field = (label, input) => el('div.u-space-y-1', [
+            el('div.u-text-sm.u-color-unimportant', [label]), input
+        ]);
+
+        const save = () => {
+            const name = (nameField.get('value') || '').trim();
+            saved = {
+                name: name || preset.name,
+                date: (dateField.get('value') || '').trim(),
+                time: (timeField.get('value') || '').trim()
+            };
+            view.fire('modal:hide');
+        };
+        const cancel = () => view.fire('modal:hide');
+
+        const view = new classes.View({
+            className: 'u-p-6 u-space-y-5',
+            draw: () => [
+                el('h1.u-trim.u-font-bold', ['Edit preset']),
+                el('div.u-space-y-3', [
+                    field('Name', nameField), field('Date', dateField), field('Time', timeField)
+                ]),
+                el('div.u-flex.u-space-x-2', [
+                    new classes.ButtonView({
+                        type: 'v-Button--cta v-Button--sizeM', label: 'Save',
+                        target: { go: save }, method: 'go'
+                    }),
+                    new classes.ButtonView({
+                        type: 'v-Button--standard v-Button--sizeM', label: 'Cancel',
+                        target: { go: cancel }, method: 'go'
+                    })
+                ])
+            ],
+            keyOutside: (event) => {
+                if (event.type !== 'keydown') return;
+                if (event.key === 'Enter') save();
+                else if (event.key === 'Escape') cancel();
+            }
+        });
+
+        const dialog = framedModal(classes, view, 420, event => view.keyOutside(event));
+        view.on('modal:hide', { close: () => dialog.modal.hide() }, 'close');
+
+        dialog.modal.show().then(() => {
+            dialog.takeApart();
+            if (saved) done(saved);
+        });
+    };
+
+    const NEW_SNOOZE_PRESET_NAME = 'New preset';
+
     /*
-     * Your snooze presets, as a list rather than as text: three short fields
-     * a row (Name, Date, Time) are nothing like a grouping's own multi-line
-     * blocks, so this is not Fastmail's own splits editor seeded with a
-     * stand-in, the way groupingsSection reuses it - a modal dialog is not
-     * warranted for three short fields, and the fields sit in the row
-     * itself instead.
+     * Your snooze presets, a drag-reorderable list built the same way
+     * groupingsSection builds its own (reorderList, names as ids, a dialog
+     * to edit one, discrete add/remove/reorder actions that read the
+     * setting fresh and write it back whole). There is no raw-text mode
+     * here the way groupings has one: three short fields a row need no
+     * second way to edit them.
      *
      * "Choose a date and time…" is drawn last, always, and is not part of
      * the setting at all - see addSnoozePresets, which appends it itself
      * whenever the menu is actually built - so there is nothing here for it
      * to move, edit or remove.
-     *
-     * A field write is debounced, like settingRow's own text fields, and
-     * never redraws the list: a field mid-edit must not be thrown away out
-     * from under whoever is typing into it. Reordering, adding and removing
-     * a row are discrete presses instead, so those write and redraw at
-     * once, the same as groupingsSection's own list actions.
      */
-    const snoozePresetRowParts = (classes, preset, isFirst, isLast, onField, moveUp, moveDown, remove) => {
-        const el = FastMail.el;
-
-        const nameField = new classes.TextInputView({ placeholder: 'Name', value: preset.name });
-        nameField.addObserverForKey('value', {
-            changed: () => onField('name', nameField.get('value'))
-        }, 'changed');
-
-        const dateField = new classes.TextInputView({
-            placeholder: 'today, tomorrow, 2w, in 2 weeks, or YYYY-MM-DD', value: preset.date
-        });
-        dateField.addObserverForKey('value', {
-            changed: () => onField('date', dateField.get('value'))
-        }, 'changed');
-
-        const timeField = new classes.TextInputView({ placeholder: 'HH:MM', value: preset.time });
-        timeField.addObserverForKey('value', {
-            changed: () => onField('time', timeField.get('value'))
-        }, 'changed');
-
-        return [
-            el('div.u-flex-1', [nameField]),
-            el('div.u-flex-1', [dateField]),
-            el('div', { style: 'width:90px' }, [timeField]),
-            new classes.ButtonView({
-                type: 'v-Button--subtle v-Button--sizeM v-Button--iconOnly',
-                label: 'Move up', icon: standardIcon('i-chevronup', MOVE_SHAPES.up),
-                isDisabled: isFirst,
-                target: { go: moveUp }, method: 'go'
-            }),
-            new classes.ButtonView({
-                type: 'v-Button--subtle v-Button--sizeM v-Button--iconOnly',
-                label: 'Move down', icon: standardIcon('i-chevrondown', MOVE_SHAPES.down),
-                isDisabled: isLast,
-                target: { go: moveDown }, method: 'go'
-            }),
-            new classes.ButtonView({
-                type: 'v-Button--subtle v-Button--sizeM',
-                label: 'Remove', target: { go: remove }, method: 'go'
-            })
-        ];
-    };
-
-    const NEW_SNOOZE_PRESET_NAME = 'New preset';
-
-    const snoozePresetsSection = (classes, register) => {
+    const snoozePresetsSection = (classes) => {
         const el = FastMail.el;
         const option = settingFor('snoozePresets');
-        const debounced = debouncedWrite();
-        register.trackFlush(debounced.flush);
+
+        const named = (presets, name) => presets.filter(one => one.name === name)[0] || null;
 
         const redraw = () => holder.viewNeedsRedraw();
         const save = (presets) => {
@@ -8513,70 +8539,71 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             redraw();
         };
 
-        const move = (presets, index, by) => {
-            const to = index + by;
-            if (to < 0 || to >= presets.length) return;
-            const copy = presets.slice();
-            copy.splice(to, 0, copy.splice(index, 1)[0]);
-            save(copy);
+        const reorder = (order) => {
+            const now = parseSnoozePresets(settingValue('snoozePresets'));
+            save(mergeOrder(now.map(one => one.name), order).map(name => named(now, name)));
         };
 
-        const remove = (presets, index) => {
-            const copy = presets.slice();
-            copy.splice(index, 1);
-            save(copy);
+        const remove = (name) => {
+            const now = parseSnoozePresets(settingValue('snoozePresets'));
+            save(now.filter(one => one.name !== name));
         };
 
-        // Date and Time are both required, so a fresh row starts with real
-        // values rather than blanks the user would have to notice and fill
-        // in before it means anything.
-        const add = (presets) => {
-            save(presets.concat([{ name: NEW_SNOOZE_PRESET_NAME, date: 'today', time: '08:00' }]));
+        // A name no preset has yet, the same dedup groupingsSection's own
+        // add() uses for "New grouping".
+        const add = () => {
+            const now = parseSnoozePresets(settingValue('snoozePresets'));
+            let name = NEW_SNOOZE_PRESET_NAME;
+            for (let count = 2; named(now, name); count += 1) name = NEW_SNOOZE_PRESET_NAME + ' ' + count;
+            save(now.concat([{ name: name, date: 'today', time: '08:00' }]));
+        };
+
+        const edit = (name) => {
+            const now = parseSnoozePresets(settingValue('snoozePresets'));
+            const seed = named(now, name);
+            if (!seed) {
+                redraw();
+                return;
+            }
+            editSnoozePreset(classes, seed, (value) => {
+                const then = parseSnoozePresets(settingValue('snoozePresets'));
+                const at = then.map(one => one.name).indexOf(name);
+                if (at === -1) {
+                    reportFault('“' + name + '” is no longer in your snooze presets, so its edit was not saved');
+                    redraw();
+                    return;
+                }
+                then[at] = value;
+                save(then);
+            });
         };
 
         const holder = new classes.View({
             className: 'u-space-y-3',
             draw: () => {
-                // Drawn from, and never written from, so a field mid-edit
-                // below is not undone by a redraw a sibling row's own
-                // action triggered.
+                // Drawn from, and never written from.
                 const presets = parseSnoozePresets(settingValue('snoozePresets'));
 
-                const rows = presets.map((preset, index) => new classes.View({
-                    className: 'u-list-item u-flex u-items-center u-space-x-2',
-                    draw: () => snoozePresetRowParts(classes, preset, index === 0, index === presets.length - 1,
-                        (field, value) => {
-                            preset[field] = value;
-                            debounced.write('snoozePresets', formatSnoozePresets(presets));
-                        },
-                        () => move(presets, index, -1),
-                        () => move(presets, index, 1),
-                        () => remove(presets, index))
+                const items = presets.map(one => ({
+                    id: one.name,
+                    label: snoozePresetSummary(one),
+                    edit: () => edit(one.name),
+                    remove: () => remove(one.name)
                 }));
 
-                // Always last, and no row of the setting's own: it opens
-                // Fastmail's own picker, same as Fastmail's own Custom…
-                // entry did, so there is nothing here to name, move or
-                // remove.
-                rows.push(new classes.View({
-                    className: 'u-list-item u-flex u-items-center u-space-x-2 u-color-unimportant',
-                    draw: () => [el('div.u-flex-1', [CHOOSE_SNOOZE_DATE_LABEL + ' — always last, always offered'])]
-                }));
+                const list = reorderList(classes, items, reorder);
 
-                const list = new classes.View({
-                    className: 'u-list-body u-list-body--borders',
-                    draw: () => rows
-                });
+                const customRow = el('div.u-list-item.u-color-unimportant', [CHOOSE_SNOOZE_DATE_LABEL]);
 
                 const addButton = new classes.ButtonView({
                     type: 'v-Button--standard v-Button--sizeM',
                     label: 'Add a preset',
-                    target: { go: () => add(presets) }, method: 'go'
+                    target: { go: add }, method: 'go'
                 });
 
                 return [
                     el('h3.u-trim.u-font-bold', [option.title]),
-                    list,
+                    el('div', [list, customRow]),
                     addButton,
                     el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint])
                 ];
@@ -8590,7 +8617,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const sectionRow = (classes, option, register) => {
         if (option.key === 'groupings') return groupingsSection(classes, register);
         if (option.key === 'bottomBarSlots') return barSlotsSection(classes);
-        if (option.key === 'snoozePresets') return snoozePresetsSection(classes, register);
+        if (option.key === 'snoozePresets') return snoozePresetsSection(classes);
         return settingRow(classes, option, register);
     };
 
