@@ -12,12 +12,26 @@ enum SettingsSyncRules {
     static let keySeparator = "."
 
     /// How many actions fit on a bar depends on the screen, so these two
-    /// stay on each device.
-    static let localOnlyKeys: Set<String> = ["bottomBarItems", "topBarItems"]
+    /// sync per device type (`mac`, `iphone`, `ipad`) instead of per account:
+    /// every device of the same type shares one value, rather than sharing
+    /// with every device on the account or staying on a single device.
+    static let deviceTypeKeys: Set<String> = ["bottomBarItems", "topBarItems"]
+
+    /// The store key segment marking a device-type key, between the account
+    /// id and the device type: `u1234abcd.bar.mac.bottomBarItems`. Makes the
+    /// two key formats unambiguous to parse, since a plain key never has more
+    /// than one `.` and a device-type key always has exactly three.
+    static let deviceTypeMarker = "bar"
 
     /// With the longest setting name, a key stays inside iCloud's limit.
     static let maxAccountIdLength = 32
     static let maxStoreKeyBytes = 64
+
+    /// The kind of device a key's bucket belongs to. Safari's device type is
+    /// always `.mac`; the apps read `UIDevice.current.userInterfaceIdiom`.
+    enum DeviceType: String, CaseIterable {
+        case mac, iphone, ipad
+    }
 
     /// How long an app believes an empty store may still be downloading,
     /// counted from its first successful synchronize.
@@ -40,9 +54,12 @@ enum SettingsSyncRules {
         return key.unicodeScalars.allSatisfy { isLetter($0) || isDigit($0) }
     }
 
-    /// A setting that travels between devices.
+    /// A setting that travels between devices in the plain, per-account key
+    /// space. The device-type keys still travel, through the separate
+    /// device-type key space, so this keeps refusing them here to force them
+    /// through `deviceTypeStoreKey`/`parseDeviceTypeKey` instead.
     static func isSyncedKey(_ key: String) -> Bool {
-        isSettingKey(key) && !localOnlyKeys.contains(key)
+        isSettingKey(key) && !deviceTypeKeys.contains(key)
     }
 
     /// The store key for one account's setting, or nothing when the account,
@@ -61,6 +78,27 @@ enum SettingsSyncRules {
         let key = String(storeKey[separator.upperBound...])
         guard isValidAccountId(accountId), isSyncedKey(key) else { return nil }
         return (accountId, key)
+    }
+
+    /// The store key for one account's device-type setting, or nothing when
+    /// the account, the key or the length will not do.
+    static func deviceTypeStoreKey(accountId: String, deviceType: DeviceType, key: String) -> String? {
+        guard isValidAccountId(accountId), deviceTypeKeys.contains(key) else { return nil }
+        let joined = [accountId, deviceTypeMarker, deviceType.rawValue, key].joined(separator: keySeparator)
+        return joined.utf8.count <= maxStoreKeyBytes ? joined : nil
+    }
+
+    /// The account, device type and setting a device-type store key names, or
+    /// nothing for a key that is not a device-type setting for a known device
+    /// type.
+    static func parseDeviceTypeKey(storeKey: String) -> (accountId: String, deviceType: DeviceType, key: String)? {
+        let parts = storeKey.components(separatedBy: keySeparator)
+        guard parts.count == 4, parts[1] == deviceTypeMarker else { return nil }
+        let accountId = parts[0]
+        let key = parts[3]
+        guard isValidAccountId(accountId), deviceTypeKeys.contains(key),
+              let deviceType = DeviceType(rawValue: parts[2]) else { return nil }
+        return (accountId, deviceType, key)
     }
 
     // MARK: Values
@@ -106,8 +144,9 @@ enum SettingsSyncRules {
     // MARK: Settings
 
     /// One account's synced settings in the store's contents, without the
-    /// prefix. Other accounts, local-only settings and values that are
-    /// neither a boolean nor a string are left out.
+    /// prefix. Other accounts, device-type settings (a separate key space:
+    /// see `deviceTypeSettings`) and values that are neither a boolean nor a
+    /// string are left out.
     static func settings(for accountId: String, in contents: [String: Any]) -> [String: Any] {
         var settings: [String: Any] = [:]
         for (entryKey, item) in contents {
@@ -124,6 +163,31 @@ enum SettingsSyncRules {
         var entries: [String: Any] = [:]
         for (key, item) in local {
             guard let entryKey = storeKey(accountId: accountId, key: key),
+                  let value = settingValue(item) else { continue }
+            entries[entryKey] = plain(value)
+        }
+        return entries
+    }
+
+    /// One account's device-type settings in the store's contents, without
+    /// the prefix. Other accounts, other device types and values that are
+    /// neither a boolean nor a string are left out.
+    static func deviceTypeSettings(for accountId: String, deviceType: DeviceType, in contents: [String: Any]) -> [String: Any] {
+        var settings: [String: Any] = [:]
+        for (entryKey, item) in contents {
+            guard let parsed = parseDeviceTypeKey(storeKey: entryKey), parsed.accountId == accountId,
+                  parsed.deviceType == deviceType, let value = settingValue(item) else { continue }
+            settings[parsed.key] = plain(value)
+        }
+        return settings
+    }
+
+    /// A device's device-type settings as store entries for one account and
+    /// device type: the device-type ones, each under its prefixed key.
+    static func deviceTypeStoreEntries(accountId: String, deviceType: DeviceType, local: [String: Any]) -> [String: Any] {
+        var entries: [String: Any] = [:]
+        for (key, item) in local {
+            guard let entryKey = deviceTypeStoreKey(accountId: accountId, deviceType: deviceType, key: key),
                   let value = settingValue(item) else { continue }
             entries[entryKey] = plain(value)
         }
@@ -163,7 +227,8 @@ enum SettingsSyncRules {
 
     /// Taking iCloud's settings: each synced setting iCloud holds is set
     /// where it differs, and each synced setting iCloud lacks is removed, so
-    /// the page shows its default. Local-only settings are never touched.
+    /// the page shows its default. Device-type settings are never touched
+    /// here; `deviceTypeAdoption` decides those, separately.
     struct Adoption {
         var set: [String: Any]
         var remove: [String]
@@ -179,6 +244,19 @@ enum SettingsSyncRules {
         return Adoption(set: set, remove: remove)
     }
 
+    /// The same decision as `adoption(local:inStore:)`, for one account's
+    /// device-type bucket. `local` and `inStore` are already scoped to
+    /// `deviceTypeKeys` by the caller, so this does not call `isSyncedKey`.
+    static func deviceTypeAdoption(local: [String: Any], inStore: [String: Any]) -> Adoption {
+        var set: [String: Any] = [:]
+        for (key, item) in inStore where deviceTypeKeys.contains(key) {
+            guard let value = settingValue(item), !sameValue(local[key], item) else { continue }
+            set[key] = plain(value)
+        }
+        let remove = local.keys.filter { deviceTypeKeys.contains($0) && inStore[$0] == nil }.sorted()
+        return Adoption(set: set, remove: remove)
+    }
+
     // MARK: The Safari extension
 
     /// What the extension's native part does with one message from its
@@ -190,11 +268,14 @@ enum SettingsSyncRules {
     }
 
     /// - `get {accountId}` replies `{ok, available, settings}`: the account's
-    ///   synced settings without the prefix, and whether this Mac has an
-    ///   iCloud account.
-    /// - `set {accountId, key, value}` replies `{ok}` and writes one key.
-    /// - An unknown action, a local-only key, or a bad id, key or value
-    ///   replies `{ok: false, error}` and writes nothing.
+    ///   synced settings without the prefix, merged with this Mac's bucket of
+    ///   the device-type settings (Safari's device type is always `.mac`),
+    ///   and whether this Mac has an iCloud account.
+    /// - `set {accountId, key, value}` replies `{ok}` and writes one key: a
+    ///   device-type key goes to this Mac's bucket, everything else to the
+    ///   plain, per-account key.
+    /// - An unknown action, or a bad id, key or value, replies
+    ///   `{ok: false, error}` and writes nothing.
     static func extensionAnswer(
         to message: [String: Any],
         hasICloudIdentity: Bool,
@@ -206,14 +287,23 @@ enum SettingsSyncRules {
         let action = message["action"] as? String ?? ""
         switch action {
         case "get":
-            let settings = settings(for: accountId, in: storeContents())
+            let contents = storeContents()
+            var settings = settings(for: accountId, in: contents)
+            for (key, value) in deviceTypeSettings(for: accountId, deviceType: .mac, in: contents) {
+                settings[key] = value
+            }
             return ExtensionAnswer(
                 reply: ["ok": true, "available": hasICloudIdentity, "settings": settings],
                 write: nil
             )
         case "set":
-            guard let key = message["key"] as? String,
-                  let entryKey = storeKey(accountId: accountId, key: key) else {
+            guard let key = message["key"] as? String else {
+                return refusal("the message has no usable key")
+            }
+            let entryKey = deviceTypeKeys.contains(key)
+                ? deviceTypeStoreKey(accountId: accountId, deviceType: .mac, key: key)
+                : storeKey(accountId: accountId, key: key)
+            guard let entryKey else {
                 return refusal("the message has no usable key")
             }
             guard let item = message["value"], let value = settingValue(item) else {

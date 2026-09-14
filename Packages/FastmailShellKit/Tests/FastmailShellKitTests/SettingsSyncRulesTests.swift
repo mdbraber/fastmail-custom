@@ -36,9 +36,11 @@ import Testing
     }
 }
 
-// The bar lengths depend on the screen, so they never travel
-@Test func theBarLengthsAreNeverStoreKeys() {
-    #expect(SettingsSyncRules.localOnlyKeys == ["bottomBarItems", "topBarItems"])
+// The bar lengths depend on the screen, so they never travel as plain,
+// per-account store keys; they travel through the device-type key space
+// instead (see the "Device type" tests below).
+@Test func theBarLengthsAreNeverPlainStoreKeys() {
+    #expect(SettingsSyncRules.deviceTypeKeys == ["bottomBarItems", "topBarItems"])
     #expect(SettingsSyncRules.storeKey(accountId: "u1234abcd", key: "bottomBarItems") == nil)
     #expect(SettingsSyncRules.storeKey(accountId: "u1234abcd", key: "topBarItems") == nil)
     #expect(SettingsSyncRules.parse(storeKey: "u1234abcd.topBarItems") == nil)
@@ -137,13 +139,72 @@ import Testing
     #expect(plan.remove == ["snoozeKey"])
 }
 
+// MARK: Device type
+
+@Test func aDeviceTypeStoreKeyIsTheAccountBarTheDeviceTypeAndTheKey() {
+    #expect(
+        SettingsSyncRules.deviceTypeStoreKey(accountId: "u1234abcd", deviceType: .mac, key: "bottomBarItems")
+            == "u1234abcd.bar.mac.bottomBarItems"
+    )
+    let parsed = SettingsSyncRules.parseDeviceTypeKey(storeKey: "u1234abcd.bar.mac.bottomBarItems")
+    #expect(parsed?.accountId == "u1234abcd")
+    #expect(parsed?.deviceType == .mac)
+    #expect(parsed?.key == "bottomBarItems")
+}
+
+@Test func deviceTypeStoreKeyRefusesABadAccountIdOrAKeyNotInDeviceTypeKeys() {
+    #expect(SettingsSyncRules.deviceTypeStoreKey(accountId: "u1234.abcd", deviceType: .mac, key: "bottomBarItems") == nil)
+    #expect(SettingsSyncRules.deviceTypeStoreKey(accountId: "u1234abcd", deviceType: .mac, key: "labelColours") == nil)
+    // Even the longest account id and device type name stays within the
+    // 64-byte limit: 32 + ".bar.iphone.bottomBarItems" (26 bytes) = 58
+    let account = String(repeating: "a", count: 32)
+    let longest = SettingsSyncRules.deviceTypeStoreKey(accountId: account, deviceType: .iphone, key: "bottomBarItems")
+    #expect(longest?.utf8.count == 58)
+}
+
+@Test func parseDeviceTypeKeyRefusesAPlainKeyAnUnknownDeviceTypeOrAKeyNotInDeviceTypeKeys() {
+    // A plain key has only one dot; a device-type key needs exactly three
+    #expect(SettingsSyncRules.parseDeviceTypeKey(storeKey: "u1234abcd.labelColours") == nil)
+    #expect(SettingsSyncRules.parseDeviceTypeKey(storeKey: "u1234abcd.bar.android.bottomBarItems") == nil)
+    #expect(SettingsSyncRules.parseDeviceTypeKey(storeKey: "u1234abcd.bar.mac.labelColours") == nil)
+    #expect(SettingsSyncRules.parseDeviceTypeKey(storeKey: "u1234abcd.notbar.mac.bottomBarItems") == nil)
+}
+
+@Test func deviceTypeSettingsExtractsOnlyTheMatchingAccountsAndDeviceTypesBarKeys() {
+    let contents: [String: Any] = [
+        "u1234abcd.bar.mac.bottomBarItems": "3",
+        "u1234abcd.bar.iphone.bottomBarItems": "2",
+        "u1234abcd.bar.mac.topBarItems": "1",
+        "u9999zzzz.bar.mac.bottomBarItems": "5",
+        "u1234abcd.triageLabel": "Todo",
+    ]
+    let settings = SettingsSyncRules.deviceTypeSettings(for: "u1234abcd", deviceType: .mac, in: contents)
+    #expect(Set(settings.keys) == ["bottomBarItems", "topBarItems"])
+    #expect(settings["bottomBarItems"] as? String == "3")
+}
+
+@Test func deviceTypeStoreEntriesProducesOnlyPrefixedBarKeysFromALocalDictThatAlsoHasPlainSettings() {
+    let local: [String: Any] = ["bottomBarItems": "4", "topBarItems": "2", "labelColours": true, "triageLabel": "Todo"]
+    let entries = SettingsSyncRules.deviceTypeStoreEntries(accountId: "u1234abcd", deviceType: .ipad, local: local)
+    #expect(Set(entries.keys) == ["u1234abcd.bar.ipad.bottomBarItems", "u1234abcd.bar.ipad.topBarItems"])
+    #expect(entries["u1234abcd.bar.ipad.bottomBarItems"] as? String == "4")
+}
+
+@Test func deviceTypeAdoptionSetsWhatDiffersAndRemovesBarKeysTheStoreLacks() {
+    let local: [String: Any] = ["bottomBarItems": "4", "topBarItems": "2"]
+    let inStore: [String: Any] = ["bottomBarItems": "6"]
+    let plan = SettingsSyncRules.deviceTypeAdoption(local: local, inStore: inStore)
+    #expect(Set(plan.set.keys) == ["bottomBarItems"])
+    #expect(plan.set["bottomBarItems"] as? String == "6")
+    #expect(plan.remove == ["topBarItems"])
+}
+
 // MARK: The Safari extension's native part
 
 @Test func theExtensionsGetAnswersOneAccountsSyncedSettingsWithoutThePrefix() throws {
     let contents: [String: Any] = [
         "u1234abcd.triageLabel": "Todo",
         "u1234abcd.labelColours": NSNumber(value: false),
-        "u1234abcd.topBarItems": "3",
         "u9999zzzz.triageLabel": "Other",
     ]
     let answer = SettingsSyncRules.extensionAnswer(
@@ -156,6 +217,27 @@ import Testing
     #expect(answer.reply["available"] as? Bool == true)
     let settings = try #require(answer.reply["settings"] as? [String: Any])
     #expect(Set(settings.keys) == ["triageLabel", "labelColours"])
+}
+
+// The get reply merges the plain settings with this Mac's own bucket of the
+// device-type (bar) settings, since Safari's device type is always .mac
+@Test func theExtensionsGetMergesPlainSettingsWithTheMacBucketOfBarSettings() throws {
+    let contents: [String: Any] = [
+        "u1234abcd.triageLabel": "Todo",
+        "u1234abcd.bar.mac.bottomBarItems": "3",
+        "u1234abcd.bar.mac.topBarItems": "5",
+        "u1234abcd.bar.iphone.bottomBarItems": "2",
+        "u9999zzzz.bar.mac.bottomBarItems": "9",
+    ]
+    let answer = SettingsSyncRules.extensionAnswer(
+        to: ["action": "get", "accountId": "u1234abcd"],
+        hasICloudIdentity: true,
+        storeContents: { contents }
+    )
+    let settings = try #require(answer.reply["settings"] as? [String: Any])
+    #expect(Set(settings.keys) == ["triageLabel", "bottomBarItems", "topBarItems"])
+    #expect(settings["bottomBarItems"] as? String == "3")
+    #expect(settings["topBarItems"] as? String == "5")
 }
 
 @Test func theExtensionsGetSaysWhenThereIsNoICloudAccount() {
@@ -184,9 +266,21 @@ import Testing
     #expect(read == 0)
 }
 
-@Test func theExtensionRefusesBarLengthsBadIdsKeysValuesAndActions() {
+// A bar item now succeeds, writing the mac-bucket key rather than the plain
+// account key (which does not exist for these two settings)
+@Test func theExtensionsSetOnABarItemSucceedsAndWritesTheMacBucketKey() {
+    let answer = SettingsSyncRules.extensionAnswer(
+        to: ["action": "set", "accountId": "u1234abcd", "key": "bottomBarItems", "value": "4"],
+        hasICloudIdentity: true,
+        storeContents: { [:] }
+    )
+    #expect(answer.reply["ok"] as? Bool == true)
+    #expect(answer.write?.key == "u1234abcd.bar.mac.bottomBarItems")
+    #expect(answer.write?.value as? String == "4")
+}
+
+@Test func theExtensionRefusesBadIdsKeysValuesAndActions() {
     let messages: [[String: Any]] = [
-        ["action": "set", "accountId": "u1234abcd", "key": "bottomBarItems", "value": "4"],
         ["action": "set", "accountId": "", "key": "labelColours", "value": true],
         ["action": "set", "accountId": String(repeating: "a", count: 33), "key": "labelColours", "value": true],
         ["action": "set", "accountId": "u1234abcd", "key": "bad.key", "value": true],

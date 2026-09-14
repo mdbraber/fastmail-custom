@@ -34,19 +34,22 @@ private final class Harness {
     let store = FakeStore()
     var hasICloudIdentity = true
     var now = Date(timeIntervalSinceReferenceDate: 1_000_000)
+    var deviceType: SettingsSyncRules.DeviceType = .mac
     var scheduled: [(delay: TimeInterval, work: @MainActor @Sendable () -> Void)] = []
     private(set) var sync: CustomModeSettingsSync!
 
-    init(_ name: String) {
+    init(_ name: String, deviceType: SettingsSyncRules.DeviceType = .mac) {
         let suite = "CustomModeSettingsSyncTests.\(name)"
         defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
+        self.deviceType = deviceType
         sync = CustomModeSettingsSync(
             defaults: defaults,
             store: store,
             hasICloudIdentity: { [unowned self] in self.hasICloudIdentity },
             now: { [unowned self] in self.now },
-            schedule: { [unowned self] delay, work in self.scheduled.append((delay, work)) }
+            schedule: { [unowned self] delay, work in self.scheduled.append((delay, work)) },
+            deviceType: { [unowned self] in self.deviceType }
         )
     }
 
@@ -170,6 +173,109 @@ private final class Harness {
 
     #expect(h.local("triageLabel") as? String == "Todo")
     #expect(h.sync.isJoined("u1234abcd"))
+}
+
+// MARK: The bar bucket
+
+@Test @MainActor func joiningAdoptsAnExistingMacBucketValue() {
+    let h = Harness(#function)
+    h.defaults.set("4", forKey: "customMode.bottomBarItems")
+    h.store.values = ["u1234abcd.bar.mac.bottomBarItems": "6"]
+
+    h.sync.accountReported("u1234abcd")
+
+    #expect(h.local("bottomBarItems") as? String == "6")
+    #expect(h.sync.isJoinedBar("u1234abcd"))
+    #expect(h.store.writes.isEmpty)
+}
+
+@Test @MainActor func anEmptyBucketIsUploadedAfterTheInitialSyncNoticeOrThirtySeconds() {
+    let h = Harness(#function)
+    h.defaults.set("4", forKey: "customMode.bottomBarItems")
+    // The account's plain settings are already there, so only the bar bucket
+    // is left to decide
+    h.store.values = ["u1234abcd.triageLabel": "Todo"]
+
+    h.sync.accountReported("u1234abcd")
+    #expect(h.sync.isJoined("u1234abcd"))
+    #expect(!h.sync.isJoinedBar("u1234abcd"))
+    #expect(h.store.values["u1234abcd.bar.mac.bottomBarItems"] == nil)
+
+    h.sync.externalChange(reason: NSUbiquitousKeyValueStoreInitialSyncChange, keys: [])
+
+    #expect(h.store.values["u1234abcd.bar.mac.bottomBarItems"] as? String == "4")
+    #expect(h.sync.isJoinedBar("u1234abcd"))
+}
+
+@Test @MainActor func aLocalBarChangeWritesTheDeviceTypeKeyOnceJoinedAndNotBefore() {
+    let unjoined = Harness(#function + ".unjoined")
+    unjoined.sync.accountReported("u1234abcd")
+    unjoined.sync.localChanged(key: "bottomBarItems", value: "4")
+    #expect(unjoined.store.writes.isEmpty)
+
+    let joined = Harness(#function + ".joined")
+    joined.store.values = ["u1234abcd.bar.mac.bottomBarItems": "6"]
+    joined.sync.accountReported("u1234abcd")
+
+    joined.sync.localChanged(key: "bottomBarItems", value: "8")
+
+    #expect(joined.store.writes == ["u1234abcd.bar.mac.bottomBarItems"])
+    #expect(joined.store.values["u1234abcd.bar.mac.bottomBarItems"] as? String == "8")
+}
+
+@Test @MainActor func anExternalBarChangeFromTheSameDeviceTypeIsTaken() {
+    let h = Harness(#function, deviceType: .iphone)
+    h.store.values = ["u1234abcd.bar.iphone.bottomBarItems": "4"]
+    h.sync.accountReported("u1234abcd")
+
+    h.store.values["u1234abcd.bar.iphone.bottomBarItems"] = "2"
+    h.sync.externalChange(reason: NSUbiquitousKeyValueStoreServerChange, keys: ["u1234abcd.bar.iphone.bottomBarItems"])
+
+    #expect(h.local("bottomBarItems") as? String == "2")
+    #expect(h.store.writes.isEmpty)
+}
+
+@Test @MainActor func anExternalBarChangeFromADifferentDeviceTypeOrAccountIsIgnored() {
+    let h = Harness(#function, deviceType: .mac)
+    h.defaults.set("4", forKey: "customMode.bottomBarItems")
+    h.store.values = ["u1234abcd.bar.mac.bottomBarItems": "4"]
+    h.sync.accountReported("u1234abcd")
+
+    h.store.values["u1234abcd.bar.ipad.bottomBarItems"] = "9"
+    h.store.values["u9999zzzz.bar.mac.bottomBarItems"] = "7"
+    h.sync.externalChange(
+        reason: NSUbiquitousKeyValueStoreServerChange,
+        keys: ["u1234abcd.bar.ipad.bottomBarItems", "u9999zzzz.bar.mac.bottomBarItems"]
+    )
+
+    #expect(h.local("bottomBarItems") as? String == "4")
+    #expect(h.store.writes.isEmpty)
+}
+
+@Test @MainActor func turningSyncOffClearsTheBarJoinedFlagAndStopsBarWritesToo() {
+    let h = Harness(#function)
+    h.store.values = ["u1234abcd.bar.mac.bottomBarItems": "4"]
+    h.sync.accountReported("u1234abcd")
+    #expect(h.sync.isJoinedBar("u1234abcd"))
+
+    h.sync.setEnabled(false)
+
+    #expect(!h.sync.isJoinedBar("u1234abcd"))
+    h.sync.localChanged(key: "bottomBarItems", value: "8")
+    #expect(h.store.writes.isEmpty)
+}
+
+@Test @MainActor func turningSyncOnAndOffReAdoptsTheBarBucketSameAsThePlainOne() {
+    let h = Harness(#function)
+    h.store.values = ["u1234abcd.bar.mac.bottomBarItems": "4"]
+    h.sync.accountReported("u1234abcd")
+    h.sync.setEnabled(false)
+    h.defaults.set("Changed while off", forKey: "customMode.bottomBarItems")
+
+    h.sync.setEnabled(true)
+
+    #expect(h.local("bottomBarItems") as? String == "4")
+    #expect(h.sync.isJoinedBar("u1234abcd"))
 }
 
 // MARK: Local changes

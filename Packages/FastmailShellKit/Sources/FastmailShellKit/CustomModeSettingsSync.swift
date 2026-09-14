@@ -1,5 +1,8 @@
 import Foundation
 import os
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// What the sync component needs from iCloud key-value storage. The apps
 /// hand it `NSUbiquitousKeyValueStore.default`; the tests hand it a fake.
@@ -23,6 +26,9 @@ public final class CustomModeSettingsSync {
     nonisolated static let accountIdKey = "settingsSync.accountId"
     nonisolated static let enabledKey = "settingsSync.enabled"
     nonisolated static let joinedKeyPrefix = "settingsSync.joined."
+    /// One flag per account, not per device type: this device's own device
+    /// type is fixed for the process's lifetime, so no suffix is needed.
+    nonisolated static let joinedBarKeyPrefix = "settingsSync.joinedBar."
 
     /// Why the store says it changed, numbered as Foundation numbers them.
     enum ChangeReason: Int {
@@ -41,6 +47,7 @@ public final class CustomModeSettingsSync {
     private let hasICloudIdentity: @MainActor () -> Bool
     private let now: @MainActor () -> Date
     private let schedule: Schedule
+    private let deviceType: @MainActor () -> SettingsSyncRules.DeviceType
     private let log = Logger(subsystem: "com.mdbraber.fastmail-custom", category: "settings-sync")
     /// Whether this launch has heard the store's first download finish.
     private var initialSyncArrived = false
@@ -55,13 +62,15 @@ public final class CustomModeSettingsSync {
         store: KeyValueStore,
         hasICloudIdentity: @escaping @MainActor () -> Bool,
         now: @escaping @MainActor () -> Date = { Date() },
-        schedule: @escaping Schedule
+        schedule: @escaping Schedule,
+        deviceType: @escaping @MainActor () -> SettingsSyncRules.DeviceType
     ) {
         self.defaults = defaults
         self.store = store
         self.hasICloudIdentity = hasICloudIdentity
         self.now = now
         self.schedule = schedule
+        self.deviceType = deviceType
     }
 
     deinit {
@@ -87,6 +96,12 @@ public final class CustomModeSettingsSync {
 
     func isJoined(_ accountId: String) -> Bool {
         defaults.bool(forKey: Self.joinedKeyPrefix + accountId)
+    }
+
+    /// Whether this account's bar bucket (this device's own device type) has
+    /// had its first sync on this device.
+    func isJoinedBar(_ accountId: String) -> Bool {
+        defaults.bool(forKey: Self.joinedBarKeyPrefix + accountId)
     }
 
     /// Listens for other devices' changes, and joins the last known account
@@ -117,14 +132,20 @@ public final class CustomModeSettingsSync {
     }
 
     /// The page changed a setting, which the app has already saved. It goes
-    /// to the store once the account has joined; until then, joining settles
-    /// it.
+    /// to the store once the account (or, for a bar length, this device's
+    /// bar bucket) has joined; until then, joining settles it.
     public func localChanged(key: String, value: Any) {
-        guard isEnabled, let accountId, isJoined(accountId),
-              let entryKey = SettingsSyncRules.storeKey(accountId: accountId, key: key),
-              SettingsSyncRules.isSyncableValue(value)
-        else { return }
-        store.set(value, forKey: entryKey)
+        guard isEnabled, let accountId, SettingsSyncRules.isSyncableValue(value) else { return }
+        if SettingsSyncRules.deviceTypeKeys.contains(key) {
+            guard isJoinedBar(accountId),
+                  let entryKey = SettingsSyncRules.deviceTypeStoreKey(accountId: accountId, deviceType: deviceType(), key: key)
+            else { return }
+            store.set(value, forKey: entryKey)
+        } else {
+            guard isJoined(accountId), let entryKey = SettingsSyncRules.storeKey(accountId: accountId, key: key)
+            else { return }
+            store.set(value, forKey: entryKey)
+        }
     }
 
     /// The settings page's "Sync settings with iCloud" switch. Off keeps
@@ -169,10 +190,12 @@ public final class CustomModeSettingsSync {
     }
 
     /// Values another device wrote, taken into this device's settings where
-    /// they differ: this account's synced settings only. They go into
-    /// UserDefaults directly and never through `localChanged`, so nothing
-    /// received is written back; the pusher and the home-screen shortcuts
-    /// follow the defaults change as they always have.
+    /// they differ: this account's synced settings, plus this account's bar
+    /// bucket for this device's own device type (a change from another
+    /// device of a different type, or a different account, is ignored). They
+    /// go into UserDefaults directly and never through `localChanged`, so
+    /// nothing received is written back; the pusher and the home-screen
+    /// shortcuts follow the defaults change as they always have.
     private func take(_ keys: [String]) {
         guard let accountId else { return }
         var changed: [String: Any] = [:]
@@ -186,61 +209,121 @@ public final class CustomModeSettingsSync {
         where !SettingsSyncRules.sameValue(local[key], value) {
             defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
         }
+        for (key, value) in SettingsSyncRules.deviceTypeSettings(for: accountId, deviceType: deviceType(), in: changed)
+        where !SettingsSyncRules.sameValue(local[key], value) {
+            defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
+        }
     }
 
-    /// The current account's first sync, if it has not had one.
+    /// The current account's first sync, if it has not had one, and its bar
+    /// bucket's first sync (for this device's own device type), if that has
+    /// not had one either. The two decisions share this launch's
+    /// `firstSuccessfulSync`/`initialSyncArrived` clock but are otherwise
+    /// independent: one may adopt while the other still waits to upload.
     func joinIfNeeded() {
-        guard isEnabled, let accountId, !isJoined(accountId) else { return }
+        guard isEnabled, let accountId else { return }
+        let plainNeeded = !isJoined(accountId)
+        let barNeeded = !isJoinedBar(accountId)
+        guard plainNeeded || barNeeded else { return }
+
         let identity = hasICloudIdentity()
         let synchronized = store.synchronize()
         if synchronized, identity, firstSuccessfulSync == nil {
             firstSuccessfulSync = now()
         }
-        let inStore = SettingsSyncRules.settings(for: accountId, in: store.dictionaryRepresentation)
-        let decision = SettingsSyncRules.joinDecision(
-            storeHasAccountKeys: !inStore.isEmpty,
-            initialSyncArrived: initialSyncArrived,
-            secondsSinceSuccessfulSync: firstSuccessfulSync.map { now().timeIntervalSince($0) },
-            hasICloudIdentity: identity
-        )
-        switch decision {
-        case .adopt:
-            let plan = SettingsSyncRules.adoption(
-                local: CustomModeSettings.current(from: defaults), inStore: inStore
+        let secondsSinceSuccessfulSync = firstSuccessfulSync.map { now().timeIntervalSince($0) }
+        if !identity, plainNeeded || barNeeded {
+            log.notice("No iCloud account; Custom mode settings stay on this device")
+        }
+
+        var nextRecheck: TimeInterval?
+        func noteWait(_ recheckIn: TimeInterval?) {
+            guard let recheckIn else { return }
+            nextRecheck = min(nextRecheck ?? recheckIn, recheckIn)
+        }
+
+        if plainNeeded {
+            let inStore = SettingsSyncRules.settings(for: accountId, in: store.dictionaryRepresentation)
+            let decision = SettingsSyncRules.joinDecision(
+                storeHasAccountKeys: !inStore.isEmpty,
+                initialSyncArrived: initialSyncArrived,
+                secondsSinceSuccessfulSync: secondsSinceSuccessfulSync,
+                hasICloudIdentity: identity
             )
-            for (key, value) in plan.set {
-                defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
+            switch decision {
+            case .adopt:
+                let plan = SettingsSyncRules.adoption(
+                    local: CustomModeSettings.current(from: defaults), inStore: inStore
+                )
+                for (key, value) in plan.set {
+                    defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
+                }
+                for key in plan.remove {
+                    defaults.removeObject(forKey: CustomModeSettings.defaultsKey(for: key))
+                }
+                defaults.set(true, forKey: Self.joinedKeyPrefix + accountId)
+                log.notice("Took this account's Custom mode settings from iCloud")
+            case .upload:
+                let entries = SettingsSyncRules.storeEntries(
+                    accountId: accountId, local: CustomModeSettings.current(from: defaults)
+                )
+                for (key, value) in entries {
+                    store.set(value, forKey: key)
+                }
+                _ = store.synchronize()
+                defaults.set(true, forKey: Self.joinedKeyPrefix + accountId)
+                log.notice("Sent this device's Custom mode settings to iCloud")
+            case .wait(let recheckIn):
+                noteWait(recheckIn)
             }
-            for key in plan.remove {
-                defaults.removeObject(forKey: CustomModeSettings.defaultsKey(for: key))
-            }
-            defaults.set(true, forKey: Self.joinedKeyPrefix + accountId)
-            log.notice("Took this account's Custom mode settings from iCloud")
-        case .upload:
-            let entries = SettingsSyncRules.storeEntries(
-                accountId: accountId, local: CustomModeSettings.current(from: defaults)
+        }
+
+        if barNeeded {
+            let type = deviceType()
+            let inStore = SettingsSyncRules.deviceTypeSettings(for: accountId, deviceType: type, in: store.dictionaryRepresentation)
+            let decision = SettingsSyncRules.joinDecision(
+                storeHasAccountKeys: !inStore.isEmpty,
+                initialSyncArrived: initialSyncArrived,
+                secondsSinceSuccessfulSync: secondsSinceSuccessfulSync,
+                hasICloudIdentity: identity
             )
-            for (key, value) in entries {
-                store.set(value, forKey: key)
+            switch decision {
+            case .adopt:
+                let local = CustomModeSettings.current(from: defaults).filter { SettingsSyncRules.deviceTypeKeys.contains($0.key) }
+                let plan = SettingsSyncRules.deviceTypeAdoption(local: local, inStore: inStore)
+                for (key, value) in plan.set {
+                    defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
+                }
+                for key in plan.remove {
+                    defaults.removeObject(forKey: CustomModeSettings.defaultsKey(for: key))
+                }
+                defaults.set(true, forKey: Self.joinedBarKeyPrefix + accountId)
+                log.notice("Took this account's bar settings from iCloud")
+            case .upload:
+                let local = CustomModeSettings.current(from: defaults).filter { SettingsSyncRules.deviceTypeKeys.contains($0.key) }
+                let entries = SettingsSyncRules.deviceTypeStoreEntries(accountId: accountId, deviceType: type, local: local)
+                for (key, value) in entries {
+                    store.set(value, forKey: key)
+                }
+                _ = store.synchronize()
+                defaults.set(true, forKey: Self.joinedBarKeyPrefix + accountId)
+                log.notice("Sent this device's bar settings to iCloud")
+            case .wait(let recheckIn):
+                noteWait(recheckIn)
             }
-            _ = store.synchronize()
-            defaults.set(true, forKey: Self.joinedKeyPrefix + accountId)
-            log.notice("Sent this device's Custom mode settings to iCloud")
-        case .wait(let recheckIn):
-            if !identity {
-                log.notice("No iCloud account; Custom mode settings stay on this device")
-            }
-            guard let recheckIn, !recheckPending else { return }
-            recheckPending = true
-            schedule(recheckIn) { [weak self] in
-                self?.recheckPending = false
-                self?.joinIfNeeded()
-            }
+        }
+
+        guard let nextRecheck, !recheckPending else { return }
+        recheckPending = true
+        schedule(nextRecheck) { [weak self] in
+            self?.recheckPending = false
+            self?.joinIfNeeded()
         }
     }
 
     private func clearJoined() {
-        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(Self.joinedKeyPrefix) {
+        for key in defaults.dictionaryRepresentation().keys
+        where key.hasPrefix(Self.joinedKeyPrefix) || key.hasPrefix(Self.joinedBarKeyPrefix) {
             defaults.removeObject(forKey: key)
         }
     }
@@ -269,6 +352,13 @@ public extension CustomModeSettingsSync {
                     try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                     work()
                 }
+            },
+            deviceType: {
+                #if canImport(UIKit)
+                return UIDevice.current.userInterfaceIdiom == .pad ? .ipad : .iphone
+                #else
+                return .mac
+                #endif
             }
         )
         current = sync
