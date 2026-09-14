@@ -6262,13 +6262,31 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // Every option in this menu carries an icon, a tick on the chosen one and
     // a blank of the same size on the rest, and the blank is what lines the
-    // labels up. Both are copied from Fastmail's own grouping options, one of
-    // which is always ticked, so the mode's entries match whatever Fastmail
-    // draws; if neither can be found the entries go without, as before.
+    // labels up. Both are copied from Fastmail's own grouping options, so the
+    // mode's entries match whatever Fastmail draws; if neither can be found
+    // the entries go without, as before.
+    //
+    // The blank always turns up this way: Fastmail's own groupBy is a plain
+    // mirror of the mailbox's sort (see currentGroupingId, which reads the
+    // same sort entry Fastmail's setter for groupBy writes), so while one of
+    // this mode's own groupings is active groupBy holds this mode's own id,
+    // never one of Fastmail's four stock values or the "custom" string its
+    // own Custom… entry's icon checks for — none of Fastmail's stock options
+    // is ever selected then, which is what draws their blanks.
+    //
+    // The tick is the one that cannot turn up the same way: for the same
+    // reason, nothing Fastmail draws is ever ticked while this menu has
+    // something of its own to tick, so there is never a rendered i-tick to
+    // read off an option. The Custom… entry's icon is a transform of
+    // groupBy (present on its binding as .transform, same as any Overture
+    // binding here) rather than a fixed value, so calling that transform
+    // directly with "custom" still returns Fastmail's own tick icon, with
+    // no dependence on what groupBy currently holds.
     const groupingIcons = (options) => {
         const icons = { tick: null, blank: null };
         options.forEach((option) => {
-            if (!boundToGroupBy(option) && !iconBoundToGroupBy(option)) return;
+            const isIconBound = iconBoundToGroupBy(option);
+            if (!boundToGroupBy(option) && !isIconBound) return;
             try {
                 const icon = option.get('icon');
                 const className = icon && typeof icon.getAttribute === 'function'
@@ -6277,6 +6295,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 if (!icons.blank && /\bi-blank\b/.test(className)) icons.blank = icon;
             } catch (error) {
                 // An option whose icon cannot be read is no sample
+            }
+            if (!icons.tick && isIconBound) {
+                try {
+                    const binding = option.__meta__.bindings.icon;
+                    const tick = binding.transform.call(binding, 'custom', true);
+                    const className = tick && typeof tick.getAttribute === 'function'
+                        ? tick.getAttribute('class') || '' : '';
+                    if (/\bi-tick\b/.test(className)) icons.tick = tick;
+                } catch (error) {
+                    // Fastmail's own transform is no sample either, then
+                }
             }
         });
         return icons;
