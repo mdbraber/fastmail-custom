@@ -134,7 +134,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         labelsGroupingIndex: '',
         // The automatic Labels grouping's own groups, written as one block of
         // groupings is, with the line "Labels = *labels*" standing where the
-        // group per label goes. Empty is that line alone and Other.
+        // group per label goes; the block's first line is the name the Group
+        // menu shows. Empty is that line alone and Other, named Labels.
         labelsGrouping: '',
         // Shown in the sidebar but worked as piles, not queues: never filed
         // into, never stripped by archive
@@ -290,7 +291,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'groupings', group: 'grouping', clearable: true, multiline: true,
             title: 'Your groupings',
-            hint: 'Each one is offered in a mailbox’s Group menu beside Fastmail’s own. Labels makes a group for each label; edit it to add groups of your own before or after those. Groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Renaming a grouping loses it on the mailboxes using it.'
+            hint: 'Each one is offered in a mailbox’s Group menu beside Fastmail’s own. Labels makes a group for each label; edit it to add groups of your own before or after those. Groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Edit also renames a grouping; renaming one of your own loses it on the mailboxes using it, renaming Labels does not.'
         },
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
@@ -1644,6 +1645,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const LABELS_MARKER = { name: 'Labels', query: '*labels*' };
     const isLabelsMarker = (category) => !!category && category.query === LABELS_MARKER.query;
 
+    // What the Labels grouping is called until it is renamed.
+    const LABELS_GROUPING_NAME = 'Labels';
+
     /*
      * The settings text, as blocks: every grouping it holds, finished or not.
      *
@@ -1757,21 +1761,22 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         });
         if (!categories.some(isLabelsMarker)) categories.unshift(Object.assign({}, LABELS_MARKER));
         return {
-            name: LABELS_MARKER.name,
+            name: stored && stored.name ? stored.name : LABELS_GROUPING_NAME,
             categories: categories,
             otherName: stored ? stored.otherName : OTHER_NAME
         };
     };
 
     // Back to the setting, which stays empty while the grouping is only its
-    // labels and Other, as it starts.
+    // labels and Other under its own name, as it starts.
     const formatLabelsGrouping = (grouping) => {
         const categories = (grouping.categories || []).some(isLabelsMarker)
             ? grouping.categories
             : [Object.assign({}, LABELS_MARKER)].concat(grouping.categories || []);
         const otherName = grouping.otherName || OTHER_NAME;
-        if (categories.length === 1 && otherName === OTHER_NAME) return '';
-        return formatGroupings([{ name: LABELS_MARKER.name, categories: categories, otherName: otherName }]);
+        const name = grouping.name || LABELS_GROUPING_NAME;
+        if (categories.length === 1 && otherName === OTHER_NAME && name === LABELS_GROUPING_NAME) return '';
+        return formatGroupings([{ name: name, categories: categories, otherName: otherName }]);
     };
 
     // The Labels grouping for one mailbox, given its group per label: the
@@ -1782,7 +1787,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const shaped = labelsGroupingSettings();
         return {
             id: LABELS_GROUPING,
-            name: 'labels',
+            name: shaped.name,
             categories: [].concat(...shaped.categories.map(one => (isLabelsMarker(one) ? labels : [one]))),
             otherName: shaped.otherName
         };
@@ -8132,9 +8137,24 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             return;
         }
 
+        // Fastmail heads its dialog "Groups in" and the mailbox's name. Here
+        // the name is the grouping's own and can be changed, so a field takes
+        // the heading's place, and its value goes with the save.
         let saved = null;
-        const controller = groupingStandIn(grouping, (value) => { saved = value; });
-        const view = new Editor({ controller: controller });
+        const nameField = new classes.TextInputView({ label: 'Name', value: grouping.name });
+        const controller = groupingStandIn(grouping, (value) => {
+            saved = Object.assign({}, value, { name: String(nameField.get('value') || '').trim() });
+        });
+        const view = new Editor({
+            controller: controller,
+            draw: function () {
+                const parts = Editor.prototype.draw.apply(this, arguments);
+                const field = FastMail.el('div', [nameField]);
+                if (parts[0] && parts[0].tagName === 'H1') parts[0] = field;
+                else parts.unshift(field);
+                return parts;
+            }
+        });
         const dialog = framedModal(classes, view, 580, event => view.keyOutside(event));
 
         // The editor's own Cancel and Save both fire modal:hide; Save has
@@ -8279,8 +8299,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     redraw();
                     return;
                 }
+                // A name another grouping already has would have the parser
+                // drop this one at the next read, so it keeps its own.
+                let newName = value.name || name;
+                if (newName !== name && named(now, newName)) {
+                    reportFault('a grouping called “' + newName + '” already exists, so “' + name +
+                        '” kept its name');
+                    newName = name;
+                }
                 now[at] = {
-                    id: now[at].id, name: name,
+                    id: SPLIT_PREFIX + newName, name: newName,
                     categories: value.categories, otherName: value.otherName || OTHER_NAME
                 };
                 save(now);
@@ -8323,10 +8351,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     edit: () => edit(one.name),
                     remove: () => remove(one.name)
                 }));
-                const ownGroups = labelsGroupingSettings().categories.length - 1;
+                const shaped = labelsGroupingSettings();
+                const ownGroups = shaped.categories.length - 1;
                 items.splice(labelsGroupingIndex(groupings.length), 0, {
                     id: LABELS_GROUPING,
-                    label: 'Labels — a group per label' + (ownGroups
+                    label: shaped.name + ' — a group per label' + (ownGroups
                         ? ' and ' + ownGroups + (ownGroups === 1 ? ' other' : ' others')
                         : ''),
                     edit: editLabels,
