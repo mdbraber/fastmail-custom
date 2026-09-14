@@ -4,18 +4,18 @@ import Testing
 
 @Test func theHomeScreenOffersTheTwoListsAndTheTwoBeginnings() {
     let shortcuts = HomeShortcuts.shortcuts(badgeLabel: "Triage")
-    #expect(shortcuts.map(\.title) == ["Triage", "Inbox", "Search", "Compose"])
+    #expect(shortcuts.map(\.title) == ["Inbox", "Triage", "Compose", "Search"])
     #expect(shortcuts.count == 4, "iOS draws four and no more")
-    #expect(shortcuts.map(\.path) == ["/mail/Triage", "/mail/Inbox", nil, "/mail/Inbox/compose"])
+    #expect(shortcuts.map(\.path) == ["/mail/Inbox", "/mail/Triage", "/mail/Inbox/compose", nil])
     #expect(shortcuts.map(\.type) == [
-        HomeShortcuts.labelType, HomeShortcuts.inboxType,
-        HomeShortcuts.searchType, HomeShortcuts.composeType
+        HomeShortcuts.inboxType, HomeShortcuts.labelType,
+        HomeShortcuts.composeType, HomeShortcuts.searchType
     ])
     #expect(Set(shortcuts.map(\.icon)).count == 4, "each is told apart at a glance")
+    #expect(shortcuts.first?.icon == .system("tray"))
     // The funnel, the same glyph the sidebar row wears for this label, rather
     // than the tag a label would otherwise get.
-    #expect(shortcuts.first?.icon == .template(HomeShortcuts.funnelImageName))
-    #expect(shortcuts[1].icon == .system("tray"))
+    #expect(shortcuts[1].icon == .template(HomeShortcuts.funnelImageName))
 }
 
 // Search has no address to open; Fastmail's /mail/search: bounces to the
@@ -83,24 +83,27 @@ private let repoRoot = URL(fileURLWithPath: #filePath)
 #endif
 
 @Test func withoutABadgeLabelTheLabelRowIsTheOnlyOneMissing() {
-    #expect(HomeShortcuts.shortcuts(badgeLabel: "").map(\.title) == ["Inbox", "Search", "Compose"])
-    #expect(HomeShortcuts.shortcuts(badgeLabel: "   ").map(\.title) == ["Inbox", "Search", "Compose"])
-    #expect(HomeShortcuts.shortcuts(badgeLabel: nil).map(\.title) == ["Inbox", "Search", "Compose"])
+    #expect(HomeShortcuts.shortcuts(badgeLabel: "").map(\.title) == ["Inbox", "Compose", "Search"])
+    #expect(HomeShortcuts.shortcuts(badgeLabel: "   ").map(\.title) == ["Inbox", "Compose", "Search"])
+    #expect(HomeShortcuts.shortcuts(badgeLabel: nil).map(\.title) == ["Inbox", "Compose", "Search"])
 }
 
 // The badge label may be the Inbox itself; two identical shortcuts help nobody
 @Test func aBadgeLabelThatIsTheInboxIsNotOfferedTwice() {
-    #expect(HomeShortcuts.shortcuts(badgeLabel: "Inbox").map(\.title) == ["Inbox", "Search", "Compose"])
-    #expect(HomeShortcuts.shortcuts(badgeLabel: "  inbox ").map(\.title) == ["Inbox", "Search", "Compose"])
+    #expect(HomeShortcuts.shortcuts(badgeLabel: "Inbox").map(\.title) == ["Inbox", "Compose", "Search"])
+    #expect(HomeShortcuts.shortcuts(badgeLabel: "  inbox ").map(\.title) == ["Inbox", "Compose", "Search"])
 }
 
 @Test func aNestedLabelKeepsItsPathAndAwkwardCharactersAreEncoded() {
-    #expect(HomeShortcuts.shortcuts(badgeLabel: "Projects/Work").first?.path == "/mail/Projects/Work")
-    #expect(HomeShortcuts.shortcuts(badgeLabel: "To read").first?.path == "/mail/To%20read")
-    #expect(HomeShortcuts.shortcuts(badgeLabel: "R&D").first?.path == "/mail/R%26D")
+    func labelShortcut(_ badgeLabel: String) -> HomeShortcut? {
+        HomeShortcuts.shortcuts(badgeLabel: badgeLabel).first { $0.type == HomeShortcuts.labelType }
+    }
+    #expect(labelShortcut("Projects/Work")?.path == "/mail/Projects/Work")
+    #expect(labelShortcut("To read")?.path == "/mail/To%20read")
+    #expect(labelShortcut("R&D")?.path == "/mail/R%26D")
     // The title stays readable whatever the path needs
-    #expect(HomeShortcuts.shortcuts(badgeLabel: "To read").first?.title == "To read")
-    #expect(HomeShortcuts.shortcuts(badgeLabel: "Projects/Work").first?.title == "Projects/Work")
+    #expect(labelShortcut("To read")?.title == "To read")
+    #expect(labelShortcut("Projects/Work")?.title == "Projects/Work")
 }
 
 @Test func aShortcutOpensItsPageOnFastmail() throws {
