@@ -8,8 +8,17 @@ struct SettingsView: View {
         // Only the shell's own settings are here now. Everything about the
         // mail interface is in the page, under Fastmail's own Settings, where
         // one panel serves the Mac, the phone and Safari alike.
-        GeneralSettingsView(profile: profile)
-            .frame(width: 500, height: 460)
+        TabView {
+            GeneralSettingsView(profile: profile)
+                .tabItem { Label("General", systemImage: "gearshape") }
+            #if os(macOS)
+            ComposeSettingsView()
+                .tabItem { Label("Compose", systemImage: "square.and.pencil") }
+            DownloadsSettingsView()
+                .tabItem { Label("Downloads", systemImage: "arrow.down.circle") }
+            #endif
+        }
+        .frame(width: 500, height: 340)
     }
 }
 
@@ -17,9 +26,6 @@ private struct GeneralSettingsView: View {
     let profile: Profile
     @AppStorage(StartView.defaultsKey) private var startView = ""
     @AppStorage(Backend.defaultsKey) private var backendName = Backend.production.rawValue
-    @AppStorage(AttachmentOpener.autoOpenDefaultsKey) private var autoOpen = false
-    @AppStorage(DownloadManager.folderDefaultsKey) private var downloadFolder = ""
-    @AppStorage(ComposeMode.defaultsKey) private var composeMode = ComposeMode.fallback.rawValue
 
     var body: some View {
         Form {
@@ -49,20 +55,47 @@ private struct GeneralSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            #if os(macOS)
+        }
+        .formStyle(.grouped)
+    }
+
+    private var resolved: String {
+        StartView.resolve(
+            startView,
+            default: profile.startURL,
+            backend: Backend.resolve(backendName)
+        ).absoluteString
+    }
+}
+
+#if os(macOS)
+private struct ComposeSettingsView: View {
+    @AppStorage(ComposeMode.defaultsKey) private var composeMode = ComposeMode.fallback.rawValue
+
+    var body: some View {
+        Form {
             Section {
                 Picker("New message opens", selection: $composeMode) {
                     ForEach(ComposeMode.allCases, id: \.rawValue) { mode in
                         Text(mode.title).tag(mode.rawValue)
                     }
                 }
-            } header: {
-                Text("Compose")
             } footer: {
                 Text("What the C key and the Compose button do. Hold Option for Fastmail's own compose in the page, Command and Option for a tab.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct DownloadsSettingsView: View {
+    @AppStorage(AttachmentOpener.autoOpenDefaultsKey) private var autoOpen = false
+    @AppStorage(DownloadManager.folderDefaultsKey) private var downloadFolder = ""
+
+    var body: some View {
+        Form {
             Section {
                 LabeledContent("Download folder") {
                     Text(downloadFolder.isEmpty ? "~/Downloads" : downloadFolder)
@@ -79,23 +112,11 @@ private struct GeneralSettingsView: View {
                 Text("Downloaded documents and images open in their default app. Archives, installers and executables always preview.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } header: {
-                Text("Downloads")
             }
-            #endif
         }
         .formStyle(.grouped)
     }
 
-    private var resolved: String {
-        StartView.resolve(
-            startView,
-            default: profile.startURL,
-            backend: Backend.resolve(backendName)
-        ).absoluteString
-    }
-
-    #if os(macOS)
     private func chooseFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -105,5 +126,5 @@ private struct GeneralSettingsView: View {
             downloadFolder = url.path
         }
     }
-    #endif
 }
+#endif
