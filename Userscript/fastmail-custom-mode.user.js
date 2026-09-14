@@ -111,11 +111,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // instead of its own presets, one per line as "Name = Date @ Time";
         // Date is a keyword (today, tomorrow, this weekend, next week), a
         // count and a unit short or written out (2w, in 2 weeks), or a date
-        // as YYYY-MM-DD. Time is HH:MM, both always given. "Later today",
-        // four hours from now, always comes first, and "Choose a date and
-        // time…", which opens Fastmail's own picker, always last; neither is
-        // part of this setting.
-        snoozePresets: 'This Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
+        // as YYYY-MM-DD, each with a Time as HH:MM; or a number of hours
+        // (+4h, in 4 hours), counted from the start of this hour, which needs
+        // no Time. "Choose a date and time…", which opens Fastmail's own
+        // picker, always comes last and is not part of this setting.
+        snoozePresets: 'Later today = +4h\nThis Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
             'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
         // The action bar's verbs, as one ordered list over all of them: the
         // bar takes as many leading ones as fit; More always keeps a slot,
@@ -295,7 +295,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
             title: 'Snooze presets',
-            hint: 'Fastmail’s own Snooze button and shortcut (b) offer these instead of its own list, numbered so 1, 2, 3… picks one. Each needs a Date — today, tomorrow, this weekend, next week, a count and unit (2w, in 2 weeks), or a date as YYYY-MM-DD — and a Time. “Later today”, four hours from now, is always added first, and “Choose a date and time…” last.'
+            hint: 'Fastmail’s own Snooze button and shortcut (b) offer these instead of its own list, numbered so 1, 2, 3… picks one. Each needs a Date — today, tomorrow, this weekend, next week, a count and unit (2w, in 2 weeks), or a date as YYYY-MM-DD — and a Time; or a number of hours (+4h), counted from the start of this hour, with no Time. One whose time has passed is greyed out. “Choose a date and time…” is always added last.'
         },
         {
             key: 'swapArchiveExpand', group: 'keyboard',
@@ -3527,9 +3527,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * Custom… option's target and method (showCustomPicker), taken off
      * whichever stock option still carries them before they are replaced,
      * so it opens the very same real picker Fastmail's own entry did.
-     *
-     * "Later today" is not a preset either: it always comes first, four
-     * hours from whenever the menu is drawn.
      */
 
     // "08:00". Anything unreadable is eight in the morning.
@@ -3585,8 +3582,23 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // days", "in 1 month" - the count-and-unit shape this mode's old single
     // snoozeDefault setting used, kept as one more way to write a Date, a
     // plain offset from now rather than anchored to a weekday the way
-    // "next week" is.
-    const SNOOZE_PERIOD = /^(?:in\s+)?(\d+)\s*(d(?:ays?)?|w(?:eeks?)?|m(?:onths?)?)$/i;
+    // "next week" is. A leading "+" reads the same as "in".
+    const SNOOZE_PERIOD = /^(?:\+\s*|in\s+)?(\d+)\s*(d(?:ays?)?|w(?:eeks?)?|m(?:onths?)?)$/i;
+
+    // "+4h", "4h" or "in 4 hours": that many hours on from the start of the
+    // current hour, the way Fastmail's own Later today counts its three, so
+    // it always lands on a full hour; at 19:37, +4h is 23:00. It brings its
+    // own time, so a preset written this way needs no Time.
+    const SNOOZE_HOURS = /^(?:\+\s*|in\s+)?(\d+)\s*h(?:ours?)?$/i;
+
+    const snoozeHoursTarget = (now, text) => {
+        const match = SNOOZE_HOURS.exec(String(text || '').trim());
+        if (!match) return null;
+        const target = new Date(now.getTime());
+        target.setMinutes(0, 0, 0);
+        target.setHours(target.getHours() + parseInt(match[1], 10));
+        return target;
+    };
 
     /*
      * A preset's Date resolved against `now`: "today" changes nothing,
@@ -3647,10 +3659,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     // The wall-clock moment a preset proposes: its Date keyword, at its own
-    // Time. Both are required of every preset; parseSnoozeTime's own
-    // "unreadable is 8am" is a parser's safety net for a malformed line,
-    // not a setting to fall back on.
+    // Time, or a number of hours, which brings its own time. A Time is
+    // required of every other preset; parseSnoozeTime's own "unreadable is
+    // 8am" is a parser's safety net for a malformed line, not a setting to
+    // fall back on.
     const snoozePresetTarget = (now, preset) => {
+        const hours = snoozeHoursTarget(now, preset.date);
+        if (hours) return hours;
         const target = snoozeDateKeyword(now, preset.date);
         const time = parseSnoozeTime(preset.time);
         target.setHours(time.hours, time.minutes, 0, 0);
@@ -3722,17 +3737,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const CHOOSE_SNOOZE_DATE_LABEL = 'Choose a date and time…';
 
-    // Always first, whatever the presets say: four hours from when the menu
-    // is drawn, to the minute.
-    const LATER_TODAY_LABEL = 'Later today';
-    const LATER_TODAY_HOURS = 4;
-
-    const laterTodayTarget = (now) => {
-        const target = new Date(now.getTime() + LATER_TODAY_HOURS * 36e5);
-        target.setSeconds(0, 0);
-        return target;
-    };
-
     // Replaces Fastmail's own preset list with this mode's, through the
     // same patched MenuView.prototype.draw as addGroupings (see patchMenus
     // below): options is the plain array FutureTimeMenuView built, and
@@ -3748,10 +3752,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const futureTimeMenuView = custom.get('target');
 
         const now = new Date();
-        const presets = [{ name: LATER_TODAY_LABEL, target: laterTodayTarget(now) }]
-            .concat(parseSnoozePresets(settings.snoozePresets).map(preset => ({
-                name: preset.name, target: snoozePresetTarget(now, preset)
-            })));
+        const presets = parseSnoozePresets(settings.snoozePresets).map(preset => ({
+            name: preset.name, target: snoozePresetTarget(now, preset)
+        }));
 
         // A time already gone cannot be snoozed until, so it is offered
         // greyed out rather than hidden, keeping every number where it was.
@@ -3765,6 +3768,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 () => futureTimeMenuView.showCustomPicker()));
         }
 
+        if (!entries.length) return;
         options.splice(0, options.length, ...entries);
     };
 
@@ -8475,7 +8479,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         const nameField = new classes.TextInputView({ placeholder: 'Name', value: preset.name });
         const dateField = new classes.TextInputView({
-            placeholder: 'today, tomorrow, 2w, in 2 weeks, or YYYY-MM-DD', value: preset.date
+            placeholder: 'today, tomorrow, +4h, 2w, or YYYY-MM-DD', value: preset.date
         });
         const timeField = new classes.TextInputView({ placeholder: 'HH:MM', value: preset.time });
 
@@ -8536,10 +8540,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * to edit one, discrete add/remove/reorder actions that read the
      * setting fresh and write it back whole).
      *
-     * "Later today" is drawn first and "Choose a date and time…" last,
-     * always, and neither is part of the setting at all - see
-     * addSnoozePresets, which adds both itself whenever the menu is actually
-     * built - so there is nothing here for them to move, edit or remove.
+     * "Choose a date and time…" is drawn last, always, and is not part of
+     * the setting at all - see addSnoozePresets, which appends it itself
+     * whenever the menu is actually built - so there is nothing here for it
+     * to move, edit or remove.
      */
     const snoozePresetsSection = (classes) => {
         const el = FastMail.el;
@@ -8608,8 +8612,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 const list = reorderList(classes, items, reorder);
 
-                const laterRow = el('div.u-list-item.u-color-unimportant',
-                    [LATER_TODAY_LABEL + ' — in ' + LATER_TODAY_HOURS + ' hours']);
                 const customRow = el('div.u-list-item.u-color-unimportant', [CHOOSE_SNOOZE_DATE_LABEL]);
 
                 const addButton = new classes.ButtonView({
@@ -8620,7 +8622,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 return [
                     el('h3.u-trim.u-font-bold', [option.title]),
-                    el('div', [laterRow, list, customRow]),
+                    el('div', [list, customRow]),
                     addButton,
                     el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint])
                 ];
