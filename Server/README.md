@@ -47,7 +47,8 @@ so the tokens have to be able to write.
    subscription for an API token; either works, push is quicker),
    `verified` (true once Fastmail's verification round-trip is done),
    `lastNotice`, `devices`, `muted` (devices whose choice is Off; they
-   still get the badge), `contacts` (whether the token reads contacts) and
+   still get the badge), `contacts` (whether the token reads contacts;
+   false until the account's session has been read) and
    `modes` (devices per choice: `off`, `important`, `inbox`, `custom`).
    If `verified` stays `false`
    for more than a minute, run `docker compose restart`; the subscription

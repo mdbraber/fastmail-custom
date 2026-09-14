@@ -529,6 +529,29 @@ test('without contacts access nothing is read, the sets stay empty, and health s
     assert.equal(withAccess.watcher.status().contacts, true);
 });
 
+// Registrations reply `contacts: null` until this is set, so a device that
+// registers while the watcher starts is not told the token cannot read them.
+test('the session counts as read once Fastmail has answered it, even when a later step fails, and not before', async () => {
+    assert.equal((await setUp()).watcher.sessionRead, true, 'a normal start');
+
+    const t = await build({ contactsAccountIds: ['acc2'], books: { acc2: { cards: addressBook(), state: 'cs1' } } });
+    assert.equal(t.watcher.sessionRead, false, 'nothing read before start');
+
+    // A session that cannot be read leaves contacts unknown; start tries again later
+    t.jmap.connect = async () => { throw new JMAPError('session: HTTP 503', { status: 503 }); };
+    await t.watcher.start();
+    assert.equal(t.watcher.sessionRead, false);
+    assert.equal(t.watcher.notices, null, 'the start did fail');
+
+    // Read, and then the account has no Inbox: the start fails, the contacts are known
+    t.jmap.connect = async () => {};
+    t.jmap.mailboxes = async () => [];
+    await t.watcher.start();
+    assert.equal(t.watcher.notices, null, 'the start did fail');
+    assert.equal(t.watcher.sessionRead, true);
+    assert.equal(t.watcher.hasContacts, true);
+});
+
 // Task 5b: a token typically reads two address books (its own primary one
 // and a second, contacts-only account), and VIPs live in only one of them.
 test('contacts and VIPs are the union of every address book the token can read, built per account', async () => {

@@ -14,6 +14,8 @@ async function running() {
     const watchers = {
         personal: {
             callbackSecret: 'abc123',
+            // Started: the session has been read, so the reply's contacts is a boolean
+            sessionRead: true,
             hasContacts: true,
             status: () => ({ notices: 'push', verified: true, lastNotice: null, devices: 1 }),
             receive: async (body) => { received.push(body); },
@@ -137,6 +139,32 @@ test('with both fields notify wins, and the reply says whether contacts can be r
         s.watchers.personal.hasContacts = false;
         const without = await register(s, { account: 'personal', token, alerts: false, notify: { mode: 'important' } });
         assert.deepEqual(await without.json(), { ok: true, notify: { mode: 'important', senders: 'everyone', mailboxIds: [] }, contacts: false });
+    } finally {
+        await s.close();
+    }
+});
+
+// The server listens before its watchers have read their sessions. A device
+// told false then would warn about contacts until it next registered.
+test('before the watcher has read the session the reply says contacts are unknown; after, it says what the session said', async () => {
+    const s = await running();
+    const important = { mode: 'important', senders: 'everyone', mailboxIds: [] };
+    try {
+        s.watchers.personal.sessionRead = false;
+        s.watchers.personal.hasContacts = false;
+        const early = await register(s, { account: 'personal', token, notify: { mode: 'important' } });
+        assert.equal(early.status, 200);
+        assert.deepEqual(await early.json(), { ok: true, notify: important, contacts: null });
+        // Stored all the same: only the reply waits on the session
+        assert.deepEqual(s.registered, [['personal', token, { notify: important }]]);
+
+        s.watchers.personal.sessionRead = true;
+        const without = await register(s, { account: 'personal', token, notify: { mode: 'important' } });
+        assert.deepEqual(await without.json(), { ok: true, notify: important, contacts: false });
+
+        s.watchers.personal.hasContacts = true;
+        const withAccess = await register(s, { account: 'personal', token, notify: { mode: 'important' } });
+        assert.deepEqual(await withAccess.json(), { ok: true, notify: important, contacts: true });
     } finally {
         await s.close();
     }

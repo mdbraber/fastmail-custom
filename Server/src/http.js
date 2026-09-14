@@ -40,8 +40,13 @@ async function route({ config, watchers, devices }, request, response) {
         const { notify, error } = registrationChoice(body);
         if (error) return reply(response, 400, { error });
         await devices.register(body.account, body.token, { notify });
-        // Whether the account's token can read contacts: without, VIPs and contacts match nobody
-        return reply(response, 200, { ok: true, notify, contacts: watchers[body.account].hasContacts === true });
+        // Whether the account's token can read contacts: without, VIPs and
+        // contacts match nobody. Null until the watcher has read the session,
+        // so a device registering during start-up is not told false and
+        // warned for days
+        const watcher = watchers[body.account];
+        const contacts = watcher.sessionRead === true ? watcher.hasContacts === true : null;
+        return reply(response, 200, { ok: true, notify, contacts });
     }
 
     // The buttons on a notification. The phone has no Fastmail credentials of

@@ -284,7 +284,8 @@ Every change saves at once. There is no Done or Save button.
 - **The device registry** stores `{registeredAt, notify}`. A record from
   before this change, carrying `alerts`, reads as `inbox` or `off`.
 - **The reply** is `{ ok: true, notify, contacts }`. `contacts` is true
-  when the account's token can read contacts.
+  when the account's token can read contacts, false when it cannot, and
+  null while the server has not yet read the account's session.
 
 ### Which messages alert which device
 

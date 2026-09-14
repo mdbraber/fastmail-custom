@@ -45,6 +45,10 @@ export class AccountWatcher {
         this.vipAddresses = new Set();
         this.contactsStates = {};
         this.contactsDue = false;
+        // Set once the JMAP session has been read, and never unset: until
+        // then `hasContacts` is false for want of knowing, not because the
+        // token cannot read contacts
+        this.sessionRead = false;
         this.notices = null;
         this.callbackSecret = null;
         this.pushSubscriptionId = null;
@@ -79,6 +83,9 @@ export class AccountWatcher {
 
     async connect() {
         await this.jmap.connect();
+        // The session names the contacts accounts; a later step failing
+        // does not make them unknown again
+        this.sessionRead = true;
         const mailboxes = await this.jmap.mailboxes();
         this.inboxId = mailboxes.find((m) => m.role === 'inbox')?.id ?? null;
         if (!this.inboxId) throw new Error('no Inbox in this account');
@@ -474,6 +481,8 @@ export class AccountWatcher {
             devices: devices.length,
             // What muted always meant: no alerts, the count still arrives
             muted: modes.off,
+            // False before the session has been read, as well as after a
+            // read that found no contacts access
             contacts: this.hasContacts,
             modes,
         };
