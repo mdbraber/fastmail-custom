@@ -8459,12 +8459,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return holder;
     };
 
-    // The list row's own label: a plain summary, since "Name — Date @
-    // Time" says exactly what a preset resolves to without computing it
-    // against "now" the way the menu's own two-part label does.
-    const snoozePresetSummary = (preset) =>
-        preset.name + ' — ' + (preset.date || 'today') + ' @ ' + (preset.time || '08:00');
-
     // Edited in a dialog of its own, the same shell editGrouping's own
     // editor sits in (framedModal, read off Fastmail's bundle) - just with
     // three plain fields as its content instead of Fastmail's splits
@@ -8604,9 +8598,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // Drawn from, and never written from.
                 const presets = parseSnoozePresets(settingValue('snoozePresets'));
 
+                // The name alone; its Date and Time are for its Edit dialog.
                 const items = presets.map(one => ({
                     id: one.name,
-                    label: snoozePresetSummary(one),
+                    label: one.name,
                     edit: () => edit(one.name),
                     remove: () => remove(one.name)
                 }));
