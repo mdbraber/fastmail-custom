@@ -41,12 +41,35 @@ userscripts have no `browser.scripting`. See
 | File | Purpose |
 |---|---|
 | `manifest.json` | MV3 manifest, scoped to `app.fastmail.com` and `app.beta.fastmail.com` |
-| `background.js` | Injects the payload with `world: "MAIN"` on page load |
-| `early.js` | Content script at `document_start`, replaying last load's styles; stamps the host marker (`data-custom-mode-host`) and relays the page's setting writes into extension storage |
+| `background.js` | Injects the payload with `world: "MAIN"` on page load; keeps each Fastmail account's settings and syncs them with iCloud through the native part |
+| `early.js` | Content script at `document_start`, replaying last load's styles; stamps the host marker (`data-custom-mode-host`), saves the page's setting writes under its account, and passes the account and the sync switch to the background script |
+| `App/Fastmail Custom Mode/Fastmail Custom Mode Extension/SafariWebExtensionHandler.swift` | The native part: reads and writes iCloud key-value storage for the background script, through `Packages/FastmailShellKit/Sources/FastmailShellKit/SettingsSyncRules.swift`, which the extension compiles by reference |
 | `settings.html` / `settings.js` | The toolbar popup; opens Custom mode's page in Fastmail's Settings |
 | `fastmail-custom-mode.js` | Symlink to the userscript, which is the payload |
 
 The payload guards against running twice, so a duplicate injection is harmless.
+
+## Settings sync
+
+Custom mode's settings follow each Fastmail account between Safari on this Mac
+and the Personal and Work apps on the Mac, iPhone and iPad, through iCloud
+key-value storage. The extension target declares the store the apps share;
+the host app does not.
+
+- The page reports its account. Each account keeps its own set in
+  `settingsByAccount`, and `settings` is the starting set for an account seen
+  for the first time.
+- The native part cannot hear iCloud's change notices, so the background
+  script asks it when a tab reports its account, when a Fastmail tab comes to
+  the front, and every five minutes.
+- The first time an account syncs here, iCloud's settings win when it holds
+  any. Otherwise the set here stays, and only later changes are sent, one at
+  a time.
+- `bottomBarItems` and `topBarItems` stay on this Mac.
+- The "Sync settings with iCloud" switch on Custom mode's settings page is
+  kept as `syncEnabled`, for Safari on this Mac only. Turning it off keeps
+  every setting and forgets every first sync; turning it on takes iCloud's
+  settings again.
 
 ## Building
 
