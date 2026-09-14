@@ -69,7 +69,7 @@ cannot reach on its own: real windows, notifications, downloads and links.
 - 🔔 **Push notifications**: choose Off, Important, All in Inbox or labels of
   your own per device; a banner carries Archive, Later and Pin.
 - 📱 **Home screen shortcuts**: long-press the icon on iPhone or iPad for
-  Inbox, your triage label, Compose and Search.
+  Search, Compose, your triage label and Inbox.
 - 🔒 **App lock**: iPhone and iPad can ask for Face ID, Touch ID or your
   passcode before mail shows.
 - 🌐 **In-app browser**: links leaving the app can open in one instead of

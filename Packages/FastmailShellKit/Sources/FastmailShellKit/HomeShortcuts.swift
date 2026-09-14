@@ -71,9 +71,6 @@ public enum HomeShortcuts {
             icon: .system("tray"),
             path: inboxPath
         )
-        // iOS draws the menu from the icon outwards, which puts the last of
-        // these under your thumb: Search, reached for more than a compose
-        // window is opened straight into a blank one.
         let search = HomeShortcut(
             type: searchType,
             title: searchTitle,
@@ -87,8 +84,11 @@ public enum HomeShortcuts {
             path: composePath
         )
         let label = (badgeLabel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        // iOS draws the menu from the icon outwards, which puts the last of
+        // these under your thumb: Inbox, reached for more than the other
+        // three.
         guard !label.isEmpty, label.lowercased() != inboxTitle.lowercased() else {
-            return [inbox, compose, search]
+            return [search, compose, inbox]
         }
         // The funnel, not a tag. Everywhere else this label is drawn it wears
         // that glyph, because what it names is the mail still waiting rather
@@ -99,9 +99,9 @@ public enum HomeShortcuts {
             icon: .template(funnelImageName),
             path: path(forLabel: label)
         )
-        // Four, which is all iOS draws: the two lists first, Inbox then
-        // Triage, then the two beginnings, Compose then Search.
-        return [inbox, shortcut, compose, search]
+        // Four, which is all iOS draws: the two beginnings first, Search then
+        // Compose, then the two lists, Triage then Inbox.
+        return [search, compose, shortcut, inbox]
     }
 
     /// A label's own view. Nested labels keep their separators; everything
