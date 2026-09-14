@@ -132,6 +132,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // Labels grouping in the Group menu; empty means all the way at the
         // front, which is today's fixed behaviour.
         labelsGroupingIndex: '',
+        // The automatic Labels grouping's own groups, written as one block of
+        // groupings is, with the line "Labels = *labels*" standing where the
+        // group per label goes. Empty is that line alone and Other.
+        labelsGrouping: '',
         // Shown in the sidebar but worked as piles, not queues: never filed
         // into, never stripped by archive
         excludedLabels: 'Later, Feedbin',
@@ -286,7 +290,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'groupings', group: 'grouping', clearable: true, multiline: true,
             title: 'Your groupings',
-            hint: 'Each one is offered in a mailbox’s Group menu beside Fastmail’s own. Its groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Renaming a grouping loses it on the mailboxes using it.'
+            hint: 'Each one is offered in a mailbox’s Group menu beside Fastmail’s own. Labels makes a group for each label; edit it to add groups of your own before or after those. Groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Renaming a grouping loses it on the mailboxes using it.'
         },
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
@@ -1616,8 +1620,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * the sort field; its five are "" for none, isTodayWeekMonth, isPinned,
      * isUnread and custom, and custom reads a definition stored on the
      * mailbox. The mode adds two kinds of its own and stores no definition
-     * anywhere: "labels", built from the label tree, and one per block of
-     * settings.groupings, under the id "split:" and its name.
+     * on the mailbox: "labels", built from the label tree and shaped by
+     * settings.labelsGrouping, and one per block of settings.groupings, under
+     * the id "split:" and its name.
      *
      * A value Fastmail does not know is safe in that sort: its own
      * calculateSplits returns null for one, no category sort is built, and
@@ -1631,6 +1636,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // Everything the list falls into that no group claimed. Fastmail's own
     // wording for the same bucket.
     const OTHER_NAME = 'Other';
+
+    // Where the Labels grouping puts its group per label among its other
+    // groups. Carried as a group like any other, with a search nobody would
+    // type, so the setting keeps the form every grouping has and Fastmail's
+    // own editor can carry it as a row among the rest.
+    const LABELS_MARKER = { name: 'Labels', query: '*labels*' };
+    const isLabelsMarker = (category) => !!category && category.query === LABELS_MARKER.query;
 
     /*
      * The settings text, as blocks: every grouping it holds, finished or not.
@@ -1732,6 +1744,51 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
+     * The Labels grouping as the user has shaped it: groups of their own by
+     * search, the marker where the group per label goes, and the name for
+     * everything else. With nothing stored, or no marker in what is, the
+     * marker stands first; a second marker is dropped.
+     */
+    const labelsGroupingSettings = () => {
+        const stored = parseGroupings(settings.labelsGrouping)[0];
+        const categories = [];
+        (stored ? stored.categories : []).forEach((one) => {
+            if (!isLabelsMarker(one) || !categories.some(isLabelsMarker)) categories.push(one);
+        });
+        if (!categories.some(isLabelsMarker)) categories.unshift(Object.assign({}, LABELS_MARKER));
+        return {
+            name: LABELS_MARKER.name,
+            categories: categories,
+            otherName: stored ? stored.otherName : OTHER_NAME
+        };
+    };
+
+    // Back to the setting, which stays empty while the grouping is only its
+    // labels and Other, as it starts.
+    const formatLabelsGrouping = (grouping) => {
+        const categories = (grouping.categories || []).some(isLabelsMarker)
+            ? grouping.categories
+            : [Object.assign({}, LABELS_MARKER)].concat(grouping.categories || []);
+        const otherName = grouping.otherName || OTHER_NAME;
+        if (categories.length === 1 && otherName === OTHER_NAME) return '';
+        return formatGroupings([{ name: LABELS_MARKER.name, categories: categories, otherName: otherName }]);
+    };
+
+    // The Labels grouping for one mailbox, given its group per label: the
+    // user's own groups where they put them, and those where the marker
+    // stands. None where there are no labels to group by.
+    const labelsDefinition = (labels) => {
+        if (!labels.length) return null;
+        const shaped = labelsGroupingSettings();
+        return {
+            id: LABELS_GROUPING,
+            name: 'labels',
+            categories: [].concat(...shaped.categories.map(one => (isLabelsMarker(one) ? labels : [one]))),
+            otherName: shaped.otherName
+        };
+    };
+
+    /*
      * A group per label under this one.
      *
      * Built as filters rather than searches, so no query has to be written or
@@ -1750,17 +1807,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 isSidebarLabel(other) && !isTriage(other))
             .sort((a, b) => (a.get('sortOrder') || 0) - (b.get('sortOrder') || 0));
 
-        if (!children.length) return null;
-
-        return {
-            id: LABELS_GROUPING,
-            name: 'labels',
-            categories: children.map(child => ({
-                name: child.get('name'),
-                filter: { inMailbox: child.get('id') }
-            })),
-            otherName: OTHER_NAME
-        };
+        return labelsDefinition(children.map(child => ({
+            name: child.get('name'),
+            filter: { inMailbox: child.get('id') }
+        })));
     };
 
     // The Inbox groups by the labels at the top level, which are nobody's
@@ -1778,17 +1828,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 isSidebarLabel(other) && !isTriage(other))
             .sort((a, b) => (a.get('sortOrder') || 0) - (b.get('sortOrder') || 0));
 
-        if (!roots.length) return null;
-
-        return {
-            id: LABELS_GROUPING,
-            name: 'labels',
-            categories: roots.map(root => ({
-                name: root.get('name'),
-                filter: { inMailbox: root.get('id') }
-            })),
-            otherName: OTHER_NAME
-        };
+        return labelsDefinition(roots.map(root => ({
+            name: root.get('name'),
+            filter: { inMailbox: root.get('id') }
+        })));
     };
 
     const groupingFor = (id, mailbox) => {
@@ -1850,8 +1893,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * other question to the real one. Fastmail then does the parsing, and
      * the shape that comes back is its own.
      *
-     * A definition built from filters already, which Labels is, needs none
-     * of that and is returned as it stands.
+     * A group built from a filter already, which each of Labels' group per
+     * label is, needs none of that. So only the searches are handed over,
+     * and the filter Fastmail makes of each goes back into the place its
+     * search held among the rest.
      */
     const standInFor = (mailController, definition) => {
         const source = {
@@ -1871,16 +1916,20 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const splitsFor = (mailController, original, definition) => {
-        const parsed = definition.categories.length > 0 &&
-            definition.categories.every(one => one.filter);
-        if (parsed) {
-            return {
-                categories: definition.categories,
+        const searches = definition.categories.filter(one => !one.filter);
+        const parsed = searches.length
+            ? original.call(standInFor(mailController, {
+                categories: searches,
                 otherName: definition.otherName
-            };
-        }
+            }))
+            : { categories: [] };
+        if (!parsed) return null;
 
-        return original.call(standInFor(mailController, definition));
+        let next = 0;
+        return {
+            categories: definition.categories.map(one => (one.filter ? one : parsed.categories[next++])),
+            otherName: definition.otherName
+        };
     };
 
     const patchSplits = () => {
@@ -1967,7 +2016,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             if (currentGroupingId() !== LABELS_GROUPING) return;
             const grouping = labelsGroupingFor(controller().get('mailbox'));
             const signature = grouping
-                ? grouping.categories.map(one => one.filter.inMailbox + ':' + one.name).join('|')
+                ? grouping.categories.map(one =>
+                    (one.filter ? one.filter.inMailbox : one.query) + ':' + one.name).join('|')
                 : '';
             if (signature === lastLabelGroups) return;
             lastLabelGroups = signature;
@@ -8042,13 +8092,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // Fastmail's own editor, in the frame its own Custom… entry uses: its
     // condition rows drag only inside a ScrollView, and its Escape and Enter
-    // are answered by its own keyOutside.
-    const editGrouping = (classes, grouping, done) => {
+    // are answered by its own keyOutside. closed, when given, is called once
+    // the dialog has gone, or at once when it cannot open.
+    const editGrouping = (classes, grouping, done, closed) => {
+        const finish = closed || (() => {});
         // Its dialog needs its own two classes; the page that holds the
         // Edit button does not, so they are checked here rather than there.
         const Editor = FastMail.classes && FastMail.classes.GroupSettingsView;
         if (typeof Editor !== 'function' || !classes.ModalOverlayView || !classes.ScrollView) {
             reportFault('Fastmail’s groupings editor is not available here');
+            finish();
             return;
         }
 
@@ -8064,8 +8117,56 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // show() settles once the overlay has been hidden.
         dialog.modal.show().then(() => {
             dialog.takeApart();
+            finish();
             if (saved) done(saved);
         });
+    };
+
+    /*
+     * The Labels grouping, in the same editor. One of its rows is nothing
+     * Fastmail could draw: the marker, standing for the group per label, and
+     * carried as a row like the rest so that it drags among them and saves in
+     * its place. While this dialog is open, SplitConditionItemView draws that
+     * one row as a plain line with no "…" menu, so it can be moved but
+     * neither edited nor removed. Every other row is Fastmail's to draw, and
+     * the settings page's own lists hand their rows a draw of their own, so
+     * they never reach this. The row's own draw is put back once the dialog
+     * has gone.
+     */
+    const LABELS_MARKER_HINT = 'One group for each label';
+
+    const editLabelsGrouping = (classes, grouping, done) => {
+        const Row = FastMail.classes && FastMail.classes.SplitConditionItemView;
+        if (typeof Row !== 'function') {
+            reportFault('Fastmail’s groupings editor is not available here');
+            return;
+        }
+
+        const el = FastMail.el;
+        const hadOwnDraw = Object.prototype.hasOwnProperty.call(Row.prototype, 'draw');
+        const rowDraw = Row.prototype.draw;
+        const putBack = () => {
+            if (hadOwnDraw) Row.prototype.draw = rowDraw;
+            else delete Row.prototype.draw;
+        };
+
+        Row.prototype.draw = function () {
+            const content = this.get('content');
+            if (!content || content.get('query') !== LABELS_MARKER.query) return rowDraw.apply(this, arguments);
+            return [
+                el('div.u-flex-none.u-select-none', { style: 'margin-top:-6px;cursor: grab' }, ['⣶']),
+                el('div.u-flex-1.u-font-bold', { style: 'line-height:32px' }, [LABELS_MARKER.name]),
+                el('div.u-flex-1.u-truncate.u-color-unimportant', [LABELS_MARKER_HINT]),
+                el('div', { style: 'flex: 0 0 32px' })
+            ];
+        };
+
+        try {
+            editGrouping(classes, grouping, done, putBack);
+        } catch (error) {
+            putBack();
+            reportFault('could not open the Labels grouping', error);
+        }
     };
 
     /*
@@ -8159,6 +8260,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             });
         };
 
+        // The Labels grouping is always there, so it has no name to be found
+        // by and no Remove; its save is written whole over its own setting.
+        const editLabels = () => {
+            editLabelsGrouping(classes, labelsGroupingSettings(), (value) => {
+                writeSetting('labelsGrouping', formatLabelsGrouping(value));
+                redraw();
+            });
+        };
+
         // A name no grouping has yet: of two groupings sharing a name the
         // parser keeps the first and drops the second without a word, so a
         // second Add under the same name would add nothing.
@@ -8186,10 +8296,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     edit: () => edit(one.name),
                     remove: () => remove(one.name)
                 }));
+                const ownGroups = labelsGroupingSettings().categories.length - 1;
                 items.splice(labelsGroupingIndex(groupings.length), 0, {
                     id: LABELS_GROUPING,
-                    label: 'Labels — automatic, one group per label here',
-                    edit: null,
+                    label: 'Labels — a group per label' + (ownGroups
+                        ? ' and ' + ownGroups + (ownGroups === 1 ? ' other' : ' others')
+                        : ''),
+                    edit: editLabels,
                     remove: null
                 });
 
