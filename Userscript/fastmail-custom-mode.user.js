@@ -8397,7 +8397,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 const addButton = new classes.ButtonView({
                     type: 'v-Button--standard v-Button--sizeM',
-                    label: 'Add a group preset',
+                    label: 'Add a preset',
                     target: { go: add },
                     method: 'go'
                 });
