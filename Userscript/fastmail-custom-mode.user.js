@@ -107,10 +107,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // The label a rule puts on everything incoming. Taken off by keeping
         // or filing; the script never adds it.
         triageLabel: 'Triage',
-        // w opens Fastmail's own snooze dialog filled in for this far ahead,
-        // a count and d, w or m, at this time of day
-        snoozeKey: 'w',
-        snoozeDefault: '2w',
+        // Fastmail's own Snooze button and shortcut (b) open this list
+        // instead of its own presets, one per line as "Name = Date @ Time";
+        // Date is a keyword (today, tomorrow, this weekend, next week) and
+        // blank is today, Time is HH:MM and blank falls back to the time
+        // below. "Choose a date and time…" is always appended, last, and
+        // opens Fastmail's own picker; it is not part of this setting.
+        snoozePresets: 'This Evening = @ 19:00\nTomorrow = tomorrow\n' +
+            'This weekend = this weekend\nNext week = next week',
         snoozeTime: '08:00',
         // The pin-toggle key, in Fastmail's own key spelling.
         urgentKey: 's',
@@ -286,19 +290,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             hint: 'One block each: a line naming the grouping, then indented “Name = search” lines, then a bare line for everything else. Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Renaming a grouping loses it on the mailboxes using it.'
         },
         {
-            key: 'snoozeKey', group: 'snooze',
-            title: 'Snooze key',
-            hint: 'Opens the snooze dialog with the default period filled in.'
-        },
-        {
-            key: 'snoozeDefault', group: 'snooze',
-            title: 'Default snooze period',
-            hint: 'A number and d, w or m for days, weeks or months, such as 2w.'
+            key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
+            title: 'Snooze presets',
+            hint: 'Fastmail’s own Snooze button and shortcut (b) offer these instead of its own list, numbered so 1, 2, 3… picks one. Each has a Date (today, tomorrow, this weekend, next week; blank is today) and a Time (blank uses the default below). “Choose a date and time…” is always added last.'
         },
         {
             key: 'snoozeTime', group: 'snooze',
-            title: 'Snooze time of day',
-            hint: 'When a snoozed message returns, as HH:MM.'
+            title: 'Default snooze time',
+            hint: 'What a preset with no time of its own uses, as HH:MM.'
         },
         {
             key: 'urgentKey', group: 'keyboard',
@@ -634,20 +633,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // A user label is a mailbox without a system role
     const isUserLabel = (mailbox) => !!mailbox && !mailbox.get('role');
-
-    // Which class a view is. FastMail.classes is keyed by the Name every class
-    // declares, so the class object itself can be had and asked about ; which
-    // beats comparing constructor.name to a string twice over: a subclass
-    // answers yes, and nothing depends on the minifier having kept the
-    // constructor's function name, which is a property nobody promised.
-    const isViewOfClass = (view, name) => {
-        if (!view || !view.constructor) return false;
-
-        const Class = FastMail.classes && FastMail.classes[name];
-        if (Class) return view instanceof Class;
-
-        return view.constructor.name === name;
-    };
 
     // Fastmail names a chip by the mailbox's full path; "Projects/Work", not
     // "Work"; while the record's name and displayName are only the leaf.
@@ -2324,8 +2309,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return null;
     };
 
-    const SNOOZE_SHORTCUT = 'b';
-
     // Our own "Remove label", since Fastmail draws no such button here: the
     // third slot holds one contextual view that reads Archive while the view
     // is filtered to the Inbox; which, in this mode, every label view is, and
@@ -2413,8 +2396,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         method: 'removeLabel'
     });
 
-    // The bar's spellings of the verbs Fastmail has no button for: keep a
-    // tray, snooze for a while a clock.
+    // The bar's spelling of the one verb Fastmail has no button for: keep, a
+    // tray.
     const STATE_VERB_SHAPES = {
         // An arrow going down into an open tray. It was a tick in a circle,
         // which is the mark for done, and done is Archive, two buttons along.
@@ -2422,10 +2405,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             ['line', { x1: '12', y1: '4.4', x2: '12', y2: '13.6' }],
             ['polyline', { points: '7.6 9.2 12 13.6 16.4 9.2' }],
             ['polyline', { points: '5.2 12.6 5.2 19.6 18.8 19.6 18.8 12.6' }]
-        ],
-        snooze: [
-            ['circle', { cx: '12', cy: '12', r: '7.75' }],
-            ['polyline', { points: '12 7.81 12 12 14.93 13.47' }]
         ]
     };
 
@@ -2435,9 +2414,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // sends an unfiled conversation to the Labels sheet, and two menus
     // fighting over the same moment is how taps get eaten
     const stateVerbOption = (label, kind) => {
-        const run = kind === 'snooze'
-            ? () => setTimeout(openSnoozeDialog, 0)
-            : () => setTimeout(() => runVerb('keep', null), 0);
+        const run = () => setTimeout(() => runVerb('keep', null), 0);
 
         const option = new FastMail.classes.ButtonView({
             label: label,
@@ -2593,24 +2570,21 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const ACTION_LIST_MARKS = ['archive', 'labels', 'move', 'trash', 'snooze', 'removeLabel'];
 
     /*
-     * Two verbs of the mode's own that live in the menu and nowhere else.
+     * The one verb of the mode's own that lives in the menu and nowhere
+     * else: Remove label, because Fastmail's own button cannot be used
+     * here. It runs the plain remove, and this mode reads a plain remove on
+     * a project label as "archive"; that is what keeps a swipe from quietly
+     * unfiling a message. Removing on purpose has to say so, which is what
+     * this one does.
      *
-     * Snooze for the set period, beside Fastmail's Snooze rather than in
-     * place of it: the stock button opens the dialog, this one just does it.
+     * Snooze used to have one here too, beside Fastmail's own Snooze
+     * button; now that button's own menu is this mode's list of presets
+     * (see addSnoozePresets), so there is nothing left for a second one to
+     * do.
      *
-     * Remove label, because Fastmail's own button cannot be used here. It
-     * runs the plain remove, and this mode reads a plain remove on a project
-     * label as "archive"; that is what keeps a swipe from quietly unfiling
-     * a message. Removing on purpose has to say so, which is what this one
-     * does.
-     *
-     * Named rather than inserted, like everything else on the bar, and named
-     * last so they sit under Fastmail's own.
+     * Named rather than inserted, like everything else on the bar.
      */
-    const MODE_MENU_NAMES = ['customSnooze', 'customRemoveLabel'];
-
-    const snoozeMenuLabel = () =>
-        'Snooze ' + snoozePeriodLabel(settings.snoozeDefault);
+    const MODE_MENU_NAMES = ['customRemoveLabel'];
 
     /*
      * Our buttons, drawn the way the bar draws its own.
@@ -2695,16 +2669,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             toolbar.registerView('keep', stateVerbOption('Keep', 'keep'));
         }
         matchBarStyle(toolbar, toolbar.getView('keep'));
-
-        const snooze = named('customSnooze',
-            () => stateVerbOption(snoozeMenuLabel(), 'snooze'));
-        try {
-            // The period is a setting, so the wording follows it
-            snooze.set('label', snoozeMenuLabel());
-        } catch (error) {
-            // A label that will not be set is still a working button
-        }
-        matchBarStyle(toolbar, snooze);
 
         matchBarStyle(toolbar, named('customRemoveLabel', () => {
             const option = removeLabelOption();
@@ -3507,21 +3471,50 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * ----------------------------------------------------------------
-     * Snooze for a while; `w`
+     * Snooze presets; Fastmail's own Snooze button and shortcut, `b`
      * ----------------------------------------------------------------
+     *
+     * Fastmail's own Snooze button is a MenuButtonView whose menu is a
+     * FutureTimeMenuView, read off its own bundle (NewEvent.mod.js, folded
+     * into mail.mod.js's own import list). Its draw() builds
+     * `this.menuView = new MenuView({showFilter:false, closeOnActivate:true,
+     * options: this.drawOptions()})` - the very MenuView class patchMenus
+     * already patches for the Group menu, with the very same plain, mutable
+     * `options` array addGroupings already rewrites. So this list is added
+     * the same way, in the same patched draw(), rather than through any
+     * dialog-swapping mechanism of its own.
+     *
+     * drawOptions() builds six numbered presets, each `new ButtonView({
+     * shortcut: "1".."6", date: <a Date>, target: this,
+     * method: "menuDateChosen" })`, and a seventh, `new ButtonView({
+     * shortcut: "7", target: this, method: "showCustomPicker" })`; all seven
+     * share one target, the FutureTimeMenuView itself. Numbered shortcuts
+     * are not a MenuView behaviour that falls out of an option's position:
+     * "shortcut" is a plain property any ButtonView carries (confirmed on
+     * ButtonView's own Mixin in the bundle: an empty default, registered
+     * with the global shortcut table on didEnterDocument whenever it is
+     * non-empty), and FutureTimeMenuView sets it explicitly per option. So
+     * every preset built below sets one of its own the same way.
+     *
+     * menuDateChosen reads the button's own `date` and hands it to
+     * didSelect, which the mail app's own FutureTimeMenuView overrides to
+     * call a real, callable primitive: `controller().actions.snooze(keys,
+     * date)`. Confirmed both off the static bundle and live, read-only,
+     * against the real running app (its own toString() matches the bundle
+     * byte for byte): `snooze(e,t){if(eA&&this.dispatchToMainWindow(...)
+     * ||!t)return this; ...}` - a plain Date is enough, with no dependence
+     * on the custom picker's own local-time-written-as-UTC quirk, since
+     * that quirk lives in FutureCustomTimeView, not in this call. Passing a
+     * falsy `keys` (as `controller().actions.archive(null)` already does
+     * elsewhere in this file) snoozes the current selection, exactly as
+     * pressing `b` and choosing a stock preset would. So each preset below
+     * calls this directly, rather than driving the picker's own Save.
+     *
+     * "Choose a date and time…" is not a preset: it reuses Fastmail's own
+     * Custom… option's target and method (showCustomPicker), taken off
+     * whichever stock option still carries them before they are replaced,
+     * so it opens the very same real picker Fastmail's own entry did.
      */
-
-    // Fastmail's Snooze button is a MenuButtonView whose menu is a
-    // FutureTimeMenuView: the presets, and a custom option that swaps them for
-    // a FutureCustomTimeView, a date picker and a time field bound to that
-    // view's `date`, a preview line, Save and Cancel, Enter to save.
-
-    // "2w", "14d", "1m": a count and a unit. Anything unreadable is two weeks.
-    const parseSnoozePeriod = (text) => {
-        const match = /^\s*(\d+)\s*([dwm])\s*$/i.exec(String(text || ''));
-        if (!match) return { count: 2, unit: 'w' };
-        return { count: parseInt(match[1], 10), unit: match[2].toLowerCase() };
-    };
 
     // "08:00". Anything unreadable is eight in the morning.
     const parseSnoozeTime = (text) => {
@@ -3533,110 +3526,144 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         };
     };
 
-    // The wall-clock moment to propose: today plus the period, at the time
-    const snoozeTarget = (now, period, time) => {
+    // "Name = Date @ Time", one per line. Forgiving, like parseGroupings: a
+    // line with no "=" is skipped rather than guessed at, and a name with
+    // nothing else on the line is just today at the fallback time.
+    const parseSnoozePresets = (text) => String(text || '').split('\n')
+        .map(raw => raw.trim())
+        .filter(Boolean)
+        .map((line) => {
+            const divider = line.indexOf('=');
+            if (divider === -1) return null;
+            const name = line.slice(0, divider).trim();
+            if (!name) return null;
+            const rest = line.slice(divider + 1).trim();
+            const at = rest.indexOf('@');
+            const date = (at === -1 ? rest : rest.slice(0, at)).trim();
+            const time = (at === -1 ? '' : rest.slice(at + 1)).trim();
+            return { name: name, date: date, time: time };
+        })
+        .filter(Boolean);
+
+    // The inverse of parseSnoozePresets, and round-trips with it: a preset
+    // with neither half written is still "Name =", not dropped.
+    const formatSnoozePresets = (presets) => (presets || []).map((one) => {
+        const date = one.date || '';
+        const time = one.time ? '@ ' + one.time : '';
+        const right = date && time ? date + ' ' + time : date + time;
+        return (one.name + ' = ' + right).trim();
+    }).join('\n');
+
+    // The next occurrence of a given weekday (0 = Sunday .. 6 = Saturday)
+    // that is not today - rolling a full week ahead rather than ever
+    // landing on the day it is asked from.
+    const snoozeWeekdayOffset = (fromDay, targetDay) => {
+        const add = (targetDay - fromDay + 7) % 7;
+        return add === 0 ? 7 : add;
+    };
+
+    /*
+     * A preset's Date keyword resolved against `now`: blank or "today"
+     * changes nothing, "tomorrow" is the next day, and "this weekend" /
+     * "next week" are the next Saturday or Monday that is not today.
+     *
+     * The weekend and week rules are not this mode's own convention: they
+     * are Fastmail's own, read off FutureTimeMenuView.drawOptions in its
+     * bundle. Its weekend option adds `7-(day+1)%7` days and its week
+     * option adds `7-(day+6)%7`, worked out there from a fresh `new Date`
+     * each time the menu draws; checked by hand against every day of the
+     * week, both reduce to exactly snoozeWeekdayOffset above with target
+     * weekdays 6 (Saturday) and 1 (Monday) - the next Saturday or Monday,
+     * never today even on a Saturday or a Monday itself. (Fastmail also
+     * swaps the weekend option's own label between "This weekend" and
+     * "Next weekend" depending on whether today already is one; this mode
+     * keeps one name, chosen once, for the same preset either way.)
+     */
+    const snoozeDateKeyword = (now, keyword) => {
         const target = new Date(now.getTime());
-        target.setHours(time.hours, time.minutes, 0, 0);
-        if (period.unit === 'd') target.setDate(target.getDate() + period.count);
-        else if (period.unit === 'w') target.setDate(target.getDate() + period.count * 7);
-        else target.setMonth(target.getMonth() + period.count);
+        switch (String(keyword || '').trim().toLowerCase()) {
+            case 'tomorrow':
+                target.setDate(target.getDate() + 1);
+                break;
+            case 'this weekend':
+            case 'next weekend':
+                target.setDate(target.getDate() + snoozeWeekdayOffset(now.getDay(), 6));
+                break;
+            case 'next week':
+                target.setDate(target.getDate() + snoozeWeekdayOffset(now.getDay(), 1));
+                break;
+            default:
+            // '', 'today', or anything unread: today, same as a blank Date
+        }
         return target;
     };
 
-    // FutureCustomTimeView keeps `date` as the local wall-clock time written
-    // as if it were UTC; its drawCustom subtracts the timezone offset and its
-    // localDate adds it back; so the same shift is applied here, or the dialog
-    // shows the right day at the wrong hour.
-    const asPickerDate = (local) =>
-        new Date(local.getTime() - local.getTimezoneOffset() * 60000);
-
-    // "2w" → "2 weeks", for a button label
-    const snoozePeriodLabel = (text) => {
-        const period = parseSnoozePeriod(text);
-        const unit = { d: 'day', w: 'week', m: 'month' }[period.unit];
-        return period.count + ' ' + unit + (period.count === 1 ? '' : 's');
+    // The wall-clock moment a preset proposes: its Date keyword, at its own
+    // Time, or the setting below where either is blank.
+    const snoozePresetTarget = (now, preset, fallbackTime) => {
+        const target = snoozeDateKeyword(now, preset.date);
+        const time = preset.time ? parseSnoozeTime(preset.time) : fallbackTime;
+        target.setHours(time.hours, time.minutes, 0, 0);
+        return target;
     };
 
-    // A view that is drawn: its layer is in the document and has a size.
-    const isDrawn = (view) => {
+    // Fastmail's own Custom… option, the one whose method is
+    // "showCustomPicker" (see the header above) - every stock preset shares
+    // its target, the FutureTimeMenuView itself, which is also how "Choose
+    // a date and time…" below still opens Fastmail's own real picker.
+    const snoozeMenuCustomOption = (options) => (options || []).filter((option) => {
         try {
-            const layer = view.get('layer');
-            if (!layer || !layer.isConnected) return false;
-            const box = layer.getBoundingClientRect();
-            return box.width > 0 && box.height > 0;
+            return !!option && typeof option.get === 'function' &&
+                option.get('method') === 'showCustomPicker';
         } catch (error) {
             return false;
         }
+    })[0] || null;
+
+    const snoozePresetOption = (shortcut, label, run) => {
+        const option = new FastMail.classes.ButtonView({
+            shortcut: shortcut,
+            label: label,
+            target: { run: run },
+            method: 'run'
+        });
+        option.customSnoozePreset = true;
+        return option;
     };
 
-    // The Snooze button on whichever bar is drawn: by its registered name
-    // first, which survives translation and a bar too narrow to draw it; by
-    // its shortcut behind that.
-    const snoozeButtonView = () => {
-        const candidates = [];
-        for (const bar of toolbarsOnScreen()) {
-            try {
-                const named = bar.getView('snooze');
-                if (named) candidates.push(named);
-            } catch (error) {
-                // A bar that has never heard of the name
-            }
-            (bar.get('childViews') || [])
-                .filter(view => hasShortcut(view, SNOOZE_SHORTCUT))
-                .forEach(view => candidates.push(view));
-        }
-        return candidates.filter(isDrawn)[0] || candidates[0] || null;
-    };
+    const CHOOSE_SNOOZE_DATE_LABEL = 'Choose a date and time…';
 
-    // The menu that is drawn. The button's menuView property makes a fresh,
-    // undrawn menu on every read, so it is no use; the one on screen is an
-    // ancestor of the popover's list, and it is the one whose preset list can
-    // be swapped for the custom picker.
-    const drawnSnoozeMenu = () => {
-        const roots = document.querySelectorAll('.v-Menu, .v-PopOver, .v-Sheet');
-        for (const root of Array.from(roots)) {
-            let view = FastMail.getViewFromNode(root);
-            for (let i = 0; view && i < 6; i += 1) {
-                if (typeof view.showCustomPicker === 'function') return view;
-                view = typeof view.get === 'function' ? view.get('parentView') : null;
-            }
-        }
-        return null;
-    };
+    // Replaces Fastmail's own preset list with this mode's, through the
+    // same patched MenuView.prototype.draw as addGroupings (see patchMenus
+    // below): options is the plain array FutureTimeMenuView built, and
+    // snoozeMenuCustomOption is how this menu is told apart from any other,
+    // translation-proof and independent of Fastmail's own wording, the same
+    // way boundToGroupBy tells the Group menu apart from any other.
+    const addSnoozePresets = (options) => {
+        if (!modeIsOn) return;
+        if (options.some(option => option && option.customSnoozePreset)) return;
 
-    const openSnoozeDialog = () => {
-        const button = snoozeButtonView();
-        if (!button || typeof button.get !== 'function') {
-            reportFault('no Snooze button to open');
-            return;
+        const custom = snoozeMenuCustomOption(options);
+        if (!custom) return;
+        const futureTimeMenuView = custom.get('target');
+
+        const now = new Date();
+        const fallbackTime = parseSnoozeTime(settings.snoozeTime);
+        const presets = parseSnoozePresets(settings.snoozePresets);
+
+        const entries = presets.map((preset, index) => {
+            const target = snoozePresetTarget(now, preset, fallbackTime);
+            return snoozePresetOption(String(index + 1), preset.name,
+                () => controller().actions.snooze(null, target));
+        });
+
+        if (futureTimeMenuView && typeof futureTimeMenuView.showCustomPicker === 'function') {
+            entries.push(snoozePresetOption(String(entries.length + 1), CHOOSE_SNOOZE_DATE_LABEL,
+                () => futureTimeMenuView.showCustomPicker()));
         }
 
-        pressButtonView(button);
-
-        const propose = () => {
-            const menu = drawnSnoozeMenu();
-            if (!menu) return false;
-
-            // showCustomPicker replaces the preset list once; menuView is
-            // null after it, which is how a second try knows not to
-            if (menu.menuView) menu.showCustomPicker();
-
-            const custom = (menu.get('childViews') || [])
-                .filter(view => isViewOfClass(view, 'FutureCustomTimeView'))[0];
-            if (!custom) return false;
-
-            const local = snoozeTarget(
-                new Date(),
-                parseSnoozePeriod(settings.snoozeDefault),
-                parseSnoozeTime(settings.snoozeTime)
-            );
-            custom.set('date', asPickerDate(local));
-            return true;
-        };
-
-        // activate() shows the popover synchronously as a rule; a tick later
-        // covers a bar that builds its menu on the way in
-        if (!propose()) setTimeout(propose, 0);
+        if (!entries.length) return;
+        options.splice(0, options.length, ...entries);
     };
 
     /*
@@ -4427,6 +4454,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * first may be the one you cannot see; a drawn button wins where there is
      * a choice. A press that opens nothing is still caught by the deadline.
      */
+    // A view that is drawn: its layer is in the document and has a size.
+    const isDrawn = (view) => {
+        try {
+            const layer = view.get('layer');
+            if (!layer || !layer.isConnected) return false;
+            const box = layer.getBoundingClientRect();
+            return box.width > 0 && box.height > 0;
+        } catch (error) {
+            return false;
+        }
+    };
+
     const toolbarLabelsView = () => {
         const found = [];
 
@@ -5300,7 +5339,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (settings.swapArchiveExpand) wanted[ARCHIVE_KEY] = archive;
 
         wanted[sanitizedKey(settings.urgentKey, 's')] = () => runVerb('urgent', null);
-        wanted[sanitizedKey(settings.snoozeKey, 'w')] = () => openSnoozeDialog();
 
         return wanted;
     };
@@ -6434,6 +6472,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                         options.unshift(copyLinkOption(), null);
                     }
                     addGroupings(options);
+                    addSnoozePresets(options);
                 }
             } catch (error) {
                 reportFault('could not add to a menu', error);
@@ -8367,10 +8406,157 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return holder;
     };
 
-    // Two options are lists rather than fields; everything else is a row.
+    /*
+     * Your snooze presets, as a list rather than as text: three short fields
+     * a row (Name, Date, Time) are nothing like a grouping's own multi-line
+     * blocks, so this is not Fastmail's own splits editor seeded with a
+     * stand-in, the way groupingsSection reuses it - a modal dialog is not
+     * warranted for three short fields, and the fields sit in the row
+     * itself instead.
+     *
+     * "Choose a date and time…" is drawn last, always, and is not part of
+     * the setting at all - see addSnoozePresets, which appends it itself
+     * whenever the menu is actually built - so there is nothing here for it
+     * to move, edit or remove.
+     *
+     * A field write is debounced, like settingRow's own text fields, and
+     * never redraws the list: a field mid-edit must not be thrown away out
+     * from under whoever is typing into it. Reordering, adding and removing
+     * a row are discrete presses instead, so those write and redraw at
+     * once, the same as groupingsSection's own list actions.
+     */
+    const snoozePresetRowParts = (classes, preset, isFirst, isLast, onField, moveUp, moveDown, remove) => {
+        const el = FastMail.el;
+
+        const nameField = new classes.TextInputView({ placeholder: 'Name', value: preset.name });
+        nameField.addObserverForKey('value', {
+            changed: () => onField('name', nameField.get('value'))
+        }, 'changed');
+
+        const dateField = new classes.TextInputView({
+            placeholder: 'today, tomorrow, this weekend, next week', value: preset.date
+        });
+        dateField.addObserverForKey('value', {
+            changed: () => onField('date', dateField.get('value'))
+        }, 'changed');
+
+        const timeField = new classes.TextInputView({ placeholder: 'HH:MM', value: preset.time });
+        timeField.addObserverForKey('value', {
+            changed: () => onField('time', timeField.get('value'))
+        }, 'changed');
+
+        return [
+            el('div.u-flex-1', [nameField]),
+            el('div.u-flex-1', [dateField]),
+            el('div', { style: 'width:90px' }, [timeField]),
+            new classes.ButtonView({
+                type: 'v-Button--subtle v-Button--sizeM v-Button--iconOnly',
+                label: 'Move up', icon: standardIcon('i-chevronup', MOVE_SHAPES.up),
+                isDisabled: isFirst,
+                target: { go: moveUp }, method: 'go'
+            }),
+            new classes.ButtonView({
+                type: 'v-Button--subtle v-Button--sizeM v-Button--iconOnly',
+                label: 'Move down', icon: standardIcon('i-chevrondown', MOVE_SHAPES.down),
+                isDisabled: isLast,
+                target: { go: moveDown }, method: 'go'
+            }),
+            new classes.ButtonView({
+                type: 'v-Button--subtle v-Button--sizeM',
+                label: 'Remove', target: { go: remove }, method: 'go'
+            })
+        ];
+    };
+
+    const NEW_SNOOZE_PRESET_NAME = 'New preset';
+
+    const snoozePresetsSection = (classes, register) => {
+        const el = FastMail.el;
+        const option = settingFor('snoozePresets');
+        const debounced = debouncedWrite();
+        register.trackFlush(debounced.flush);
+
+        const redraw = () => holder.viewNeedsRedraw();
+        const save = (presets) => {
+            writeSetting('snoozePresets', formatSnoozePresets(presets));
+            redraw();
+        };
+
+        const move = (presets, index, by) => {
+            const to = index + by;
+            if (to < 0 || to >= presets.length) return;
+            const copy = presets.slice();
+            copy.splice(to, 0, copy.splice(index, 1)[0]);
+            save(copy);
+        };
+
+        const remove = (presets, index) => {
+            const copy = presets.slice();
+            copy.splice(index, 1);
+            save(copy);
+        };
+
+        const add = (presets) => {
+            save(presets.concat([{ name: NEW_SNOOZE_PRESET_NAME, date: '', time: '' }]));
+        };
+
+        const holder = new classes.View({
+            className: 'u-space-y-3',
+            draw: () => {
+                // Drawn from, and never written from, so a field mid-edit
+                // below is not undone by a redraw a sibling row's own
+                // action triggered.
+                const presets = parseSnoozePresets(settingValue('snoozePresets'));
+
+                const rows = presets.map((preset, index) => new classes.View({
+                    className: 'u-list-item u-flex u-items-center u-space-x-2',
+                    draw: () => snoozePresetRowParts(classes, preset, index === 0, index === presets.length - 1,
+                        (field, value) => {
+                            preset[field] = value;
+                            debounced.write('snoozePresets', formatSnoozePresets(presets));
+                        },
+                        () => move(presets, index, -1),
+                        () => move(presets, index, 1),
+                        () => remove(presets, index))
+                }));
+
+                // Always last, and no row of the setting's own: it opens
+                // Fastmail's own picker, same as Fastmail's own Custom…
+                // entry did, so there is nothing here to name, move or
+                // remove.
+                rows.push(new classes.View({
+                    className: 'u-list-item u-flex u-items-center u-space-x-2 u-color-unimportant',
+                    draw: () => [el('div.u-flex-1', [CHOOSE_SNOOZE_DATE_LABEL + ' — always last, always offered'])]
+                }));
+
+                const list = new classes.View({
+                    className: 'u-list-body u-list-body--borders',
+                    draw: () => rows
+                });
+
+                const addButton = new classes.ButtonView({
+                    type: 'v-Button--standard v-Button--sizeM',
+                    label: 'Add a preset',
+                    target: { go: () => add(presets) }, method: 'go'
+                });
+
+                return [
+                    el('h3.u-trim.u-font-bold', [option.title]),
+                    list,
+                    addButton,
+                    el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint])
+                ];
+            }
+        });
+
+        return holder;
+    };
+
+    // Three options are lists rather than fields; everything else is a row.
     const sectionRow = (classes, option, register) => {
         if (option.key === 'groupings') return groupingsSection(classes, register);
         if (option.key === 'bottomBarSlots') return barSlotsSection(classes);
+        if (option.key === 'snoozePresets') return snoozePresetsSection(classes, register);
         return settingRow(classes, option, register);
     };
 
