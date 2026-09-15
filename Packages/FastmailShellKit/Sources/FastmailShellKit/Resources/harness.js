@@ -826,6 +826,7 @@
                 var payload = { mode: choice.mode };
                 if (choice.senders !== undefined) payload.senders = choice.senders;
                 if (choice.mailboxIds !== undefined) payload.mailboxIds = choice.mailboxIds;
+                if (choice.excludedMailboxIds !== undefined) payload.excludedMailboxIds = choice.excludedMailboxIds;
                 return post('setNotifications', payload).then(notificationReply);
             },
             openSettings: function () {

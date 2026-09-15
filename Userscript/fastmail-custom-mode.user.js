@@ -7029,7 +7029,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         { value: 'inbox', glyph: 'inbox', title: 'All in inbox',
             description: 'Show a notification for everything that arrives in your inbox.' },
         { value: 'custom', glyph: 'settings', title: 'Custom',
-            description: 'Choose senders and labels to notify for.' }
+            description: 'Choose senders, and labels to include or exclude.' }
     ];
 
     const NOTIFICATION_SENDERS = [
@@ -7115,15 +7115,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * The labels, drawn with Fastmail's own list, menu button and mailbox
-     * menu, the way its page draws them. The menu offers the Inbox and
-     * mailboxes without a role. Both lists answer { view, show(ids) }, where
-     * show puts ids chosen elsewhere into the list on screen.
+     * A list of labels under a title, drawn with Fastmail's own list, menu
+     * button and mailbox menu, the way its page draws them. The menu offers
+     * the Inbox and mailboxes without a role. Both kinds of list answer
+     * { view, show(ids) }, where show puts ids chosen elsewhere into the list
+     * on screen.
      */
-    const fastmailLabelList = (classes, accountId, ids, changed) => {
+    const fastmailLabelList = (classes, accountId, title, ids, changed) => {
         const el = FastMail.el;
         const list = new classes.ListInputView({
-            label: 'Labels',
+            label: title,
             value: ids.slice(),
             mapValueToItems: (value) => (value || []).map(id => ({ id })),
             mapItemsToValue: (items) => items.map(item => item.id),
@@ -7165,7 +7166,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // The same list from parts that are always there: the list's own markup,
     // a remove button per label, and a select to add one.
-    const plainLabelList = (classes, accountId, ids, changed) => {
+    const plainLabelList = (classes, accountId, title, ids, changed) => {
         const el = FastMail.el;
         let current = ids.slice();
         let holder = null;
@@ -7190,7 +7191,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 ]));
                 const addable = notificationLabels(accountId).filter(mailbox => !chosen.has(mailbox.get('id')));
                 return [
-                    el('legend.u-font-semibold.u-trim', ['Labels']),
+                    el('legend.u-font-semibold.u-trim', [title]),
                     el('ul.u-list-body.u-list-body--borders.u-hideifempty', rows),
                     new classes.SelectView({
                         label: 'Add label',
@@ -7231,7 +7232,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const mobile = isMobileSettings(controller);
         const accountId = primaryMailAccountId();
         const state = {
-            status: 'loading', mode: null, senders: 'everyone', mailboxIds: [],
+            status: 'loading', mode: null, senders: 'everyone', mailboxIds: [], excludedMailboxIds: [],
             permission: 'allowed', pushToken: null, contacts: null
         };
         let asked = 0;
@@ -7251,7 +7252,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             if (views.choices && views.choices.get('value') !== state.mode) views.choices.set('value', state.mode);
             if (views.senders && views.senders.get('value') !== state.senders) views.senders.set('value', state.senders);
             if (views.labels) views.labels.show(state.mailboxIds);
+            if (views.excludedLabels) views.excludedLabels.show(state.excludedMailboxIds);
         };
+
+        // An app from before the excluded list answers without it: none
+        const labelIds = (value) => Array.isArray(value) ? value.filter(id => typeof id === 'string' && id) : [];
 
         const takeChoice = (reply) => {
             if (!reply || NOTIFICATION_MODES.every(one => one.value !== reply.mode)) {
@@ -7259,8 +7264,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             }
             state.mode = reply.mode;
             state.senders = NOTIFICATION_SENDERS.some(one => one.value === reply.senders) ? reply.senders : 'everyone';
-            state.mailboxIds = Array.isArray(reply.mailboxIds)
-                ? reply.mailboxIds.filter(id => typeof id === 'string' && id) : [];
+            state.mailboxIds = labelIds(reply.mailboxIds);
+            state.excludedMailboxIds = labelIds(reply.excludedMailboxIds);
         };
 
         const refresh = () => {
@@ -7286,7 +7291,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         const choose = (change) => {
             if (state.status !== 'ready') return;
-            const next = { mode: state.mode, senders: state.senders, mailboxIds: state.mailboxIds.slice() };
+            const next = {
+                mode: state.mode, senders: state.senders,
+                mailboxIds: state.mailboxIds.slice(), excludedMailboxIds: state.excludedMailboxIds.slice()
+            };
             Object.assign(next, change);
             // Custom chosen with no labels yet starts from the Inbox, for
             // everyone; a list kept from an earlier Custom is taken up again.
@@ -7337,13 +7345,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             });
         };
 
-        const drawLabels = () => {
-            const changed = (ids) => choose({ mailboxIds: ids });
+        // Custom's two lists: the labels it notifies for (mailboxIds), and
+        // the labels whose messages it leaves out (excludedMailboxIds)
+        const drawLabels = (title, key) => {
+            const changed = (ids) => choose({ [key]: ids });
             const fastmails = ['ListInputView', 'MenuButtonView', 'MailboxMenuView']
                 .every(name => typeof classes[name] === 'function');
             return fastmails
-                ? fastmailLabelList(classes, accountId, state.mailboxIds, changed)
-                : plainLabelList(classes, accountId, state.mailboxIds, changed);
+                ? fastmailLabelList(classes, accountId, title, state[key], changed)
+                : plainLabelList(classes, accountId, title, state[key], changed);
         };
 
         const openSettingsButton = () => new classes.ButtonView({
@@ -7384,8 +7394,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 const controls = [views.choices];
                 if (state.mode === 'custom') {
                     views.senders = drawSenders();
-                    views.labels = drawLabels();
-                    controls.push(el('div.u-space-y-5', [views.senders, views.labels.view]));
+                    views.labels = drawLabels('Included labels', 'mailboxIds');
+                    views.excludedLabels = drawLabels('Excluded labels', 'excludedMailboxIds');
+                    controls.push(el('div.u-space-y-5', [views.senders, views.labels.view, views.excludedLabels.view]));
                 }
                 sections.push(pageSection(NOTIFICATIONS_PAGE_ID, { id: 'messages', title: 'New messages' }, controls));
                 if (state.pushToken) {

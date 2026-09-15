@@ -1018,13 +1018,13 @@ final class HarnessTests: XCTestCase {
     func testSetNotificationsSendsTheChoiceAndResolvesToTheSavedOne() async throws {
         replies = { body in
             guard body["action"] as? String == "setNotifications" else { return nil }
-            return #"{"mailboxIds":["P2F"],"mode":"custom","senders":"vips"}"#
+            return #"{"excludedMailboxIds":["P9L"],"mailboxIds":["P2F"],"mode":"custom","senders":"vips"}"#
         }
         webView = try makeWebView(userScript: "", metadata: Self.meta())
         try await load(webView)
         _ = try await evaluate(webView, """
         window.__saved = null;
-        window.native.notifications.set({ mode: 'custom', senders: 'vips', mailboxIds: ['P2F'] })
+        window.native.notifications.set({ mode: 'custom', senders: 'vips', mailboxIds: ['P2F'], excludedMailboxIds: ['P9L'] })
             .then(function (saved) { window.__saved = saved; });
         true;
         """)
@@ -1034,11 +1034,14 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(payload["mode"] as? String, "custom")
         XCTAssertEqual(payload["senders"] as? String, "vips")
         XCTAssertEqual(payload["mailboxIds"] as? [String], ["P2F"])
+        XCTAssertEqual(payload["excludedMailboxIds"] as? [String], ["P9L"])
         try await waitUntil {
             try await self.evaluate(self.webView, "!!window.__saved") as? Bool == true
         }
-        let saved = try await evaluate(webView, "window.__saved.mode + ',' + window.__saved.mailboxIds.join('|')") as? String
-        XCTAssertEqual(saved, "custom,P2F")
+        let saved = try await evaluate(webView, """
+        [window.__saved.mode, window.__saved.mailboxIds.join('|'), window.__saved.excludedMailboxIds.join('|')].join(',')
+        """) as? String
+        XCTAssertEqual(saved, "custom,P2F,P9L")
     }
 
     // A refusal, or no app at all, reaches the page as a rejection it can
