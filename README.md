@@ -1,85 +1,55 @@
 # Fastmail Custom
 
-A personal set of tools for using Fastmail: a userscript that reshapes the web
-app around one-label triage, a Safari extension that runs it, native shell apps
-for macOS and iOS, and a small server that pushes new-mail notifications to the
-phone.
-
-## Not affiliated with Fastmail
-
-This is an independent, personal project. It is **not affiliated with,
-endorsed by, sponsored by, or supported by Fastmail Pty Ltd** in any way.
-"Fastmail" is their name and trademark, used here only to say which service
-these tools work with.
-
-Nothing here is an official client. It changes the Fastmail web app from the
-outside, so it can break whenever Fastmail changes theirs, and it comes with no
-warranty of any kind. Please do not ask Fastmail for support with it; report
-anything that goes wrong here instead.
+A personal set of tools for using Fastmail. I wanted to be able to quickly triage incoming messages (add a label in the Inbox so it feels less cluttered). That spun eh, a little out of control... :-)
+I merged all my previously written Fastmail tweaks and ideas into this repo and it's now my daily driver. It supports all the features the stock Fastmail apps offer plus more.
 
 ## Features
 
-Fastmail lets a message carry any number of labels. That is flexible, but it
-leaves the Inbox as a pile: nothing on a message says whether you have dealt
-with it. Custom mode uses a label as the message's state instead. Every
-message belongs to one project, anything undecided sits under a triage label
-until you keep it, and archiving means the same thing wherever you do it. The
-point is an Inbox you can empty and a queue you can trust.
-
-The web app pieces do that work. The Mac and iPhone apps add what a web page
-cannot reach on its own: real windows, notifications, downloads and links.
+| | | | |
+|---|---|---|---|
+| <img width="620" alt="CleanShot 2026-09-15 at 08 54 17@2x" src="https://github.com/user-attachments/assets/1451fe56-e2ef-46f5-9762-b75a8bdf4140" /> | <img width="620" alt="CleanShot 2026-09-15 at 08 54 38@2x" src="https://github.com/user-attachments/assets/6c638117-d91d-417f-b651-961c9d8d2206" /> | <img width="620" alt="CleanShot 2026-09-15 at 08 54 54@2x" src="https://github.com/user-attachments/assets/be372f0a-e840-4603-b769-efe55fc0e8da" /> | <img width="620" alt="CleanShot 2026-09-15 at 08 55 16@2x" src="https://github.com/user-attachments/assets/4c00e4bf-0dd5-4765-8b8a-b6a58192c47a" /> |
 
 **Triage**
 
-- 🏷️ **One label per message**: each message belongs to a single project.
-- 📥 **Triage queue**: everything undecided waits in one place.
-- 📦 **Consistent archive**: archiving does the same thing wherever you do it.
-- 🎯 **Keeping**: pick a label, or drag the message onto one.
-- 👥 **Contact groups**: keeping under chosen labels adds the sender to a group.
+- 🏷️ **Inbox triage**: quick add a label to inbox message or archive
+- 📦 **Keep or Archive**: keeping allows to add a label, archiving strips all project labels/pins
+- 👥 **Add sender to group via label**: add to a specific label and the sender gets automatically added to a Contacts group (like Hey.com)
 
-**Keyboard**
+**Grouping**
+- 🗃️ **Custom groups**: Fastmail recently introduced "Mailbox groups" - create as
+  many custom groups as you like, change the built-in groups and easily switch between them
 
-- ⌨️ **Single-key actions**: keep, snooze or pin with one keystroke.
+**Snoozing**
 - ⏰ **Snooze presets**: your own list of times on Fastmail's own Snooze
   button, one whose time has passed greyed out rather than offered.
 
-**Sidebar and colours**
+**User experience**
 
-- 🗂️ **Grouped sidebar**: folders, labels and saved searches kept apart.
-- 🔻 **Triage icon**: the triage label is a funnel, so the queue stands out.
-- 🔢 **Inbox-only counts**: a label counts its Inbox mail, not everything kept under it.
-- 🎨 **Label colours**: on the message rows, or in the sidebar only.
-- 🗃️ **Group presets**: split a mailbox by age, pinned, unread or your
-  labels, or write groups of your own — edit any of them from Settings.
-
-**Windows and writing**
-
-- 🪟 **Native windows and tabs**: Fastmail in real windows you can tab together.
-- ✉️ **Compose target**: write in the page, a tab or a window of its own.
-- ↗️ **Pop-out windows**: open any message or draft in its own window.
+- 🪟 **Native UI (macOS) with tabs**: Fastmail runs in a WKWebView (fast, energy-efficient) and supports tabs
+- ✉️ **Compose inline, window or tab (macOS)**: compose messages without losing focus
+- ↗️ **Pop-out windows (macOS)**: open any message or draft in its own window.
 - 🖨️ **Printing**: print a message from its window.
-
-**Around the system**
-
 - ⬇️ **Downloads**: attachments go to a folder you choose.
-- 📤 **Share extension**: send a page or a link to Fastmail from any app.
-- 📮 **mailto handling**: mail links open in the right account.
-- 🤝 **Handoff**: carry on with the same message on your other device, or in
-  its browser.
-- 🔔 **Push notifications**: choose Off, Important, All in Inbox or labels of
-  your own per device; a banner carries Archive, Later and Pin.
-- 📱 **Home screen shortcuts**: long-press the icon on iPhone or iPad for
-  Search, Compose, your triage label and Inbox.
-- 🔒 **App lock**: iPhone and iPad can ask for Face ID, Touch ID or your
-  passcode before mail shows.
-- 🌐 **In-app browser**: links leaving the app can open in one instead of
-  Safari, when you turn that on.
-- 🤖 **Shortcuts, AppleScript and the menu bar**: drive the app from your own
-  scripts, or the Mac's own Edit menu.
-- ⚙️ **Shared settings**: the same settings on Mac, iPhone and in Safari,
-  kept in sync through iCloud when you turn that on.
+- 📮 **mailto handling**: mail links open in the right account on iOS (via a separate app showing a chooser).
+- 🤝 **Handoff (iOS / macOS)**: carry on with the same message on your other device, or in its browser.
+- 🔔 **Push notifications**: choose Off, Important, All in Inbox or labels of your own per device; a banner carries Archive, Later and Pin.
+- 📱 **Home screen shortcuts (iOS)**: long-press the icon on iPhone or iPad for Inbox, your triage label, Compose and Search.
+- 🔒 **App lock (iOS)**: iPhone and iPad can ask for Face ID, Touch ID or your passcode before mail shows.
+- 🌐 **In-app browser**: links leaving the app can open in in-app browser or your default browser
+- ⚙️ **Shared settings**: the same settings on Mac, iPhone and in Safari, kept in sync through iCloud when you turn that on.
 
-## What is in here
+**Appearance**
+
+- 🗂️ **Grouped sidebar**: folders, labels and saved searches kept apart with sections
+- 🔻 **Triage icon**: the triage label has its own icon
+- 🔢 **Filtered counts**: counts show the number with the filter applied
+- 🎨 **Label colours**: show the full message row in the label color
+
+**Scripting support**
+- 🤖 **Shortcuts, AppleScript and the menu bar**: get URL / Title or Markdown Link via AppleScript or Shortcuts.
+  Also allow running custom JavaScript to fully customize your experience
+
+## Repository
 
 **Custom mode** (`Userscript/fastmail-custom-mode.user.js`) is the userscript
 that does the work: one-label triage, where a project label is the live state
@@ -106,6 +76,18 @@ important senders and VIPs, or labels you pick, reading contacts and VIPs
 over JMAP so the API tokens live on the server rather than on the phone. See
 `Server/README.md`.
 
+| Path | What it is |
+| --- | --- |
+| `Userscript/` | Custom mode itself |
+| `SafariExtension/` | The extension that runs it, and its host app |
+| `Apps/` | The macOS and iOS apps |
+| `Extensions/` | The share extensions |
+| `Packages/FastmailShellKit/` | The shared shell: web view, windows, links, settings |
+| `Server/` | The push server |
+| `Tests/` | Integration tests that run the real scripts in a web view |
+| `tools/` | Build and deploy helpers |
+
+
 ## Building
 
 You need Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen) and Node.
@@ -124,18 +106,17 @@ make install-extension
 identifiers and the push server's details. It is deliberately not checked in;
 the example file shows the shape.
 
-## Layout
+## Not affiliated with Fastmail
 
-| Path | What it is |
-| --- | --- |
-| `Userscript/` | Custom mode itself |
-| `SafariExtension/` | The extension that runs it, and its host app |
-| `Apps/` | The macOS and iOS apps |
-| `Extensions/` | The share extensions |
-| `Packages/FastmailShellKit/` | The shared shell: web view, windows, links, settings |
-| `Server/` | The push server |
-| `Tests/` | Integration tests that run the real scripts in a web view |
-| `tools/` | Build and deploy helpers |
+This is an independent, personal project. It is **not affiliated with,
+endorsed by, sponsored by, or supported by Fastmail Pty Ltd** in any way.
+"Fastmail" is their name and trademark, used here only to say which service
+these tools work with.
+
+Nothing here is an official client. It changes the Fastmail web app from the
+outside, so it can break whenever Fastmail changes theirs, and it comes with no
+warranty of any kind. Please do not ask Fastmail for support with it; report
+anything that goes wrong here instead.
 
 ## Licence
 
