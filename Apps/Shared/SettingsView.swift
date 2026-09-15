@@ -46,10 +46,6 @@ private struct GeneralSettingsView: View {
                     text: $startView,
                     prompt: Text("/mail/Inbox")
                 )
-                Text(resolved)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
             } footer: {
                 Text("The path to open, such as /mail/Inbox. Empty opens the default view. Takes effect in new windows.")
                     .font(.caption)
@@ -57,14 +53,6 @@ private struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
-    }
-
-    private var resolved: String {
-        StartView.resolve(
-            startView,
-            default: profile.startURL,
-            backend: Backend.resolve(backendName)
-        ).absoluteString
     }
 }
 
@@ -75,7 +63,7 @@ private struct ComposeSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Picker("New message opens", selection: $composeMode) {
+                Picker("Compose opens", selection: $composeMode) {
                     ForEach(ComposeMode.allCases, id: \.rawValue) { mode in
                         Text(mode.title).tag(mode.rawValue)
                     }
@@ -93,20 +81,54 @@ private struct ComposeSettingsView: View {
 private struct DownloadsSettingsView: View {
     @AppStorage(AttachmentOpener.autoOpenDefaultsKey) private var autoOpen = false
     @AppStorage(DownloadManager.folderDefaultsKey) private var downloadFolder = ""
+    @AppStorage(DownloadManager.askEachTimeDefaultsKey) private var askEachTime = false
+
+    // Safari's own shape for this picker: the fixed folder first, then
+    // whichever other folder was chosen last, if any, then the two choices
+    // that are not a folder at all.
+    private enum Choice: Hashable {
+        case downloads
+        case custom(String)
+        case askEachTime
+        case chooseOther
+    }
+
+    private var choice: Choice {
+        if askEachTime { return .askEachTime }
+        if !downloadFolder.isEmpty { return .custom(downloadFolder) }
+        return .downloads
+    }
 
     var body: some View {
         Form {
             Section {
-                LabeledContent("Download folder") {
-                    Text(downloadFolder.isEmpty ? "~/Downloads" : downloadFolder)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                HStack {
-                    Button("Choose…") { chooseFolder() }
-                    if !downloadFolder.isEmpty {
-                        Button("Use ~/Downloads") { downloadFolder = "" }
+                Picker("File download location", selection: Binding(
+                    get: { choice },
+                    set: { selection in
+                        switch selection {
+                        case .downloads:
+                            askEachTime = false
+                            downloadFolder = ""
+                        case .custom(let path):
+                            askEachTime = false
+                            downloadFolder = path
+                        case .askEachTime:
+                            askEachTime = true
+                        case .chooseOther:
+                            chooseFolder()
+                        }
                     }
+                )) {
+                    Label("Downloads", systemImage: "folder").tag(Choice.downloads)
+                    if case .custom(let path) = choice {
+                        Label(
+                            FileManager.default.displayName(atPath: path),
+                            systemImage: "folder"
+                        ).tag(Choice.custom(path))
+                    }
+                    Divider()
+                    Text("Ask for each download").tag(Choice.askEachTime)
+                    Text("Other…").tag(Choice.chooseOther)
                 }
                 Toggle("Auto-open safe attachments", isOn: $autoOpen)
                 Text("Downloaded documents and images open in their default app. Archives, installers and executables always preview.")
@@ -122,9 +144,9 @@ private struct DownloadsSettingsView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url {
-            downloadFolder = url.path
-        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        askEachTime = false
+        downloadFolder = url.path
     }
 }
 #endif

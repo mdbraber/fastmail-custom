@@ -1,5 +1,8 @@
 import Foundation
 import WebKit
+#if canImport(AppKit)
+import AppKit
+#endif
 
 @MainActor
 public final class DownloadManager: NSObject, ObservableObject {
@@ -34,6 +37,7 @@ public final class DownloadManager: NSObject, ObservableObject {
     private var pendingReveal: [UUID: Item] = [:]
 
     public static let folderDefaultsKey = "downloads.folder"
+    public static let askEachTimeDefaultsKey = "downloads.askEachTime"
 
     nonisolated static func uniqueFilename(_ filename: String, taken: (String) -> Bool) -> String {
         guard taken(filename) else { return filename }
@@ -188,6 +192,23 @@ extension DownloadManager: WKDownloadDelegate {
         completionHandler: @escaping @MainActor @Sendable (URL?) -> Void
     ) {
         let id = identifier(for: download)
+        #if canImport(AppKit)
+        if defaults.bool(forKey: Self.askEachTimeDefaultsKey) {
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = suggestedFilename
+            panel.canCreateDirectories = true
+            panel.begin { [weak self] result in
+                guard let self, result == .OK, let destination = panel.url else {
+                    completionHandler(nil)
+                    return
+                }
+                self.begin(id: id, filename: destination.lastPathComponent, fileURL: destination)
+                self.observeProgress(download, id: id)
+                completionHandler(destination)
+            }
+            return
+        }
+        #endif
         let directory = Self.destinationDirectory(
             chosenPath: defaults.string(forKey: Self.folderDefaultsKey)
         )
