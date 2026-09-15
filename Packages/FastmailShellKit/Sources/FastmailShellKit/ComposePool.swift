@@ -348,11 +348,47 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
       // Everything below is the page's own business, and a frame inside it
       // has no say in what the window is called or when it closes.
       if(window.top!==window){return;}
+      // A window on its own does not always lose the To field once a
+      // message is sent: the compose form can stay mounted under a
+      // "Sending…" badge that never resolves in this particular window,
+      // even though the send itself has already gone through (the message
+      // shows up sent, and its own undo lives in whichever window shows
+      // it). So the send is not read from the page's own visible state,
+      // which can get stuck, but from Fastmail's own compose controller:
+      // didSend is what it calls once a send is confirmed, right before it
+      // closes its own idea of the compose panel; didSendFail is its
+      // sibling for one that failed, and is left alone so a window with
+      // something to fix stays open. Patching the prototype catches every
+      // compose in this window, not only the one open when this runs, and
+      // is retried below until Fastmail has finished loading enough to
+      // have it.
+      var sent=false;
+      function patchSendSignal(){
+        try {
+          var Ctrl=window.FastMail&&FastMail.classes&&FastMail.classes.ComposeController;
+          if(!Ctrl||!Ctrl.prototype||Ctrl.prototype.__fmshellPatched){return;}
+          var original=Ctrl.prototype.didSend;
+          if(typeof original!=='function'){return;}
+          Ctrl.prototype.didSend=function(){
+            var result=original.apply(this,arguments);
+            sent=true;
+            send();
+            return result;
+          };
+          Ctrl.prototype.__fmshellPatched=true;
+        } catch(e){}
+      }
+      // A stuck "Sending…" badge as a fallback, in case Fastmail's own
+      // naming for the above ever changes and the patch quietly stops
+      // catching anything.
+      function isSending(){
+        return /Sending(\\.\\.\\.|\\u2026)/.test(document.body.textContent||'');
+      }
       function line(){
         var i=document.querySelector('input[id$="-to-input"]');
         if(!i){return null;}
         sawCompose=true;
-        goneSince=null;
+        if(!sent&&!isSending()){goneSince=null;}
         var w=i.closest('.v-EmailInput');
         var tokens=w?w.querySelector('ul.v-EmailInput-tokens'):null;
         // Each recipient carries its own Remove button; the band wants the
@@ -375,16 +411,23 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
       // A message that has been sent, saved or discarded takes its window with
       // it.
       function gone(){
+        if(sent){return true;}
         if(!sawCompose){return false;}
-        if(document.querySelector('input[id$="-to-input"]')){return false;}
-        if(goneSince===null){goneSince=Date.now();setTimeout(send,700);return false;}
-        return Date.now()-goneSince>600;
+        if(!isSending() && document.querySelector('input[id$="-to-input"]')){return false;}
+        if(goneSince===null){goneSince=Date.now();setTimeout(send,1200);return false;}
+        return Date.now()-goneSince>1000;
       }
       function send(){
         if(pending){return;}
         pending=true;
-        requestAnimationFrame(function(){
+        // A plain timer, not requestAnimationFrame: rAF callbacks do not run
+        // at all once this window is occluded, which is exactly what happens
+        // the moment someone sends and switches focus away, and this is the
+        // one check that has to keep going anyway to notice the window is
+        // done and close it.
+        setTimeout(function(){
           pending=false;
+          patchSendSignal();
           var to=line();
           var meta=document.querySelector('meta[name="theme-color"]');
           var state={
@@ -398,7 +441,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
           if(key===last){return;}
           last=key;
           window.webkit.messageHandlers.fmshellRecipients.postMessage(state);
-        });
+        },0);
       }
       ['input','keyup','click','focusout'].forEach(function(name){
         document.addEventListener(name,send,true);
