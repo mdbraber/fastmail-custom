@@ -32,7 +32,6 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 - ⬇️ **Downloads**: attachments go to a folder you choose.
 - 📮 **mailto handling**: mail links open in the right account on iOS (via a separate app showing a chooser).
 - 🤝 **Handoff (iOS / macOS)**: carry on with the same message on your other device, or in its browser.
-- 🔔 **Push notifications**: choose Off, Important, All in Inbox or labels of your own per device; a banner carries Archive, Later and Pin.
 - 📱 **Home screen shortcuts (iOS)**: long-press the icon on iPhone or iPad for Inbox, your triage label, Compose and Search.
 - 🔒 **App lock (iOS)**: iPhone and iPad can ask for Face ID, Touch ID or your passcode before mail shows.
 - 🌐 **In-app browser**: links leaving the app can open in in-app browser or your default browser
@@ -44,6 +43,9 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 - 🔻 **Triage icon**: the triage label has its own icon
 - 🔢 **Filtered counts**: counts show the number with the filter applied
 - 🎨 **Label colours**: show the full message row in the label color
+
+ **Notifications**
+ - 🔔 **Push notifications**: choose Off, Important, All in Inbox or labels of your own per device; a banner carries Archive, Later and Pin. Push notifications needs the server component (see `Server/`)
 
 **Scripting support**
 - 🤖 **Shortcuts, AppleScript and the menu bar**: get URL / Title or Markdown Link via AppleScript or Shortcuts.
