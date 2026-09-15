@@ -1,13 +1,15 @@
 import Foundation
 
 /// This device's notification choice: one of the Notifications page's four
-/// boxed options, and for Custom the senders and labels. Kept in the app's own
-/// defaults, so Personal and Work each have theirs, and changed only by the
-/// page, through the `setNotifications` bridge action.
+/// boxed options, and for Custom the senders and the labels it includes and
+/// excludes. Kept in the app's own defaults, so Personal and Work each have
+/// theirs, and changed only by the page, through the `setNotifications`
+/// bridge action.
 public enum PushPreferences {
     public static let modeKey = "push.mode"
     public static let sendersKey = "push.senders"
     public static let mailboxIdsKey = "push.mailboxIds"
+    public static let excludedMailboxIdsKey = "push.excludedMailboxIds"
     /// What the push server's last registration reply said about reading the
     /// account's contacts; absent while no reply has said.
     public static let contactsKey = "push.contacts"
@@ -40,16 +42,18 @@ public enum PushPreferences {
             ?? legacyMode(in: defaults)
         let senders = defaults.string(forKey: sendersKey).flatMap(NotificationChoice.Senders.init(rawValue:))
             ?? .everyone
-        let ids = defaults.array(forKey: mailboxIdsKey)?.compactMap { $0 as? String } ?? []
-        return NotificationChoice(mode: mode, senders: senders, mailboxIds: ids)
+        let included = defaults.array(forKey: mailboxIdsKey)?.compactMap { $0 as? String } ?? []
+        let excluded = defaults.array(forKey: excludedMailboxIdsKey)?.compactMap { $0 as? String } ?? []
+        return NotificationChoice(mode: mode, senders: senders, mailboxIds: included, excludedMailboxIds: excluded)
     }
 
-    /// Senders and labels are kept whatever the mode, so leaving Custom and
-    /// coming back finds the list as it was.
+    /// Senders and both label lists are kept whatever the mode, so leaving
+    /// Custom and coming back finds the lists as they were.
     public static func save(_ choice: NotificationChoice, in defaults: UserDefaults = .standard) {
         defaults.set(choice.mode.rawValue, forKey: modeKey)
         defaults.set(choice.senders.rawValue, forKey: sendersKey)
         defaults.set(choice.mailboxIds, forKey: mailboxIdsKey)
+        defaults.set(choice.excludedMailboxIds, forKey: excludedMailboxIdsKey)
     }
 
     public static func contacts(in defaults: UserDefaults = .standard) -> Bool? {

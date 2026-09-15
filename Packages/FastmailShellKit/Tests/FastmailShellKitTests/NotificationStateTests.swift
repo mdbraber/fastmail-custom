@@ -14,7 +14,7 @@ import UserNotifications
 
 @Test func theStateAnswersWithEveryField() throws {
     let state = NotificationState(
-        choice: NotificationChoice(mode: .custom, senders: .vips, mailboxIds: ["P2F"]),
+        choice: NotificationChoice(mode: .custom, senders: .vips, mailboxIds: ["P2F"], excludedMailboxIds: ["P9L"]),
         permission: .denied,
         pushToken: "00abff",
         contacts: false
@@ -23,10 +23,11 @@ import UserNotifications
     #expect(object["mode"] as? String == "custom")
     #expect(object["senders"] as? String == "vips")
     #expect(object["mailboxIds"] as? [String] == ["P2F"])
+    #expect(object["excludedMailboxIds"] as? [String] == ["P9L"])
     #expect(object["permission"] as? String == "denied")
     #expect(object["pushToken"] as? String == "00abff")
     #expect(object["contacts"] as? Bool == false)
-    #expect(object.count == 6)
+    #expect(object.count == 7)
 }
 
 // Unknown is null, never false: false would raise the contacts warning

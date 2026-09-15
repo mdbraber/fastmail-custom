@@ -42,12 +42,13 @@ private func fresh() -> UserDefaults {
 
 @Test func aSavedChoiceReadsBack() {
     let defaults = fresh()
-    let choice = NotificationChoice(mode: .custom, senders: .contacts, mailboxIds: ["P2F", "P3V"])
+    let choice = NotificationChoice(mode: .custom, senders: .contacts, mailboxIds: ["P2F", "P3V"], excludedMailboxIds: ["P9L"])
     PushPreferences.save(choice, in: defaults)
     #expect(PushPreferences.choice(in: defaults) == choice)
     #expect(defaults.string(forKey: "push.mode") == "custom")
     #expect(defaults.string(forKey: "push.senders") == "contacts")
     #expect(defaults.stringArray(forKey: "push.mailboxIds") == ["P2F", "P3V"])
+    #expect(defaults.stringArray(forKey: "push.excludedMailboxIds") == ["P9L"])
 }
 
 @Test func storedNonsenseReadsAsTheDefaults() {
@@ -55,7 +56,20 @@ private func fresh() -> UserDefaults {
     defaults.set("loud", forKey: "push.mode")
     defaults.set("friends", forKey: "push.senders")
     defaults.set(["", "P2F", "P2F"], forKey: "push.mailboxIds")
-    #expect(PushPreferences.choice(in: defaults) == NotificationChoice(mode: .inbox, senders: .everyone, mailboxIds: ["P2F"]))
+    defaults.set(["P9L", "", "P9L"], forKey: "push.excludedMailboxIds")
+    #expect(PushPreferences.choice(in: defaults) == NotificationChoice(
+        mode: .inbox, senders: .everyone, mailboxIds: ["P2F"], excludedMailboxIds: ["P9L"]
+    ))
+}
+
+// The acknowledgement an app from before excluded labels kept has no such
+// field. Reading it as a match would never tell the server about the list,
+// so it reads as nothing acknowledged and the choice is registered once more.
+@Test func anAcknowledgementFromBeforeExcludedLabelsIsDue() {
+    let defaults = fresh()
+    PushPreferences.save(NotificationChoice(mode: .inbox), in: defaults)
+    defaults.set(#"{"mailboxIds":[],"mode":"inbox","senders":"everyone"}"#, forKey: "push.acknowledged")
+    #expect(PushPreferences.registrationDue(in: defaults) == true)
 }
 
 // The server learns the choice only through a registration, so the app
@@ -78,6 +92,11 @@ private func fresh() -> UserDefaults {
 
     PushPreferences.save(NotificationChoice(mode: .custom, mailboxIds: ["P2F", "P3V"]), in: defaults)
     #expect(PushPreferences.registrationDue(in: defaults) == true, "a label added is a change")
+
+    let excluding = NotificationChoice(mode: .custom, mailboxIds: ["P2F", "P3V"], excludedMailboxIds: ["P9L"])
+    PushPreferences.acknowledge(NotificationChoice(mode: .custom, mailboxIds: ["P2F", "P3V"]), contacts: true, in: defaults)
+    PushPreferences.save(excluding, in: defaults)
+    #expect(PushPreferences.registrationDue(in: defaults) == true, "an excluded label added is a change")
 
     defaults.set("not json", forKey: "push.acknowledged")
     #expect(PushPreferences.registrationDue(in: defaults) == true, "an unreadable acknowledgement is none")

@@ -67,7 +67,7 @@ import Testing
 
     let custom = config.registration(
         account: "personal", deviceToken: Data([0x01]),
-        choice: NotificationChoice(mode: .custom, senders: .vips, mailboxIds: ["P2F", "P3V"])
+        choice: NotificationChoice(mode: .custom, senders: .vips, mailboxIds: ["P2F", "P3V"], excludedMailboxIds: ["P9L"])
     )
     let customBody = try #require(custom.httpBody)
     let customJSON = try #require(JSONSerialization.jsonObject(with: customBody) as? [String: Any])
@@ -76,6 +76,7 @@ import Testing
     #expect(notify["mode"] as? String == "custom")
     #expect(notify["senders"] as? String == "vips")
     #expect(notify["mailboxIds"] as? [String] == ["P2F", "P3V"])
+    #expect(notify["excludedMailboxIds"] as? [String] == ["P9L"])
 }
 
 @Test func theTokenIsLowercaseHex() {
