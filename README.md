@@ -1,6 +1,6 @@
 # Fastmail Custom
 
-A personal set of tools for using Fastmail. I wanted to be able to quickly triage incoming messages (add a label in the Inbox so it feels less cluttered). That spun eh, a little out of control... :[...]
+A personal set of tools for using Fastmail. I wanted to be able to quickly triage incoming messages (add a label in the Inbox so it feels less cluttered). That spun eh, a little out of control... :-)
 I merged all my previously written Fastmail tweaks and ideas into this repo and it's now my daily driver. It supports all the features the stock Fastmail apps offer plus more.
 
 ## Features
