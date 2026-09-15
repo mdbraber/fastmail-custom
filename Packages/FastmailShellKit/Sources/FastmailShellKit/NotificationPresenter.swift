@@ -34,7 +34,12 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
     private func ask() {
         guard !authorizationGranted, !authorizationDenied, !authorizationPending else { return }
         authorizationPending = true
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
+        // .badge belongs here too: it is not only what lets a notification
+        // carry a number, it is what registers this app with the system as
+        // one whose dock badge counts at all. Leave it out and the same
+        // dockTile.badgeLabel call BadgeController already makes sits there
+        // unauthorized and silently unshown, no matter its value.
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) {
             [weak self] granted, error in
             Task { @MainActor in
                 guard let self else { return }

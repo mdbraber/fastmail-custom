@@ -103,7 +103,11 @@ public final class BadgeController {
             }
         }
         #else
-        NSApplication.shared.dockTile.badgeLabel = value == 0 ? nil : String(value)
+        let tile = NSApplication.shared.dockTile
+        tile.badgeLabel = value == 0 ? nil : String(value)
+        // badgeLabel alone can sit unapplied until something else forces a
+        // redraw; display() is the tile's own way to ask for one now.
+        tile.display()
         #endif
     }
 }
