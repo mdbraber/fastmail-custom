@@ -1,18 +1,9 @@
 # Fastmail Custom
 
-A personal set of tools for using Fastmail. I wanted to be able to quickly triage incoming messages (add a label in the Inbox so it feels less cluttered). That spun eh, a little out of coontrol. I merged all my previously written Fastmail tweaks and ideas into this repo and it's now my daily driver. It supports all the features the stock Fastmail apps offer plus more.
+A personal set of tools for using Fastmail. I wanted to be able to quickly triage incoming messages (add a label in the Inbox so it feels less cluttered). That spun eh, a little out of control... :-)
+I merged all my previously written Fastmail tweaks and ideas into this repo and it's now my daily driver. It supports all the features the stock Fastmail apps offer plus more.
 
 ## Features
-
-Fastmail lets a message carry any number of labels. That is flexible, but it
-leaves the Inbox as a pile: nothing on a message says whether you have dealt
-with it. Custom mode uses a label as the message's state instead. Every
-message belongs to one project, anything undecided sits under a triage label
-until you keep it, and archiving means the same thing wherever you do it. The
-point is an Inbox you can empty and a queue you can trust.
-
-The web app pieces do that work. The Mac and iPhone apps add what a web page
-cannot reach on its own: real windows, notifications, downloads and links.
 
 **Triage**
 
