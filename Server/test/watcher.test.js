@@ -95,8 +95,8 @@ function fakeAPNs(answer = () => ({ status: 200, reason: null })) {
     return { sent, send: async (token, payload, options) => { sent.push({ token, payload, ...options }); return answer(token); } };
 }
 
-const INBOX = { mode: 'inbox', senders: 'everyone', mailboxIds: [] };
-const OFF = { mode: 'off', senders: 'everyone', mailboxIds: [] };
+const INBOX = { mode: 'inbox', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
+const OFF = { mode: 'off', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
 
 // Each token with its choice: inbox, unless `choices` names another
 function fakeDevices(tokens, choices = {}) {
@@ -619,8 +619,8 @@ test('one address book failing to read keeps every set and state as they were, u
 // VIP, Bob a contact; M5's thread is followed through another message.
 const choices = {
     'tok-inbox': INBOX,
-    'tok-important': { mode: 'important', senders: 'everyone', mailboxIds: [] },
-    'tok-custom': { mode: 'custom', senders: 'contacts', mailboxIds: ['kerk'] },
+    'tok-important': { mode: 'important', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] },
+    'tok-custom': { mode: 'custom', senders: 'contacts', mailboxIds: ['kerk'], excludedMailboxIds: [] },
     'tok-off': OFF,
 };
 const batch = () => ({
@@ -661,7 +661,7 @@ test('each device hears the new messages its own choice matches', async () => {
 });
 
 test('a device that got no alert hears a changed count on its own; one that got an alert has it there', async () => {
-    const quiet = { ...choices, 'tok-quiet': { mode: 'custom', senders: 'vips', mailboxIds: ['kerk'] } };
+    const quiet = { ...choices, 'tok-quiet': { mode: 'custom', senders: 'vips', mailboxIds: ['kerk'], excludedMailboxIds: [] } };
     const t = await setUp(batch(), { devices: fakeDevices(Object.keys(quiet), quiet) });
     t.jmap.counts.badge = 5;
     await newMail(t);

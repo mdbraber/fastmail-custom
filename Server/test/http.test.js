@@ -5,8 +5,8 @@ import { createServer } from '../src/http.js';
 const silent = { warn() {}, info() {}, error() {} };
 const token = 'c'.repeat(64);
 const sealedNotice = { '@type': 'StateChange', changed: { acc1: { Email: 's7' } } };
-const INBOX = { mode: 'inbox', senders: 'everyone', mailboxIds: [] };
-const OFF = { mode: 'off', senders: 'everyone', mailboxIds: [] };
+const INBOX = { mode: 'inbox', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
+const OFF = { mode: 'off', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
 
 async function running() {
     const received = [];
@@ -93,13 +93,13 @@ test('an older app build registers with alerts alone: true is inbox, false is of
 test('a registration carrying notify is stored and answered normalised', async () => {
     const s = await running();
     try {
-        const custom = await register(s, { account: 'personal', token, notify: { mode: 'custom', senders: 'vips', mailboxIds: ['P2F', 'P3V'] } });
+        const choice = { mode: 'custom', senders: 'vips', mailboxIds: ['P2F', 'P3V'], excludedMailboxIds: ['P9L'] };
+        const custom = await register(s, { account: 'personal', token, notify: choice });
         assert.equal(custom.status, 200);
-        const choice = { mode: 'custom', senders: 'vips', mailboxIds: ['P2F', 'P3V'] };
         assert.deepEqual(await custom.json(), { ok: true, notify: choice, contacts: true });
 
         const important = await register(s, { account: 'personal', token, notify: { mode: 'important' } });
-        const filled = { mode: 'important', senders: 'everyone', mailboxIds: [] };
+        const filled = { mode: 'important', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
         assert.deepEqual(await important.json(), { ok: true, notify: filled, contacts: true });
         assert.deepEqual(s.registered, [['personal', token, { notify: choice }], ['personal', token, { notify: filled }]]);
     } finally {
@@ -118,6 +118,7 @@ test('each malformed notify field is a 400 naming it, and nothing is stored', as
             [{ notify: { mode: 'custom', mailboxIds: 'P2F' } }, /^notify\.mailboxIds /],
             [{ notify: { mode: 'custom', mailboxIds: [''] } }, /^notify\.mailboxIds /],
             [{ notify: { mode: 'custom', mailboxIds: Array.from({ length: 201 }, (_, index) => `M${index}`) } }, /^notify\.mailboxIds /],
+            [{ notify: { mode: 'custom', mailboxIds: ['P2F'], excludedMailboxIds: [''] } }, /^notify\.excludedMailboxIds /],
         ];
         for (const [extra, pattern] of cases) {
             const response = await register(s, { account: 'personal', token, ...extra });
@@ -138,7 +139,8 @@ test('with both fields notify wins, and the reply says whether contacts can be r
 
         s.watchers.personal.hasContacts = false;
         const without = await register(s, { account: 'personal', token, alerts: false, notify: { mode: 'important' } });
-        assert.deepEqual(await without.json(), { ok: true, notify: { mode: 'important', senders: 'everyone', mailboxIds: [] }, contacts: false });
+        assert.deepEqual(await without.json(),
+            { ok: true, notify: { mode: 'important', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] }, contacts: false });
     } finally {
         await s.close();
     }
@@ -148,7 +150,7 @@ test('with both fields notify wins, and the reply says whether contacts can be r
 // told false then would warn about contacts until it next registered.
 test('before the watcher has read the session the reply says contacts are unknown; after, it says what the session said', async () => {
     const s = await running();
-    const important = { mode: 'important', senders: 'everyone', mailboxIds: [] };
+    const important = { mode: 'important', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
     try {
         s.watchers.personal.sessionRead = false;
         s.watchers.personal.hasContacts = false;

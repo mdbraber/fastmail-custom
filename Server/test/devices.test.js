@@ -9,8 +9,8 @@ const silent = { warn() {}, info() {}, error() {} };
 const token = 'a'.repeat(64);
 const other = 'b'.repeat(64);
 const scratch = async () => path.join(await mkdtemp(path.join(os.tmpdir(), 'devices-')), 'devices.json');
-const INBOX = { mode: 'inbox', senders: 'everyone', mailboxIds: [] };
-const OFF = { mode: 'off', senders: 'everyone', mailboxIds: [] };
+const INBOX = { mode: 'inbox', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
+const OFF = { mode: 'off', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
 
 test('a device token is hex of a plausible length', () => {
     assert.equal(isDeviceToken(token), true);
@@ -40,7 +40,7 @@ test('registrations persist, per account, and can be removed', async () => {
 
 test('each device keeps its own choice, stored as notify, across a reload', async () => {
     const file = await scratch();
-    const custom = { mode: 'custom', senders: 'vips', mailboxIds: ['P2F', 'P3V'] };
+    const custom = { mode: 'custom', senders: 'vips', mailboxIds: ['P2F', 'P3V'], excludedMailboxIds: ['P9L'] };
     const registry = new DeviceRegistry(file, silent);
     await registry.load();
     await registry.register('personal', token);

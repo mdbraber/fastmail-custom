@@ -40,7 +40,10 @@ export function matchesChoice(notify, email, context) {
         return (!discarded && vip) || followed;
     }
     case 'custom': {
+        // In one of the included labels and in none of the excluded ones,
+        // so a label on both lists keeps its messages out
         if (!notify.mailboxIds.some((id) => carries(email, id))) return false;
+        if (notify.excludedMailboxIds.some((id) => carries(email, id))) return false;
         if (notify.senders === 'contacts') return sender !== null && context.contacts.has(sender);
         if (notify.senders === 'vips') return sender !== null && context.vips.has(sender);
         return true;

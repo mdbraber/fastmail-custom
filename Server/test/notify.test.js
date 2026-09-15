@@ -55,7 +55,7 @@ const context = (over = {}) => ({
     ...over,
 });
 const from = (address) => [{ name: 'Someone', email: address }];
-const choice = (mode, over = {}) => ({ mode, senders: 'everyone', mailboxIds: [], ...over });
+const choice = (mode, over = {}) => ({ mode, senders: 'everyone', mailboxIds: [], excludedMailboxIds: [], ...over });
 
 test('off never matches', () => {
     assert.equal(matchesChoice(choice('off'), email({ from: from('vip@example.net') }), context()), false);
@@ -102,6 +102,42 @@ test('custom needs one of its labels', () => {
 
 test('custom with an empty label list matches nothing', () => {
     assert.equal(matchesChoice(choice('custom'), email({ from: from('vip@example.net') }), context()), false);
+});
+
+// Inbox included and Later excluded: what is in the Inbox, unless it is also
+// under Later
+test('custom skips a message that carries any excluded label', () => {
+    const LATER = 'mbx-later';
+    const custom = choice('custom', { mailboxIds: [inbox], excludedMailboxIds: [OTHER_LABEL, LATER] });
+    assert.equal(matchesChoice(custom, email({ mailboxIds: { [inbox]: true } }), context()), true);
+    assert.equal(matchesChoice(custom, email({ mailboxIds: { [inbox]: true, [LATER]: true } }), context()), false);
+    assert.equal(matchesChoice(custom, email({ mailboxIds: { [inbox]: true, [OTHER_LABEL]: true } }), context()), false);
+    assert.equal(matchesChoice(custom, email({ mailboxIds: { [LATER]: true } }), context()), false);
+    // A label not set to true is not carried
+    assert.equal(matchesChoice(custom, email({ mailboxIds: { [inbox]: true, [LATER]: false } }), context()), true);
+});
+
+test('a label both included and excluded is excluded', () => {
+    const both = choice('custom', { mailboxIds: [LABEL, OTHER_LABEL], excludedMailboxIds: [LABEL] });
+    assert.equal(matchesChoice(both, email({ mailboxIds: { [LABEL]: true } }), context()), false);
+    assert.equal(matchesChoice(both, email({ mailboxIds: { [OTHER_LABEL]: true } }), context()), true);
+});
+
+test('an excluded label stops a message whoever sent it', () => {
+    const vips = choice('custom', { mailboxIds: [inbox], excludedMailboxIds: [LABEL], senders: 'vips' });
+    assert.equal(matchesChoice(vips, email({ from: from('vip@example.net') }), context()), true);
+    assert.equal(matchesChoice(vips, email({ mailboxIds: { [inbox]: true, [LABEL]: true }, from: from('vip@example.net') }), context()), false);
+});
+
+// The app keeps both lists when another choice is picked, so they may come
+// along with it; only Custom reads them
+test('excluded labels count only for custom', () => {
+    const inInboxAndLabel = { mailboxIds: { [inbox]: true, [LABEL]: true } };
+    assert.equal(matchesChoice(choice('inbox', { excludedMailboxIds: [LABEL] }), email(inInboxAndLabel), context()), true);
+    assert.equal(
+        matchesChoice(choice('important', { excludedMailboxIds: [LABEL] }), email({ ...inInboxAndLabel, from: from('vip@example.net') }), context()),
+        true,
+    );
 });
 
 test('custom senders: everyone, contacts, or VIPs', () => {

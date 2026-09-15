@@ -9,23 +9,31 @@ const isPlainObject = (value) => value !== null && typeof value === 'object' && 
 
 // The choice an app build from before `notify` meant with its one switch.
 export function fromAlerts(alerts) {
-    return { mode: alerts === false ? 'off' : 'inbox', senders: 'everyone', mailboxIds: [] };
+    return { mode: alerts === false ? 'off' : 'inbox', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
 }
 
+const isLabelList = (ids) => Array.isArray(ids) && ids.length <= MAX_MAILBOX_IDS
+    && ids.every((id) => typeof id === 'string' && id.length > 0);
+
 // `notify` checked and filled in: { notify } or { error } naming the field.
-// The mailbox ids are kept exactly as sent, in their order: the app compares
-// what it sent with what was accepted.
+// `mailboxIds` are the labels Custom includes, `excludedMailboxIds` the ones
+// it leaves out; a choice from before the excluded list leaves out none. The
+// ids are kept exactly as sent, in their order: the app compares what it
+// sent with what was accepted.
 export function normaliseNotify(value) {
     if (!isPlainObject(value)) return { error: 'notify must be an object' };
     if (!MODES.includes(value.mode)) return { error: `notify.mode must be one of ${MODES.join(', ')}` };
     const senders = value.senders === undefined ? 'everyone' : value.senders;
     if (!SENDERS.includes(senders)) return { error: `notify.senders must be one of ${SENDERS.join(', ')}` };
     const mailboxIds = value.mailboxIds === undefined ? [] : value.mailboxIds;
-    if (!Array.isArray(mailboxIds) || mailboxIds.length > MAX_MAILBOX_IDS
-        || !mailboxIds.every((id) => typeof id === 'string' && id.length > 0)) {
+    if (!isLabelList(mailboxIds)) {
         return { error: `notify.mailboxIds must be an array of at most ${MAX_MAILBOX_IDS} non-empty strings` };
     }
-    return { notify: { mode: value.mode, senders, mailboxIds: [...mailboxIds] } };
+    const excludedMailboxIds = value.excludedMailboxIds === undefined ? [] : value.excludedMailboxIds;
+    if (!isLabelList(excludedMailboxIds)) {
+        return { error: `notify.excludedMailboxIds must be an array of at most ${MAX_MAILBOX_IDS} non-empty strings` };
+    }
+    return { notify: { mode: value.mode, senders, mailboxIds: [...mailboxIds], excludedMailboxIds: [...excludedMailboxIds] } };
 }
 
 // A registration's choice: `notify` when it is there, otherwise the older
