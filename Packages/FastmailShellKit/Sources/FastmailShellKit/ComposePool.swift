@@ -37,10 +37,16 @@ public final class ComposePool<Window: AnyObject> {
     private(set) var pooled: Window?
     private let create: () -> Window
     private let prepare: (Window) -> Void
+    private let release: (Window) -> Void
 
-    public init(create: @escaping () -> Window, prepare: @escaping (Window) -> Void) {
+    public init(
+        create: @escaping () -> Window,
+        prepare: @escaping (Window) -> Void,
+        release: @escaping (Window) -> Void = { _ in }
+    ) {
         self.create = create
         self.prepare = prepare
+        self.release = release
     }
 
     public func preload() {
@@ -51,12 +57,15 @@ public final class ComposePool<Window: AnyObject> {
     }
 
     public func take() -> Window {
+        let window: Window
         if let pooled {
             self.pooled = nil
-            return pooled
+            window = pooled
+        } else {
+            window = create()
+            prepare(window)
         }
-        let window = create()
-        prepare(window)
+        release(window)
         return window
     }
 
@@ -93,8 +102,13 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
             create: { [weak self] in self?.makeWindow() ?? NSWindow() },
             prepare: { window in
                 ComposeWindows.readyForPool(window)
-                ComposeWindows.webView(of: window)?.load(URLRequest(url: composeURL))
-            }
+                guard let view = ComposeWindows.webView(of: window) else { return }
+                // A page loaded to wait unseen must not count as an open
+                // window; poolScript says why.
+                ComposeWindows.useScripts(pooled: true, in: view.configuration.userContentController)
+                view.load(URLRequest(url: composeURL))
+            },
+            release: { window in ComposeWindows.leavePool(window) }
         )
         pool?.preload()
         guard observers.isEmpty else { return }
@@ -453,6 +467,45 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     })();
     """
 
+    /// Keeps a compose page waiting in the pool off Fastmail's roll call of
+    /// open windows. A page that sees another window open holds new mail back
+    /// for up to twenty seconds whenever it is not focused, so a hidden page
+    /// on that roll call left the mailbox window slow to show new mail. The
+    /// page still says hello, so the others answer and it knows it is not the
+    /// master window, the one that shows notifications; it says goodbye
+    /// straight after, and answers no roll call until it is opened.
+    static let poolScript = """
+    (function(){
+      var pooled=true,announced=[];
+      var post=BroadcastChannel.prototype.postMessage;
+      // owm:broadcast before Fastmail knows who is signed in, and
+      // owm:<account>:broadcast after.
+      function isRollCall(channel){return /^owm:.*broadcast$/.test(channel.name);}
+      function forget(channel){
+        announced=announced.filter(function(one){return one.channel!==channel;});
+      }
+      BroadcastChannel.prototype.postMessage=function(message){
+        if(!pooled||!message||!isRollCall(this)){return post.apply(this,arguments);}
+        if(message.type==='wc:ping'){return;}
+        if(message.type==='wc:bye'){forget(this);}
+        post.apply(this,arguments);
+        if(message.type==='wc:hello'){
+          forget(this);
+          announced.push({channel:this,wcId:message.wcId});
+          post.call(this,{wcId:message.wcId,type:'wc:bye'});
+        }
+      };
+      window.fmshellLeavePool=function(){
+        if(!pooled){return;}
+        pooled=false;
+        announced.forEach(function(one){
+          post.call(one.channel,{wcId:one.wcId,type:'wc:hello',url:location.href});
+        });
+        announced=[];
+      };
+    })();
+    """
+
     public nonisolated func userContentController(
         _ controller: WKUserContentController,
         didReceive message: WKScriptMessage
@@ -595,13 +648,37 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     ) {
         guard watchedControllers.insert(ObjectIdentifier(controller)).inserted else { return }
         controller.add(handler, name: "fmshellRecipients")
-        // Every frame, not only the page's own: a message's body is shown in
-        // one of its own, and printing is asked for from in there.
+        controller.addUserScript(recipientUserScript)
+    }
+
+    // Every frame, not only the page's own: a message's body is shown in one
+    // of its own, and printing is asked for from in there.
+    private static var recipientUserScript: WKUserScript {
+        WKUserScript(source: recipientScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+    }
+
+    /// The scripts a pool window's pages load with. A WKUserContentController
+    /// cannot take back a single script, so the set is laid down afresh; which
+    /// is only ever done to a pool window's own controller, never to one a
+    /// popout shares with the page it came from.
+    static func useScripts(pooled: Bool, in controller: WKUserContentController) {
+        controller.removeAllUserScripts()
+        controller.addUserScript(recipientUserScript)
+        guard pooled else { return }
+        // Ahead of Fastmail, which says hello as soon as it starts.
         controller.addUserScript(WKUserScript(
-            source: recipientScript,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: false
+            source: poolScript,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
         ))
+    }
+
+    /// Puts a window's page on the roll call: the page already there says
+    /// hello, and pages it loads from here on carry no pool script.
+    static func leavePool(_ window: NSWindow) {
+        guard let view = webView(of: window) else { return }
+        useScripts(pooled: false, in: view.configuration.userContentController)
+        view.evaluateJavaScript("window.fmshellLeavePool&&window.fmshellLeavePool()")
     }
 
     private func makeWindow() -> NSWindow {

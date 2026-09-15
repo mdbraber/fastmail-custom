@@ -58,6 +58,27 @@ private final class FakeWindow {}
     #expect(!pool.shouldRecycle(second))
 }
 
+// Taking a window out of the pool is what lets its page count as an open
+// window, whether it was loaded ahead of time or only just made; going back
+// into the pool is not.
+@Test @MainActor func everyWindowTakenFromThePoolIsReleasedFromIt() {
+    var released: [FakeWindow] = []
+    let pool = ComposePool<FakeWindow>(
+        create: { FakeWindow() },
+        prepare: { _ in },
+        release: { released.append($0) }
+    )
+    pool.preload()
+    #expect(released.isEmpty)
+    let preloaded = pool.take()
+    let fresh = pool.take()
+    #expect(released.count == 2)
+    #expect(released.first === preloaded)
+    #expect(released.last === fresh)
+    #expect(pool.shouldRecycle(preloaded))
+    #expect(released.count == 2)
+}
+
 @Test func theComposeURLCarriesTheAccountOnlyWhenKnown() {
     let with = Profile(
         id: "personal",
@@ -282,5 +303,22 @@ private func makePlainWindow() -> NSWindow {
     let configuration = WKWebViewConfiguration()
     _ = ComposeWindows.shared.window(for: configuration, size: NSSize(width: 400, height: 400))
     _ = ComposeWindows.shared.window(for: configuration, size: NSSize(width: 400, height: 400))
+}
+
+// A compose page waiting in the pool carries the script that keeps it off
+// Fastmail's roll call of open windows, ahead of anything Fastmail runs; once
+// the window is opened its pages load without it, and still watch the To line.
+@Test @MainActor func onlyAComposePageWaitingInThePoolCarriesThePoolScript() {
+    let controller = WKUserContentController()
+    ComposeWindows.useScripts(pooled: true, in: controller)
+    #expect(controller.userScripts.count == 2)
+    let pooled = controller.userScripts.filter { $0.source == ComposeWindows.poolScript }
+    #expect(pooled.count == 1)
+    #expect(pooled.first?.injectionTime == .atDocumentStart)
+    #expect(pooled.first?.isForMainFrameOnly == true)
+
+    ComposeWindows.useScripts(pooled: false, in: controller)
+    #expect(controller.userScripts.count == 1)
+    #expect(!controller.userScripts.contains { $0.source == ComposeWindows.poolScript })
 }
 #endif
