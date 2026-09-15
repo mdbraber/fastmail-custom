@@ -45,7 +45,7 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 - 🎨 **Label colours**: show the full message row in the label color
 
  **Notifications**
- - 🔔 **Push notifications**: choose Off, Important, All in Inbox or labels of your own per device; a banner carries Archive, Later and Pin. Push notifications needs the server component (see `Server/`)
+ - 🔔 **Push notifications**: choose Off, Important, All in Inbox or labels of your own per device; a banner carries Archive, Later and Pin. Push notifications needs the server component (see [Server/](Server/))
 
 **Scripting support**
 - 🤖 **Shortcuts, AppleScript and the menu bar**: get URL / Title or Markdown Link via AppleScript or Shortcuts.
