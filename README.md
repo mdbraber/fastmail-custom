@@ -18,7 +18,7 @@ cannot reach on its own: real windows, notifications, downloads and links.
 
 - 🏷️ **Inbox triage**: quick add a label to inbox message or archive
 - 📦 **Keep or Archive**: keeping allows to add a label, archiving strips all project labels/pins
-- 👥 **Contact groups**: add to a specific label and the sender gets automatically added to a Contacts group (like Hey.com)
+- 👥 **Add sender to group via label**: add to a specific label and the sender gets automatically added to a Contacts group (like Hey.com)
 
 **Grouping**
 - 🗃️ **Custom groups**: Fastmail recently introduced "Mailbox groups" - create as
@@ -27,13 +27,6 @@ cannot reach on its own: real windows, notifications, downloads and links.
 **Snoozing**
 - ⏰ **Snooze presets**: your own list of times on Fastmail's own Snooze
   button, one whose time has passed greyed out rather than offered.
-
-**Appearance**
-
-- 🗂️ **Grouped sidebar**: folders, labels and saved searches kept apart with sections
-- 🔻 **Triage icon**: the triage label has its own icon
-- 🔢 **Filtered counts**: counts show the number with the filter applied
-- 🎨 **Label colours**: show the full message row in the label color
 
 **User experience**
 
@@ -49,6 +42,13 @@ cannot reach on its own: real windows, notifications, downloads and links.
 - 🔒 **App lock (iOS)**: iPhone and iPad can ask for Face ID, Touch ID or your passcode before mail shows.
 - 🌐 **In-app browser**: links leaving the app can open in in-app browser or your default browser
 - ⚙️ **Shared settings**: the same settings on Mac, iPhone and in Safari, kept in sync through iCloud when you turn that on.
+
+**Appearance**
+
+- 🗂️ **Grouped sidebar**: folders, labels and saved searches kept apart with sections
+- 🔻 **Triage icon**: the triage label has its own icon
+- 🔢 **Filtered counts**: counts show the number with the filter applied
+- 🎨 **Label colours**: show the full message row in the label color
 
 **Scripting support**
 - 🤖 **Shortcuts, AppleScript and the menu bar**: get URL / Title or Markdown Link via AppleScript or Shortcuts.
