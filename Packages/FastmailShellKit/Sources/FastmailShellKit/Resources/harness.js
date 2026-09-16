@@ -998,12 +998,16 @@
         });
     });
 
-    // Fastmail's desktop-app hook. Its service worker decides and formats
-    // every notification; fed by the page's own live connection, so no push is
-    // needed, and, when it believes it is inside Fastmail's Electron app,
-    // hands it to the page, which calls window.electron.showNotification.
+    // Fastmail's desktop-app hook. Its offline worker decides which new mail
+    // notifies, from the page's own live connection, so no push is needed, and
+    // broadcasts it; its service worker formats it and, when it believes it is
+    // inside Fastmail's Electron app, hands it to the page, which calls
+    // window.electron.showNotification.
     if (/Electron\//.test(navigator.userAgent) && typeof window.electron !== 'object') {
         var pendingNotifications = [];
+        var notificationCount = 0;
+        // Message ids already handed over from this page, by either route
+        var notifiedEmailIds = {};
 
         // A sound, if wanted, is asked for right after the notification and
         // synchronously, so the send waits a tick and the two travel as one.
@@ -1013,25 +1017,61 @@
             queued.forEach(function (notification) { post('notify', notification); });
         };
 
+        var queueNotification = function (notification) {
+            pendingNotifications.push(notification);
+            if (pendingNotifications.length === 1) setTimeout(flushNotifications, 0);
+        };
+
+        // Fastmail hands its push over as the notification's data, with the
+        // message under email; a calendar alert carries its event instead.
+        var emailOf = function (data) {
+            return data && data.email && data.email.id ? data.email : null;
+        };
+
+        // The message id for mail, so a read message's notification can be
+        // dismissed by it; for anything else an id of its own, since two
+        // alerts for one event are two notifications.
+        var notificationIdOf = function (data) {
+            var email = emailOf(data);
+            if (email) return String(email.id);
+            if (data.emailId) return String(data.emailId);
+            notificationCount += 1;
+            return (data.calendarEventId ? data.calendarEventId + '/' : 'n') +
+                (data.alertId || Date.now() + '-' + notificationCount);
+        };
+
+        // Once per message from this page. Across windows, and for one that
+        // comes in late, NotificationPresenter keeps it to once as well.
+        var claimEmail = function (data) {
+            var email = emailOf(data);
+            if (!email) return true;
+            if (notifiedEmailIds[email.id]) return false;
+            notifiedEmailIds[email.id] = true;
+            return true;
+        };
+
+        var jsonOf = function (data) {
+            try {
+                return JSON.stringify(data);
+            } catch (error) {
+                return '';
+            }
+        };
+
         window.electron = {
             showNotification: function (payload, data) {
                 payload = payload || {};
                 data = data || {};
-                var dataJSON;
-                try {
-                    dataJSON = JSON.stringify(data);
-                } catch (error) {
-                    dataJSON = '';
-                }
-                pendingNotifications.push({
-                    id: String(data.emailId || data.calendarEventId || Date.now()),
+                if (!claimEmail(data)) return;
+                var email = emailOf(data);
+                queueNotification({
+                    id: notificationIdOf(data),
                     title: String(payload.title || ''),
                     body: String(payload.body || ''),
                     sound: false,
-                    threadId: String(data.threadId || ''),
-                    data: dataJSON
+                    threadId: String((email && email.threadId) || data.threadId || ''),
+                    data: jsonOf(data)
                 });
-                if (pendingNotifications.length === 1) setTimeout(flushNotifications, 0);
             },
             playNotificationSound: function () {
                 if (pendingNotifications.length) {
@@ -1060,6 +1100,83 @@
             getIsDefaultApp: function () { return Promise.resolve(false); },
             setIsDefaultApp: function () {}
         };
+
+        /*
+         * The new-mail notification Fastmail's service worker never shows.
+         *
+         * Before showing one it looks up the sender's contact photo, and for
+         * a contact that has one it builds the photo's address from the
+         * photo's type, which Fastmail's stored contacts call mediaType; the
+         * lookup throws and the notification is dropped without a word. So
+         * the same broadcast the service worker answers is heard here too,
+         * and if its notification has not come through within
+         * FALLBACK_DELAY, this page shows the message itself, formatted the
+         * way the service worker formats it and with the sound Fastmail's
+         * page would add. Fastmail's own, when it arrives in time, is the one
+         * shown; one arriving after this is not shown again.
+         *
+         * Only the message Fastmail's offline worker has already decided
+         * should notify is broadcast, so Fastmail's notification setting
+         * still decides what notifies.
+         */
+        var FALLBACK_DELAY = 2000;
+        var pageUserId = (/[?&]u=(\w+)/.exec(location.search) || [])[1] || '';
+
+        // The service worker's title: the sender's name, or the address when
+        // the name is dressed up as an address or as Fastmail, unless the
+        // message is trusted; a clock ahead of it for snoozed mail coming
+        // back. Fastmail's own test also catches lookalike characters; this
+        // one catches the plain spellings.
+        var fallbackTitle = function (push) {
+            var email = push.email;
+            var from = (email.from && email.from[0]) || {};
+            var address = String(from.email || '');
+            var name = String(from.name || '').trim().replace(/\s+/g, ' ') || address;
+            var keywords = email.keywords || {};
+            if (name !== address && !keywords.$istrusted &&
+                    (/[@\uFF20\uFE6B]/.test(name) || /f\W*a\W*s\W*t\W*m\W*a\W*i\W*l/i.test(name))) {
+                name = address;
+            }
+            return (push.isAwakened ? '\uD83D\uDD52 ' : '') + (name || 'New message');
+        };
+
+        // What Fastmail's page reads before asking for a sound
+        var mailSoundWanted = function (userId) {
+            try {
+                return !!JSON.parse(localStorage.getItem('preferences:' + userId + '.notificationsMailSound'));
+            } catch (error) {
+                return false;
+            }
+        };
+
+        try {
+            // Held on to: a channel nothing refers to is collected, listener
+            // and all, a few seconds after the page has loaded
+            window.__fmshell.proxyWorkerChannel = new BroadcastChannel('proxyworker');
+            window.__fmshell.proxyWorkerChannel.addEventListener('message', function (event) {
+                var message = event.data;
+                if (!message || message.type !== 'emailPush' || !message.data) return;
+                var push = message.data;
+                var email = emailOf(push);
+                if (!email || notifiedEmailIds[email.id]) return;
+                // Another account's window is the one Fastmail would pick
+                if (pageUserId && push.userId && push.userId !== pageUserId) return;
+
+                setTimeout(function () {
+                    if (!claimEmail(push)) return;
+                    queueNotification({
+                        id: String(email.id),
+                        title: fallbackTitle(push),
+                        body: String(email.subject || '') || 'New message',
+                        sound: mailSoundWanted(push.userId),
+                        threadId: String(email.threadId || ''),
+                        data: jsonOf(push)
+                    });
+                }, FALLBACK_DELAY);
+            });
+        } catch (error) {
+            report(error);
+        }
 
         // A WKWebView's own window.Notification reports "denied" with no
         // public way for this app to change that, which is what left the

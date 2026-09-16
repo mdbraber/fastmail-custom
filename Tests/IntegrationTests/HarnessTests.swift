@@ -165,6 +165,112 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(withoutElectronType, "undefined")
     }
 
+    private func notifications() -> [[String: Any]] {
+        received.filter { $0["action"] as? String == "notify" }.compactMap { $0["payload"] as? [String: Any] }
+    }
+
+    // On a page with an origin of its own: WebKit delivers no BroadcastChannel
+    // message on a file: page, whose origin is opaque, and Fastmail's page is
+    // never one
+    private func electronWebView() async throws -> WKWebView {
+        let url = URL(string: "fmtest://app.test/")!
+        let view = try makeWebView(
+            userScript: "", metadata: Self.meta(), configURL: url, scheme: "fmtest",
+            applicationName: WebContainer.electronUserAgentToken
+        )
+        try await loadCustomScheme(view, url: url)
+        return view
+    }
+
+    // What Fastmail's offline worker broadcasts for a message that should
+    // notify, as read from its proxyWorker.js
+    private func broadcastEmailPush(_ webView: WKWebView, id: String, name: String, address: String,
+                                    subject: String, trusted: Bool = false) async throws {
+        _ = try await evaluate(webView, """
+        window.__proxyworker = window.__proxyworker || new BroadcastChannel('proxyworker');
+        window.__proxyworker.postMessage({type: 'emailPush', data: {
+            '@type': 'EmailPush', accountId: 'A1', userId: 'u1',
+            email: {id: '\(id)', threadId: 'T-\(id)', subject: '\(subject)',
+                from: [{name: '\(name)', email: '\(address)'}],
+                keywords: \(trusted ? "{$istrusted: true}" : "{}"), mailboxIds: {}}
+        }});
+        true;
+        """)
+    }
+
+    // Fastmail hands over its push as the notification's data: the ids sit
+    // under email, not at the top
+    func testFastmailsNotificationTakesItsIdsFromTheEmail() async throws {
+        webView = try await electronWebView()
+        _ = try await evaluate(webView, """
+        window.electron.showNotification({title: 'Ada', body: 'Re: engine'},
+            {'@type': 'EmailPush', userId: 'u1', email: {id: 'M1', threadId: 'T1'}});
+        true;
+        """)
+        try await waitUntil { !self.notifications().isEmpty }
+        let shown = try XCTUnwrap(notifications().first)
+        XCTAssertEqual(shown["id"] as? String, "M1")
+        XCTAssertEqual(shown["threadId"] as? String, "T1")
+    }
+
+    // Fastmail's service worker drops a notification when the sender's
+    // contact has a photo, so the new-mail broadcast it would have answered
+    // is answered here after a short wait
+    func testAnEmailPushFastmailNeverShowsIsShownByTheFallback() async throws {
+        webView = try await electronWebView()
+        _ = try await evaluate(webView, "localStorage.setItem('preferences:u1.notificationsMailSound', JSON.stringify('default')); true;")
+        try await broadcastEmailPush(webView, id: "M2", name: "  Bob   Smith ", address: "bob@example.com", subject: "Lunch")
+        try await waitUntil(timeout: 15) { !self.notifications().isEmpty }
+        let shown = try XCTUnwrap(notifications().first)
+        XCTAssertEqual(shown["id"] as? String, "M2")
+        XCTAssertEqual(shown["title"] as? String, "Bob Smith")
+        XCTAssertEqual(shown["body"] as? String, "Lunch")
+        XCTAssertEqual(shown["threadId"] as? String, "T-M2")
+        XCTAssertEqual(shown["sound"] as? Bool, true)
+        let data = try XCTUnwrap((shown["data"] as? String)?.data(using: .utf8))
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual((json["email"] as? [String: Any])?["id"] as? String, "M2")
+    }
+
+    func testFastmailsOwnNotificationKeepsTheFallbackFromRepeatingIt() async throws {
+        webView = try await electronWebView()
+        try await broadcastEmailPush(webView, id: "M3", name: "Cy", address: "cy@example.com", subject: "Hi")
+        _ = try await evaluate(webView, """
+        window.electron.showNotification({title: 'Cy', body: 'Hi'},
+            {'@type': 'EmailPush', userId: 'u1', email: {id: 'M3', threadId: 'T-M3'}});
+        true;
+        """)
+        // Past the fallback's wait, with room to spare
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        XCTAssertEqual(notifications().filter { $0["id"] as? String == "M3" }.count, 1)
+
+        // And the other way round: shown by the fallback first, Fastmail's late one is not sent again
+        try await broadcastEmailPush(webView, id: "M4", name: "Di", address: "di@example.com", subject: "Yo")
+        // A hidden page's timers run slow, the fallback's wait among them
+        try await waitUntil(timeout: 15) { self.notifications().contains { $0["id"] as? String == "M4" } }
+        _ = try await evaluate(webView, """
+        window.electron.showNotification({title: 'Di', body: 'Yo'},
+            {'@type': 'EmailPush', userId: 'u1', email: {id: 'M4', threadId: 'T-M4'}});
+        true;
+        """)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(notifications().filter { $0["id"] as? String == "M4" }.count, 1)
+    }
+
+    func testTheFallbackShowsTheAddressForANameDressedUpAsOne() async throws {
+        webView = try await electronWebView()
+        try await broadcastEmailPush(webView, id: "M5", name: "support@fastmail.com", address: "evil@example.com", subject: "Verify")
+        try await broadcastEmailPush(webView, id: "M6", name: "Fastmail Support", address: "evil@example.com", subject: "Verify")
+        try await broadcastEmailPush(webView, id: "M7", name: "Fastmail Support", address: "help@fastmail.com", subject: "Real", trusted: true)
+        try await waitUntil(timeout: 15) { self.notifications().count >= 3 }
+        let titles = Dictionary(uniqueKeysWithValues: notifications().compactMap { shown in
+            (shown["id"] as? String).map { ($0, shown["title"] as? String ?? "") }
+        })
+        XCTAssertEqual(titles["M5"], "evil@example.com")
+        XCTAssertEqual(titles["M6"], "evil@example.com")
+        XCTAssertEqual(titles["M7"], "Fastmail Support")
+    }
+
     // Fastmail's Mail preferences page asks whether it is the default email
     // app before it draws, and its switch asks to become it. The shells leave
     // that to macOS, so the answer is always no and the switch does nothing;

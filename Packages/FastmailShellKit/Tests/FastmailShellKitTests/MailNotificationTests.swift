@@ -30,6 +30,17 @@ import Testing
     #expect(notification.dataJSON == "{}")
 }
 
+// One message reported twice, by Fastmail's own notification and by the
+// page script's fallback, or by two windows, shows once
+@Test func aMessageIdIsShownOnceWithinTheHour() {
+    var recent = RecentNotificationIds()
+    let start = Date(timeIntervalSince1970: 1_000_000)
+    #expect(recent.isRepeat("M1", now: start) == false)
+    #expect(recent.isRepeat("M1", now: start.addingTimeInterval(5)) == true)
+    #expect(recent.isRepeat("M2", now: start.addingTimeInterval(5)) == false)
+    #expect(recent.isRepeat("M1", now: start.addingTimeInterval(RecentNotificationIds.window + 1)) == false)
+}
+
 #if os(macOS)
 @Test func aNotificationIsNotShownWhileTheAppIsFrontmost() {
     #expect(NotificationPresenter.shouldPresent(appActive: true) == false)

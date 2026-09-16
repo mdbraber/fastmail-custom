@@ -35,3 +35,21 @@ public struct MailNotification: Equatable, Sendable {
         )
     }
 }
+
+/// Message ids shown lately. The page can hand one message over twice, by
+/// Fastmail's own notification and by the page script's fallback for the one
+/// Fastmail drops, or once from each open window; it is shown once.
+struct RecentNotificationIds {
+    static let window: TimeInterval = 60 * 60
+
+    private var shownAt: [String: Date] = [:]
+
+    /// Whether the id was already shown within the window; if not, it counts
+    /// as shown from now.
+    mutating func isRepeat(_ id: String, now: Date = Date()) -> Bool {
+        shownAt = shownAt.filter { now.timeIntervalSince($0.value) < Self.window }
+        if shownAt[id] != nil { return true }
+        shownAt[id] = now
+        return false
+    }
+}

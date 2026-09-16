@@ -16,6 +16,7 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
     private var authorizationPending = false
     private var authorizationDenied = false
     private var waiting: [MailNotification] = []
+    private var recent = RecentNotificationIds()
 
     private override init() {
         super.init()
@@ -65,6 +66,7 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
 
     public func show(_ notification: MailNotification) {
         if authorizationDenied { return }
+        if recent.isRepeat(notification.id) { return }
         guard authorizationGranted else {
             // Every notification that arrives while authorization is still
             // undetermined waits here, not just the one that triggered the
