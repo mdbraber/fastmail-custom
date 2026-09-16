@@ -165,8 +165,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // thumb holding the phone one-handed; this repeats it fixed above
         // the tab bar instead. The two are independent: the pair can be
         // added without taking the header's own buttons away, or the
-        // header's pair can be taken away on its own.
+        // header's pair can be taken away on its own. Off by default on
+        // the iPad even when the pair itself is on, since a tablet's own
+        // reach is not the phone's one-handed stretch this exists for.
         floatingMessageNav: true,
+        floatingMessageNavIPad: false,
         hideMessageNavButtons: false,
         // The phone's own big title over the list; Fastmail never builds
         // one at all past phone width, so this is a standalone element
@@ -331,8 +334,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         },
         {
             key: 'floatingMessageNav', group: 'appearance',
-            title: 'Floating message navigation',
-            hint: 'Up/down buttons above the tab bar, for stepping between messages one-handed. Phone only.'
+            title: 'Floating message navigation (Mobile only)',
+            hint: 'Up/down buttons above the tab bar, for stepping between messages one-handed.'
+        },
+        {
+            key: 'floatingMessageNavIPad', group: 'appearance', parent: 'floatingMessageNav',
+            title: 'Also on iPad',
+            hint: 'Off keeps the floating pair to the phone; on repeats it on the iPad too.'
         },
         {
             key: 'hideMessageNavButtons', group: 'appearance',
@@ -5527,15 +5535,20 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // Run on everything that can move either pair on or off screen: the
     // message opening or closing, the list under it being replaced, the
     // app being left for Settings or Contacts, either setting, and a
-    // rotation crossing the phone/tablet width Fastmail decides on. The two
-    // settings are independent, so each is applied on its own rather than
-    // one following the other.
+    // rotation crossing the phone/tablet width Fastmail decides on. The
+    // header's own buttons stay a phone-only concern — the iPad's header
+    // has no such pair to hide — so only the floating one gets the iPad
+    // sub-setting; the two are otherwise independent, each applied on its
+    // own rather than one following the other.
     const applyFloatingNav = () => {
         const message = modeIsOn ? openMessage() : null;
-        const onPhoneMessage = !!message && messageIsCurrentView(message) &&
-            isPhoneLayout() && FastMail.router.get('app') === 'mail';
+        const onMessage = !!message && messageIsCurrentView(message) &&
+            FastMail.router.get('app') === 'mail';
+        const onPhoneMessage = onMessage && isPhoneLayout();
+        const onFloatingNavMessage = onPhoneMessage ||
+            (onMessage && isTabletLayout() && settings.floatingMessageNavIPad);
 
-        if (onPhoneMessage && settings.floatingMessageNav) {
+        if (onFloatingNavMessage && settings.floatingMessageNav) {
             ensureFloatingNav();
             const plan = stepFrom(message);
             floatingNavPrevBtn.disabled = !plan.previous;
