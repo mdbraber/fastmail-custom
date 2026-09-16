@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Fastmail Custom mode
+// @name         Fastmail Custom
 // @namespace    custom
 // @version      3.14
 // @description  One-label triage for Fastmail: a project label is the live state, and archive means one thing everywhere
@@ -13,7 +13,7 @@
 // ==/UserScript==
 
 /*
-Fastmail Custom mode
+Fastmail Custom
 Maarten den Braber <m@mdbraber.com>
 
 One-label triage for Fastmail: a project label is the live state of a
@@ -27,8 +27,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // Injection can happen more than once, an injector racing a reload, or a
     // manual load on top of an existing copy.
-    if (window.customMode) {
-        console.log('Custom mode: already loaded');
+    if (window.fastmailCustom) {
+        console.log('Fastmail Custom: already loaded');
         return;
     }
 
@@ -52,7 +52,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     ];
 
     // Where the on/off state is remembered across reloads
-    const STORAGE_KEY = 'custom-mode';
+    const STORAGE_KEY = 'fastmail-custom';
     // What it was called before the mode was renamed, read once so a mode
     // switched off stays off.
     const LEGACY_STORAGE_KEY = 'custom-inbox-mode';
@@ -68,10 +68,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const MOVE_SHORTCUT = 'v';
     const STOCK_MOVE_CODE = 'KeyV';
     // Id of our stylesheet
-    const STYLE_ID = 'custom-mode-style';
+    const STYLE_ID = 'fastmail-custom-style';
     // What the extension's document_start script replays on the next load, so
     // Fastmail's first paint is already styled. Read by early.js as well.
-    const EARLY_KEY = 'custom-mode-early';
+    const EARLY_KEY = 'fastmail-custom-early';
     // Views worth remembering an answer for; older ones are dropped
     const EARLY_PATH_LIMIT = 40;
     // Bumped when remembered answers become untrustworthy, to drop them once
@@ -160,13 +160,24 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         appBadgeLabel: 'Triage',
         swapArchiveExpand: true,
         sidebarSeparators: true,
-        hideLoneExpando: true
+        hideLoneExpando: true,
+        // The phone's own up/down step sits in the header, a stretch for a
+        // thumb holding the phone one-handed; this repeats it fixed above
+        // the tab bar instead. The two are independent: the pair can be
+        // added without taking the header's own buttons away, or the
+        // header's pair can be taken away on its own.
+        floatingMessageNav: true,
+        hideMessageNavButtons: false,
+        // The phone's own big title over the list; Fastmail never builds
+        // one at all past phone width, so this is a standalone element
+        // rather than anything Fastmail's own could be un-hidden into.
+        showMailboxTitle: false
     };
 
     // Named here, ahead of localSettings, so that writeSetting's own
     // local-storage fallback further down the file reads and writes the same
     // key rather than a second spelling of it.
-    const LOCAL_SETTINGS_KEY = 'custom-mode-settings';
+    const LOCAL_SETTINGS_KEY = 'fastmail-custom-settings';
 
     // A plain browser tab has no host to store settings in, so the page
     // keeps them here. A tab that does have a host never writes this, so an
@@ -182,7 +193,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     let settings = Object.assign(
         {},
         DEFAULT_SETTINGS,
-        window.__customModeSettings || localSettings()
+        window.__fastmailCustomSettings || localSettings()
     );
 
     /*
@@ -192,7 +203,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      *
      * Canonical, and the only one. The settings page is drawn from this, and
      * neither host holds a copy: the apps and the extension handle the
-     * customMode. namespace without knowing what is in it, so adding an
+     * fastmailCustom. namespace without knowing what is in it, so adding an
      * option means adding one entry here and nothing anywhere else.
      *
      * The default is not repeated: DEFAULT_SETTINGS above already carries all
@@ -200,11 +211,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      */
     const SETTING_GROUPS = [
         { id: 'appearance', title: 'Appearance' },
-        { id: 'labelsFiling', title: 'Labels & keeping' },
-        { id: 'grouping', title: 'Groups' },
-        { id: 'snooze', title: 'Snooze' },
         { id: 'keyboard', title: 'Keyboard' },
-        { id: 'bottomBar', title: 'Action bar' }
+        { id: 'labelsFiling', title: 'Labels & keeping' },
+        { id: 'bottomBar', title: 'Action bar' },
+        { id: 'grouping', title: 'Groups' },
+        { id: 'snooze', title: 'Snooze' }
     ];
 
     const SETTINGS = [
@@ -317,6 +328,21 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             key: 'bottomBarSlots', group: 'bottomBar',
             title: 'Action bar actions',
             hint: 'In order, with a separator you can drag: everything above shows on this device’s action bar, everything from the separator down goes under More. The phone and the iPad or Mac each keep their own count, set from that device’s own settings.'
+        },
+        {
+            key: 'floatingMessageNav', group: 'appearance',
+            title: 'Floating message navigation',
+            hint: 'Up/down buttons above the tab bar, for stepping between messages one-handed. Phone only.'
+        },
+        {
+            key: 'hideMessageNavButtons', group: 'appearance',
+            title: 'Hide the header’s own up/down buttons',
+            hint: 'Independent of the floating pair above. Phone only.'
+        },
+        {
+            key: 'showMailboxTitle', group: 'appearance',
+            title: 'Show the mailbox name above the list',
+            hint: 'The phone’s own big title, past phone width too, where Fastmail draws none.'
         }
     ];
 
@@ -326,7 +352,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * What a stored value means. These rules used to live in Swift, in
-     * CustomModeSettings.current; they move here with the catalogue, because
+     * FastmailCustomSettings.current; they move here with the catalogue, because
      * the hosts no longer know which options are clearable.
      *
      * A text value is trimmed. If nothing is left, a clearable option means
@@ -379,7 +405,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * the round trip lands.
      */
     const hostIsExtension = () =>
-        document.documentElement.dataset.customModeHost === 'extension';
+        document.documentElement.dataset.fastmailCustomHost === 'extension';
 
     const writeSetting = (key, value) => {
         settings[key] = resolveSetting(key, value);
@@ -391,7 +417,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         if (hostIsExtension()) {
             window.postMessage(
-                { source: 'custom-mode', kind: 'setting', key: key, value: value },
+                { source: 'fastmail-custom', kind: 'setting', key: key, value: value },
                 location.origin
             );
             return;
@@ -409,7 +435,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     /*
      * Settings sync. A host that can keep these settings in iCloud, which is
      * the apps and the Safari extension, says so by setting
-     * window.__customModeSync = {enabled} beside the settings, and sets it
+     * window.__fastmailCustomSync = {enabled} beside the settings, and sets it
      * again before every applySettings. A plain browser tab has no such
      * object, so it draws no switch.
      *
@@ -419,6 +445,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * second for a minute and then lets go; a page that never learns its
      * account keeps its settings on this device, as before.
      */
+    const SYNC_GROUP = { id: 'sync', title: 'Sync' };
     const SYNC_TITLE = 'Sync settings with iCloud';
     const SYNC_HINT = 'Keeps these settings the same on your other devices for this Fastmail account. ' +
         'The bar lengths stay on each device. Turning syncing on takes the settings already in iCloud.';
@@ -426,14 +453,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const ACCOUNT_REPORT_TRIES = 120;
 
     const syncState = () => {
-        const sync = window.__customModeSync;
+        const sync = window.__fastmailCustomSync;
         return sync && typeof sync.enabled === 'boolean' ? sync : null;
     };
 
     // The host's echo comes back through applySettings; the state changes
     // here first, so the switch and the page agree until it lands.
     const writeSyncEnabled = (enabled) => {
-        window.__customModeSync = { enabled: enabled };
+        window.__fastmailCustomSync = { enabled: enabled };
 
         if (window.native && typeof window.native.setSettingsSync === 'function') {
             window.native.setSettingsSync(enabled);
@@ -442,7 +469,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         if (hostIsExtension()) {
             window.postMessage(
-                { source: 'custom-mode', kind: 'sync', enabled: enabled },
+                { source: 'fastmail-custom', kind: 'sync', enabled: enabled },
                 location.origin
             );
         }
@@ -456,7 +483,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         if (hostIsExtension()) {
             window.postMessage(
-                { source: 'custom-mode', kind: 'account', accountId: accountId },
+                { source: 'fastmail-custom', kind: 'account', accountId: accountId },
                 location.origin
             );
         }
@@ -486,10 +513,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * The switch, at the top of the general section, in a view of its own so
-     * that a change made in another window redraws the switch and nothing
-     * else on the page. A switch just flipped here already shows what the
-     * host will echo back, so that echo redraws nothing.
+     * The switch, in its own section at the bottom of the page, in a view of
+     * its own so that a change made in another window redraws the switch and
+     * nothing else on the page. A switch just flipped here already shows
+     * what the host will echo back, so that echo redraws nothing.
      */
     let syncRowView = null;
     let syncRowShown = null;
@@ -519,12 +546,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         syncRowView = holder;
         return holder;
     };
-
-    // What goes ahead of a group's own options: the switch, at the top of
-    // whichever group is first, so it is the first thing on the page
-    // regardless of which group that is.
-    const syncRows = (classes, group) =>
-        group.id === SETTING_GROUPS[0].id && syncState() ? [syncRow(classes)] : [];
 
     const refreshSyncRow = () => {
         const state = syncState();
@@ -609,8 +630,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const reportFault = (what, error) => {
-        if (error !== undefined) console.warn('Custom mode: ' + what, error);
-        else console.warn('Custom mode: ' + what);
+        if (error !== undefined) console.warn('Fastmail Custom: ' + what, error);
+        else console.warn('Fastmail Custom: ' + what);
 
         if (faultsReported.has(what)) return;
         faultsReported.add(what);
@@ -618,7 +639,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         try {
             const host = notifications();
             // Long enough to read and dismissible, since it is not routine
-            if (host) host.toast('Custom mode: ' + what, 8000, true);
+            if (host) host.toast('Fastmail Custom: ' + what, 8000, true);
         } catch (toastError) {
             // The console line above is all that is left
         }
@@ -1063,6 +1084,276 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * ----------------------------------------------------------------
+     * The list's own total, above the Inbox's or a project's rows
+     * ----------------------------------------------------------------
+     *
+     * Fastmail draws a divider there itself, "Unread N", the header of the
+     * one named bucket a grouping puts a label on; a project or the Inbox
+     * is read as a queue here, though, so what belongs there is the queue's
+     * whole length, with what is still unread alongside it rather than
+     * standing in for it. Replaces that divider, since a bucket titled
+     * "Unread" holding the queue's total would be its own contradiction;
+     * a grouping that draws no such divider gets no line here either,
+     * rather than one pasted in without a bucket to sit in.
+     */
+    const MAILBOX_SUMMARY_CLASS = 'custom-mailboxListSummary';
+
+    const mailboxSummaryApplies = (mailbox) => !!mailbox &&
+        (mailbox.get('role') === 'inbox' || isTriage(mailbox) || isProject(mailbox));
+
+    const mailboxSummaryText = () => {
+        if (!modeIsOn) return null;
+
+        const mailController = controller();
+        if (mailController.get('search')) return null;
+
+        const mailbox = mailController.get('mailbox');
+        if (!mailboxSummaryApplies(mailbox)) return null;
+
+        const total = countFor(mailbox);
+        const unread = mailbox.get('unreadThreads') || 0;
+        return unread > 0 ? `${total} (${unread})` : String(total);
+    };
+
+    // The divider stands on its own, not under a title guaranteed to be
+    // drawn above it: some layouts draw no page title over the list at
+    // all, and a bare count sitting where "Unread" used to name it reads
+    // as nothing in particular. The name makes the line its own sentence.
+    const mailboxSummaryLine = () => {
+        const text = mailboxSummaryText();
+        if (text === null) return null;
+
+        const mailbox = controller().get('mailbox');
+        const name = mailbox && mailbox.get('name');
+        return name ? `${name} • ${text}` : text;
+    };
+
+    // Whether ensureMailboxTitle is the one carrying the name and count
+    // right now, the same three conditions it gates on itself.
+    const mailboxTitleActive = () =>
+        modeIsOn && settings.showMailboxTitle &&
+        !isPhoneLayout() && !isTabletLayout();
+
+    // The bold label is only there to recognise the row the first time;
+    // once dressed, the class left on it is the mark a later pass reads
+    // instead, since the label itself is gone by then.
+    const dressMailboxListTitle = (node) => {
+        // The standalone title already says this; a divider repeating it
+        // would only be the same line twice.
+        if (mailboxTitleActive()) return;
+
+        if (!node.classList.contains(MAILBOX_SUMMARY_CLASS)) {
+            const label = node.querySelector('b');
+            if (!label || label.textContent.trim() !== 'Unread') return;
+        }
+
+        const text = mailboxSummaryLine();
+        if (text === null || node.dataset.customDressed === text) return;
+
+        node.dataset.customDressed = text;
+        node.classList.add(MAILBOX_SUMMARY_CLASS);
+        node.textContent = text;
+    };
+
+    // A filter narrows the queue rather than grouping it, so it earns no
+    // divider of its own; Fastmail already names the filter in the title's
+    // own subtitle ("Personal • In Inbox"), and what is missing there is how
+    // many the narrowed list actually holds.
+    const mailboxFilteredCount = () => {
+        if (!modeIsOn) return null;
+
+        const mailController = controller();
+        if (mailController.get('search') || !mailController.get('mailboxFilter')) {
+            return null;
+        }
+        if (!mailboxSummaryApplies(mailController.get('mailbox'))) return null;
+
+        const list = mailController.get('mailboxMessageList');
+        const length = list && list.get('length');
+        return typeof length === 'number' ? length : null;
+    };
+
+    // The subtitle's own text, before any count joins it, kept once so a
+    // count that changes edits from there rather than piling onto its own
+    // last edit.
+    const dressPageSubtitle = (node) => {
+        if (node.dataset.customBase === undefined) {
+            node.dataset.customBase = node.textContent;
+        }
+
+        const base = node.dataset.customBase;
+        const count = mailboxFilteredCount();
+        const text = count === null ? base : `${base} • ${count}`;
+
+        if (node.textContent !== text) node.textContent = text;
+    };
+
+    // Standalone, in normal flow ahead of the list's own titles overlay,
+    // rather than inside it: the overlay is Fastmail's own positioned
+    // element, unaffected by anything ahead of it in flow, so a title
+    // placed there instead pushes the overlay (and the rows under it)
+    // down with it rather than sitting over either.
+    const removeMailboxTitle = () => {
+        const el = document.getElementById(MAILBOX_TITLE_ID);
+        if (el) el.remove();
+        const compact = document.getElementById(MAILBOX_TITLE_COMPACT_ID);
+        if (compact) compact.remove();
+    };
+
+    // Where the compact title lands once the big one has scrolled past:
+    // the same row as the list's own Select all checkbox, so scrolling
+    // reads as the title shrinking into it rather than costing its own
+    // extra row the way a merely-sticky title would.
+    const mailboxTitleCheckbox = () => {
+        const checkbox = document.querySelector('.v-SelectAllCheckbox');
+        return checkbox && checkbox.closest('.v-Toolbar') ? checkbox : null;
+    };
+
+    // The compact title's resting transform: enlarged and shifted to sit
+    // exactly where the big title is, so the crossfade in updateMailbox-
+    // TitleScrolled reads as one title shrinking into place. scrollTop is
+    // added back into the big title's viewport top because that top moves
+    // as the list scrolls while the toolbar (outside the scrolling
+    // container) does not; the translate is unaffected by the scale next
+    // to it in the same transform, since scale, being closer to the
+    // element, applies first and translate shifts the already-scaled box
+    // in the parent's own pixels.
+    const positionMailboxTitleCompact = (compact, big, container) => {
+        const bigRect = big.getBoundingClientRect();
+        const compactRect = compact.getBoundingClientRect();
+        const restingBigTop = bigRect.top + container.scrollTop;
+        const tx = bigRect.left - compactRect.left;
+        const ty = restingBigTop - compactRect.top;
+        const scale = MAILBOX_TITLE_FONT_SIZE / MAILBOX_TITLE_COMPACT_FONT_SIZE;
+        compact.style.setProperty(
+            '--custom-mailboxTitleExpand',
+            'translate(' + tx + 'px, ' + ty + 'px) scale(' + scale + ')'
+        );
+    };
+
+    const ensureMailboxTitleCompact = (big, container) => {
+        const checkbox = mailboxTitleCheckbox();
+        if (!checkbox) {
+            const stale = document.getElementById(MAILBOX_TITLE_COMPACT_ID);
+            if (stale) stale.remove();
+            return;
+        }
+
+        let el = document.getElementById(MAILBOX_TITLE_COMPACT_ID);
+        if (!el) {
+            el = document.createElement('span');
+            el.id = MAILBOX_TITLE_COMPACT_ID;
+        }
+        if (el.dataset.customKey !== big.dataset.customKey) {
+            el.dataset.customKey = big.dataset.customKey;
+            el.textContent = '';
+            big.childNodes.forEach((node) => el.appendChild(node.cloneNode(true)));
+        }
+        if (el.previousElementSibling !== checkbox) {
+            checkbox.insertAdjacentElement('afterend', el);
+        }
+        positionMailboxTitleCompact(el, big, container);
+    };
+
+    const MAILBOX_TITLE_SCROLL_THRESHOLD = 20;
+
+    const updateMailboxTitleScrolled = (container) => {
+        const scrolled = container.scrollTop > MAILBOX_TITLE_SCROLL_THRESHOLD;
+        const big = document.getElementById(MAILBOX_TITLE_ID);
+        const compact = document.getElementById(MAILBOX_TITLE_COMPACT_ID);
+        if (big) big.classList.toggle(MAILBOX_TITLE_SCROLLED_CLASS, scrolled);
+        if (compact) compact.classList.toggle(MAILBOX_TITLE_SCROLLED_CLASS, scrolled);
+    };
+
+    // Attached once per scroll container; a mailbox switch replaces the
+    // container's content but not the container itself, so the listener
+    // keeps working across route changes without being re-added.
+    const watchMailboxTitleScroll = (container) => {
+        if (container.dataset.customTitleScrollWatch) return;
+        container.dataset.customTitleScrollWatch = 'true';
+        container.addEventListener('scroll', () => updateMailboxTitleScrolled(container));
+    };
+
+    const ensureMailboxTitle = () => {
+        if (!mailboxTitleActive()) {
+            removeMailboxTitle();
+            return;
+        }
+
+        const mailbox = controller().get('mailbox');
+        const name = mailbox && mailbox.get('name');
+        const titles = document.querySelector('.v-MailboxListTitles');
+        if (!name || !titles || !titles.parentElement) {
+            removeMailboxTitle();
+            return;
+        }
+
+        // The Inbox, Triage or a project reads as a queue, so its title
+        // carries the same total (and unread) the list's own divider
+        // does, in the divider's own subdued colour rather than the
+        // name's; anything else (Sent, Drafts, …) is not a queue and
+        // keeps to its plain name.
+        const count = mailboxSummaryText();
+        const key = name + '|' + count;
+
+        let el = document.getElementById(MAILBOX_TITLE_ID);
+        if (!el) {
+            el = document.createElement('div');
+            el.id = MAILBOX_TITLE_ID;
+        }
+        if (el.dataset.customKey !== key) {
+            el.dataset.customKey = key;
+            el.textContent = '';
+            el.appendChild(document.createTextNode(name));
+            if (count !== null) {
+                const countEl = document.createElement('span');
+                countEl.className = MAILBOX_TITLE_COUNT_CLASS;
+                countEl.textContent = ' • ' + count;
+                el.appendChild(countEl);
+            }
+        }
+        if (el.nextSibling !== titles) titles.parentElement.insertBefore(el, titles);
+
+        const container = titles.parentElement;
+        ensureMailboxTitleCompact(el, container);
+        watchMailboxTitleScroll(container);
+        updateMailboxTitleScrolled(container);
+    };
+
+    const refreshMailboxSummary = () => {
+        document.querySelectorAll('.v-MailboxListTitles-title')
+            .forEach(dressMailboxListTitle);
+        document.querySelectorAll('.v-Page-subtitle')
+            .forEach(dressPageSubtitle);
+        ensureMailboxTitle();
+    };
+
+    // A filtered list's own length is what the subtitle's count reads, and
+    // filing a message out of it changes that length without the list
+    // itself being replaced; watched the same way watchGroupCounts watches
+    // a list's own counts, once per list rather than once per read.
+    const watchMailboxSummaryList = () => {
+        const list = controller().get('mailboxMessageList');
+        if (!list || list.customSummaryWatch) return;
+        list.customSummaryWatch = true;
+        list.addObserverForKey('length', { go: refreshMailboxSummary }, 'go');
+    };
+
+    // A redraw, not a rename: the row this dresses only ever comes and goes
+    // with the grouping, so watching for it arriving is watching for the
+    // list itself being drawn, which a route change and a scroll both do.
+    let mailboxSummaryWatched = false;
+
+    const watchMailboxListTitles = () => {
+        if (mailboxSummaryWatched) return;
+        mailboxSummaryWatched = true;
+
+        new MutationObserver(refreshMailboxSummary)
+            .observe(document.body, { childList: true, subtree: true });
+    };
+
+    /*
+     * ----------------------------------------------------------------
      * Badges
      * ----------------------------------------------------------------
      */
@@ -1413,31 +1704,134 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ' opacity: 1; transform: translateX(-50%) translateY(0); }'
     ];
 
+    // A second pair of up/down buttons for stepping between messages, fixed
+    // above the tab bar on the right rather than up in the phone's header,
+    // where a thumb holding the phone one-handed cannot reach them. Fastmail's
+    // own notification pill (.v-NotificationContainer, the one showToast
+    // reaches for first) rises above the message's own action bar when one
+    // shows, measured with a message open at 122px above the viewport's own
+    // bottom edge; 140px clears it rather than the plainer 72px TOAST_RULES
+    // uses for its own hand-drawn fallback, which only has the action bar to
+    // clear.
+    const FLOATING_NAV_ID = 'custom-message-nav';
+
+    const FLOATING_NAV_RULES = [
+        '#' + FLOATING_NAV_ID + ' {' +
+        ' position: fixed; right: 16px;' +
+        ' bottom: calc(140px + env(safe-area-inset-bottom, 0px));' +
+        ' z-index: 2147483000;' +
+        ' display: none; flex-direction: column; gap: 10px; }',
+        '#' + FLOATING_NAV_ID + '.is-shown { display: flex; }',
+        // The compose button's own style, read off Fastmail's own custom
+        // properties rather than its computed colours, so the pair follows
+        // dark mode (and any future theme) the same way the compose button
+        // does instead of freezing today's light-mode values. The literal
+        // colours are only the fallback, for the moment before Fastmail's
+        // own stylesheet has set these on :root.
+        '.custom-message-nav-btn {' +
+        ' width: 44px; height: 44px; padding: 0; border: none; border-radius: 50%;' +
+        ' display: flex; align-items: center; justify-content: center;' +
+        ' background: var(--ui-layer-color-bg, rgb(250, 250, 250));' +
+        ' color: var(--ui-page-color-fg, rgb(27, 30, 32));' +
+        ' box-shadow: var(--ui-page-shadow, 0 2px 10px rgba(0, 0, 0, 0.1), 0 1px 20px rgba(0, 0, 0, 0.1));' +
+        ' -webkit-tap-highlight-color: transparent; }',
+        '.custom-message-nav-btn:disabled {' +
+        ' background: var(--ui-button-simple-color-bg-disabled, rgba(250, 250, 250, 0.7));' +
+        ' color: var(--ui-button-simple-color-fg-disabled, rgba(27, 30, 32, 0.3)); }'
+    ];
+
+    // The header's own up/down pair, on <html> rather than <body> for the
+    // same reason HIDE_INBOX_LABEL_CLASS is: Fastmail rewrites body.className
+    // wholesale on a redraw. Reached by the icon rather than a name Fastmail
+    // gives neither button; scoped to a header's own button so a chevron
+    // used anywhere else on the page (the main menu carries one too) is left
+    // alone.
+    const HIDE_MESSAGE_NAV_CLASS = 'custom-hideMessageNav';
+
+    const HIDE_MESSAGE_NAV_RULES = [
+        '.' + HIDE_MESSAGE_NAV_CLASS + ' .v-PageHeader-section button.v-Button--iconOnly:has(.i-chevronup),' +
+        ' .' + HIDE_MESSAGE_NAV_CLASS + ' .v-PageHeader-section button.v-Button--iconOnly:has(.i-chevrondown)' +
+        ' { display: none !important; }'
+    ];
+
+    // The phone's own big list title, colour var(--ui-page-color-fg) and
+    // family read off a real one on the phone, since isMobile is a
+    // platform read rather than a width one and past phone width
+    // Fastmail's own stylesheet carries no .v-Page-title rule at all to
+    // borrow from directly. Sized down from the phone's own 32px, which on
+    // a desktop pane reads oversized against the row text below it. The
+    // left margin matches a group heading's own left padding (20px) exactly,
+    // so the two starts line up rather than merely looking close; the
+    // count's own colour is the same subdued one the phone's title and the
+    // group headings both already read a count in, var(--ui-page-color-fg
+    // -subtle), measured off one rather than guessed.
+    const MAILBOX_TITLE_ID = 'custom-mailboxTitle';
+    const MAILBOX_TITLE_COUNT_CLASS = 'custom-mailboxTitle-count';
+    const MAILBOX_TITLE_COMPACT_ID = 'custom-mailboxTitle-compact';
+    const MAILBOX_TITLE_SCROLLED_CLASS = 'custom-mailboxTitle-scrolled';
+    const MAILBOX_TITLE_FONT_SIZE = 20;
+    const MAILBOX_TITLE_COMPACT_FONT_SIZE = 14;
+
+    // Matches the phone's own two-copy technique: one title that fades
+    // out as it scrolls (this one) and a second, permanently sitting in
+    // the row with Select all, that starts transformed up to this one's
+    // size and position and drops to its resting transform as it fades
+    // in. Measured live, the phone's own shrink lands within about the
+    // first 20px of scroll rather than tracking scroll position
+    // continuously, which is why the swap below is a class threshold and
+    // a CSS transition rather than per-pixel scroll math.
+    const MAILBOX_TITLE_RULES = [
+        '#' + MAILBOX_TITLE_ID + ' {' +
+        ' font-family: "Proxima Nova", system-ui, "Segoe UI", Roboto, Ubuntu,' +
+        ' Cantarell, "Noto Sans", -apple-system, Arial, sans-serif;' +
+        ' font-size: ' + MAILBOX_TITLE_FONT_SIZE + 'px; font-weight: 700; line-height: 1.3;' +
+        ' color: var(--ui-page-color-fg, rgb(27, 30, 32));' +
+        ' padding: 12px 20px 4px; box-sizing: border-box;' +
+        ' overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' +
+        ' transition: opacity 0.15s ease; }',
+        '#' + MAILBOX_TITLE_ID + '.' + MAILBOX_TITLE_SCROLLED_CLASS + ' { opacity: 0; }',
+        '#' + MAILBOX_TITLE_COMPACT_ID + ' {' +
+        ' font-family: "Proxima Nova", system-ui, "Segoe UI", Roboto, Ubuntu,' +
+        ' Cantarell, "Noto Sans", -apple-system, Arial, sans-serif;' +
+        ' display: inline-block; margin-left: 12px; max-width: 40%;' +
+        ' font-size: ' + MAILBOX_TITLE_COMPACT_FONT_SIZE + 'px; font-weight: 700;' +
+        ' color: var(--ui-page-color-fg, rgb(27, 30, 32));' +
+        ' overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' +
+        ' transform-origin: top left;' +
+        ' transform: var(--custom-mailboxTitleExpand, none); opacity: 0;' +
+        ' transition: transform 0.15s ease, opacity 0.15s ease; }',
+        '#' + MAILBOX_TITLE_COMPACT_ID + '.' + MAILBOX_TITLE_SCROLLED_CLASS + ' {' +
+        ' transform: none; opacity: 1; }',
+        '.' + MAILBOX_TITLE_COUNT_CLASS + ' {' +
+        ' font-weight: 400;' +
+        ' color: var(--ui-page-color-fg-subtle, rgb(91, 100, 108)); }'
+    ];
+
     // The fallback panel's own styles, added once by ensureSettingsPageStyles
     // rather than run through updateStyles: the plain panel can be opened
     // with the mode off (openFallbackSettings does not check it) and before
     // mail has ever loaded, so these rules must not wait on either.
     const FALLBACK_PANEL_RULES = [
-        '#custom-mode-fallback-settings {' +
+        '#fastmail-custom-fallback-settings {' +
         ' position: fixed; inset: 0; z-index: 2147483000;' +
         ' display: flex; align-items: flex-start; justify-content: center;' +
         ' padding: 24px; overflow-y: auto; background: rgba(0, 0, 0, 0.4); }',
-        '.custom-mode-fallback-sheet {' +
+        '.fastmail-custom-fallback-sheet {' +
         ' width: 100%; max-width: 620px; padding: 20px 24px;' +
         ' border-radius: 10px; background: Canvas; color: CanvasText;' +
         ' color-scheme: light dark;' +
         ' font: 14px/1.45 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }',
-        '.custom-mode-fallback-row {' +
+        '.fastmail-custom-fallback-row {' +
         ' display: flex; gap: 9px; align-items: flex-start; padding: 9px 0;' +
         ' border-top: 1px solid rgba(128, 128, 128, 0.3); }',
-        '.custom-mode-fallback-row input[type="text"],' +
-        ' .custom-mode-fallback-row textarea {' +
+        '.fastmail-custom-fallback-row input[type="text"],' +
+        ' .fastmail-custom-fallback-row textarea {' +
         ' display: block; width: 100%; box-sizing: border-box; font: inherit; }',
-        '.custom-mode-fallback-row textarea {' +
+        '.fastmail-custom-fallback-row textarea {' +
         ' font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }',
-        '.custom-mode-fallback-title { display: block; font-weight: 500; }',
-        '.custom-mode-fallback-hint { display: block; opacity: 0.7; }',
-        '.custom-mode-fallback-note { opacity: 0.7; }'
+        '.fastmail-custom-fallback-title { display: block; font-weight: 500; }',
+        '.fastmail-custom-fallback-hint { display: block; opacity: 0.7; }',
+        '.fastmail-custom-fallback-note { opacity: 0.7; }'
     ];
 
     // A sub-option on the settings page while the option it depends on is
@@ -1447,7 +1841,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // ensureSettingsPageStyles, alongside the fallback panel's own rules,
     // for the same reason: the page opens with the mode off too, and before
     // mail has ever loaded.
-    const SUB_OPTION_DIMMED = 'custom-mode-dimmed';
+    const SUB_OPTION_DIMMED = 'fastmail-custom-dimmed';
     const SUB_OPTION_RULES = ['.' + SUB_OPTION_DIMMED + ' { opacity: 0.5; }'];
 
     // The settings page's own two rule sets, in their own element rather
@@ -1580,6 +1974,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             .concat(BADGE_UNREAD_RULES)
             .concat(TRIAGE_ICON_RULES)
             .concat(TOAST_RULES)
+            .concat(FLOATING_NAV_RULES)
+            .concat(HIDE_MESSAGE_NAV_RULES)
+            .concat(MAILBOX_TITLE_RULES)
             .join('\n');
         const existing = document.getElementById(STYLE_ID);
 
@@ -2054,7 +2451,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // Folded groups, for the mode's own groupings only: mailbox and grouping
     // to the indexes folded under it. Local because the definition is never
     // stored either, so there is nothing on the server for it to hang off.
-    const GROUPING_STORE_KEY = 'custom-mode-groups';
+    const GROUPING_STORE_KEY = 'fastmail-custom-groups';
 
     const foldedGroups = () => {
         try {
@@ -2251,6 +2648,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const isTabletLayout = () => {
         try {
             return !!(FastMail.root && FastMail.root.get('isTablet'));
+        } catch (error) {
+            return false;
+        }
+    };
+
+    // Three layouts, not two: isTablet is false on the Mac shell as well as
+    // the phone, so a feature meant for the phone alone asks isMobile
+    // directly rather than reading "not a tablet" as "is a phone".
+    const isPhoneLayout = () => {
+        try {
+            return !!(FastMail.root && FastMail.root.get('isMobile'));
         } catch (error) {
             return false;
         }
@@ -2951,6 +3359,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
 
         updateInboxLabelVisibility();
+        updateFloatingNav();
     };
 
     /*
@@ -4977,6 +5386,172 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
+    /*
+     * ----------------------------------------------------------------
+     * Floating message navigation
+     * ----------------------------------------------------------------
+     *
+     * Fastmail's own up/down step lives in the phone's header, out of a
+     * thumb's reach while holding the phone one-handed. This pair repeats
+     * it fixed above the tab bar instead, walking to the same neighbours
+     * stepFrom already works out for filing, by the same goToUrl a
+     * decision's own step uses.
+     */
+
+    let floatingNavEl = null;
+    let floatingNavPrevBtn = null;
+    let floatingNavNextBtn = null;
+
+    const chevronIcon = (direction) => {
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('width', '22');
+        svg.setAttribute('height', '22');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2.5');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+        svg.setAttribute('role', 'presentation');
+
+        const points = document.createElementNS(SVG_NS, 'polyline');
+        points.setAttribute('points', direction === 'up' ? '6 15 12 9 18 15' : '6 9 12 15 18 9');
+        svg.appendChild(points);
+        return svg;
+    };
+
+    const stepToNeighbour = (which) => {
+        const message = openMessage();
+        if (!message) return;
+        const target = stepFrom(message)[which];
+        const url = target && urlForMessage(target);
+        if (url) goToUrl(url);
+    };
+
+    // The controller keeps naming a message the header's own back button has
+    // already left: with a reading pane Fastmail draws whatever it still
+    // calls the open message behind the list rather than clearing it (see
+    // closeOpenMessage's own comment above, on the same quirk). The address
+    // is the tell instead: the phone's single pane draws whichever message
+    // the URL names, so a message no longer named there is one behind the
+    // list, not the one on screen.
+    const messageIsCurrentView = (message) => {
+        if (!message) return false;
+        const own = urlForMessage(message);
+        if (!own) return false;
+        try {
+            return new URL(own, location.href).pathname === location.pathname;
+        } catch (error) {
+            return false;
+        }
+    };
+
+    const ensureFloatingNav = () => {
+        if (floatingNavEl) return floatingNavEl;
+
+        floatingNavEl = document.createElement('div');
+        floatingNavEl.id = FLOATING_NAV_ID;
+
+        floatingNavPrevBtn = document.createElement('button');
+        floatingNavPrevBtn.type = 'button';
+        floatingNavPrevBtn.className = 'custom-message-nav-btn';
+        floatingNavPrevBtn.setAttribute('aria-label', 'Previous message');
+        floatingNavPrevBtn.appendChild(chevronIcon('up'));
+        floatingNavPrevBtn.addEventListener('click', () => stepToNeighbour('previous'));
+
+        floatingNavNextBtn = document.createElement('button');
+        floatingNavNextBtn.type = 'button';
+        floatingNavNextBtn.className = 'custom-message-nav-btn';
+        floatingNavNextBtn.setAttribute('aria-label', 'Next message');
+        floatingNavNextBtn.appendChild(chevronIcon('down'));
+        floatingNavNextBtn.addEventListener('click', () => stepToNeighbour('next'));
+
+        floatingNavEl.appendChild(floatingNavPrevBtn);
+        floatingNavEl.appendChild(floatingNavNextBtn);
+        document.body.appendChild(floatingNavEl);
+        return floatingNavEl;
+    };
+
+    // Run on everything that can move either pair on or off screen: the
+    // message opening or closing, the list under it being replaced, the
+    // app being left for Settings or Contacts, either setting, and a
+    // rotation crossing the phone/tablet width Fastmail decides on. The two
+    // settings are independent, so each is applied on its own rather than
+    // one following the other.
+    const applyFloatingNav = () => {
+        const message = modeIsOn ? openMessage() : null;
+        const onPhoneMessage = !!message && messageIsCurrentView(message) &&
+            isPhoneLayout() && FastMail.router.get('app') === 'mail';
+
+        if (onPhoneMessage && settings.floatingMessageNav) {
+            ensureFloatingNav();
+            const plan = stepFrom(message);
+            floatingNavPrevBtn.disabled = !plan.previous;
+            floatingNavNextBtn.disabled = !plan.next;
+            floatingNavEl.classList.add('is-shown');
+        } else if (floatingNavEl) {
+            floatingNavEl.classList.remove('is-shown');
+        }
+
+        document.documentElement.classList.toggle(
+            HIDE_MESSAGE_NAV_CLASS,
+            onPhoneMessage && settings.hideMessageNavButtons
+        );
+    };
+
+    // A tick after the trigger, the same wait advanceAfterDecision gives the
+    // list elsewhere in this file: the message key and the router's own
+    // encoded state each fire mid-navigation, before location.href has
+    // necessarily caught up with either, and messageIsCurrentView reads
+    // exactly that address. Coalesced, since opening a message fires both
+    // in the same turn.
+    //
+    // The tick is not always enough on its own: the address and the message
+    // key do not always land on the same one, and a check run against
+    // whichever landed first reads the other as still the old screen. A
+    // second pass a moment later catches the state the first pass was too
+    // early to see, with nothing else left to trigger a check once it does
+    // land; reset on every fresh trigger so a burst of them ends in one
+    // settled pass rather than several.
+    let floatingNavTimer = null;
+    let floatingNavSettleTimer = null;
+
+    const updateFloatingNav = () => {
+        if (!floatingNavTimer) {
+            floatingNavTimer = setTimeout(() => {
+                floatingNavTimer = null;
+                applyFloatingNav();
+            }, 0);
+        }
+
+        clearTimeout(floatingNavSettleTimer);
+        floatingNavSettleTimer = setTimeout(applyFloatingNav, 250);
+    };
+
+    // Every address change goes through here regardless of which of the
+    // router's own properties it also touches, or whether it touches one at
+    // all, so this is the one place worth wrapping rather than a growing
+    // list of properties guessed at one broken case at a time. Wraps
+    // whatever is already on history.pushState/replaceState, composing with
+    // the shell's own equivalent patch instead of fighting it.
+    let historyWatchedForFloatingNav = false;
+
+    const watchHistoryForFloatingNav = () => {
+        if (historyWatchedForFloatingNav) return;
+        historyWatchedForFloatingNav = true;
+
+        ['pushState', 'replaceState'].forEach((method) => {
+            const original = history[method];
+            history[method] = function () {
+                const result = original.apply(this, arguments);
+                updateFloatingNav();
+                return result;
+            };
+        });
+
+        window.addEventListener('popstate', updateFloatingNav);
+    };
+
     // The one undo everything routes through; the toast's button and the
     // keyboard's z alike.
     let undoTarget = null;
@@ -6108,6 +6683,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         refreshGroupings();
         scheduleMidnight();
         applyStickyFilter();
+        updateFloatingNav();
     };
 
     const toggleMode = () => setMode(!modeIsOn);
@@ -6185,6 +6761,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 refreshLabelGroups();
                 scheduleStyles();
                 scheduleBadgeRepaint();
+                refreshMailboxSummary();
             }
         }, 'go');
 
@@ -6196,10 +6773,30 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // this rides the same change of mailbox.
         controller().addObserverForKey('mailbox', { go: applyStickyFilter }, 'go');
 
+        // A fresh mailbox draws its own divider before any of its records
+        // change, so the summary line needs its own follow rather than
+        // waiting on the store event above.
+        controller().addObserverForKey('mailbox', { go: refreshMailboxSummary }, 'go');
+
         // Opening a message does not always rebuild the bar, so the pin's
         // paint follows the open message directly rather than waiting for a
         // redraw to carry it along.
         controller().addObserverForKey('message', { go: updatePinState }, 'go');
+
+        // Same reasoning, for the floating up/down pair: opening or closing
+        // a message is what puts them on or takes them off screen.
+        controller().addObserverForKey('message', { go: updateFloatingNav }, 'go');
+
+        // The header's own back button, and Home, carry the address back to
+        // the list without clearing the controller's message (see
+        // messageIsCurrentView's own comment), so the message key alone
+        // misses that step. Fastmail's router writes every move through the
+        // History API regardless of which of its own properties it also
+        // updates, or whether it updates one at all, so this catches all of
+        // them rather than guessing which property a given move touches.
+        // Composes with the shell's own equivalent patch rather than
+        // fighting it: each wraps whatever it finds already there.
+        watchHistoryForFloatingNav();
 
         // Entering or leaving a search rebuilds the toolbar without changing
         // the mailbox or the filter, so neither of the other two observers
@@ -6217,6 +6814,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             go: refreshToolbar
         }, 'go');
 
+        // A filter's own subtitle carries a count now, so a filter turning
+        // on or off needs the same follow the filter button's state does.
+        controller().addObserverForKey('mailboxFilter', {
+            go: refreshMailboxSummary
+        }, 'go');
+
         // A different mailbox may be grouped differently, or not at all
         controller().addObserverForKey('sort', { go: scheduleMidnight }, 'go');
         controller().addObserverForKey('mailbox', { go: scheduleMidnight }, 'go');
@@ -6228,6 +6831,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             go: () => {
                 adoptList();
                 watchGroupCounts();
+                updateFloatingNav();
+                watchMailboxSummaryList();
+                refreshMailboxSummary();
             }
         }, 'go');
     };
@@ -6611,7 +7217,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             try {
                 const options = this.get('options');
                 if (options && typeof options.unshift === 'function') {
-                    if (!options.some(option => option && option.customCopyLinkOption) &&
+                    // The Mac and iOS shells carry the same link on their own
+                    // menu, Copy URL among two others, so this one stands
+                    // down there rather than saying it twice.
+                    if (!/Electron\//.test(navigator.userAgent) &&
+                        !options.some(option => option && option.customCopyLinkOption) &&
                         isMessageActionsMenu(options)) {
                         options.unshift(copyLinkOption(), null);
                     }
@@ -6631,7 +7241,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * The settings page
      * ----------------------------------------------------------------
      *
-     * Every Custom mode option, drawn from Fastmail's own view classes as a
+     * Every Fastmail Custom option, drawn from Fastmail's own view classes as a
      * page registered with Fastmail's Settings controller, so one page
      * serves the Mac app, the phone, the extension and a plain tab. The
      * native screens keep only what has to be reachable when no page will
@@ -6794,15 +7404,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * The page Fastmail's Settings shows for Custom mode, built the way its
+     * The page Fastmail's Settings shows for Fastmail Custom, built the way its
      * own pages are: a PageView holding one SettingsPaneView, and in it one
      * section per group with the heading on the left and the options on the
      * right. The section markup is Display options' and Custom swipes', class
      * for class, so the spacing, the dividers and the wrap to one column on a
      * narrow screen are all theirs.
      */
-    const SETTINGS_PAGE_ID = 'custommode';
-    const SETTINGS_PAGE_TITLE = 'Custom mode';
+    const SETTINGS_PAGE_ID = 'custom-options';
+    const SETTINGS_PAGE_TITLE = 'Custom options';
 
     // The page needs these; the groupings editor's dialog also wants
     // ModalOverlayView and ScrollView, the mobile build's back button wants
@@ -6853,8 +7463,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             draw() {
                 register.reset();
                 const sections = SETTING_GROUPS.map(group => settingsSection(group,
-                    syncRows(classes, group).concat(
-                        settingsInGroup(group.id).map(option => sectionRow(classes, option, register)))));
+                    settingsInGroup(group.id).map(option => sectionRow(classes, option, register))));
+                if (syncState()) sections.push(settingsSection(SYNC_GROUP, [syncRow(classes)]));
                 register.settle();
                 return sections;
             },
@@ -6941,7 +7551,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * only the app store badges. So where the shell offers
      * window.native.notifications, which it does on iPhone and iPad and never
      * on the Mac, this page takes Fastmail's notifications id. It is built
-     * from the Custom mode page's parts: the same page view, header and
+     * from the Fastmail Custom page's parts: the same page view, header and
      * sections. The sidebar entry and its highlight stay Fastmail's own,
      * since the id is.
      *
@@ -7523,7 +8133,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return uninstall;
     };
 
-    // Called whenever the Custom mode page is: the Settings controller exists
+    // Called whenever the Fastmail Custom page is: the Settings controller exists
     // only once Settings has loaded. Without window.native.notifications,
     // which is everywhere but iPhone and iPad, it does nothing at all.
     const ensureNotificationsPage = () => {
@@ -7608,7 +8218,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             groups.some(one => one && Array.isArray(one.content) && one.content.length > 0);
     };
 
-    // Custom mode's funnel, the glyph the Triage row wears, given the classes
+    // Fastmail Custom's funnel, the glyph the Triage row wears, given the classes
     // a Settings entry's icon carries. Fastmail calls this each time it draws
     // the row, so each call makes a fresh one.
     const settingsEntryIcon = () => {
@@ -7626,8 +8236,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      */
     const ensureSettingsEntry = ({ sources, group }) => {
         if (group.content.some(entry => entry && entry.id === SETTINGS_PAGE_ID)) return;
-        const at = group.content.findIndex(entry => entry && entry.id === 'actions') + 1;
-        const Entry = group.content[at - 1].constructor;
+        // Below Offline; when that entry is not found (a Fastmail change) the
+        // row still lands, just at the end rather than right after it.
+        const offlineAt = group.content.findIndex(entry => entry && entry.id === 'offline');
+        const at = offlineAt === -1 ? group.content.length : offlineAt + 1;
+        const Entry = (group.content[at - 1] || group.content[0]).constructor;
         const entry = new Entry({ id: SETTINGS_PAGE_ID, name: SETTINGS_PAGE_TITLE, icon: settingsEntryIcon });
         group.content = group.content.slice(0, at).concat([entry], group.content.slice(at));
         sources.setOptions();
@@ -7771,7 +8384,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     installSettingsPage(controller, classes, found);
                 } catch (error) {
                     settingsPageUnavailable();
-                    reportFault('the Custom mode settings page could not be added; using the plain panel', error);
+                    reportFault('the Fastmail Custom settings page could not be added; using the plain panel', error);
                     return;
                 }
                 installedControllers.add(controller);
@@ -7787,12 +8400,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     try {
                         controller.go(SETTINGS_PAGE_ID);
                     } catch (error) {
-                        reportFault('could not go to the Custom mode settings page', error);
+                        reportFault('could not go to the Fastmail Custom settings page', error);
                     }
                 }
             }
         } catch (error) {
-            reportFault('the Custom mode settings page ran into a problem; the plain panel stands in', error);
+            reportFault('the Fastmail Custom settings page ran into a problem; the plain panel stands in', error);
             // A controller already installed stays installed: this was one
             // failed refresh, not a reason to give up under someone already
             // looking at the page.
@@ -7838,7 +8451,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // happen; left true, an unrelated later visit to Settings would
             // be redirected here instead of wherever it meant to go.
             openPageWhenInstalled = false;
-            reportFault('could not go to the Custom mode settings page; showing the plain one', error);
+            reportFault('could not go to the Fastmail Custom settings page; showing the plain one', error);
         }
         try {
             openFallbackSettings();
@@ -8447,8 +9060,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * it belongs to shows and edits it from its own settings page instead.
      */
     const ownBarDivider = () => (isTabletLayout()
-        ? { id: '__customModeBarDivider', settingKey: 'topBarItems' }
-        : { id: '__customModeBarDivider', settingKey: 'bottomBarItems' });
+        ? { id: '__fastmailCustomBarDivider', settingKey: 'topBarItems' }
+        : { id: '__fastmailCustomBarDivider', settingKey: 'bottomBarItems' });
     const DIVIDER_LABEL = 'Separator (below in Menu)';
 
     // Where a count from the setting lands among the verbs: clamped to the
@@ -8719,7 +9332,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      *
      * Deliberately dull. It is not meant to be nice, it is meant to be there.
      */
-    const FALLBACK_ID = 'custom-mode-fallback-settings';
+    const FALLBACK_ID = 'fastmail-custom-fallback-settings';
 
     const openFallbackSettings = () => {
         if (document.getElementById(FALLBACK_ID)) return;
@@ -8728,14 +9341,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         overlay.id = FALLBACK_ID;
 
         const sheet = document.createElement('div');
-        sheet.className = 'custom-mode-fallback-sheet';
+        sheet.className = 'fastmail-custom-fallback-sheet';
 
         const heading = document.createElement('h1');
-        heading.textContent = 'Custom mode';
+        heading.textContent = SETTINGS_PAGE_TITLE;
         sheet.appendChild(heading);
 
         const note = document.createElement('p');
-        note.className = 'custom-mode-fallback-note';
+        note.className = 'fastmail-custom-fallback-note';
         note.textContent = 'Fastmail’s own controls are unavailable in this ' +
             'version, so these are plain ones. Everything still saves.';
         sheet.appendChild(note);
@@ -8757,7 +9370,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             rows.forEach((option) => {
                 const current = settingValue(option.key);
                 const row = document.createElement('label');
-                row.className = 'custom-mode-fallback-row';
+                row.className = 'fastmail-custom-fallback-row';
 
                 const input = typeof current === 'boolean'
                     ? document.createElement('input')
@@ -8778,10 +9391,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 const text = document.createElement('span');
                 const name = document.createElement('span');
-                name.className = 'custom-mode-fallback-title';
+                name.className = 'fastmail-custom-fallback-title';
                 name.textContent = option.title;
                 const hint = document.createElement('span');
-                hint.className = 'custom-mode-fallback-hint';
+                hint.className = 'fastmail-custom-fallback-hint';
                 hint.textContent = option.hint;
                 text.appendChild(name);
                 text.appendChild(hint);
@@ -8844,7 +9457,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * whitespace collapsed and lower-cased so a stray line break or a
      * differently-cased label still matches.
      */
-    const SETTINGS_ROW_CLASS = 'custom-mode-settings-row';
+    const SETTINGS_ROW_CLASS = 'fastmail-custom-settings-row';
 
     const collapseText = (text) => String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
 
@@ -8887,7 +9500,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (settingsPageState === 'waiting') settingsPageUnavailable();
 
         // With the page installed, the entry Fastmail draws is the way in,
-        // and a copy left from before would put Custom mode in the list twice.
+        // and a copy left from before would put the entry in the list twice.
         if (settingsPageState === 'installed') {
             if (copied) {
                 (copied.closest('li') || copied).remove();
@@ -8910,8 +9523,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         link.removeAttribute('title');
 
         const label = link.querySelector('span');
-        if (label) label.textContent = 'Custom mode';
-        else link.appendChild(document.createTextNode('Custom mode'));
+        if (label) label.textContent = SETTINGS_PAGE_TITLE;
+        else link.appendChild(document.createTextNode(SETTINGS_PAGE_TITLE));
 
         link.addEventListener('click', (event) => {
             event.preventDefault();
@@ -8919,7 +9532,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             openFallbackSettings();
         });
 
-        list.insertBefore(clone, offline);
+        list.insertBefore(clone, offline.nextSibling);
         fixListHeight(list, swipes);
     };
 
@@ -8991,14 +9604,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         bindOptionShortcuts();
         addObservers();
+        watchMailboxListTitles();
 
         setMode(storedMode());
         scheduleMidnight();
         adoptList();
         watchGroupCounts();
+        watchMailboxSummaryList();
+        refreshMailboxSummary();
 
         // Handy from the console, and how the counts can be checked by hand
-        window.customMode = {
+        window.fastmailCustom = {
             isOn: () => modeIsOn,
             setMode,
             toggleMode,
@@ -9041,7 +9657,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             }
         };
 
-        console.log(`Custom mode ${modeIsOn ? 'on' : 'off'}; window.customMode.toggleMode() to switch it`);
+        console.log(`Fastmail Custom ${modeIsOn ? 'on' : 'off'}; window.fastmailCustom.toggleMode() to switch it`);
     };
 
     // What startSettingsPage needs, and no more; checked the same defensive
