@@ -322,7 +322,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'groupings', group: 'grouping', clearable: true, multiline: true,
             title: 'Group presets',
-            hint: 'Each one is offered in a mailbox’s Group menu between None and Custom…, which stay Fastmail’s own; everything between them, including “by age”, “pinned first” and “unread first”, is yours to rename, reorder, edit or remove. Add group in a preset’s editor also offers Labels (root), a group for each top-level label, and Labels (all), a group for every label with sub-labels before their parent, so “labels” can be removed and built again. Groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Edit also renames a grouping; renaming one loses it on the mailboxes using it.'
+            hint: 'Each one is offered in a mailbox’s Group menu between None and Custom…, which stay Fastmail’s own; everything between them, including “by age”, “pinned first” and “unread first”, is yours to rename, reorder, edit or remove. Add group in a preset’s editor also offers Labels (root), a group for each top-level label, and Labels (all), a group for every label with sub-labels before their parent, so “labels” can be removed and built again. Groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Edit also renames a grouping; renaming one loses it on the mailboxes using it. A preset’s Edit dialog also offers a Priority search, Pinned first and Unread first a click away and anything else, “in:c” among it, typed straight in; whatever it names shows first within every one of that preset’s own groups. Fastmail sorts once for the whole mailbox, so this is the only way to put anything ahead within a group rather than across all of them.'
         },
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
@@ -2166,7 +2166,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * a grouping that is never kept, so its lines are consumed rather than
      * reopening the first or derailing everything after it. A group line
      * missing its name or its search is skipped.
+     *
+     * A line reading "priority: <search>" is neither a group nor the
+     * leftover bucket's name: it marks every category in the block, doubling
+     * each into a hidden twin that also matches the search, standing right
+     * ahead of it. See withPriorityTwins.
      */
+    const PRIORITY_LINE = /^priority\s*:\s*/i;
+
     const readGroupingBlocks = (text) => {
         const groupings = [];
         const taken = {};
@@ -2183,7 +2190,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             const indented = /^\s/.test(raw);
             const divider = line.indexOf('=');
 
-            if (!current || (!indented && divider === -1)) {
+            if (!current || (!indented && divider === -1 && !PRIORITY_LINE.test(line))) {
                 // A name already taken still opens a scratch grouping, so its
                 // lines are consumed rather than falling through and being
                 // read as the start of a grouping of their own.
@@ -2192,12 +2199,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     id: id,
                     name: line,
                     categories: [],
-                    otherName: OTHER_NAME
+                    otherName: OTHER_NAME,
+                    priority: ''
                 };
                 if (!taken[id]) {
                     taken[id] = true;
                     groupings.push(current);
                 }
+                return;
+            }
+
+            if (PRIORITY_LINE.test(line)) {
+                current.priority = line.replace(PRIORITY_LINE, '').trim();
                 return;
             }
 
@@ -2228,6 +2241,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      */
     const formatGroupings = (groupings) => (groupings || []).map((one) => {
         const lines = [one.name];
+        if (one.priority) lines.push('  priority: ' + one.priority);
         (one.categories || []).forEach((category) => {
             lines.push('  ' + category.name + ' = ' + category.query);
         });
@@ -2458,6 +2472,130 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         };
     };
 
+    /*
+     * A grouping's priority search, asked the same way splitsFor asks
+     * Fastmail to parse a category's own search: a one-category stand-in,
+     * so the parsing is Fastmail's rather than reimplemented here.
+     */
+    const priorityFilterFor = (mailController, original, query) => {
+        try {
+            const parsed = original.call(standInFor(mailController, {
+                categories: [{ name: '', query: query }],
+                otherName: OTHER_NAME
+            }));
+            const category = parsed && parsed.categories && parsed.categories[0];
+            return (category && category.filter) || null;
+        } catch (error) {
+            return null;
+        }
+    };
+
+    /*
+     * An invisible tag on a category's own name, naming its priority pair
+     * and which half it is. The tag travels with the splits themselves, so
+     * the list's folding and its layout each find the pairs in the very
+     * splits they were handed (see priorityPairs), rather than in something
+     * kept on the side that could describe a different grouping by then.
+     *
+     * Built from characters every engine this runs in renders with no glyph
+     * and no width, so the tag never shows in the heading a person reads.
+     * ​ and ‌ write the pair's number in binary; ‍ marks the
+     * twin half; ⁠ and ﻿ bound the whole thing, so a name that
+     * happens to hold one of these on its own is not mistaken for a tag.
+     */
+    const PAIR_TAG_START = '⁠';
+    const PAIR_TAG_ZERO = '​';
+    const PAIR_TAG_ONE = '‌';
+    const PAIR_TAG_TWIN = '‍';
+    const PAIR_TAG_END = '﻿';
+    const PAIR_TAG_RE = new RegExp(PAIR_TAG_START + '([' + PAIR_TAG_ZERO + PAIR_TAG_ONE + ']*)(' +
+        PAIR_TAG_TWIN + '?)' + PAIR_TAG_END);
+
+    const pairTag = (pairId, isTwin) => {
+        const bits = Math.max(0, pairId).toString(2).split('')
+            .map(bit => (bit === '1' ? PAIR_TAG_ONE : PAIR_TAG_ZERO)).join('');
+        return PAIR_TAG_START + bits + (isTwin ? PAIR_TAG_TWIN : '') + PAIR_TAG_END;
+    };
+
+    const readPairTag = (text) => {
+        const match = PAIR_TAG_RE.exec(text || '');
+        if (!match) return null;
+        const bits = match[1].split('').map(ch => (ch === PAIR_TAG_ONE ? '1' : '0')).join('');
+        return { pairId: bits ? parseInt(bits, 2) : 0, isTwin: !!match[2] };
+    };
+
+    /*
+     * The priority pairs in a set of splits, by category index: each twin
+     * and the real category standing right after it, the leftover bucket
+     * counting as the index after the last category, the way Fastmail's
+     * collapsedGroups and splitOffsets both count it.
+     */
+    const priorityPairs = (splits) => {
+        const pairs = [];
+        if (!splits || !splits.categories) return pairs;
+
+        const tags = splits.categories.map(one => readPairTag(one.name))
+            .concat([readPairTag(splits.otherName)]);
+        tags.forEach((tag, index) => {
+            const next = tags[index + 1];
+            if (tag && tag.isTwin && next && !next.isTwin && next.pairId === tag.pairId) {
+                pairs.push({ twin: index, real: index + 1 });
+            }
+        });
+        return pairs;
+    };
+
+    /*
+     * A grouping's categories, doubled for its priority search.
+     *
+     * Each category gets a twin ahead of it that also demands the priority
+     * search, so first-match-wins bucketing sends everything the priority
+     * names there first, leaving the category itself holding the rest; the
+     * two draw back to back with nothing between them. The leftover bucket
+     * gets the same treatment, as one more explicit category naming only the
+     * priority search, ahead of whatever Fastmail still calls Other. Both
+     * halves of every pair carry the same tag, real as well as twin, since
+     * priorityPairs has to find the real one by more than its name alone.
+     *
+     * A category already holding a filter (a label) is anded with the
+     * priority's own filter, asked from Fastmail once above rather than
+     * written as a search nothing here could parse back into inMailbox
+     * safely. A category still holding a search is just two searches
+     * written together, left for splitsFor's own call to Fastmail's parser
+     * to turn into a filter the same way any other search-built category is.
+     */
+    const withPriorityTwins = (mailController, original, definition) => {
+        if (!definition.priority) return definition;
+
+        const priorityFilter = priorityFilterFor(mailController, original, definition.priority);
+        if (!priorityFilter) return definition;
+
+        const categories = [];
+
+        definition.categories.forEach((category, pairId) => {
+            const twin = category.filter
+                ? {
+                    name: pairTag(pairId, true) + category.name,
+                    filter: { operator: 'AND', conditions: [category.filter, priorityFilter] }
+                }
+                : { name: pairTag(pairId, true) + category.name, query: category.query + ' ' + definition.priority };
+            const real = Object.assign({}, category, { name: pairTag(pairId, false) + category.name });
+
+            categories.push(twin, real);
+        });
+
+        const otherPairId = definition.categories.length;
+        categories.push({
+            name: pairTag(otherPairId, true) + (definition.otherName || OTHER_NAME),
+            query: definition.priority
+        });
+
+        return Object.assign({}, definition, {
+            categories: categories,
+            otherName: pairTag(otherPairId, false) + (definition.otherName || OTHER_NAME)
+        });
+    };
+
     const patchSplits = () => {
         const mailController = controller();
         if (mailController.customGroupings) return;
@@ -2468,7 +2606,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         mailController.calculateSplits = function () {
             try {
                 const definition = modeGroupingIsActive();
-                if (definition) return splitsFor(this, original, definition);
+                if (definition) return splitsFor(this, original, withPriorityTwins(this, original, definition));
             } catch (error) {
                 reportFault('could not build the groups', error);
             }
@@ -2593,7 +2731,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * on the proxy itself to write into the mailbox's stored split. Under
      * one of the mode's groupings that would store a definition the mode
      * does not own, so the method is replaced and the set is seeded from
-     * what was folded here last time.
+     * what was folded here last time. Folding itself is taken over too, so
+     * a priority pair folds as the one group it is drawn as; see
+     * foldPriorityPair.
      */
     const adoptList = () => {
         try {
@@ -2617,11 +2757,24 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // gives one shared key; the redraw on coming back from Settings
             // then threw ("The object can not be found here") and the mail
             // page never came back.
+            // A pair is squared up before the count, not after, for the same
+            // reason.
             const before = list.get('length') || 0;
             list.collapsedGroups.clear();
             remembered.forEach(index => list.collapsedGroups.add(index));
+            priorityPairs(mailController.get('splits')).forEach(({ twin, real }) => {
+                if (list.collapsedGroups.has(twin) || list.collapsedGroups.has(real)) {
+                    list.collapsedGroups.add(twin);
+                    list.collapsedGroups.add(real);
+                }
+            });
             list.computedPropertyDidChange('length');
             list.rangeDidChange(0, Math.max(before, list.get('length') || 0));
+
+            const toggleGroup = list.toggleGroup;
+            list.toggleGroup = function (index) {
+                return toggleGroup.call(this, foldPriorityPair(this, mailController.get('splits'), index));
+            };
 
             list.collapsedGroupsDidChange = function () {
                 rememberFolded(mailbox, definition.id,
@@ -2631,6 +2784,37 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         } catch (error) {
             reportFault('could not take over the list\'s folding', error);
         }
+    };
+
+    /*
+     * Fold a priority pair as one group, whichever half's heading was
+     * clicked.
+     *
+     * Fastmail's toggleGroup flips the one index it is handed, recounts the
+     * list's length and tells the list which rows moved, all in one go.
+     * Matching the other half afterwards, from collapsedGroupsDidChange,
+     * came too late: the length had already been counted with the pair
+     * half folded, so opening a pair left the list short by the real
+     * half's rows and folding one left it offering rows past its end.
+     * So the real half is set here, beforehand, to what the clicked half
+     * is to become, the twin to the opposite, and the twin is handed on
+     * for Fastmail to flip: the count then covers both, and the rows it
+     * reports as moved start at the twin, ahead of the real half's.
+     *
+     * Returns the index Fastmail's own toggleGroup should flip.
+     */
+    const foldPriorityPair = (list, splits, index) => {
+        const pair = priorityPairs(splits).find(one => one.twin === index || one.real === index);
+        if (!pair) return index;
+
+        if (list.collapsedGroups.has(index)) {
+            list.collapsedGroups.add(pair.twin);
+            list.collapsedGroups.delete(pair.real);
+        } else {
+            list.collapsedGroups.delete(pair.twin);
+            list.collapsedGroups.add(pair.real);
+        }
+        return pair.twin;
     };
 
     /*
@@ -2705,6 +2889,81 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
+     * Draw a priority pair as one group.
+     *
+     * The message list lays its groups out from splitOffsets: an entry per
+     * category and one for the leftover bucket, each giving the group's
+     * first row, its count, how many of those rows show, and where the
+     * group starts and how tall it stands. Every group holding anything is
+     * given a heading's room, and the headings view puts each heading at
+     * its group's top, see-through where the group has no height. Left to
+     * that, a pair with mail in both halves reads as two groups of the same
+     * name, and hiding one heading in the page only leaves its room
+     * standing empty; hiding the real half's heading also hid the only
+     * heading a pair with an empty twin has.
+     *
+     * So a pair with mail in both halves is laid out as one group: the
+     * twin's entry takes both counts, both halves' showing rows and a
+     * single heading's room over them all, the real half's entry is left
+     * holding nothing, the way an empty group's is, and every group below
+     * moves up by the heading no longer needed. A pair with mail in only
+     * one half needs nothing: the empty half already has no height, so its
+     * heading is already the see-through one. The list positions rows with
+     * indexToOffset and offsetToIndex, which read the same entries and
+     * count a heading only for a group holding something, so rows and
+     * clicks line up with the merged heading too.
+     *
+     * The list is Fastmail's one message list view, patched the first time
+     * it redraws.
+     */
+    const patchPriorityLayout = (view) => {
+        if (view.customPriorityLayout) return;
+        if (!Object.prototype.hasOwnProperty.call(view, 'splitOffsets') ||
+            typeof view.splitOffsets !== 'function') return;
+        view.customPriorityLayout = true;
+
+        const original = view.splitOffsets;
+        const splitOffsets = function () {
+            const offsets = original.apply(this, arguments);
+            const pairs = offsets ? priorityPairs(this.get('splits')) : [];
+            if (!pairs.length) return offsets;
+
+            const titleHeight = this.get('titleHeight');
+            const merged = offsets.slice();
+            pairs.forEach(({ twin, real }) => {
+                const first = merged[twin];
+                const second = merged[real];
+                if (!first || !second || !first.count || !second.count) return;
+
+                const visibleCount = first.visibleCount + second.visibleCount;
+                merged[twin] = Object.assign({}, first, {
+                    count: first.count + second.count,
+                    visibleCount: visibleCount,
+                    height: first.height + second.height - titleHeight
+                });
+                merged[real] = Object.assign({}, second, {
+                    index: first.index + visibleCount,
+                    count: 0,
+                    visibleCount: 0,
+                    height: 0
+                });
+            });
+
+            let pxTop = 0;
+            return merged.map((entry) => {
+                const placed = Object.assign({}, entry, { pxTop: pxTop });
+                pxTop += entry.height;
+                return placed;
+            });
+        };
+
+        // Carries isProperty over, which is what makes it a computed property
+        Object.assign(splitOffsets, original);
+        view.splitOffsets = splitOffsets;
+        view.computedPropertyDidChange('splitOffsets');
+    };
+
+    /*
      * A redraw that fails partway must not leave the list deaf.
      *
      * A view's redraw opens a batch of property changes before it redraws
@@ -2736,6 +2995,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const depthOf = (view) => (view.__meta__ && view.__meta__.depth) || 0;
 
         proto.redraw = function () {
+            try {
+                patchPriorityLayout(this);
+            } catch (layoutError) {
+                reportFault('could not draw priority pairs as one group', layoutError);
+            }
+
             const before = depthOf(this);
             try {
                 return original.apply(this, arguments);
@@ -7686,7 +7951,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // one part rather than the page.
     const pageClasses = () => findClasses(
         ['PageView', 'SettingsPaneView', 'ToggleView', 'TextInputView', 'ButtonView', 'View'],
-        ['ModalOverlayView', 'ScrollView', 'PageHeaderView', 'MenuButtonView', 'MenuView']
+        ['ModalOverlayView', 'ScrollView', 'PageHeaderView', 'MenuButtonView', 'MenuView', 'SelectView']
     );
 
     // Fastmail's classes by name: nothing if a required one is missing,
@@ -9077,19 +9342,52 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         // Fastmail heads its dialog "Groups in" and the mailbox's name. Here
         // the name is the grouping's own and can be changed, so a field takes
-        // the heading's place, and its value goes with the save.
+        // the heading's place, and its value goes with the save. Two more
+        // fields, unknown to Fastmail's own dialog, hold the search that
+        // stands each of this grouping's categories a priority twin ahead of
+        // itself; see withPriorityTwins. The preset picker is a shortcut
+        // that fills the search field beside it rather than a value of its
+        // own, so Pinned first and Unread first are one choice away while
+        // anything else, "in:c" among it, is still typed straight in. All
+        // three are read only at Save, since that is the only point
+        // Fastmail's own dialog hands anything back.
         let saved = null;
         const nameField = new classes.TextInputView({ label: 'Name', value: grouping.name });
+        const priorityField = new classes.TextInputView({
+            label: 'Priority search',
+            value: grouping.priority || ''
+        });
+        // The preset picker needs SelectView, optional like everything past
+        // pageClasses' required six; without it the search field still
+        // works, typed straight in, so the dialog opens either way.
+        const priorityPreset = typeof classes.SelectView === 'function'
+            ? new classes.SelectView({
+                label: 'Priority preset',
+                value: '',
+                options: [
+                    { label: 'None', value: '' },
+                    { label: 'Pinned first', value: 'is:pinned' },
+                    { label: 'Unread first', value: 'is:unread' }
+                ],
+                userDidInput: (value) => priorityField.set('value', value)
+            })
+            : null;
         const controller = groupingStandIn(grouping, (value) => {
-            saved = Object.assign({}, value, { name: String(nameField.get('value') || '').trim() });
+            saved = Object.assign({}, value, {
+                name: String(nameField.get('value') || '').trim(),
+                priority: String(priorityField.get('value') || '').trim()
+            });
         });
         const view = new Editor({
             controller: controller,
             draw: function () {
                 const parts = Editor.prototype.draw.apply(this, arguments);
                 const field = FastMail.el('div', [nameField]);
+                const priority = FastMail.el('div',
+                    priorityPreset ? [priorityPreset, priorityField] : [priorityField]);
                 if (parts[0] && parts[0].tagName === 'H1') parts[0] = field;
                 else parts.unshift(field);
+                parts.splice(1, 0, priority);
                 return parts;
             }
         });
@@ -9285,7 +9583,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 }
                 now[at] = {
                     id: SPLIT_PREFIX + newName, name: newName,
-                    categories: value.categories, otherName: value.otherName || OTHER_NAME
+                    categories: value.categories, otherName: value.otherName || OTHER_NAME,
+                    priority: value.priority || ''
                 };
                 save(now);
             });
@@ -9301,7 +9600,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             save(now.concat([{
                 id: SPLIT_PREFIX + name, name: name,
                 categories: [{ name: 'Pinned', query: 'is:pinned' }],
-                otherName: OTHER_NAME
+                otherName: OTHER_NAME,
+                priority: ''
             }]));
         };
 
