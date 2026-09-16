@@ -1138,9 +1138,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // once dressed, the class left on it is the mark a later pass reads
     // instead, since the label itself is gone by then.
     const dressMailboxListTitle = (node) => {
-        // The standalone title already says this; a divider repeating it
-        // would only be the same line twice.
-        if (mailboxTitleActive()) return;
+        // Something else already says this: the standalone title on
+        // desktop, or Fastmail's own native title on phone and tablet,
+        // which mailboxTitleActive() itself stands aside for but keeps
+        // showing regardless of the setting. Either way a divider
+        // repeating it would only be the same line twice.
+        if (mailboxTitleActive() || isPhoneLayout() || isTabletLayout()) return;
 
         if (!node.classList.contains(MAILBOX_SUMMARY_CLASS)) {
             const label = node.querySelector('b');
