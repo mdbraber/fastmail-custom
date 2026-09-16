@@ -9346,6 +9346,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return { frame, modal, takeApart };
     };
 
+    // A heading in the groupings editor, over the description that follows it
+    const editorSection = (title, description) => FastMail.el('div.u-space-y-3', [
+        FastMail.el('h2.u-trim.u-text-xl.u-font-bold', [title]),
+        description
+    ]);
+
     /*
      * A grouping's priorities in its editor, as a list built from the parts
      * Fastmail builds its groups list from, as read from its bundle: an
@@ -9441,14 +9447,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         return {
             // Laid out the way Fastmail lays out its own groups above
-            draw: () => el('div.u-space-y-3', [
-                el('p.u-trim.u-color-unimportant', [
+            draw: () => [
+                editorSection('Priorities', el('p.u-trim.u-color-unimportant', [
                     'Within each group, conversations matching the first priority come first, ' +
                     'then those matching the next, then the rest.'
-                ]),
-                el('div', [addButton]),
-                rows
-            ]),
+                ])),
+                el('div.u-space-y-3', [el('div', [addButton]), rows])
+            ],
             value: () => list.map(one => ({ name: one.get('name') || '', query: one.get('query') }))
         };
     };
@@ -9488,6 +9493,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // the heading's place, and its value goes with the save. After
         // Fastmail's own groups come the grouping's priorities, which its
         // dialog knows nothing of, drawn with its own rows; see priorityRows.
+        // Each of the two gets a heading over its description, and the
+        // priorities are laid out the way Fastmail lays out its groups.
         // Both are read only at Save, since that is the only point Fastmail's
         // own dialog hands anything back. Without the priorities list, a save
         // keeps the priorities the grouping already had.
@@ -9507,8 +9514,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 const field = FastMail.el('div', [nameField]);
                 if (parts[0] && parts[0].tagName === 'H1') parts[0] = field;
                 else parts.unshift(field);
+                // Fastmail's description of groups follows its heading
+                const description = parts[1] && parts[1].tagName === 'P' ? parts[1] : null;
+                parts.splice(1, description ? 1 : 0, editorSection('Groups', description));
                 // Ahead of Save and Cancel, which Fastmail draws last
-                if (priorities) parts.splice(Math.max(0, parts.length - 1), 0, priorities.draw());
+                if (priorities) parts.splice(Math.max(0, parts.length - 1), 0, ...priorities.draw());
                 return parts;
             }
         });
