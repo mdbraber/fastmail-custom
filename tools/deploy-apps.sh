@@ -165,6 +165,8 @@ for try in $(seq 1 $TRIES); do
       # so reported every success as a skip.
       listing=$(xcrun devicectl list devices 2>/dev/null)
       for line in ${(f)listing}; do
+        # Xcode's Simulators are listed too, and are never installed to
+        [[ "$line" == *simulated* ]] && continue
         other=$(print -r -- "$line" | grep -oE "$DEVICE_ID")
         [ -n "$other" ] || continue
         [ -n "${seen[$other]}" ] && continue
