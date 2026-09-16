@@ -1188,11 +1188,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (node.textContent !== text) node.textContent = text;
     };
 
-    // Standalone, in normal flow ahead of the list's own titles overlay,
-    // rather than inside it: the overlay is Fastmail's own positioned
-    // element, unaffected by anything ahead of it in flow, so a title
-    // placed there instead pushes the overlay (and the rows under it)
-    // down with it rather than sitting over either.
     const removeMailboxTitle = () => {
         const el = document.getElementById(MAILBOX_TITLE_ID);
         if (el) el.remove();
@@ -1211,19 +1206,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // The compact title's resting transform: enlarged and shifted to sit
     // exactly where the big title is, so the crossfade in updateMailbox-
-    // TitleScrolled reads as one title shrinking into place. scrollTop is
-    // added back into the big title's viewport top because that top moves
-    // as the list scrolls while the toolbar (outside the scrolling
-    // container) does not; the translate is unaffected by the scale next
-    // to it in the same transform, since scale, being closer to the
-    // element, applies first and translate shifts the already-scaled box
-    // in the parent's own pixels.
-    const positionMailboxTitleCompact = (compact, big, container) => {
+    // TitleScrolled reads as one title shrinking into place. Neither
+    // element is inside the scrolling container (both are flex siblings
+    // of it), so their viewport positions are already scroll-invariant —
+    // no scrollTop correction needed. The translate is unaffected by the
+    // scale next to it in the same transform, since scale, being closer
+    // to the element, applies first and translate shifts the
+    // already-scaled box in the parent's own pixels.
+    const positionMailboxTitleCompact = (compact, big) => {
         const bigRect = big.getBoundingClientRect();
         const compactRect = compact.getBoundingClientRect();
-        const restingBigTop = bigRect.top + container.scrollTop;
         const tx = bigRect.left - compactRect.left;
-        const ty = restingBigTop - compactRect.top;
+        const ty = bigRect.top - compactRect.top;
         const scale = MAILBOX_TITLE_FONT_SIZE / MAILBOX_TITLE_COMPACT_FONT_SIZE;
         compact.style.setProperty(
             '--custom-mailboxTitleExpand',
@@ -1231,7 +1225,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         );
     };
 
-    const ensureMailboxTitleCompact = (big, container) => {
+    const ensureMailboxTitleCompact = (big) => {
         const checkbox = mailboxTitleCheckbox();
         if (!checkbox) {
             const stale = document.getElementById(MAILBOX_TITLE_COMPACT_ID);
@@ -1262,7 +1256,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // title was actually created, changed or moved keeps the common
         // no-op call cheap instead of reflowing the page on every row the
         // list recycles.
-        if (changed) positionMailboxTitleCompact(el, big, container);
+        if (changed) positionMailboxTitleCompact(el, big);
     };
 
     const MAILBOX_TITLE_SCROLL_THRESHOLD = 20;
@@ -1293,7 +1287,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const mailbox = controller().get('mailbox');
         const name = mailbox && mailbox.get('name');
         const titles = document.querySelector('.v-MailboxListTitles');
-        if (!name || !titles || !titles.parentElement) {
+        const container = titles && titles.parentElement;
+        const pagePane = container && container.parentElement;
+        if (!name || !container || !pagePane) {
             removeMailboxTitle();
             return;
         }
@@ -1322,10 +1318,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 el.appendChild(countEl);
             }
         }
-        if (el.nextSibling !== titles) titles.parentElement.insertBefore(el, titles);
+        // A flex sibling of the scrolling container, never a child of it:
+        // that container is Fastmail's own, its rows recycled by Ember,
+        // and a mailbox switch replaces .v-MailboxListTitles inside it —
+        // exactly when a node written into that subtree previously
+        // corrupted the next render, leaving the list frozen on the old
+        // mailbox's rows. .v-Page is a flex column, so sitting ahead of
+        // the content pane here still pushes it down, the same effect
+        // insertBefore into the pane itself used to give directly.
+        if (el.nextSibling !== container) pagePane.insertBefore(el, container);
 
-        const container = titles.parentElement;
-        ensureMailboxTitleCompact(el, container);
+        ensureMailboxTitleCompact(el);
         watchMailboxTitleScroll(container);
         updateMailboxTitleScrolled(container);
     };
@@ -1803,8 +1806,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // share of it dead to hover and click.
         ' padding: 12px 20px 16px; box-sizing: border-box;' +
         ' overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' +
-        ' transition: opacity 0.15s ease; }',
-        '#' + MAILBOX_TITLE_ID + '.' + MAILBOX_TITLE_SCROLLED_CLASS + ' { opacity: 0; }',
+        // No longer a child of the scrolling container, so it no longer
+        // scrolls out of the way on its own; flex: none keeps .v-Page's
+        // flex column from stretching it, and max-height transitioning to
+        // 0 (border-box counts the padding inside that budget) reclaims
+        // the row it would otherwise leave behind once faded.
+        ' flex: none; max-height: 70px;' +
+        ' transition: opacity 0.15s ease, max-height 0.15s ease; }',
+        '#' + MAILBOX_TITLE_ID + '.' + MAILBOX_TITLE_SCROLLED_CLASS + ' {' +
+        ' opacity: 0; max-height: 0; }',
         '#' + MAILBOX_TITLE_COMPACT_ID + ' {' +
         ' font-family: "Proxima Nova", system-ui, "Segoe UI", Roboto, Ubuntu,' +
         ' Cantarell, "Noto Sans", -apple-system, Arial, sans-serif;' +
