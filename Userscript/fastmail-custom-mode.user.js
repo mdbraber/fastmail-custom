@@ -2931,6 +2931,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             '0,0,0,2.14,0h0l3-3' }]
     ];
 
+    // Fastmail's label glyph, as its sidebar draws it
+    const LABEL_SHAPES = [
+        ['path', { d: 'M11.69,4.75l-6.5,6.5a1.5,1.5,0,0,0,0,2.13l5.42,5.43a1.51,1.51,0,0,0,2.14,0h0l6.5-6.49V4.75Z' +
+            'M15.5,10A1.5,1.5,0,1,1,17,8.5,1.5,1.5,0,0,1,15.5,10Z' }]
+    ];
+
     // u-standardicon is what gives these no fill, a currentcolor stroke and
     // the weight the rest of the bar is drawn at
     const standardIcon = (name, shapes) => {
@@ -9124,7 +9130,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                         const queries = new Set(view.get('categories').map(one =>
                             (typeof one.get === 'function' ? one.get('query') : one.query)));
                         LABELS_MARKERS.forEach((marker) => {
+                            // With an icon, as Fastmail's own entries have,
+                            // so the names line up with theirs
                             const option = new classes.ButtonView({
+                                icon: standardIcon('i-label', LABEL_SHAPES),
                                 label: marker.name,
                                 query: marker.query,
                                 isDisabled: queries.has(marker.query),
