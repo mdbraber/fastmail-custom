@@ -2926,15 +2926,23 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * of the same name, and hiding headings in the page only leaves their
      * room standing empty.
      *
-     * So the first tier holding anything takes the whole group: every
-     * tier's count, every tier's showing rows and a single heading's room
-     * over them all. The tiers after it are left holding nothing, the way
-     * an empty group's entry does, and every group below moves up by the
-     * headings no longer needed. Tiers before it are empty already, with no
-     * height, so their headings are the see-through ones. The list positions
-     * rows with indexToOffset and offsetToIndex, which read the same entries
-     * and count a heading only for an entry holding something, so rows and
-     * clicks line up with the one heading too.
+     * So the first tier takes the whole group: every tier's count, every
+     * tier's showing rows and a single heading's room over them all. The
+     * tiers after it are left holding nothing, the way an empty group's
+     * entry does, so their headings are the see-through ones, and every
+     * group below moves up by the headings no longer needed. The list
+     * positions rows with indexToOffset and offsetToIndex, which read the
+     * same entries and count a heading only for an entry holding something,
+     * so rows and clicks line up with the one heading too.
+     *
+     * Always the first tier, even while it is empty, rather than whichever
+     * tier first holds something: Fastmail fades a heading in or out over
+     * 300ms as its group gains or loses height, so handing the group from
+     * one tier's heading to another's crossfaded the two where they stand,
+     * the outgoing one already reading 0. Pinning the first message of a
+     * group whose priority is is:pinned flashed "Triage 0" over "Triage 16"
+     * that way. Kept on the first tier, the group's heading never changes
+     * hands, so nothing fades.
      *
      * The list is Fastmail's one message list view, patched the first time
      * it redraws.
@@ -2954,18 +2962,20 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             const titleHeight = this.get('titleHeight');
             const merged = offsets.slice();
             groups.forEach((tiers) => {
-                const lead = tiers.find(index => merged[index] && merged[index].count);
-                if (lead === undefined) return;
+                if (tiers.some(index => !merged[index])) return;
+                const filled = tiers.filter(index => merged[index].count);
+                if (!filled.length) return;
 
-                const after = tiers.filter(index => index > lead && merged[index]);
-                const entry = after.reduce((sum, index) => (merged[index].count ? Object.assign({}, sum, {
-                    count: sum.count + merged[index].count,
-                    visibleCount: sum.visibleCount + merged[index].visibleCount,
-                    height: sum.height + merged[index].height - titleHeight
-                }) : sum), merged[lead]);
+                const add = key => filled.reduce((sum, index) => sum + merged[index][key], 0);
+                const entry = Object.assign({}, merged[tiers[0]], {
+                    count: add('count'),
+                    visibleCount: add('visibleCount'),
+                    // Each filled tier's height carries a heading; one stays
+                    height: add('height') - titleHeight * (filled.length - 1)
+                });
 
-                merged[lead] = entry;
-                after.forEach((index) => {
+                merged[tiers[0]] = entry;
+                tiers.slice(1).forEach((index) => {
                     merged[index] = Object.assign({}, merged[index], {
                         index: entry.index + entry.visibleCount,
                         count: 0,
