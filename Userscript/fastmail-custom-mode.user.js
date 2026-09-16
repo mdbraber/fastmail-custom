@@ -2609,8 +2609,19 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             const mailbox = mailController.get('mailbox');
             const remembered = foldedGroups()[foldKey(mailbox, definition.id)] || [];
 
+            // By now the list has been built from the mailbox's stored folds
+            // and has counted its rows by them. Its length does not watch the
+            // set, so it has to be told, the way Fastmail's own toggleGroup
+            // tells it. Left counting the old folds, the list offered rows
+            // past its end that read as undefined, which Fastmail's list view
+            // gives one shared key; the redraw on coming back from Settings
+            // then threw ("The object can not be found here") and the mail
+            // page never came back.
+            const before = list.get('length') || 0;
             list.collapsedGroups.clear();
             remembered.forEach(index => list.collapsedGroups.add(index));
+            list.computedPropertyDidChange('length');
+            list.rangeDidChange(0, Math.max(before, list.get('length') || 0));
 
             list.collapsedGroupsDidChange = function () {
                 rememberFolded(mailbox, definition.id,
