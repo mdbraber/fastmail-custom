@@ -1240,19 +1240,29 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
 
         let el = document.getElementById(MAILBOX_TITLE_COMPACT_ID);
+        let changed = false;
         if (!el) {
             el = document.createElement('span');
             el.id = MAILBOX_TITLE_COMPACT_ID;
+            changed = true;
         }
         if (el.dataset.customKey !== big.dataset.customKey) {
             el.dataset.customKey = big.dataset.customKey;
             el.textContent = '';
             big.childNodes.forEach((node) => el.appendChild(node.cloneNode(true)));
+            changed = true;
         }
         if (el.previousElementSibling !== checkbox) {
             checkbox.insertAdjacentElement('afterend', el);
+            changed = true;
         }
-        positionMailboxTitleCompact(el, big, container);
+        // ensureMailboxTitle runs on every list mutation (MutationObserver
+        // on document.body), which is most of them; getBoundingClientRect
+        // forces a synchronous layout, so only paying for it when the
+        // title was actually created, changed or moved keeps the common
+        // no-op call cheap instead of reflowing the page on every row the
+        // list recycles.
+        if (changed) positionMailboxTitleCompact(el, big, container);
     };
 
     const MAILBOX_TITLE_SCROLL_THRESHOLD = 20;
@@ -1786,7 +1796,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ' Cantarell, "Noto Sans", -apple-system, Arial, sans-serif;' +
         ' font-size: ' + MAILBOX_TITLE_FONT_SIZE + 'px; font-weight: 700; line-height: 1.3;' +
         ' color: var(--ui-page-color-fg, rgb(27, 30, 32));' +
-        ' padding: 12px 20px 4px; box-sizing: border-box;' +
+        // A real gap here, not just padding down to the list: the first
+        // row below can be an interactive group header rather than a
+        // plain message, and with no visible break the two read as one
+        // clickable block when only the row is, leaving the title's own
+        // share of it dead to hover and click.
+        ' padding: 12px 20px 16px; box-sizing: border-box;' +
         ' overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' +
         ' transition: opacity 0.15s ease; }',
         '#' + MAILBOX_TITLE_ID + '.' + MAILBOX_TITLE_SCROLLED_CLASS + ' { opacity: 0; }',
