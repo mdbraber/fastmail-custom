@@ -155,6 +155,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // of the same name, making the contact, and the group, if either is
         // new.
         contactGroupLabels: '',
+        // Keeping a message, by any of the Keep routes, adds from[0] to your
+        // contacts when they are not one already
+        keepAddsContact: false,
         // The app icon's badge, for the shell apps: this label's total, Triage
         // is what is left to decide.
         appBadgeLabel: 'Triage',
@@ -216,6 +219,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         { id: 'appearance', title: 'Appearance' },
         { id: 'keyboard', title: 'Keyboard' },
         { id: 'labelsFiling', title: 'Labels & keeping' },
+        { id: 'contacts', title: 'Contacts' },
         { id: 'bottomBar', title: 'Action bar' },
         { id: 'grouping', title: 'Groups' },
         { id: 'snooze', title: 'Snooze' }
@@ -273,7 +277,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             hint: 'Destinations that hold mail rather than queue it; archive leaves them on, and Shift-E archives into one. Comma-separated paths.'
         },
         {
-            key: 'contactGroupLabels', group: 'labelsFiling', clearable: true,
+            key: 'keepAddsContact', group: 'contacts',
+            title: 'Add the sender to contacts when keeping',
+            hint: 'Keeping a message adds its sender to your contacts if they are not there yet. Archiving does not.'
+        },
+        {
+            key: 'contactGroupLabels', group: 'contacts', clearable: true,
             title: 'Labels that add the sender to a contact group',
             hint: 'Applying one adds the sender to the contact group of the same name, creating it if needed. Comma-separated paths.'
         },
@@ -3474,9 +3483,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                         // takes Triage and every other destination off under.
                         actions.move(storeKeys, mailbox);
                     } else if (!FastMail.preferences.get('inLabelsMode')) {
-                        actions.copy(storeKeys, mailbox);
+                        asKeep(() => actions.copy(storeKeys, mailbox));
                     } else {
-                        actions.add(storeKeys, mailbox);
+                        asKeep(() => actions.add(storeKeys, mailbox));
                     }
                 });
             });
@@ -3638,7 +3647,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // of it.
             if (typeof menu.done === 'function') {
                 const close = () => menu.done();
-                if (this.customFiling) asFiling(advance, close);
+                // A keep, unless the archive below is where this is going
+                if (this.customFiling) asFiling(advance, archiveInto ? close : () => asKeep(close));
                 else close();
             }
 
@@ -3888,6 +3898,60 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
+    /*
+     * Keeping a message adds its sender to contacts, with keepAddsContact on.
+     * The same find-or-make a contact group label uses, without the group;
+     * and it runs after the group, so a label that names one has made the
+     * contact already and there is nothing left to add.
+     *
+     * Your own addresses are left out: a message you sent, kept under a
+     * project, is not someone to add.
+     */
+    const isOwnAddress = (email) => {
+        const Identity = FastMail.classes.Identity;
+        if (!Identity) return false;
+
+        const wanted = String(email || '').toLowerCase();
+        return FastMail.store.getAll(Identity).some((identity) => {
+            const own = String(identity.get('email') || '').toLowerCase();
+            // A wildcard identity sends as anyone at its domain
+            return own.startsWith('*@') ? wanted.endsWith(own.slice(1)) : own === wanted;
+        });
+    };
+
+    const addSendersToContacts = (keys) => {
+        if (!modeIsOn || !settings.keepAddsContact) return;
+
+        try {
+            const seen = new Set();
+            const names = [];
+
+            messagesFrom(keys).forEach((message) => {
+                const from = message.get('from');
+                const sender = from && from[0];
+                if (!sender || !sender.email) return;
+
+                const accountId = message.get('accountId');
+                const email = String(sender.email).toLowerCase();
+                // Once per sender, however many of their messages were kept
+                if (seen.has(accountId + ' ' + email)) return;
+                seen.add(accountId + ' ' + email);
+
+                if (isOwnAddress(email) || contactWithEmail(accountId, email)) return;
+                if (makeContact(accountId, email, sender.name)) {
+                    names.push(sender.name || email);
+                }
+            });
+
+            if (names.length) {
+                showToast((names.length === 1 ? names[0] : names.length + ' senders') +
+                    ' added to contacts');
+            }
+        } catch (error) {
+            reportFault('could not add the sender to contacts', error);
+        }
+    };
+
     const addInsteadOfMoving = (menu) => {
         if (menu.customAdditive) return;
         menu.customAdditive = true;
@@ -3914,13 +3978,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // destination off underneath, rule 3 files the sender; nothing is
             // decided here.
             const actions = controller().actions;
-            asFiling(advance, () => {
+            asFiling(advance, () => asKeep(() => {
                 if (FastMail.preferences.get('inLabelsMode')) {
                     actions.add(null, mailbox);
                 } else {
                     actions.copy(null, mailbox);
                 }
-            });
+            }));
         };
     };
 
@@ -4346,6 +4410,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // labels above the pick count: they land on the message like
                 // any other, so a contact group named after one still fills.
                 adds.forEach(mailbox => fileSendersIntoGroup(mailbox, keys));
+                // A keep adds the sender to contacts as well, after the groups
+                if (pendingKeep) addSendersToContacts(keys);
 
                 // Set only by the call this one is nested inside, so an add
                 // that arrives on its own is just an add
@@ -4914,6 +4980,22 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
+    // Set around the routes that keep a message: the Keep picker, however it
+    // was opened, and a plain drop on a label. Not an archive into a hold
+    // label, which files as well but decides to be done with the message, and
+    // not an Option-drop, which is Fastmail's move. A bracket, like filing.
+    let pendingKeep = false;
+
+    const asKeep = (work) => {
+        const wasKeep = pendingKeep;
+        pendingKeep = true;
+        try {
+            return work();
+        } finally {
+            pendingKeep = wasKeep;
+        }
+    };
+
     // One step per filing, however many calls the filing turns into.
     const takeFilingAdvance = () => {
         const was = filingAdvance;
@@ -5335,6 +5417,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // and already past Triage is a decision that has been made, and the
         // answer to being asked again is the same as the first time: move on.
         if (removes.length) actions.addremove(keys, [], removes);
+        addSendersToContacts(keys);
         // Kept in place; the view moves on to where the setting says, or back
         // to the list, with nothing selected, when there is nothing that way.
         advanceAfterDecision(from, step);
