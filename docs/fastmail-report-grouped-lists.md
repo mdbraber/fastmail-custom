@@ -5,8 +5,12 @@ sort (`groupBy`). Both come from the API server. The offline worker in the
 web app answers the same queries correctly, so they only show on devices
 without a complete offline copy, such as the web app on a phone.
 
-Seen on app.beta.fastmail.com, 17 September 2026. The requests below were
-sent to the API as shown, with real ids in place of the placeholders.
+Seen on the beta API (`ams.api.beta.fastmail.com`, used by
+app.beta.fastmail.com), 17 September 2026; not tried against the production
+API. The requests below were sent as shown, with real ids in place of the
+placeholders. Grouping is part of the `https://www.fastmail.com/dev/mail`
+capability: with only `urn:ietf:params:jmap:mail` in `using`, any `category`
+sort is refused with `unsupportedSort`.
 
 ## 1. A group for an empty label takes every conversation
 
