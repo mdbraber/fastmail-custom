@@ -70,11 +70,13 @@ macos_check=0
 tools/check-installed-apps.sh || { macos_check=1; echo "MACOS CHECK FAILED"; }
 
 # Every paired device, or the ones named in the environment. Read from the
-# listing's own "available (paired)" column rather than from the JSON, whose
-# tunnelState reads disconnected for a device that installs perfectly well.
+# listing's own state column rather than from the JSON, whose tunnelState
+# reads disconnected for a device that installs perfectly well. A device
+# installed to a moment ago reads `connected` instead of `available (paired)`,
+# and one missing it waited out every try in silence.
 paired_devices () {
   xcrun devicectl list devices 2>/dev/null \
-    | grep 'available (paired)' \
+    | grep -E 'available \(paired\)|connected' \
     | grep -oE "$DEVICE_ID"
 }
 
