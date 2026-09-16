@@ -12,6 +12,12 @@ cd "${0:a:h}/.." || exit 1
 
 TRIES=${FASTMAIL_DEPLOY_TRIES:-60}
 
+# A device identifier as `devicectl list devices` prints it. That is the
+# hardware UDID (00008103-000904293A60801E) since the devices were paired
+# again, and was a CoreDevice UUID before; matching only the UUID found no
+# devices at all and waited out every try in silence.
+DEVICE_ID='[0-9A-Fa-f]{8}-([0-9A-Fa-f]{16}|[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})'
+
 # Build BOTH platforms before touching anything. A relaunched macOS shell or
 # an "OK" line printed before the iOS build ran once masked an iOS build
 # failure as a successful deploy; the phone kept the old build while the
@@ -69,7 +75,7 @@ tools/check-installed-apps.sh || { macos_check=1; echo "MACOS CHECK FAILED"; }
 paired_devices () {
   xcrun devicectl list devices 2>/dev/null \
     | grep 'available (paired)' \
-    | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}'
+    | grep -oE "$DEVICE_ID"
 }
 
 # A friendlier label than the UDID, because the thing a failure usually asks
@@ -159,7 +165,7 @@ for try in $(seq 1 $TRIES); do
       # so reported every success as a skip.
       listing=$(xcrun devicectl list devices 2>/dev/null)
       for line in ${(f)listing}; do
-        other=$(print -r -- "$line" | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}')
+        other=$(print -r -- "$line" | grep -oE "$DEVICE_ID")
         [ -n "$other" ] || continue
         [ -n "${seen[$other]}" ] && continue
         echo "skipped (not reachable): ${line%% *}"
