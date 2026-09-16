@@ -4874,9 +4874,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     : null;
 
             // The run ends where the triage label does. With no triage label
-            // set there is no run to end, and the setting has the last word.
-            const triage = settings.backToListAfterTriage && target &&
-                triageMailbox(target.get('accountId'));
+            // set there is no run to end, and the setting has the last word;
+            // the same for an archive of a message that was never in the run.
+            const triage = settings.backToListAfterTriage && plan.inRun !== false &&
+                target && triageMailbox(target.get('accountId'));
             const stillTriage = !triage || carriesMailbox(target, triage);
 
             // Nothing that way is the end of the list, and the mailbox is what
@@ -5360,6 +5361,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // list, so neighbours read after it are already gone and the step
         // becomes a step back to the mailbox.
         const step = stepFrom(from);
+        // Only a message that carried the triage label was part of a run, so
+        // only its archive can end one. Any other moves on where Fastmail's
+        // own setting says, whatever the message beside it carries.
+        step.inRun = carriesMailbox(from, from && triageMailbox(from.get('accountId')));
 
         silencingDidAction(actions, () => {
             const dropped = [];
