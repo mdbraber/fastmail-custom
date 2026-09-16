@@ -4389,13 +4389,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
             // A pick is an add. Rule 2 takes Triage and every other
             // destination off underneath, rule 3 files the sender; nothing is
-            // decided here.
+            // decided here. A picker built for particular conversations
+            // files those; any other files what is selected by now.
             const actions = controller().actions;
+            const keys = this.customKeys || null;
             asFiling(advance, () => asKeep(() => {
                 if (FastMail.preferences.get('inLabelsMode')) {
-                    actions.add(null, mailbox);
+                    actions.add(keys, mailbox);
                 } else {
-                    actions.copy(null, mailbox);
+                    actions.copy(keys, mailbox);
                 }
             }));
         };
@@ -5650,12 +5652,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return pickerPopOver;
     };
 
-    const buildPicker = (keys) => {
+    /*
+     * placement, when given, is where to show it instead: a popover's own
+     * options, alignWithView and all, as a right-click menu was shown with.
+     */
+    const buildPicker = (keys, placement) => {
         const MailboxMenuView = FastMail.classes && FastMail.classes.MailboxMenuView;
         if (!MailboxMenuView) return false;
 
         const popOver = popOverForPicker();
-        const anchor = pickerAnchor();
+        const anchor = placement ? placement.alignWithView : pickerAnchor();
         const rect = anchor && anchorRect(anchor);
         if (!popOver || !rect) return false;
 
@@ -5672,6 +5678,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // document; declared so the controller has one to call
                 didSelect() {}
             });
+            // The pick files these, whatever is selected by the time it is
+            // made; a right-click menu's conversation is not the selection
+            // once that menu has closed
+            menu.customKeys = keys;
 
             // What tells didEnterDocument this menu is ours to narrow and to
             // route through the waiting verb, exactly as pressing Move to does
@@ -5684,9 +5694,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             popOver.show({
                 view: menu,
                 alignWithView: anchor,
-                positionToThe: below ? 'top' : 'bottom',
-                alignEdge: 'centre',
-                showCallout: true,
+                positionToThe: placement ? placement.positionToThe : below ? 'top' : 'bottom',
+                alignEdge: placement ? placement.alignEdge : 'centre',
+                offsetTop: placement ? placement.offsetTop : 0,
+                offsetLeft: placement ? placement.offsetLeft : 0,
+                showCallout: !placement,
                 keepInHorizontalBounds: true,
                 keepInVerticalBounds: true,
                 onHide(options) {
@@ -5709,11 +5721,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // Open the filing picker for these conversations; the projects and the
     // hold labels. True when something opened, so a caller with a decision
     // riding on this picker knows whether there is a menu to hand it to.
-    const openProjectPicker = (keys) => {
+    // With a placement it opens there, built for exactly these conversations,
+    // rather than from whichever button is on screen.
+    const openProjectPicker = (keys, placement) => {
         // Where to go after the pick, read now because the pick may take the
         // row out of the list. The menu about to open takes it; what marks the
         // pick a filing is not set here at all, the pick itself sets that.
         armAdvance(messagesFrom(keys)[0]);
+        if (placement && buildPicker(keys, placement)) return true;
         const single = keys.length === 1;
         const order = single
             ? [moveButton, labelsButton]
@@ -5882,7 +5897,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         actions.archive(null);
     };
 
-    const runVerb = (kind, storeKeys) => {
+    const runVerb = (kind, storeKeys, placement) => {
         const actions = controller().actions;
         const keys = resolveKeys(actions, storeKeys);
         if (!keys) return;
@@ -5893,7 +5908,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
 
         if (unfiledAmong(keys).length) {
-            openProjectPicker(keys);
+            openProjectPicker(keys, placement);
         } else {
             runKeep(actions, keys);
         }
@@ -7754,6 +7769,73 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         options.splice.apply(options, [last + 1, 0].concat(entries));
     };
 
+    /*
+     * Keep in a message row's right-click menu, in Move to's place, while
+     * Keep instead of move is on: the verb the bar's Keep and v run, so a
+     * conversation still to be filed opens the limited picker and one
+     * already filed only loses its triage label. Move to itself stays behind
+     * Option-V and the bar.
+     *
+     * The conversations are read as the entry is pressed, while the menu is
+     * still open: until it closes, Fastmail's actions answer for the row that
+     * was right-clicked rather than for the selection, and once it has closed
+     * they no longer do. The picker opens where the menu stood, after the
+     * menu has gone, the way the bar's Keep waits, and files exactly those
+     * conversations (see buildPicker).
+     */
+    const contextKeepOption = (replaced) => {
+        const option = new FastMail.classes.ButtonView({
+            label: 'Keep',
+            icon: stateVerbIcon('keep'),
+            isLastOfSection: !!(replaced && replaced.get('isLastOfSection')),
+            method: 'keep',
+            target: {
+                keep(button) {
+                    const keys = resolveKeys(controller().actions, null);
+                    if (!keys) return;
+
+                    const PopOverView = FastMail.classes.PopOverView;
+                    const menuPopOver = PopOverView && button && typeof button.getParent === 'function'
+                        ? button.getParent(PopOverView) : null;
+                    const shown = menuPopOver && menuPopOver.get('options');
+                    const placement = shown && shown.alignWithView ? {
+                        alignWithView: shown.alignWithView,
+                        positionToThe: shown.positionToThe,
+                        alignEdge: shown.alignEdge,
+                        offsetTop: shown.offsetTop,
+                        offsetLeft: shown.offsetLeft
+                    } : null;
+
+                    setTimeout(() => runVerb('keep', keys, placement), 0);
+                }
+            }
+        });
+
+        option.customContextKeep = true;
+        return option;
+    };
+
+    const patchRowContextMenu = () => {
+        const RowView = FastMail.classes.MailboxItemView;
+        const proto = RowView && RowView.prototype;
+        if (!proto || typeof proto.getContextOptions !== 'function' || proto.customContextKeep) return;
+        proto.customContextKeep = true;
+
+        const original = proto.getContextOptions;
+        proto.getContextOptions = function () {
+            const options = original.apply(this, arguments);
+            try {
+                if (ourMoveWanted() && Array.isArray(options)) {
+                    const at = options.findIndex(option => isMoveButton(option));
+                    if (at !== -1) options[at] = contextKeepOption(options[at]);
+                }
+            } catch (error) {
+                reportFault('could not put Keep in the message menu', error);
+            }
+            return options;
+        };
+    };
+
     const isMessageActionsMenu = (options) => {
         let reply = false;
         let forward = false;
@@ -7786,10 +7868,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     // The Mac and iOS shells carry the same link on their own
                     // menu, Copy URL among two others, so this one stands
                     // down there rather than saying it twice.
+                    // At the bottom, below everything Fastmail offers, the
+                    // way the shells place theirs.
                     if (!/Electron\//.test(navigator.userAgent) &&
                         !options.some(option => option && option.customCopyLinkOption) &&
                         isMessageActionsMenu(options)) {
-                        options.unshift(copyLinkOption(), null);
+                        const last = options[options.length - 1];
+                        try {
+                            if (last) last.set('isLastOfSection', true);
+                        } catch (error) {
+                            // Without its line the link is still there
+                        }
+                        options.push(copyLinkOption());
                     }
                     addGroupings(options);
                     addSnoozePresets(options);
@@ -10321,6 +10411,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         patchArchive();
         patchLabelActions();
         patchMenus();
+        patchRowContextMenu();
         patchSplits();
         guardListRedraw();
         patchShortcuts();

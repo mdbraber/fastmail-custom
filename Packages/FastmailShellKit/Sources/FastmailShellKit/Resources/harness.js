@@ -492,17 +492,12 @@
         if (!wanted.length) return;
 
         if (kind === 'message') {
-            // Everything this app adds to this menu sits together, just
-            // above Delete, marked off on both sides, Share first as it
-            // always was.
-            var deleteAt = findOptionIndex(options, /\bdelete\b/i);
-            var buttons = wanted.map(menuItemButton);
-            markLastOfSection(buttons[buttons.length - 1]);
-            var before = options[deleteAt - 1];
-            if (before) markLastOfSection(before);
-            options.splice.apply(
-                options, [deleteAt < 0 ? options.length : deleteAt, 0].concat(buttons)
-            );
+            // Everything this app adds to this menu sits together at the
+            // very bottom, below all of Fastmail's own entries and marked off
+            // from them, Share first as it always was.
+            var last = options[options.length - 1];
+            if (last) markLastOfSection(last);
+            options.push.apply(options, wanted.map(menuItemButton));
             return;
         }
 
