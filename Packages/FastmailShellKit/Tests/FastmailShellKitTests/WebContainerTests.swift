@@ -68,7 +68,7 @@ private let nonMatchingHeader = """
     #expect(webView.configuration.userContentController.userScripts.count == 3)
     #expect(model.banner == nil)
     let first = webView.configuration.userContentController.userScripts[0]
-    #expect(first.source.hasPrefix("window.__customModeSettings = {"))
+    #expect(first.source.hasPrefix("window.__fastmailCustomSettings = {"))
 }
 
 @Test @MainActor func loadURLDefaultsToTheProfileStartURL() {
@@ -225,7 +225,7 @@ private let nonMatchingHeader = """
 // Tests install no sync component, and neither does the Mailto app: such a
 // page is told nothing about syncing, so it draws no switch
 @Test @MainActor func withoutASyncComponentThePageIsToldNothingAboutSync() {
-    #expect(CustomModeSettingsSync.current == nil)
+    #expect(FastmailCustomSettingsSync.current == nil)
     let loader = StubLoader(resources: [
         "harness.js": "HARNESS",
         "userscript.js": nonMatchingHeader + "\nBODY"
@@ -243,6 +243,6 @@ private let nonMatchingHeader = """
     let coordinator = WebCoordinator(model: model, startURL: profile.startURL)
     let webView = container.makeWebView(coordinator: coordinator)
     let bootstrap = webView.configuration.userContentController.userScripts[0]
-    #expect(bootstrap.source.hasPrefix("window.__customModeSettings = {"))
-    #expect(!bootstrap.source.contains("__customModeSync"))
+    #expect(bootstrap.source.hasPrefix("window.__fastmailCustomSettings = {"))
+    #expect(!bootstrap.source.contains("__fastmailCustomSync"))
 }

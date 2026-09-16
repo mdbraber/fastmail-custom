@@ -25,14 +25,10 @@ public struct AppShell: View {
         self.profile = profile
     }
 
-    /// What the web view opens. On iPhone and iPad a remembered page comes
-    /// first; the Mac opens its Start page as it always has.
+    /// What the web view opens: the remembered page, while Remember last
+    /// page is on and one is saved, otherwise the Start page.
     private var launchURL: URL {
-        #if canImport(UIKit)
         live.launchURL(readingFrom: .standard)
-        #else
-        live.startURL(readingFrom: .standard)
-        #endif
     }
 
     // The profile as the setting currently has it. Everything that builds an
@@ -98,6 +94,10 @@ public struct AppShell: View {
         .onOpenURL { url in
             route(url)
         }
+        .onChange(of: model.pageURL) {
+            // Remember last page: saved as it changes, while the switch is on
+            DevicePreferences.recordPage(model.pageURL)
+        }
         // Handoff: the page open here offered to the same app on your other
         // device, and to a browser on a device that does not have it. The Mac
         // publishes it from the window instead, in ContinuityBeacon.
@@ -143,10 +143,6 @@ public struct AppShell: View {
         }
         .onChange(of: lock.state.isLocked) {
             releaseHeldLinks()
-        }
-        .onChange(of: model.pageURL) {
-            // Remember last viewed page: saved as it changes, while the switch is on
-            DevicePreferences.recordPage(model.pageURL)
         }
         .onChange(of: pendingLinks.url) {
             // A tapped notification, routed exactly as a link from outside
@@ -214,7 +210,7 @@ public struct AppShell: View {
         case .load(let target):
             model.pendingLoad = target
         case .refuse(let message):
-            model.banner = message
+            PageToast.show(message)
         case .handoff(let target):
             openInOtherApp(target)
         case .compose(let mailto):
@@ -234,7 +230,7 @@ public struct AppShell: View {
         let model = model
         let name = live.displayName
         let loadLocally: @MainActor () -> Void = {
-            model.banner = "This link belongs to your other account; \(name) opened it instead."
+            PageToast.show("This link belongs to your other account; \(name) opened it instead.")
             if let inner = LinkRouter.handoffTarget(target) {
                 model.pendingLoad = inner
             }

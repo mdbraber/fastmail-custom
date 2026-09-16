@@ -9,9 +9,9 @@ struct PersonalApp: App {
     #endif
 
     init() {
-        // One for the whole app, before its first window: Custom mode's
+        // One for the whole app, before its first window: Fastmail Custom's
         // settings follow each Fastmail account to your other devices
-        CustomModeSettingsSync.install()
+        FastmailCustomSettingsSync.install()
     }
 
     var body: some Scene {

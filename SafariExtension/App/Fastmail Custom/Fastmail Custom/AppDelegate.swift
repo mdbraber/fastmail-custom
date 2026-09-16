@@ -1,6 +1,6 @@
 //
 //  AppDelegate.swift
-//  Fastmail Custom Mode
+//  Fastmail Custom
 //
 //  Created by Maarten den Braber on 2026-08-11.
 //

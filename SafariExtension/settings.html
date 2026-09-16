@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Fastmail Custom Mode</title>
+<title>Fastmail Custom</title>
 <style>
     :root { color-scheme: light dark; }
 
@@ -20,12 +20,21 @@
     button { font: inherit; padding: 5px 12px; }
 
     button[disabled] { opacity: 0.5; }
+
+    a { color: inherit; }
 </style>
 </head>
 <body>
-    <h1>Custom mode</h1>
-    <p id="note">The settings live in the Fastmail page, beside Fastmail&rsquo;s own.</p>
-    <button id="open" type="button">Open settings</button>
+    <h1>Fastmail Custom</h1>
+    <div id="fastmail" hidden>
+        <p id="note">The settings live in the Fastmail page, beside Fastmail&rsquo;s own.</p>
+        <button id="open" type="button">Open settings</button>
+    </div>
+    <div id="elsewhere" hidden>
+        <p>Fastmail Custom only runs on Fastmail. Open a Fastmail tab to change its
+        settings, or <a id="permissions" href="#">manage website permissions</a>
+        if Safari keeps asking for access here.</p>
+    </div>
     <script src="settings.js"></script>
 </body>
 </html>

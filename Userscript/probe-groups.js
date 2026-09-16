@@ -6,8 +6,8 @@
  */
 (function () {
     try {
-        const mode = window.customMode;
-        if (!mode || !mode.parseGroupings) return 'ERR no customMode.parseGroupings';
+        const mode = window.fastmailCustom;
+        if (!mode || !mode.parseGroupings) return 'ERR no fastmailCustom.parseGroupings';
 
         const parsed = mode.parseGroupings(mode.settings().groupings);
         const controller = FastMail.router.getAppController('mail');

@@ -21,21 +21,21 @@ private let repoRoot = URL(fileURLWithPath: #filePath)
         source.split(separator: "\n").first { $0.contains("appBadgeLabel:") },
         "the userscript no longer declares appBadgeLabel"
     )
-    #expect(line.contains("'\(CustomModeSettings.badgeLabelDefault)'"))
+    #expect(line.contains("'\(FastmailCustomSettings.badgeLabelDefault)'"))
 }
 
 // The extension's native part answers through the rules file the apps
 // compile, so its store keys and local-only list are the apps' own
 @Test func theSafariExtensionsNativePartAnswersThroughTheSharedRules() throws {
-    let project = repoRoot.appendingPathComponent("SafariExtension/App/Fastmail Custom Mode")
+    let project = repoRoot.appendingPathComponent("SafariExtension/App/Fastmail Custom")
     let handler = try String(
-        contentsOf: project.appendingPathComponent("Fastmail Custom Mode Extension/SafariWebExtensionHandler.swift"),
+        contentsOf: project.appendingPathComponent("Fastmail Custom Extension/SafariWebExtensionHandler.swift"),
         encoding: .utf8
     )
     #expect(handler.contains("SettingsSyncRules.extensionAnswer("))
 
     let pbxproj = try String(
-        contentsOf: project.appendingPathComponent("Fastmail Custom Mode.xcodeproj/project.pbxproj"),
+        contentsOf: project.appendingPathComponent("Fastmail Custom.xcodeproj/project.pbxproj"),
         encoding: .utf8
     )
     let reference = "../../../Packages/FastmailShellKit/Sources/FastmailShellKit/SettingsSyncRules.swift"

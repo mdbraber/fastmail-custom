@@ -514,7 +514,7 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(title, "Row subject")
     }
 
-    private func buildSettingsList(withCustomMode: Bool = false) -> String {
+    private func buildSettingsList(withFastmailCustom: Bool = false) -> String {
         """
         (function () {
           var ul = document.createElement('ul');
@@ -536,7 +536,7 @@ final class HarnessTests: XCTestCase {
           }
           ul.appendChild(item('Notifications', '/settings/notifications'));
           ul.appendChild(item('Custom swipes', '/settings/actions'));
-          \(withCustomMode ? "ul.appendChild(item('Custom mode', '/settings/custommode'));" : "")
+          \(withFastmailCustom ? "ul.appendChild(item('Custom options', '/settings/custom-options'));" : "")
           ul.appendChild(item('Offline', '/settings/offline'));
           document.body.appendChild(ul);
         })();
@@ -573,22 +573,22 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(count, 1)
     }
 
-    func testDeviceSettingsFollowsCustomMode() async throws {
+    func testDeviceSettingsFollowsFastmailCustom() async throws {
         webView = try makeWebView(userScript: "", metadata: Self.meta())
         try await load(webView)
-        _ = try await evaluate(webView, buildSettingsList(withCustomMode: true))
+        _ = try await evaluate(webView, buildSettingsList(withFastmailCustom: true))
         try await waitUntil {
             (try await self.evaluate(
                 self.webView, "document.querySelectorAll('.fmshell-device-settings').length"
             ) as? Int ?? 0) >= 1
         }
         let labels = try await settingsLabels(webView)
-        XCTAssertEqual(labels, "Notifications,Custom swipes,Custom mode,Device settings,Offline")
+        XCTAssertEqual(labels, "Notifications,Custom swipes,Custom options,Device settings,Offline")
     }
 
-    // Custom mode's entry is drawn only once its page installs, and can land
+    // The Custom options entry is drawn only once its page installs, and can land
     // below a Device settings row that went in first.
-    func testDeviceSettingsMovesUnderCustomModeWhenItArrivesLater() async throws {
+    func testDeviceSettingsMovesUnderFastmailCustomWhenItArrivesLater() async throws {
         webView = try makeWebView(userScript: "", metadata: Self.meta())
         try await load(webView)
         _ = try await evaluate(webView, buildSettingsList())
@@ -603,10 +603,10 @@ final class HarnessTests: XCTestCase {
           var li = document.createElement('li');
           var a = document.createElement('a');
           a.className = 'app-source';
-          a.setAttribute('href', '/settings/custommode');
+          a.setAttribute('href', '/settings/custom-options');
           var span = document.createElement('span');
           span.className = 'u-truncate';
-          span.textContent = 'Custom mode';
+          span.textContent = 'Custom options';
           a.appendChild(span);
           li.appendChild(a);
           ul.insertBefore(li, ul.lastElementChild);
@@ -615,7 +615,7 @@ final class HarnessTests: XCTestCase {
         """)
         try await waitUntil {
             try await self.settingsLabels(self.webView)
-                == "Notifications,Custom swipes,Custom mode,Device settings,Offline"
+                == "Notifications,Custom swipes,Custom options,Device settings,Offline"
         }
         let count = try await evaluate(
             webView, "document.querySelectorAll('.fmshell-device-settings').length"
@@ -925,11 +925,11 @@ final class HarnessTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let bridge = NativeBridge(
             expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
-            onSetting: { key, value in defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key)) }
+            onSetting: { key, value in defaults.set(value, forKey: FastmailCustomSettings.defaultsKey(for: key)) }
         )
         let reply = await bridge.handle(body: message)
         XCTAssertNil(reply.error)
-        let stored = try XCTUnwrap(defaults.object(forKey: "customMode.labelColours"))
+        let stored = try XCTUnwrap(defaults.object(forKey: "fastmailCustom.labelColours"))
         XCTAssertEqual(CFGetTypeID(stored as CFTypeRef), CFBooleanGetTypeID())
         XCTAssertEqual(stored as? Bool, true)
     }

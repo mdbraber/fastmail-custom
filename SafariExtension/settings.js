@@ -4,6 +4,8 @@ const api = globalThis.browser || globalThis.chrome;
 // job is to open them there. Nothing is stored or read here.
 const TARGET_PATTERN = /^https:\/\/app\.(beta\.)?fastmail\.com\//;
 
+const fastmailSection = document.getElementById('fastmail');
+const elsewhereSection = document.getElementById('elsewhere');
 const button = document.getElementById('open');
 const note = document.getElementById('note');
 
@@ -14,11 +16,7 @@ const activeTab = async () => {
 
 const open = async () => {
     const tab = await activeTab();
-    if (!tab || !tab.url || !TARGET_PATTERN.test(tab.url)) {
-        note.textContent = 'Open a Fastmail tab first; the settings live in the page.';
-        button.disabled = true;
-        return;
-    }
+    if (!tab) return;
 
     // The injected function reports whether the payload's export went to the
     // settings page or opened the plain panel, so the popup only closes once
@@ -30,8 +28,8 @@ const open = async () => {
         target: { tabId: tab.id },
         world: 'MAIN',
         func: () => {
-            if (window.customMode && window.customMode.openSettings) {
-                return window.customMode.openSettings() !== false;
+            if (window.fastmailCustom && window.fastmailCustom.openSettings) {
+                return window.fastmailCustom.openSettings() !== false;
             }
             return false;
         }
@@ -40,7 +38,7 @@ const open = async () => {
     if (results && results[0] && results[0].result) {
         window.close();
     } else {
-        note.textContent = 'Custom mode has not loaded in this tab yet. Reload the page and try again.';
+        note.textContent = 'Fastmail Custom has not loaded in this tab yet. Reload the page and try again.';
     }
 };
 
@@ -48,4 +46,19 @@ button.addEventListener('click', () => {
     open().catch((error) => {
         note.textContent = 'Could not open the settings: ' + error.message;
     });
+});
+
+document.getElementById('permissions').addEventListener('click', (event) => {
+    event.preventDefault();
+    api.runtime.openOptionsPage();
+});
+
+// Shown before any click: a Fastmail tab gets the "open settings" flow,
+// anything else gets the plain website-permissions message. tab.url is only
+// populated when host_permissions covers the tab, which is exactly the
+// Fastmail domains, so an unset url means "not Fastmail" too.
+activeTab().then((tab) => {
+    const onFastmail = !!(tab && tab.url && TARGET_PATTERN.test(tab.url));
+    fastmailSection.hidden = !onFastmail;
+    elsewhereSection.hidden = onFastmail;
 });

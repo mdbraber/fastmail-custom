@@ -1,9 +1,9 @@
 /*
-Fastmail Custom Mode injector
+Fastmail Custom injector
 
 Fastmail serves `script-src 'self' …` with no 'unsafe-inline'. A userscript
 manager runs page-world code by adding an inline <script> to the page, which
-that policy refuses; so Custom mode never starts.
+that policy refuses; so Fastmail Custom never starts.
 
 scripting.executeScript() does not go through the DOM, so it is not the page's
 script to refuse. Injecting with world "MAIN" therefore lands in the same
@@ -53,7 +53,7 @@ const ACCOUNT_ID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
 // Safari hands every native message to this extension's own native part,
 // whatever application is named.
 const NATIVE_APPLICATION = 'com.mdbraber.fastmail-custom.safari';
-const SYNC_ALARM = 'custom-mode-settings-sync';
+const SYNC_ALARM = 'fastmail-custom-settings-sync';
 const SYNC_MINUTES = 5;
 
 const STORED_KEYS = ['settings', 'settingsByAccount', 'lastAccountId', 'tabAccounts', 'joinedAccounts', 'syncEnabled'];
@@ -93,7 +93,7 @@ const updateStored = (change) => {
             if (update) await api.storage.local.set(update);
         })
         .catch((error) => {
-            console.error('Custom mode: could not save the sync state', error);
+            console.error('Fastmail Custom: could not save the sync state', error);
         });
     return storageWork;
 };
@@ -107,8 +107,8 @@ const inject = async (tabId) => {
         target: { tabId },
         world: 'MAIN',
         func: (value, sync) => {
-            window.__customModeSettings = value;
-            window.__customModeSync = sync;
+            window.__fastmailCustomSettings = value;
+            window.__fastmailCustomSync = sync;
         },
         args: [settingsFor(stored, stored.lastAccountId), { enabled: isSyncOn(stored) }]
     });
@@ -125,9 +125,9 @@ const applyToTab = (tabId, stored) => api.scripting.executeScript({
     target: { tabId },
     world: 'MAIN',
     func: (value, sync) => {
-        window.__customModeSettings = value;
-        window.__customModeSync = sync;
-        if (window.customMode) window.customMode.applySettings(value);
+        window.__fastmailCustomSettings = value;
+        window.__fastmailCustomSync = sync;
+        if (window.fastmailCustom) window.fastmailCustom.applySettings(value);
     },
     args: [settingsFor(stored, accountOfTab(stored, tabId)), { enabled: isSyncOn(stored) }]
 }).catch(() => { /* tab may not have the payload yet */ });
@@ -167,11 +167,11 @@ const pullAccount = async (accountId) => {
     try {
         reply = await askNative({ action: 'get', accountId });
     } catch (error) {
-        console.warn('Custom mode: iCloud could not be asked; keeping the settings on this Mac', error);
+        console.warn('Fastmail Custom: iCloud could not be asked; keeping the settings on this Mac', error);
         return;
     }
     if (!reply.available) {
-        console.warn('Custom mode: iCloud is not available; keeping the settings on this Mac');
+        console.warn('Fastmail Custom: iCloud is not available; keeping the settings on this Mac');
         return;
     }
 
@@ -216,7 +216,7 @@ const sendSetting = async (accountId, key, value) => {
     try {
         await askNative({ action: 'set', accountId, key, value });
     } catch (error) {
-        console.warn('Custom mode: a setting could not be sent to iCloud; it is kept on this Mac', error);
+        console.warn('Fastmail Custom: a setting could not be sent to iCloud; it is kept on this Mac', error);
     }
 };
 
@@ -259,7 +259,7 @@ api.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (!tab || !tab.url || !TARGET_PATTERN.test(tab.url)) return;
 
     inject(tabId).catch((error) => {
-        console.error('Custom mode: injection failed', error);
+        console.error('Fastmail Custom: injection failed', error);
     });
 });
 
@@ -271,7 +271,7 @@ api.tabs.onActivated.addListener(({ tabId }) => {
         const stored = await readStored();
         await pullAccount((stored.tabAccounts || {})[String(tabId)]);
     })().catch((error) => {
-        console.warn('Custom mode: could not check iCloud for this tab', error);
+        console.warn('Fastmail Custom: could not check iCloud for this tab', error);
     });
 });
 
@@ -300,7 +300,7 @@ api.runtime.onMessage.addListener((message, sender) => {
     }
     if (work) {
         work.catch((error) => {
-            console.error('Custom mode: settings sync failed', error);
+            console.error('Fastmail Custom: settings sync failed', error);
         });
     }
 });
@@ -314,7 +314,7 @@ api.alarms.get(SYNC_ALARM).then((existing) => {
 api.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name !== SYNC_ALARM) return;
     pullOpenTabs().catch((error) => {
-        console.warn('Custom mode: could not check iCloud', error);
+        console.warn('Fastmail Custom: could not check iCloud', error);
     });
 });
 

@@ -4,7 +4,7 @@ import Testing
 @testable import FastmailShellKit
 
 /// Command and a number is the tab bar's. Option and a number stays the
-/// sidebar's, as Custom mode has always had it.
+/// sidebar's, as Fastmail Custom has always had it.
 @Test func onlyCommandAloneIsOurs() {
     #expect(TabSwitcher.claims([.command]))
     // A number key reports the numeric keypad too, whichever row it is on.

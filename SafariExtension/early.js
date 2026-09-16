@@ -1,5 +1,5 @@
 /*
-Fastmail Custom Mode; head start
+Fastmail Custom; head start
 
 The payload runs in the page world, which means waiting for the document to be
 complete and then for Fastmail itself to be ready. Fastmail paints its first
@@ -23,14 +23,14 @@ const api = globalThis.browser || globalThis.chrome;
 // storage either; but both see the DOM. Stamping the root element at document
 // start is how the settings page knows there is an extension here to write
 // through, before it has drawn anything.
-document.documentElement.dataset.customModeHost = 'extension';
+document.documentElement.dataset.fastmailCustomHost = 'extension';
 
-const EARLY_KEY = 'custom-mode-early';
-const MODE_KEY = 'custom-mode';
+const EARLY_KEY = 'fastmail-custom-early';
+const MODE_KEY = 'fastmail-custom';
 // What it was called before the rename; the page script migrates it, but this
 // runs first and would otherwise read nothing on the load that migrates it
 const LEGACY_MODE_KEY = 'custom-inbox-mode';
-const STYLE_ID = 'custom-mode-style';
+const STYLE_ID = 'fastmail-custom-style';
 const HIDE_CLASS = 'custom-hideInboxLabel';
 
 // Must match earlyUrlKey in the payload exactly, or nothing is ever found
@@ -151,7 +151,7 @@ window.addEventListener('message', (event) => {
     if (event.source !== window || event.origin !== location.origin) return;
 
     const message = event.data;
-    if (!message || message.source !== 'custom-mode') return;
+    if (!message || message.source !== 'fastmail-custom') return;
 
     if (message.kind === 'account') {
         if (typeof message.accountId !== 'string' || !ACCOUNT_ID_PATTERN.test(message.accountId)) return;
@@ -172,6 +172,6 @@ window.addEventListener('message', (event) => {
 
     // Chain this write onto the pending promise to serialize all writes.
     pendingWrite = pendingWrite.then(() => saveSetting(message.key, message.value)).catch((error) => {
-        console.error('Custom mode: could not save a setting', error);
+        console.error('Fastmail Custom: could not save a setting', error);
     });
 });

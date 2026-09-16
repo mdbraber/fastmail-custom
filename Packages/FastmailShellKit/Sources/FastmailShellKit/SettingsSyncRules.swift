@@ -1,6 +1,6 @@
 import Foundation
 
-/// The rules for keeping Custom mode's settings in iCloud key-value storage:
+/// The rules for keeping Fastmail Custom's settings in iCloud key-value storage:
 /// what a store key looks like, which settings travel, what a first sync
 /// decides, and what the Safari extension's native part answers.
 ///
@@ -46,7 +46,7 @@ enum SettingsSyncRules {
         return accountId.unicodeScalars.allSatisfy { isLetter($0) || isDigit($0) || $0 == "-" || $0 == "_" }
     }
 
-    /// `CustomModeSettings.isWritableSettingKey`'s rule, letters and digits
+    /// `FastmailCustomSettings.isWritableSettingKey`'s rule, letters and digits
     /// starting with a letter, written again so this file stands alone. A
     /// package test holds the two together.
     static func isSettingKey(_ key: String) -> Bool {

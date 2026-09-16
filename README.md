@@ -53,14 +53,14 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 
 ## Repository
 
-**Custom mode** (`Userscript/fastmail-custom-mode.user.js`) is the userscript
+**Fastmail Custom** (`Userscript/fastmail-custom-mode.user.js`) is the userscript
 that does the work: one-label triage, where a project label is the live state
 of a message and archiving means the same thing in every list. It runs on
 `app.fastmail.com` and `app.beta.fastmail.com`, either through a userscript
 manager or through the extension below.
 
 **Safari extension** (`SafariExtension/`) is a small extension whose only job is
-to start Custom mode. Fastmail's content security policy will not run an
+to start Fastmail Custom. Fastmail's content security policy will not run an
 inline script, so a userscript manager cannot inject it there; the extension
 can. It ships inside a host app, which is why it has to be installed rather
 than just enabled.
@@ -80,7 +80,7 @@ over JMAP so the API tokens live on the server rather than on the phone. See
 
 | Path | What it is |
 | --- | --- |
-| `Userscript/` | Custom mode itself |
+| `Userscript/` | Fastmail Custom itself |
 | `SafariExtension/` | The extension that runs it, and its host app |
 | `Apps/` | The macOS and iOS apps |
 | `Extensions/` | The share extensions |

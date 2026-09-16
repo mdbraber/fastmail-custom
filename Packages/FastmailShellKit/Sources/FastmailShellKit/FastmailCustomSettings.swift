@@ -1,21 +1,21 @@
 import Foundation
 import WebKit
 
-/// The Custom mode userscript's settings, mirrored natively.
-public enum CustomModeSettings {
-    /// Where every Custom mode setting lives in UserDefaults. Prefixed so the
+/// The Fastmail Custom userscript's settings, mirrored natively.
+public enum FastmailCustomSettings {
+    /// Where every Fastmail Custom setting lives in UserDefaults. Prefixed so the
     /// shell's own keys (backend, startView, push.mode, push.senders,
     /// push.mailboxIds, push.contacts and push.acknowledged) and the page's
     /// cannot collide, and so the page can be given the whole namespace
     /// without being given anything else.
-    public static let keyPrefix = "customMode."
+    public static let keyPrefix = "fastmailCustom."
 
     public static func defaultsKey(for key: String) -> String { keyPrefix + key }
 
     /// A key the page is allowed to write. Letters and digits only, starting
     /// with a letter. Swift keeps no list of the options — the userscript's
     /// catalogue is canonical — so the namespace is the guard: a key that
-    /// passes this can only ever name something under `customMode.`, and a
+    /// passes this can only ever name something under `fastmailCustom.`, and a
     /// dot, which is the only way to climb out of a key path, is not in the
     /// pattern.
     public static func isWritableSettingKey(_ key: String) -> Bool {
@@ -67,7 +67,7 @@ public enum CustomModeSettings {
     /// installed, so the page draws no switch there.
     static func syncLine(_ syncEnabled: Bool?) -> String {
         guard let syncEnabled else { return "" }
-        return "\nwindow.__customModeSync = {\"enabled\":\(syncEnabled)};"
+        return "\nwindow.__fastmailCustomSync = {\"enabled\":\(syncEnabled)};"
     }
 
     /// Writes the settings global before anything else runs, so the payload
@@ -79,7 +79,7 @@ public enum CustomModeSettings {
         syncEnabled: Bool? = nil
     ) -> WKUserScript {
         WKUserScript(
-            source: "window.__customModeSettings = \(json(from: defaults));" + syncLine(syncEnabled),
+            source: "window.__fastmailCustomSettings = \(json(from: defaults));" + syncLine(syncEnabled),
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         )
@@ -94,8 +94,8 @@ public enum CustomModeSettings {
         syncEnabled: Bool? = nil
     ) -> String {
         """
-        window.__customModeSettings = \(json(from: defaults));\(syncLine(syncEnabled))
-        if (window.customMode) window.customMode.applySettings(window.__customModeSettings);
+        window.__fastmailCustomSettings = \(json(from: defaults));\(syncLine(syncEnabled))
+        if (window.fastmailCustom) window.fastmailCustom.applySettings(window.__fastmailCustomSettings);
         """
     }
 }

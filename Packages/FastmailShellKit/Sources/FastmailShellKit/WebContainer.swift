@@ -20,6 +20,10 @@ public struct PageTint: Equatable, Sendable {
 
 @MainActor
 public final class ShellModel: ObservableObject {
+    /// A message shown in this app's own banner rather than Fastmail's
+    /// toast, for when there is no live page left to ask: a crashed web
+    /// content process, a failed load, or an error from before the page
+    /// even exists. Everything else routes through PageToast instead.
     @Published public var banner: String?
     @Published public var tint: PageTint?
     @Published public var dragRect: CGRect = .zero
@@ -37,6 +41,29 @@ public final class ShellModel: ObservableObject {
 
     public func show(_ message: String) {
         banner = message
+    }
+}
+
+/// A message shown Fastmail's own way, through the toast host its own
+/// archive verbs raise, reached the way harness.js already reaches it for
+/// its own fault reporting. Used for anything that happens with a page
+/// still alive to ask, so nothing here draws chrome of its own.
+@MainActor
+public enum PageToast {
+    public static func show(_ message: String, duration: TimeInterval = 4) {
+        guard let view = WebViewRegistry.shared.active else { return }
+        let script = """
+        window.__fmshell && window.__fmshell.toast(\(Self.jsonString(message)), \(Int(duration * 1000)));
+        """
+        view.evaluateJavaScript(script)
+    }
+
+    private static func jsonString(_ text: String) -> String {
+        guard
+            let data = try? JSONEncoder().encode(text),
+            let json = String(data: data, encoding: .utf8)
+        else { return "\"\"" }
+        return json
     }
 }
 
@@ -100,7 +127,7 @@ public struct WebContainer {
             // sends.
             expectedHost: loadURL.host ?? "",
             onLog: { message in print("[userscript] \(message)") },
-            onError: { [model] message in model.show(message) },
+            onError: { message in PageToast.show(message) },
             onTheme: { [model] color, isDark in
                 Task { @MainActor in model.tint = PageTint(color: color, isDark: isDark) }
             },
@@ -117,9 +144,9 @@ public struct WebContainer {
             },
             onOpenSettings: { SettingsPresenter.shared.open() },
             onSetting: { key, value in
-                UserDefaults.standard.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
+                UserDefaults.standard.set(value, forKey: FastmailCustomSettings.defaultsKey(for: key))
                 // Saved first; iCloud gets it once this account has joined
-                CustomModeSettingsSync.current?.localChanged(key: key, value: value)
+                FastmailCustomSettingsSync.current?.localChanged(key: key, value: value)
                 #if canImport(UIKit)
                 // The home-screen quick actions are built from the badge
                 // label. They are rebuilt when the app comes forward, which
@@ -178,10 +205,26 @@ public struct WebContainer {
             // Settings sync, where the app installed it; nothing happens
             // without it
             onAccount: { accountId in
-                CustomModeSettingsSync.current?.accountReported(accountId)
+                FastmailCustomSettingsSync.current?.accountReported(accountId)
             },
             onSettingsSync: { enabled in
-                CustomModeSettingsSync.current?.setEnabled(enabled)
+                FastmailCustomSettingsSync.current?.setEnabled(enabled)
+            },
+            // A WKWebView's own window.Notification cannot be granted, so the
+            // harness shims it on the Mac and asks here instead.
+            onNotificationPermission: {
+                #if os(macOS)
+                return await NotificationPresenter.shared.permissionStatus()
+                #else
+                return "denied"
+                #endif
+            },
+            onRequestNotificationPermission: {
+                #if os(macOS)
+                return await NotificationPresenter.shared.requestPermission()
+                #else
+                return "denied"
+                #endif
             }
         )
         configuration.userContentController.addScriptMessageHandler(
@@ -191,11 +234,11 @@ public struct WebContainer {
         )
 
         // Settings go in ahead of every other script: the userscript reads
-        // window.__customModeSettings the moment it starts.
+        // window.__fastmailCustomSettings the moment it starts.
         // With the sync switch's state where the app can sync, so the page
         // draws the switch from the start
         configuration.userContentController.addUserScript(
-            CustomModeSettings.bootstrapScript(syncEnabled: CustomModeSettingsSync.current?.isEnabled)
+            FastmailCustomSettings.bootstrapScript(syncEnabled: FastmailCustomSettingsSync.current?.isEnabled)
         )
 
         do {
@@ -225,9 +268,9 @@ public struct WebContainer {
         webView.isInspectable = WebInspection.isAllowed()
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
-        coordinator.settingsPusher = CustomModeSettingsPusher(
+        coordinator.settingsPusher = FastmailCustomSettingsPusher(
             webView: webView,
-            syncEnabled: { CustomModeSettingsSync.current?.isEnabled }
+            syncEnabled: { FastmailCustomSettingsSync.current?.isEnabled }
         )
         coordinator.sharePresenter = SharePresenter(model: model, webView: webView)
         coordinator.linkLoader = LinkLoader(model: model, webView: webView)
@@ -244,8 +287,8 @@ public struct WebContainer {
             guard let fileURL = item.fileURL else { return }
             AttachmentOpener.handle(fileURL: fileURL)
         }
-        DownloadManager.shared.onIssue = { [model] message in
-            model.banner = message
+        DownloadManager.shared.onIssue = { message in
+            PageToast.show(message)
         }
         webView.load(URLRequest(url: loadURL))
         return webView
@@ -457,6 +500,14 @@ final class CommandRelay {
 
     enum LinkPart {
         case url, title, markdown
+
+        var done: String {
+            switch self {
+            case .url: return "Copied URL"
+            case .title: return "Copied title"
+            case .markdown: return "Copied Markdown link"
+            }
+        }
     }
 
     // Read the way Get URL, Get Title and Get Current Link read it, so the
@@ -464,7 +515,7 @@ final class CommandRelay {
     // there is nothing to read, the line says what they would have said.
     private func copyCurrentLink(_ part: LinkPart) {
         ifKey { webView in
-            Task { @MainActor [model] in
+            Task { @MainActor in
                 do {
                     let link = try await IntentSupport.currentLink(in: webView)
                     let text: String
@@ -476,10 +527,11 @@ final class CommandRelay {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setString(text, forType: .string)
+                    PageToast.show(part.done)
                 } catch let error as IntentSupportError {
-                    model.show(error.message)
+                    PageToast.show(error.message)
                 } catch {
-                    model.show(error.localizedDescription)
+                    PageToast.show(error.localizedDescription)
                 }
             }
         }
@@ -488,13 +540,13 @@ final class CommandRelay {
     // A script action, as Run Script Action runs it
     private func runPageAction(named name: String) {
         ifKey { webView in
-            Task { @MainActor [model] in
+            Task { @MainActor in
                 do {
                     try await IntentSupport.runAction(named: name, in: webView)
                 } catch let error as IntentSupportError {
-                    model.show(error.message)
+                    PageToast.show(error.message)
                 } catch {
-                    model.show(error.localizedDescription)
+                    PageToast.show(error.localizedDescription)
                 }
             }
         }
@@ -517,7 +569,7 @@ final class CommandRelay {
     private func openInspector() {
         ifKey { webView in
             if !WebInspector.open(for: webView) {
-                model.show("This build of WebKit will not open the inspector")
+                PageToast.show("This build of WebKit will not open the inspector")
             }
         }
     }
@@ -538,14 +590,14 @@ final class CommandRelay {
                     let url = (link?["url"] as? String).flatMap(URL.init(string:)).map(Backend.canonical)
                     let title = link?["title"] as? String
                     guard url != nil || title != nil else {
-                        model.banner = "No message open"
+                        PageToast.show("No message open")
                         return
                     }
                     model.shareRequest = ShareRequest(
                         url: url, text: title, sourceRect: nil, completion: {}
                     )
                 case .failure:
-                    model.banner = "No message open"
+                    PageToast.show("No message open")
                 }
             }
         }
@@ -595,10 +647,10 @@ final class BadgePuller {
     }
 }
 
-/// Pushes changed Custom mode settings into a running page, the way the Safari
+/// Pushes changed Fastmail Custom settings into a running page, the way the Safari
 /// extension's storage listener does for its tabs.
 @MainActor
-final class CustomModeSettingsPusher {
+final class FastmailCustomSettingsPusher {
     private weak var webView: WKWebView?
     /// Whether the app's sync switch is on, or nothing where the app cannot
     /// sync. Asked afresh for every push.
@@ -665,7 +717,7 @@ final class CustomModeSettingsPusher {
             // The whole script is compared, not the settings alone: the sync
             // switch lives outside them, and a flip made in one window has to
             // reach the others
-            let script = CustomModeSettings.applyScriptSource(from: .standard, syncEnabled: self.syncEnabled())
+            let script = FastmailCustomSettings.applyScriptSource(from: .standard, syncEnabled: self.syncEnabled())
             let force = self.forceNext
             self.forceNext = false
             guard Self.shouldPush(script, after: self.pushed, force: force) else { return }

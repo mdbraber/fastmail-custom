@@ -36,14 +36,14 @@ private final class Harness {
     var now = Date(timeIntervalSinceReferenceDate: 1_000_000)
     var deviceType: SettingsSyncRules.DeviceType = .mac
     var scheduled: [(delay: TimeInterval, work: @MainActor @Sendable () -> Void)] = []
-    private(set) var sync: CustomModeSettingsSync!
+    private(set) var sync: FastmailCustomSettingsSync!
 
     init(_ name: String, deviceType: SettingsSyncRules.DeviceType = .mac) {
-        let suite = "CustomModeSettingsSyncTests.\(name)"
+        let suite = "FastmailCustomSettingsSyncTests.\(name)"
         defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         self.deviceType = deviceType
-        sync = CustomModeSettingsSync(
+        sync = FastmailCustomSettingsSync(
             defaults: defaults,
             store: store,
             hasICloudIdentity: { [unowned self] in self.hasICloudIdentity },
@@ -67,7 +67,7 @@ private final class Harness {
     }
 
     func local(_ key: String) -> Any? {
-        defaults.object(forKey: CustomModeSettings.defaultsKey(for: key))
+        defaults.object(forKey: FastmailCustomSettings.defaultsKey(for: key))
     }
 }
 
@@ -75,9 +75,9 @@ private final class Harness {
 
 @Test @MainActor func joiningAdoptsTheStoresSettingsAndRemovesSyncedOnesItLacks() {
     let h = Harness(#function)
-    h.defaults.set(true, forKey: "customMode.labelColours")
-    h.defaults.set("x", forKey: "customMode.snoozeKey")
-    h.defaults.set("4", forKey: "customMode.bottomBarItems")
+    h.defaults.set(true, forKey: "fastmailCustom.labelColours")
+    h.defaults.set("x", forKey: "fastmailCustom.snoozeKey")
+    h.defaults.set("4", forKey: "fastmailCustom.bottomBarItems")
     h.store.values = ["u1234abcd.labelColours": NSNumber(value: false), "u1234abcd.triageLabel": "Todo"]
 
     h.sync.accountReported("u1234abcd")
@@ -93,9 +93,9 @@ private final class Harness {
 
 @Test @MainActor func anEmptyStoreIsUploadedAfterTheInitialSyncNoticeAndNotBefore() {
     let h = Harness(#function)
-    h.defaults.set(false, forKey: "customMode.labelColours")
-    h.defaults.set("Todo", forKey: "customMode.triageLabel")
-    h.defaults.set("4", forKey: "customMode.bottomBarItems")
+    h.defaults.set(false, forKey: "fastmailCustom.labelColours")
+    h.defaults.set("Todo", forKey: "fastmailCustom.triageLabel")
+    h.defaults.set("4", forKey: "fastmailCustom.bottomBarItems")
 
     h.sync.accountReported("u1234abcd")
     #expect(h.store.writes.isEmpty)
@@ -111,7 +111,7 @@ private final class Harness {
 
 @Test @MainActor func anEmptyStoreIsUploadedThirtySecondsAfterASuccessfulSynchronizeAndNotBefore() {
     let h = Harness(#function)
-    h.defaults.set("Todo", forKey: "customMode.triageLabel")
+    h.defaults.set("Todo", forKey: "fastmailCustom.triageLabel")
 
     h.sync.accountReported("u1234abcd")
     #expect(h.scheduled.map { $0.delay } == [30])
@@ -153,7 +153,7 @@ private final class Harness {
 @Test @MainActor func withoutAnICloudAccountTheAppStaysUnjoined() {
     let h = Harness(#function)
     h.hasICloudIdentity = false
-    h.defaults.set("Mine", forKey: "customMode.triageLabel")
+    h.defaults.set("Mine", forKey: "fastmailCustom.triageLabel")
     h.store.values = ["u1234abcd.triageLabel": "Todo"]
 
     h.sync.accountReported("u1234abcd")
@@ -179,7 +179,7 @@ private final class Harness {
 
 @Test @MainActor func joiningAdoptsAnExistingMacBucketValue() {
     let h = Harness(#function)
-    h.defaults.set("4", forKey: "customMode.bottomBarItems")
+    h.defaults.set("4", forKey: "fastmailCustom.bottomBarItems")
     h.store.values = ["u1234abcd.bar.mac.bottomBarItems": "6"]
 
     h.sync.accountReported("u1234abcd")
@@ -191,7 +191,7 @@ private final class Harness {
 
 @Test @MainActor func anEmptyBucketIsUploadedAfterTheInitialSyncNoticeOrThirtySeconds() {
     let h = Harness(#function)
-    h.defaults.set("4", forKey: "customMode.bottomBarItems")
+    h.defaults.set("4", forKey: "fastmailCustom.bottomBarItems")
     // The account's plain settings are already there, so only the bar bucket
     // is left to decide
     h.store.values = ["u1234abcd.triageLabel": "Todo"]
@@ -237,7 +237,7 @@ private final class Harness {
 
 @Test @MainActor func anExternalBarChangeFromADifferentDeviceTypeOrAccountIsIgnored() {
     let h = Harness(#function, deviceType: .mac)
-    h.defaults.set("4", forKey: "customMode.bottomBarItems")
+    h.defaults.set("4", forKey: "fastmailCustom.bottomBarItems")
     h.store.values = ["u1234abcd.bar.mac.bottomBarItems": "4"]
     h.sync.accountReported("u1234abcd")
 
@@ -270,7 +270,7 @@ private final class Harness {
     h.store.values = ["u1234abcd.bar.mac.bottomBarItems": "4"]
     h.sync.accountReported("u1234abcd")
     h.sync.setEnabled(false)
-    h.defaults.set("Changed while off", forKey: "customMode.bottomBarItems")
+    h.defaults.set("Changed while off", forKey: "fastmailCustom.bottomBarItems")
 
     h.sync.setEnabled(true)
 
@@ -317,8 +317,8 @@ private final class Harness {
     let h = Harness(#function)
     h.store.values = ["u1234abcd.triageLabel": "Todo"]
     h.sync.accountReported("u1234abcd")
-    h.defaults.set("4", forKey: "customMode.bottomBarItems")
-    h.defaults.set("w", forKey: "customMode.snoozeKey")
+    h.defaults.set("4", forKey: "fastmailCustom.bottomBarItems")
+    h.defaults.set("w", forKey: "fastmailCustom.snoozeKey")
 
     h.store.values["u1234abcd.triageLabel"] = "Later"
     h.store.values["u1234abcd.bottomBarItems"] = "2"
@@ -387,7 +387,7 @@ private final class Harness {
 @Test @MainActor func theSwitchIsOnByDefault() {
     let h = Harness(#function)
     #expect(h.sync.isEnabled)
-    #expect(CustomModeSettingsSync.isEnabled(in: h.defaults))
+    #expect(FastmailCustomSettingsSync.isEnabled(in: h.defaults))
 }
 
 @Test @MainActor func turningSyncOffStopsEveryReadAndWriteAndClearsTheJoinedFlags() {
@@ -421,7 +421,7 @@ private final class Harness {
     h.store.values = ["u1234abcd.triageLabel": "Todo"]
     h.sync.accountReported("u1234abcd")
     h.sync.setEnabled(false)
-    h.defaults.set("Changed while off", forKey: "customMode.triageLabel")
+    h.defaults.set("Changed while off", forKey: "fastmailCustom.triageLabel")
 
     h.sync.setEnabled(true)
 
@@ -438,17 +438,17 @@ private final class Harness {
     h.sync.setEnabled(false)
     h.sync.setEnabled(true)
 
-    let settings = CustomModeSettings.current(from: h.defaults)
+    let settings = FastmailCustomSettings.current(from: h.defaults)
     #expect(!settings.keys.contains { $0.contains("enabled") || $0.contains("accountId") || $0.contains("joined") })
-    #expect(SettingsSyncRules.storeKey(accountId: "u1234abcd", key: CustomModeSettingsSync.enabledKey) == nil)
-    h.sync.localChanged(key: CustomModeSettingsSync.enabledKey, value: false)
+    #expect(SettingsSyncRules.storeKey(accountId: "u1234abcd", key: FastmailCustomSettingsSync.enabledKey) == nil)
+    h.sync.localChanged(key: FastmailCustomSettingsSync.enabledKey, value: false)
     #expect(h.store.writes.isEmpty)
 }
 
 // The notice carries its reason as a plain integer
 @Test @MainActor func theChangeReasonsAreFoundationsOwnNumbers() {
-    #expect(CustomModeSettingsSync.ChangeReason.serverChange.rawValue == NSUbiquitousKeyValueStoreServerChange)
-    #expect(CustomModeSettingsSync.ChangeReason.initialSync.rawValue == NSUbiquitousKeyValueStoreInitialSyncChange)
-    #expect(CustomModeSettingsSync.ChangeReason.quotaViolation.rawValue == NSUbiquitousKeyValueStoreQuotaViolationChange)
-    #expect(CustomModeSettingsSync.ChangeReason.accountChange.rawValue == NSUbiquitousKeyValueStoreAccountChange)
+    #expect(FastmailCustomSettingsSync.ChangeReason.serverChange.rawValue == NSUbiquitousKeyValueStoreServerChange)
+    #expect(FastmailCustomSettingsSync.ChangeReason.initialSync.rawValue == NSUbiquitousKeyValueStoreInitialSyncChange)
+    #expect(FastmailCustomSettingsSync.ChangeReason.quotaViolation.rawValue == NSUbiquitousKeyValueStoreQuotaViolationChange)
+    #expect(FastmailCustomSettingsSync.ChangeReason.accountChange.rawValue == NSUbiquitousKeyValueStoreAccountChange)
 }

@@ -60,8 +60,8 @@ private func freshDefaults(_ suite: String) -> UserDefaults {
         == "/mail/Archive/")
     #expect(DevicePreferences.rememberablePath(of: URL(string: "https://APP.FASTMAIL.COM/calendar/"))
         == "/calendar/")
-    #expect(DevicePreferences.rememberablePath(of: URL(string: "https://app.fastmail.com/settings/custommode"))
-        == "/settings/custommode")
+    #expect(DevicePreferences.rememberablePath(of: URL(string: "https://app.fastmail.com/settings/custom-options"))
+        == "/settings/custom-options")
     // Kept as it is encoded, so it opens exactly as it was
     #expect(DevicePreferences.rememberablePath(of: URL(string: "https://app.fastmail.com/mail/search:from%3Aboss"))
         == "/mail/search:from%3Aboss")

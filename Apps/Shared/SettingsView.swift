@@ -26,6 +26,7 @@ private struct GeneralSettingsView: View {
     let profile: Profile
     @AppStorage(StartView.defaultsKey) private var startView = ""
     @AppStorage(Backend.defaultsKey) private var backendName = Backend.production.rawValue
+    @AppStorage(DevicePreferences.rememberPageKey) private var rememberPage = false
 
     var body: some View {
         Form {
@@ -41,13 +42,17 @@ private struct GeneralSettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Section {
+                Toggle("Remember last page", isOn: Binding(
+                    get: { rememberPage },
+                    set: { DevicePreferences.setRememberPage($0) }
+                ))
                 TextField(
                     "Start page",
                     text: $startView,
                     prompt: Text("/mail/Inbox")
                 )
             } footer: {
-                Text("The path to open, such as /mail/Inbox. Empty opens the default view. Takes effect in new windows.")
+                Text("The path to open, such as /mail/Inbox; empty opens the default view. Used when Remember last page is off, or nothing has been saved yet. Takes effect in new windows.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

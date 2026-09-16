@@ -24,7 +24,7 @@ LS=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.f
 INSTALLED=(
   "/Applications/mdbraber.com.app"
   "/Applications/nexthealth.nl.app"
-  "/Applications/Fastmail Custom Mode.app"
+  "/Applications/Fastmail Custom.app"
 )
 
 # Every registered copy as "path<TAB>identifier". The old com.mdbraber.fastmail

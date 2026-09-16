@@ -30,7 +30,7 @@
         // Invariant over what is loaded: project label ⇒ Inbox
         const visible = S.getAll(C.Mailbox).filter(m => !m.get('role') && !(Number(m.get('hidden')) & 1))
             .map(m => m.get('name'));
-        const settings = (window.customMode && window.customMode.settings()) || {};
+        const settings = (window.fastmailCustom && window.fastmailCustom.settings()) || {};
         const excluded = String(settings.excludedLabels || 'Later').split(',').map(s => s.trim().toLowerCase());
         const triage = String(settings.triageLabel || 'Triage').toLowerCase();
         const projects = visible.filter(n => excluded.indexOf(n.toLowerCase()) === -1 && n.toLowerCase() !== triage);

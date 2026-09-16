@@ -20,17 +20,17 @@ import Testing
     }
 }
 
-// The rules file cannot see CustomModeSettings, so it carries the rule
+// The rules file cannot see FastmailCustomSettings, so it carries the rule
 // again; the two must never part.
-@Test func theSettingKeyRuleIsCustomModeSettingsOwn() {
+@Test func theSettingKeyRuleIsFastmailCustomSettingsOwn() {
     let samples = [
         "labelColours", "a", "Z9", "abc123", "", "1st", "has space", "has-hyphen",
-        "has_underscore", "push.alerts", "customMode.triageLabel", "é", "café",
+        "has_underscore", "push.alerts", "fastmailCustom.triageLabel", "é", "café",
         "e\u{301}", "\r\n", "a\r\n", "Ⅻ", "٣", "abc٣", "ｆｕｌｌ", "a\u{0}",
     ]
     for key in samples {
         #expect(
-            SettingsSyncRules.isSettingKey(key) == CustomModeSettings.isWritableSettingKey(key),
+            SettingsSyncRules.isSettingKey(key) == FastmailCustomSettings.isWritableSettingKey(key),
             "\(key.debugDescription)"
         )
     }

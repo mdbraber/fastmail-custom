@@ -17,7 +17,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onBadge: @MainActor (Int) -> Void
     private let onActions: @MainActor ([String]) -> Void
     private let onOpenSettings: @MainActor () -> Void
-    /// A Custom mode setting the page has changed. The key is bare; the
+    /// A Fastmail Custom setting the page has changed. The key is bare; the
     /// caller adds the namespace.
     private let onSetting: @MainActor (String, Any) -> Void
     private let onNotify: @MainActor (MailNotification) -> Void
@@ -39,6 +39,11 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onAccount: @MainActor (String) -> Void
     /// The settings page's "Sync settings with iCloud" switch.
     private let onSettingsSync: @MainActor (Bool) -> Void
+    /// The Mac's stand-in for window.Notification.permission, since a
+    /// WKWebView's own copy of that API cannot be granted.
+    private let onNotificationPermission: @MainActor () async -> String
+    /// The Mac's stand-in for window.Notification.requestPermission().
+    private let onRequestNotificationPermission: @MainActor () async -> String
 
     public init(
         expectedHost: String,
@@ -60,7 +65,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onSetNotifications: @escaping @MainActor (NotificationChoice) -> NotificationChoice? = { _ in nil },
         onOpenNotificationSettings: @escaping @MainActor () -> Void = {},
         onAccount: @escaping @MainActor (String) -> Void = { _ in },
-        onSettingsSync: @escaping @MainActor (Bool) -> Void = { _ in }
+        onSettingsSync: @escaping @MainActor (Bool) -> Void = { _ in },
+        onNotificationPermission: @escaping @MainActor () async -> String = { "denied" },
+        onRequestNotificationPermission: @escaping @MainActor () async -> String = { "denied" }
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
@@ -82,6 +89,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onOpenNotificationSettings = onOpenNotificationSettings
         self.onAccount = onAccount
         self.onSettingsSync = onSettingsSync
+        self.onNotificationPermission = onNotificationPermission
+        self.onRequestNotificationPermission = onRequestNotificationPermission
     }
 
     static func rect(from values: [Double]) -> CGRect? {
@@ -154,7 +163,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "setting":
             guard
                 let key = payload["key"] as? String,
-                CustomModeSettings.isWritableSettingKey(key)
+                FastmailCustomSettings.isWritableSettingKey(key)
             else {
                 return BridgeReply(value: nil, error: "setting payload has no usable key")
             }
@@ -251,6 +260,10 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             }
             onSettingsSync(number.boolValue)
             return BridgeReply(value: nil, error: nil)
+        case "notificationPermission":
+            return BridgeReply(value: await onNotificationPermission(), error: nil)
+        case "requestNotificationPermission":
+            return BridgeReply(value: await onRequestNotificationPermission(), error: nil)
         default:
             return BridgeReply(value: nil, error: "unknown action: \(action)")
         }

@@ -15,7 +15,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
     /// Whether the app is the one you are looking at.
     private let isInFront: @MainActor () -> Bool
     // Keeps the settings observer alive exactly as long as the view exists
-    var settingsPusher: CustomModeSettingsPusher?
+    var settingsPusher: FastmailCustomSettingsPusher?
     var sharePresenter: SharePresenter?
     var badgePuller: BadgePuller?
     var linkLoader: LinkLoader?
@@ -121,7 +121,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             openExternally(url)
         case .cancelWithBanner:
             decisionHandler(.cancel)
-            model.banner = Self.refusalBanner(for: url)
+            PageToast.show(Self.refusalBanner(for: url))
         }
     }
 
@@ -158,7 +158,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         case .cancelWithBanner:
             decisionHandler(.cancel)
             if let url = navigationResponse.response.url {
-                model.banner = Self.refusalBanner(for: url)
+                PageToast.show(Self.refusalBanner(for: url))
             }
         }
     }
@@ -205,7 +205,7 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
         case .cancelAndOpenExternally:
             openExternally(url)
         case .cancelWithBanner:
-            model.banner = Self.refusalBanner(for: url)
+            PageToast.show(Self.refusalBanner(for: url))
         }
         return nil
     }

@@ -68,7 +68,7 @@
         lines.push('');
     }
 
-    const mode = window.customMode;
+    const mode = window.fastmailCustom;
     const settings = (mode && mode.settings()) || {};
     let mailbox = '(none)';
     try {

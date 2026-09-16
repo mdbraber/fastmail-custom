@@ -127,8 +127,8 @@ public enum HomeShortcuts {
 
     /// The badge label as the app has it: the stored value, or the default.
     public static func badgeLabel(in defaults: UserDefaults = .standard) -> String {
-        defaults.string(forKey: CustomModeSettings.defaultsKey(for: "appBadgeLabel"))
-            ?? CustomModeSettings.badgeLabelDefault
+        defaults.string(forKey: FastmailCustomSettings.defaultsKey(for: "appBadgeLabel"))
+            ?? FastmailCustomSettings.badgeLabelDefault
     }
 }
 

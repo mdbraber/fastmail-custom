@@ -1,4 +1,4 @@
-# Fastmail Custom Mode injector
+# Fastmail Custom injector
 
 A minimal Safari web extension whose only job is to start
 `fastmail-custom-mode.user.js` on `app.fastmail.com` and `app.beta.fastmail.com`.
@@ -42,16 +42,17 @@ userscripts have no `browser.scripting`. See
 |---|---|
 | `manifest.json` | MV3 manifest, scoped to `app.fastmail.com` and `app.beta.fastmail.com` |
 | `background.js` | Injects the payload with `world: "MAIN"` on page load; keeps each Fastmail account's settings and syncs them with iCloud through the native part |
-| `early.js` | Content script at `document_start`, replaying last load's styles; stamps the host marker (`data-custom-mode-host`), saves the page's setting writes under its account, and passes the account and the sync switch to the background script |
-| `App/Fastmail Custom Mode/Fastmail Custom Mode Extension/SafariWebExtensionHandler.swift` | The native part: reads and writes iCloud key-value storage for the background script, through `Packages/FastmailShellKit/Sources/FastmailShellKit/SettingsSyncRules.swift`, which the extension compiles by reference |
-| `settings.html` / `settings.js` | The toolbar popup; opens Custom mode's page in Fastmail's Settings |
+| `early.js` | Content script at `document_start`, replaying last load's styles; stamps the host marker (`data-fastmail-custom-host`), saves the page's setting writes under its account, and passes the account and the sync switch to the background script |
+| `App/Fastmail Custom/Fastmail Custom Extension/SafariWebExtensionHandler.swift` | The native part: reads and writes iCloud key-value storage for the background script, through `Packages/FastmailShellKit/Sources/FastmailShellKit/SettingsSyncRules.swift`, which the extension compiles by reference |
+| `settings.html` / `settings.js` | The toolbar popup; opens Fastmail Custom's page in Fastmail's Settings, and links to `options.html` |
+| `options.html` | Safari's options page for the extension; explains the two allowed domains and points at the "When visiting other websites" control on the same Safari Settings screen |
 | `fastmail-custom-mode.js` | Symlink to the userscript, which is the payload |
 
 The payload guards against running twice, so a duplicate injection is harmless.
 
 ## Settings sync
 
-Custom mode's settings follow each Fastmail account between Safari on this Mac
+Fastmail Custom's settings follow each Fastmail account between Safari on this Mac
 and the Personal and Work apps on the Mac, iPhone and iPad, through iCloud
 key-value storage. The extension target declares the store the apps share;
 the host app does not.
@@ -69,7 +70,7 @@ the host app does not.
   per account: every Mac (Safari here, plus the Personal and Work apps) shares
   one value, separate from the one every iPhone shares and the one every iPad
   shares. Safari shares the Mac apps' bucket, not one of its own.
-- The "Sync settings with iCloud" switch on Custom mode's settings page is
+- The "Sync settings with iCloud" switch on Fastmail Custom's settings page is
   kept as `syncEnabled`, for Safari on this Mac only. Turning it off keeps
   every setting and forgets every first sync; turning it on takes iCloud's
   settings again.
@@ -80,7 +81,7 @@ Safari extensions must be delivered inside an app, so this needs converting once
 
 ```sh
 xcrun safari-web-extension-converter \
-    --app-name "Fastmail Custom Mode" \
+    --app-name "Fastmail Custom" \
     --copy-resources \
     SafariExtension
 ```
@@ -97,11 +98,11 @@ That builds the host app in Release and puts it in `/Applications`, which is
 where Safari looks for it. To iterate without installing, build in place:
 
 ```sh
-cd "SafariExtension/App/Fastmail Custom Mode"
-xcodebuild -project "Fastmail Custom Mode.xcodeproj" \
-    -scheme "Fastmail Custom Mode" -configuration Debug \
+cd "SafariExtension/App/Fastmail Custom"
+xcodebuild -project "Fastmail Custom.xcodeproj" \
+    -scheme "Fastmail Custom" -configuration Debug \
     -derivedDataPath build build
-open "build/Build/Products/Debug/Fastmail Custom Mode.app"
+open "build/Build/Products/Debug/Fastmail Custom.app"
 ```
 
 Reloading the tab without rebuilding silently runs the previous payload:
@@ -113,7 +114,7 @@ underneath a running app is what makes the extension vanish from Safari's list
 altogether.
 
 ```sh
-osascript -e 'tell application "Fastmail Custom Mode" to quit'
+osascript -e 'tell application "Fastmail Custom" to quit'
 ```
 
 ### Signing
@@ -129,7 +130,7 @@ with the Apple Development certificate and the identity stays put across
 rebuilds. Check it with:
 
 ```sh
-codesign -dv "build/Build/Products/Debug/Fastmail Custom Mode.app" 2>&1 |
+codesign -dv "build/Build/Products/Debug/Fastmail Custom.app" 2>&1 |
     grep TeamIdentifier
 ```
 
@@ -144,10 +145,10 @@ Extensions. Each Fastmail web app (`mdbraber.com.app` and friends) keeps its
 With a Fastmail tab open:
 
 ```js
-window.customMode.isOn()
+window.fastmailCustom.isOn()
 ```
 
-The console also logs `Custom mode on` or `off` on load. If the CSP
+The console also logs `Fastmail Custom on` or `off` on load. If the CSP
 error still appears, that is the Userscripts copy of the script failing; disable
 it there, since this extension now delivers it.
 
@@ -161,5 +162,5 @@ shells and the mailto chooser joined them under `com.mdbraber.fastmail-custom`
 the bare identifier is a prefix the whole family shares rather than one
 app's name. Safari keys an extension's enabled state and its stored settings
 to that identifier, so each rename presents this as a new extension: enable
-it again in Safari's settings, and open Custom mode's settings page from the
+it again in Safari's settings, and open Fastmail Custom's settings page from the
 toolbar button to set it up again.

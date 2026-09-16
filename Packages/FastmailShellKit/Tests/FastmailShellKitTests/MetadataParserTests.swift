@@ -3,7 +3,7 @@ import Testing
 
 private let realHeader = """
 // ==UserScript==
-// @name         Fastmail Custom mode
+// @name         Fastmail Custom
 // @namespace    mdbraber
 // @version      1.0
 // @description  Sticky Inbox filter on labels
@@ -19,7 +19,7 @@ private let realHeader = """
 
 @Test func parsesTheRealHeader() throws {
     let meta = try MetadataParser.parse(realHeader)
-    #expect(meta.name == "Fastmail Custom mode")
+    #expect(meta.name == "Fastmail Custom")
     #expect(meta.matches == ["https://app.fastmail.com/*"])
     #expect(meta.runAt == .documentIdle)
     #expect(meta.grants == ["none"])

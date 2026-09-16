@@ -101,6 +101,48 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
         (NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
     }
 
+    /// The page's own idea of window.Notification.permission: read fresh
+    /// each time, since a change in System Settings should show up without
+    /// a relaunch.
+    public func permissionStatus() async -> String {
+        let status = await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                continuation.resume(returning: settings.authorizationStatus)
+            }
+        }
+        return Self.permissionString(for: status)
+    }
+
+    /// What the page's own "Enable notifications" button calls, standing in
+    /// for window.Notification.requestPermission(): the system only ever
+    /// prompts once per install, so after the first ask this just answers
+    /// with whatever was already decided.
+    public func requestPermission() async -> String {
+        let granted = await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) {
+                granted, _ in continuation.resume(returning: granted)
+            }
+        }
+        authorizationPending = false
+        if granted {
+            authorizationGranted = true
+            let queued = waiting
+            waiting = []
+            queued.forEach(deliver)
+        } else {
+            authorizationDenied = true
+        }
+        return granted ? "granted" : "denied"
+    }
+
+    private static func permissionString(for status: UNAuthorizationStatus) -> String {
+        switch status {
+        case .denied: return "denied"
+        case .notDetermined: return "default"
+        default: return "granted"
+        }
+    }
+
     // MARK: UNUserNotificationCenterDelegate
 
     nonisolated public func userNotificationCenter(

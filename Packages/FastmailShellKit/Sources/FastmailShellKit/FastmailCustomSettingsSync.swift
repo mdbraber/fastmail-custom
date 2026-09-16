@@ -13,16 +13,16 @@ protocol KeyValueStore: AnyObject {
     func synchronize() -> Bool
 }
 
-/// Keeps Custom mode's settings the same on the devices of one iCloud
+/// Keeps Fastmail Custom's settings the same on the devices of one iCloud
 /// account, for each Fastmail account, through iCloud key-value storage.
 ///
 /// One per app process, serving every window. Settings stay where they have
-/// always been, in `UserDefaults` under `customMode.`; this copies them to
+/// always been, in `UserDefaults` under `fastmailCustom.`; this copies them to
 /// and from the store under `<account id>.<setting>`, by the rules in
 /// `SettingsSyncRules`. Its own state lives beside them under
 /// `settingsSync.`, so it is neither synced nor handed to the page.
 @MainActor
-public final class CustomModeSettingsSync {
+public final class FastmailCustomSettingsSync {
     nonisolated static let accountIdKey = "settingsSync.accountId"
     nonisolated static let enabledKey = "settingsSync.enabled"
     nonisolated static let joinedKeyPrefix = "settingsSync.joined."
@@ -204,14 +204,14 @@ public final class CustomModeSettingsSync {
                 changed[key] = item
             }
         }
-        let local = CustomModeSettings.current(from: defaults)
+        let local = FastmailCustomSettings.current(from: defaults)
         for (key, value) in SettingsSyncRules.settings(for: accountId, in: changed)
         where !SettingsSyncRules.sameValue(local[key], value) {
-            defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
+            defaults.set(value, forKey: FastmailCustomSettings.defaultsKey(for: key))
         }
         for (key, value) in SettingsSyncRules.deviceTypeSettings(for: accountId, deviceType: deviceType(), in: changed)
         where !SettingsSyncRules.sameValue(local[key], value) {
-            defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
+            defaults.set(value, forKey: FastmailCustomSettings.defaultsKey(for: key))
         }
     }
 
@@ -233,7 +233,7 @@ public final class CustomModeSettingsSync {
         }
         let secondsSinceSuccessfulSync = firstSuccessfulSync.map { now().timeIntervalSince($0) }
         if !identity, plainNeeded || barNeeded {
-            log.notice("No iCloud account; Custom mode settings stay on this device")
+            log.notice("No iCloud account; Fastmail Custom settings stay on this device")
         }
 
         var nextRecheck: TimeInterval?
@@ -253,26 +253,26 @@ public final class CustomModeSettingsSync {
             switch decision {
             case .adopt:
                 let plan = SettingsSyncRules.adoption(
-                    local: CustomModeSettings.current(from: defaults), inStore: inStore
+                    local: FastmailCustomSettings.current(from: defaults), inStore: inStore
                 )
                 for (key, value) in plan.set {
-                    defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
+                    defaults.set(value, forKey: FastmailCustomSettings.defaultsKey(for: key))
                 }
                 for key in plan.remove {
-                    defaults.removeObject(forKey: CustomModeSettings.defaultsKey(for: key))
+                    defaults.removeObject(forKey: FastmailCustomSettings.defaultsKey(for: key))
                 }
                 defaults.set(true, forKey: Self.joinedKeyPrefix + accountId)
-                log.notice("Took this account's Custom mode settings from iCloud")
+                log.notice("Took this account's Fastmail Custom settings from iCloud")
             case .upload:
                 let entries = SettingsSyncRules.storeEntries(
-                    accountId: accountId, local: CustomModeSettings.current(from: defaults)
+                    accountId: accountId, local: FastmailCustomSettings.current(from: defaults)
                 )
                 for (key, value) in entries {
                     store.set(value, forKey: key)
                 }
                 _ = store.synchronize()
                 defaults.set(true, forKey: Self.joinedKeyPrefix + accountId)
-                log.notice("Sent this device's Custom mode settings to iCloud")
+                log.notice("Sent this device's Fastmail Custom settings to iCloud")
             case .wait(let recheckIn):
                 noteWait(recheckIn)
             }
@@ -289,18 +289,18 @@ public final class CustomModeSettingsSync {
             )
             switch decision {
             case .adopt:
-                let local = CustomModeSettings.current(from: defaults).filter { SettingsSyncRules.deviceTypeKeys.contains($0.key) }
+                let local = FastmailCustomSettings.current(from: defaults).filter { SettingsSyncRules.deviceTypeKeys.contains($0.key) }
                 let plan = SettingsSyncRules.deviceTypeAdoption(local: local, inStore: inStore)
                 for (key, value) in plan.set {
-                    defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key))
+                    defaults.set(value, forKey: FastmailCustomSettings.defaultsKey(for: key))
                 }
                 for key in plan.remove {
-                    defaults.removeObject(forKey: CustomModeSettings.defaultsKey(for: key))
+                    defaults.removeObject(forKey: FastmailCustomSettings.defaultsKey(for: key))
                 }
                 defaults.set(true, forKey: Self.joinedBarKeyPrefix + accountId)
                 log.notice("Took this account's bar settings from iCloud")
             case .upload:
-                let local = CustomModeSettings.current(from: defaults).filter { SettingsSyncRules.deviceTypeKeys.contains($0.key) }
+                let local = FastmailCustomSettings.current(from: defaults).filter { SettingsSyncRules.deviceTypeKeys.contains($0.key) }
                 let entries = SettingsSyncRules.deviceTypeStoreEntries(accountId: accountId, deviceType: type, local: local)
                 for (key, value) in entries {
                     store.set(value, forKey: key)
@@ -332,18 +332,18 @@ public final class CustomModeSettingsSync {
 extension NSUbiquitousKeyValueStore: KeyValueStore {}
 
 @MainActor
-public extension CustomModeSettingsSync {
+public extension FastmailCustomSettingsSync {
     /// The one the app installed, or nothing where none was: the tests, the
     /// integration tests and the Mailto app.
-    private(set) static var current: CustomModeSettingsSync?
+    private(set) static var current: FastmailCustomSettingsSync?
 
     /// Makes the app's sync component on iCloud's own store and starts it;
     /// the same one when called again. The app's entry point calls this, so
     /// it exists before the first window builds its web view.
     @discardableResult
-    static func install() -> CustomModeSettingsSync {
+    static func install() -> FastmailCustomSettingsSync {
         if let current { return current }
-        let sync = CustomModeSettingsSync(
+        let sync = FastmailCustomSettingsSync(
             defaults: .standard,
             store: NSUbiquitousKeyValueStore.default,
             hasICloudIdentity: { FileManager.default.ubiquityIdentityToken != nil },

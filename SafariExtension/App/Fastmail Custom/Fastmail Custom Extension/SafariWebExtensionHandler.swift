@@ -1,6 +1,6 @@
 //
 //  SafariWebExtensionHandler.swift
-//  Fastmail Custom Mode Extension
+//  Fastmail Custom Extension
 //
 //  Created by Maarten den Braber on 2026-08-11.
 //
@@ -44,7 +44,7 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             _ = store.synchronize()
         }
         if let error = answer.reply["error"] as? String {
-            os_log(.error, "Custom mode settings sync refused a message: %{public}@", error)
+            os_log(.error, "Fastmail Custom settings sync refused a message: %{public}@", error)
         }
 
         let response = NSExtensionItem()

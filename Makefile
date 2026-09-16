@@ -57,11 +57,11 @@ install-ios: build-ios
 # The Safari extension ships inside a host app, which Safari only sees once
 # the app is in /Applications. Xcode resolves the extension's symlinks into
 # real files as it builds, so the app always carries the current script.
-EXTENSION_DIR = SafariExtension/App/Fastmail Custom Mode
-EXTENSION_APP = Fastmail Custom Mode.app
+EXTENSION_DIR = SafariExtension/App/Fastmail Custom
+EXTENSION_APP = Fastmail Custom.app
 
 build-extension:
-	cd "$(EXTENSION_DIR)" && xcodebuild -project "Fastmail Custom Mode.xcodeproj" -scheme "Fastmail Custom Mode" -configuration Release -derivedDataPath build -allowProvisioningUpdates build
+	cd "$(EXTENSION_DIR)" && xcodebuild -project "Fastmail Custom.xcodeproj" -scheme "Fastmail Custom" -configuration Release -derivedDataPath build -allowProvisioningUpdates build
 	tools/claim-installed-apps.sh
 
 install-extension: build-extension

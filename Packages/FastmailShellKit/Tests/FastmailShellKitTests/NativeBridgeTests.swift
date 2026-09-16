@@ -266,7 +266,7 @@ private func settingsDefaults(_ name: String) -> UserDefaults {
     let defaults = settingsDefaults(#function)
     let bridge = NativeBridge(
         expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
-        onSetting: { key, value in defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key)) }
+        onSetting: { key, value in defaults.set(value, forKey: FastmailCustomSettings.defaultsKey(for: key)) }
     )
     let first = await bridge.handle(body: [
         "action": "setting", "payload": ["key": "labelColours", "value": false],
@@ -276,26 +276,26 @@ private func settingsDefaults(_ name: String) -> UserDefaults {
     ])
     #expect(first.error == nil)
     #expect(second.error == nil)
-    #expect(defaults.object(forKey: "customMode.labelColours") as? Bool == false)
-    #expect(defaults.string(forKey: "customMode.triageLabel") == "Todo")
+    #expect(defaults.object(forKey: "fastmailCustom.labelColours") as? Bool == false)
+    #expect(defaults.string(forKey: "fastmailCustom.triageLabel") == "Todo")
 }
 
 // The prefix is the whole guard: whatever the page sends lands under
-// customMode., a namespace nothing else uses, so a key that happens to spell
-// a shell setting writes a Custom mode one and leaves the shell alone.
+// fastmailCustom., a namespace nothing else uses, so a key that happens to spell
+// a shell setting writes a Fastmail Custom one and leaves the shell alone.
 @Test @MainActor func settingActionCannotReachAShellSetting() async {
     let defaults = settingsDefaults(#function)
     defaults.set("production", forKey: Backend.defaultsKey)
     let bridge = NativeBridge(
         expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
-        onSetting: { key, value in defaults.set(value, forKey: CustomModeSettings.defaultsKey(for: key)) }
+        onSetting: { key, value in defaults.set(value, forKey: FastmailCustomSettings.defaultsKey(for: key)) }
     )
     let reply = await bridge.handle(body: [
         "action": "setting", "payload": ["key": "backend", "value": "beta"],
     ])
     #expect(reply.error == nil)
     #expect(defaults.string(forKey: Backend.defaultsKey) == "production")
-    #expect(defaults.string(forKey: "customMode.backend") == "beta")
+    #expect(defaults.string(forKey: "fastmailCustom.backend") == "beta")
 }
 
 // A dot would let a key path out of the namespace, so it is refused before
@@ -306,7 +306,7 @@ private func settingsDefaults(_ name: String) -> UserDefaults {
         expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in },
         onSetting: { key, _ in written.append(key) }
     )
-    for key in ["push.alerts", "1st", "has space", "has-hyphen", "", "customMode.triageLabel"] {
+    for key in ["push.alerts", "1st", "has space", "has-hyphen", "", "fastmailCustom.triageLabel"] {
         let reply = await bridge.handle(body: [
             "action": "setting", "payload": ["key": key, "value": "x"],
         ])

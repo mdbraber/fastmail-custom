@@ -290,11 +290,32 @@
         }, true);
     }
 
+    // Fastmail's own toast host: the container view built with the root
+    // view at boot and inserted right after it, on desktop and on the phone
+    // alike, so its drawn node is always there to ask for the instance —
+    // the same node and the same show() Fastmail Custom's own toasts use, so a
+    // message from this app reads like one of the page's own rather than
+    // drawing anything of its own.
+    function toastHost() {
+        var node = document.querySelector('.v-NotificationContainer');
+        var view = node && window.FastMail && FastMail.getViewFromNode(node);
+        return view && typeof view.show === 'function' ? view : null;
+    }
+    function toast(message, duration) {
+        try {
+            var host = toastHost();
+            if (host) host.show(String(message), duration || 4000, true);
+        } catch (error) {
+            // Nothing native left to fall back to from here.
+        }
+    }
+
     window.__fmshell = {
         onRoute: function (callback) {
             routeCallbacks.push(callback);
         },
-        report: report
+        report: report,
+        toast: toast
     };
 
     function collapse(text) {
@@ -387,8 +408,12 @@
     }
 
     function logoutIndex(options) {
+        return findOptionIndex(options, /log\s*-?\s*out|logout|sign\s*-?\s*out/i);
+    }
+
+    function findOptionIndex(options, pattern) {
         for (var i = 0; i < options.length; i += 1) {
-            if (/log\s*-?\s*out|logout|sign\s*-?\s*out/i.test(optionProbe(options[i]))) return i;
+            if (pattern.test(optionProbe(options[i]))) return i;
         }
         return -1;
     }
@@ -440,8 +465,18 @@
         return button;
     }
 
+    // The line under a section's last option is drawn from a flag on the
+    // option itself, the same one Fastmail's own groups carry (found on
+    // their rendered options as the class v-MenuOption--lastOfSection) —
+    // not from a gap in the array, which draws nothing at all.
+    function markLastOfSection(button) {
+        try {
+            button.set('isLastOfSection', true);
+        } catch (error) {}
+        return button;
+    }
+
     function injectMenuItems(menu) {
-        if (!menuItems.length) return;
         var options = menu && typeof menu.get === 'function' && menu.get('options');
         if (!options || typeof options.unshift !== 'function') return;
         var kind = menuKindOf(options);
@@ -449,19 +484,29 @@
             logMenuShape(options);
             return;
         }
+
+        if (!menuItems.length) return;
         if (options.some(function (option) { return option && option.__fmshellItem; })) return;
 
         var wanted = menuItems.filter(function (item) { return item.menu === kind; });
         if (!wanted.length) return;
 
-        var added = wanted.map(menuItemButton);
-
         if (kind === 'message') {
-            added.push(null);
-            options.unshift.apply(options, added);
+            // Everything this app adds to this menu sits together, just
+            // above Delete, marked off on both sides, Share first as it
+            // always was.
+            var deleteAt = findOptionIndex(options, /\bdelete\b/i);
+            var buttons = wanted.map(menuItemButton);
+            markLastOfSection(buttons[buttons.length - 1]);
+            var before = options[deleteAt - 1];
+            if (before) markLastOfSection(before);
+            options.splice.apply(
+                options, [deleteAt < 0 ? options.length : deleteAt, 0].concat(buttons)
+            );
             return;
         }
 
+        var added = wanted.map(menuItemButton);
         var at = logoutIndex(options);
         var splice = [at < 0 ? options.length : at, 0].concat(added);
         options.splice.apply(options, splice);
@@ -498,32 +543,32 @@
     }
 
     // The shell's own settings live in Fastmail's Settings screen, as a Device
-    // settings row right after Custom mode, or between Custom swipes and
-    // Offline while Custom mode has no row.
+    // settings row right after Custom options, or between Custom swipes and
+    // Offline while Custom options has no row.
     function dressSettingsList() {
         // On the Mac the shell's own settings open from the app menu and ⌘, so
         // the Settings screen needs no row for them; the row belongs only
         // where there is no native way in, the phone and iPad.
         if (/Electron\//.test(navigator.userAgent)) return;
         var lists = document.querySelectorAll('ul.v-Sources-list');
-        var list, swipes, offline, customMode;
+        var list, swipes, offline, fastmailCustom;
         for (var i = 0; i < lists.length && !list; i += 1) {
             var foundSwipes = null;
             var foundOffline = null;
-            var foundCustomMode = null;
+            var foundFastmailCustom = null;
             [].forEach.call(lists[i].children, function (li) {
                 var link = li.querySelector('a.app-source');
                 if (!link) return;
                 var text = collapse(link.textContent).toLowerCase();
                 if (text === 'custom swipes') foundSwipes = li;
                 if (text === 'offline') foundOffline = li;
-                if (text === 'custom mode') foundCustomMode = li;
+                if (text === 'custom options') foundFastmailCustom = li;
             });
             if (foundSwipes && foundOffline) {
                 list = lists[i];
                 swipes = foundSwipes;
                 offline = foundOffline;
-                customMode = foundCustomMode;
+                fastmailCustom = foundFastmailCustom;
             }
         }
         if (!list) return;
@@ -532,12 +577,12 @@
         // overflows it and the next section's header laps the last row.
         var existing = list.querySelector('.fmshell-device-settings');
         if (existing) {
-            // Custom mode's entry is drawn once its page installs, which can
+            // Custom options' entry is drawn once its page installs, which can
             // be after this row went in, and Fastmail's list may then put it
             // below this row; the row goes back under it.
             var row = existing.closest('li') || existing;
-            if (customMode && row.previousElementSibling !== customMode) {
-                list.insertBefore(row, customMode.nextSibling);
+            if (fastmailCustom && row.previousElementSibling !== fastmailCustom) {
+                list.insertBefore(row, fastmailCustom.nextSibling);
             }
             fixListHeight(list, swipes);
             return;
@@ -603,11 +648,25 @@
         schedule();
     }
 
+    // Fastmail's own icons in this menu (Reply, Forward, …) leave visible
+    // padding inside their 24x24 box; these two, drawn on the same grid a
+    // generic icon set uses, do not, and so read as noticeably bigger and
+    // heavier even at the same stroke width. The group scales each down
+    // around the box's centre to match, rather than redrawing the paths by
+    // hand.
     var SHARE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"' +
-        ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"' +
+        ' fill="none" stroke="currentColor" stroke-linecap="round"' +
         ' stroke-linejoin="round" class="u-standardicon v-Icon">' +
+        '<g transform="translate(12 12) scale(0.7) translate(-12 -12)">' +
         '<path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/>' +
-        '<polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
+        '<polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></g></svg>';
+
+    // No icon of their own, but still one of Fastmail's blank ones: an
+    // option that draws nothing where an icon would go still gets the
+    // room one takes, the way an unselected grouping option's does, so the
+    // label lines up with the options around it that do have one.
+    var BLANK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"' +
+        ' class="u-standardicon v-Icon i-blank"></svg>';
 
     window.native = window.native || {};
     window.native.log = function () {
@@ -675,7 +734,7 @@
     }
 
     function badgeFromScript() {
-        var api = window.customMode;
+        var api = window.fastmailCustom;
         var fm = window.FastMail;
         if (!api || typeof api.isOn !== 'function' || !api.isOn() ||
             typeof api.countFor !== 'function') return null;
@@ -751,6 +810,9 @@
             label: item.label,
             icon: typeof item.icon === 'string' ? item.icon : null,
             menu: item.menu === 'profile' ? 'profile' : 'message',
+            // Items sharing a group sit together behind one separator;
+            // an item with no group of its own is its own group of one.
+            group: typeof item.group === 'string' ? item.group : item.id,
             onSelect: item.onSelect
         });
         installMenuInjection();
@@ -785,7 +847,7 @@
         return Promise.resolve(badgeCount());
     };
 
-    // A Custom mode setting the settings page has changed. The key is bare:
+    // A Fastmail Custom setting the settings page has changed. The key is bare:
     // the shell owns the namespace it is stored under, so the page cannot
     // name anything outside it.
     window.native.setSetting = function (key, value) {
@@ -889,6 +951,7 @@
     window.native.addMenuItem({
         id: 'share',
         label: 'Share',
+        group: 'share',
         icon: SHARE_ICON,
         onSelect: function (context) {
             window.native.currentLink().then(function (link) {
@@ -899,6 +962,45 @@
                 });
             }).catch(function () {});
         }
+    });
+
+    // A menu's own way to the clipboard, confirmed the way an archive
+    // confirms: with the page's own toast, not this app's.
+    function copyText(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text);
+        }
+        var area = document.createElement('textarea');
+        area.value = text;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.focus();
+        area.select();
+        try {
+            document.execCommand('copy');
+        } finally {
+            document.body.removeChild(area);
+        }
+        return Promise.resolve();
+    }
+
+    [
+        { id: 'copyMarkdownLink', label: 'Copy Markdown Link', part: 'markdown', done: 'Copied Markdown link' },
+        { id: 'copyURL', label: 'Copy URL', part: 'url', done: 'Copied URL' },
+        { id: 'copyTitle', label: 'Copy Title', part: 'title', done: 'Copied title' }
+    ].forEach(function (spec) {
+        window.native.addMenuItem({
+            id: spec.id,
+            label: spec.label,
+            group: 'copy',
+            icon: BLANK_ICON,
+            onSelect: function () {
+                window.native.currentLink().then(function (link) {
+                    return copyText(link[spec.part]).then(function () { toast(spec.done); });
+                }).catch(function () { toast('No message open'); });
+            }
+        });
     });
 
     // Fastmail's desktop-app hook. Its service worker decides and formats
@@ -963,6 +1065,43 @@
             getIsDefaultApp: function () { return Promise.resolve(false); },
             setIsDefaultApp: function () {}
         };
+
+        // A WKWebView's own window.Notification reports "denied" with no
+        // public way for this app to change that, which is what left the
+        // Notifications page's own "Enable notifications" button unable to
+        // do anything. Real Electron apps stand in front of the same page
+        // code by replacing window.Notification themselves, so it is
+        // replaced here too, backed by whatever the Mac app already knows
+        // from asking the system.
+        var notificationPermission = 'default';
+        var refreshNotificationPermission = function () {
+            post('notificationPermission', {}).then(function (value) {
+                if (typeof value === 'string') notificationPermission = value;
+            });
+        };
+        refreshNotificationPermission();
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) refreshNotificationPermission();
+        });
+
+        var NotificationShim = function (title, options) {
+            options = options || {};
+            window.electron.showNotification(
+                { title: title, body: options.body },
+                options.data || {}
+            );
+        };
+        Object.defineProperty(NotificationShim, 'permission', {
+            get: function () { return notificationPermission; }
+        });
+        NotificationShim.requestPermission = function (callback) {
+            return post('requestNotificationPermission', {}).then(function (value) {
+                notificationPermission = typeof value === 'string' ? value : 'denied';
+                if (typeof callback === 'function') callback(notificationPermission);
+                return notificationPermission;
+            });
+        };
+        window.Notification = NotificationShim;
 
         // A click, back to the worker that wrote the notification: it
         // opens the message, the same way it does for its own clicks
