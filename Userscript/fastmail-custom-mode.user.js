@@ -1191,6 +1191,28 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (node.textContent !== text) node.textContent = text;
     };
 
+    // The mirror of mailboxTitleActive() for phone and tablet: Fastmail
+    // draws its own title there unconditionally, which is why the
+    // standalone one never activates on those layouts, but the setting
+    // should still reach what that native title says.
+    const nativeMailboxTitleActive = () =>
+        modeIsOn && settings.showMailboxTitle &&
+        (isPhoneLayout() || isTabletLayout());
+
+    // Fastmail's own title, replaced wholesale rather than appended to
+    // like dressPageSubtitle: mailboxSummaryLine() is already the full
+    // line wanted, freshly computed from the current mailbox each call,
+    // so there is no per-element "base" worth remembering, and the two
+    // synced copies (the large title and the one it shrinks into on
+    // scroll) both take it the same way Fastmail keeps their own text in
+    // sync with each other.
+    const dressNativeMailboxTitle = (node) => {
+        if (!nativeMailboxTitleActive()) return;
+        const text = mailboxSummaryLine();
+        if (text === null) return;
+        if (node.textContent !== text) node.textContent = text;
+    };
+
     const removeMailboxTitle = () => {
         const el = document.getElementById(MAILBOX_TITLE_ID);
         if (el) el.remove();
@@ -1341,6 +1363,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             .forEach(dressMailboxListTitle);
         document.querySelectorAll('.v-Page-subtitle')
             .forEach(dressPageSubtitle);
+        document.querySelectorAll('.v-Page-title')
+            .forEach(dressNativeMailboxTitle);
         ensureMailboxTitle();
     };
 
