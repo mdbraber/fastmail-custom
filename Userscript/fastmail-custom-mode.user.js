@@ -2657,6 +2657,63 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
+     * A redraw that fails partway must not leave the list deaf.
+     *
+     * A view's redraw opens a batch of property changes before it redraws
+     * anything and closes it only at the end, with nothing in between to
+     * close it on an error. So one error thrown mid-redraw leaves the
+     * message list holding every change it hears from then on: the group
+     * headers keep the counts they had (an emptied group still reads 16),
+     * and a group opened afterwards is laid out as if it were still shut, its
+     * rows drawn under the last heading. Measured in the work app, where the
+     * list view sat with its batch open and its changes queued until the
+     * batch was closed by hand, after which everything drew as it should.
+     *
+     * So a redraw that throws has whatever it opened closed again, and the
+     * error goes on as before. The error itself is not known yet: nothing
+     * recorded it. The toast carries its message and the trace is kept on
+     * window.fastmailCustom.redrawFaults(), so the next one can be read.
+     */
+    const redrawFaults = [];
+
+    const guardListRedraw = () => {
+        const ListView = FastMail.classes.ProgressiveListView;
+        if (!ListView || ListView.prototype.customRedrawGuard) return;
+
+        const proto = ListView.prototype;
+        const original = proto.redraw;
+        if (typeof original !== 'function') return;
+        proto.customRedrawGuard = true;
+
+        const depthOf = (view) => (view.__meta__ && view.__meta__.depth) || 0;
+
+        proto.redraw = function () {
+            const before = depthOf(this);
+            try {
+                return original.apply(this, arguments);
+            } catch (error) {
+                try {
+                    while (depthOf(this) > before) this.endPropertyChanges();
+                } catch (closeError) {
+                    // Closing runs the queued observers; one failing again
+                    // is reported with the first, and must not hide it
+                }
+
+                if (redrawFaults.length < 20) {
+                    redrawFaults.push({
+                        at: new Date().toISOString(),
+                        message: String(error && error.message || error),
+                        stack: String(error && error.stack || '')
+                    });
+                }
+                reportFault('the message list failed to redraw: ' +
+                    String(error && error.message || error), error);
+                throw error;
+            }
+        };
+    };
+
+    /*
      * ----------------------------------------------------------------
      * The list toolbar
      * ----------------------------------------------------------------
@@ -9741,6 +9798,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         patchLabelActions();
         patchMenus();
         patchSplits();
+        guardListRedraw();
         patchShortcuts();
         updateStyles();
         installAppBadge();
@@ -9784,6 +9842,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             currentGroupingId,
             chooseGrouping,
             openSettings,
+            // What a failed list redraw threw, for reading back later
+            redrawFaults: () => redrawFaults.slice(),
             // Called by the extension when the settings change, so options take
             // effect without a reload
             applySettings: (next) => {
