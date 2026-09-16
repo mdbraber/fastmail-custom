@@ -28,7 +28,11 @@ public final class FastmailCustomSettingsSync {
     nonisolated static let joinedKeyPrefix = "settingsSync.joined."
     /// One flag per account, not per device type: this device's own device
     /// type is fixed for the process's lifetime, so no suffix is needed.
-    nonisolated static let joinedBarKeyPrefix = "settingsSync.joinedBar."
+    /// Named anew when the bar's order joined its lengths in the bucket, so
+    /// a device that joined before joins again and sends its order.
+    nonisolated static let joinedBarKeyPrefix = "settingsSync.joinedBarOrder."
+    /// The flag from before the order was in the bucket, cleared on joining.
+    nonisolated static let earlierJoinedBarKeyPrefix = "settingsSync.joinedBar."
 
     /// Why the store says it changed, numbered as Foundation numbers them.
     enum ChangeReason: Int {
@@ -294,10 +298,13 @@ public final class FastmailCustomSettingsSync {
                 for (key, value) in plan.set {
                     defaults.set(value, forKey: FastmailCustomSettings.defaultsKey(for: key))
                 }
-                for key in plan.remove {
-                    defaults.removeObject(forKey: FastmailCustomSettings.defaultsKey(for: key))
+                let entries = SettingsSyncRules.deviceTypeStoreEntries(accountId: accountId, deviceType: type, local: plan.send)
+                for (key, value) in entries {
+                    store.set(value, forKey: key)
                 }
+                if !entries.isEmpty { _ = store.synchronize() }
                 defaults.set(true, forKey: Self.joinedBarKeyPrefix + accountId)
+                defaults.removeObject(forKey: Self.earlierJoinedBarKeyPrefix + accountId)
                 log.notice("Took this account's bar settings from iCloud")
             case .upload:
                 let local = FastmailCustomSettings.current(from: defaults).filter { SettingsSyncRules.deviceTypeKeys.contains($0.key) }
@@ -307,6 +314,7 @@ public final class FastmailCustomSettingsSync {
                 }
                 _ = store.synchronize()
                 defaults.set(true, forKey: Self.joinedBarKeyPrefix + accountId)
+                defaults.removeObject(forKey: Self.earlierJoinedBarKeyPrefix + accountId)
                 log.notice("Sent this device's bar settings to iCloud")
             case .wait(let recheckIn):
                 noteWait(recheckIn)
@@ -323,7 +331,8 @@ public final class FastmailCustomSettingsSync {
 
     private func clearJoined() {
         for key in defaults.dictionaryRepresentation().keys
-        where key.hasPrefix(Self.joinedKeyPrefix) || key.hasPrefix(Self.joinedBarKeyPrefix) {
+        where key.hasPrefix(Self.joinedKeyPrefix) || key.hasPrefix(Self.joinedBarKeyPrefix)
+            || key.hasPrefix(Self.earlierJoinedBarKeyPrefix) {
             defaults.removeObject(forKey: key)
         }
     }

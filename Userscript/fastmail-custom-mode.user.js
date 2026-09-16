@@ -127,9 +127,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
         // The action bar's verbs, as one ordered list over all of them: the
         // bar takes as many leading ones as fit; More always keeps a slot,
-        // and the rest wait inside More, in the same order. One list for
-        // every bar there is; along the bottom on a phone, across the top of
-        // a message on a tablet and on the Mac.
+        // and the rest wait inside More, in the same order. Each kind of
+        // device keeps its own list, synced between devices of that kind;
+        // along the bottom on a phone, across the top of a message on a
+        // tablet and on the Mac.
         bottomBarSlots: 'Snooze, Pin, Keep, Archive, Labels, Move, Delete',
         // How many of them are drawn rather than measured for, one count per
         // bar; empty leaves the bar measuring, which is what it did before
@@ -339,7 +340,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'bottomBarSlots', group: 'bottomBar',
             title: 'Action bar actions',
-            hint: 'In order, with a separator you can drag: everything above shows on this device’s action bar, everything from the separator down goes under More. The phone and the iPad or Mac each keep their own count, set from that device’s own settings.'
+            hint: 'In order, with a separator you can drag: everything above shows on this device’s action bar, everything from the separator down goes under More. The phone, the iPad and the Mac each keep their own order and count, set from that device’s own settings.'
         },
         {
             key: 'floatingMessageNav', group: 'appearance',
@@ -9207,14 +9208,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * count it lands at does, in bottomBarItems or topBarItems.
      *
      * Only one of the two counts is this device's own: bottomBarItems is the
-     * phone's, topBarItems is the iPad's and the Mac's (isTabletLayout is
-     * the same width check the bar itself reads its "at top or at bottom"
-     * layout from). The other count still exists and still syncs; a device
+     * phone's, topBarItems is the iPad's and the Mac's. Asked as "is this the
+     * phone layout" rather than "is this a tablet": isTablet is false on the
+     * Mac as well, which had the Mac's page editing the phone's count while
+     * its own bar, across the top, read the other. The other count still
+     * exists and still syncs; a device
      * it belongs to shows and edits it from its own settings page instead.
      */
-    const ownBarDivider = () => (isTabletLayout()
-        ? { id: '__fastmailCustomBarDivider', settingKey: 'topBarItems' }
-        : { id: '__fastmailCustomBarDivider', settingKey: 'bottomBarItems' });
+    const ownBarDivider = () => (isPhoneLayout()
+        ? { id: '__fastmailCustomBarDivider', settingKey: 'bottomBarItems' }
+        : { id: '__fastmailCustomBarDivider', settingKey: 'topBarItems' });
     const DIVIDER_LABEL = 'Separator (below in Menu)';
 
     // Where a count from the setting lands among the verbs: clamped to the

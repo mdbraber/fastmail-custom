@@ -36,14 +36,18 @@ import Testing
     }
 }
 
-// The bar lengths depend on the screen, so they never travel as plain,
-// per-account store keys; they travel through the device-type key space
-// instead (see the "Device type" tests below).
-@Test func theBarLengthsAreNeverPlainStoreKeys() {
-    #expect(SettingsSyncRules.deviceTypeKeys == ["bottomBarItems", "topBarItems"])
+// The bar's order and lengths are each device type's own, so they never
+// travel as plain, per-account store keys; they travel through the
+// device-type key space instead (see the "Device type" tests below).
+@Test func theBarOrderAndLengthsAreNeverPlainStoreKeys() {
+    #expect(SettingsSyncRules.deviceTypeKeys == ["bottomBarSlots", "bottomBarItems", "topBarItems"])
+    #expect(SettingsSyncRules.storeKey(accountId: "u1234abcd", key: "bottomBarSlots") == nil)
     #expect(SettingsSyncRules.storeKey(accountId: "u1234abcd", key: "bottomBarItems") == nil)
     #expect(SettingsSyncRules.storeKey(accountId: "u1234abcd", key: "topBarItems") == nil)
+    #expect(SettingsSyncRules.parse(storeKey: "u1234abcd.bottomBarSlots") == nil)
     #expect(SettingsSyncRules.parse(storeKey: "u1234abcd.topBarItems") == nil)
+    #expect(SettingsSyncRules.deviceTypeStoreKey(accountId: "u1234abcd", deviceType: .ipad, key: "bottomBarSlots")
+        == "u1234abcd.bar.ipad.bottomBarSlots")
 }
 
 @Test func keysThatAreNotSyncedSettingsAreNotParsed() {
@@ -190,13 +194,17 @@ import Testing
     #expect(entries["u1234abcd.bar.ipad.bottomBarItems"] as? String == "4")
 }
 
-@Test func deviceTypeAdoptionSetsWhatDiffersAndRemovesBarKeysTheStoreLacks() {
-    let local: [String: Any] = ["bottomBarItems": "4", "topBarItems": "2"]
+// A bucket lacking a key means no device of the type has sent it yet, not
+// that it was cleared: nothing clears a bar key from the store. So this
+// device's own value goes up rather than being thrown away.
+@Test func deviceTypeAdoptionSetsWhatDiffersAndSendsBarKeysTheStoreLacks() {
+    let local: [String: Any] = ["bottomBarItems": "4", "topBarItems": "2", "bottomBarSlots": "Pin, Archive"]
     let inStore: [String: Any] = ["bottomBarItems": "6"]
     let plan = SettingsSyncRules.deviceTypeAdoption(local: local, inStore: inStore)
     #expect(Set(plan.set.keys) == ["bottomBarItems"])
     #expect(plan.set["bottomBarItems"] as? String == "6")
-    #expect(plan.remove == ["topBarItems"])
+    #expect(Set(plan.send.keys) == ["topBarItems", "bottomBarSlots"])
+    #expect(plan.send["bottomBarSlots"] as? String == "Pin, Archive")
 }
 
 // MARK: The Safari extension's native part

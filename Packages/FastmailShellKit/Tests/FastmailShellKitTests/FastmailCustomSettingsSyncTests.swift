@@ -207,6 +207,52 @@ private final class Harness {
     #expect(h.sync.isJoinedBar("u1234abcd"))
 }
 
+// The order was one list for every device until it moved into the bar
+// bucket, so a bucket can hold the lengths and not the order yet
+@Test @MainActor func joiningABucketThatLacksTheOrderSendsThisDevicesOwn() {
+    let h = Harness(#function, deviceType: .ipad)
+    h.defaults.set("Pin, Archive", forKey: "fastmailCustom.bottomBarSlots")
+    h.store.values = [
+        "u1234abcd.bar.ipad.topBarItems": "3",
+        // The order as it used to travel, for every device at once
+        "u1234abcd.bottomBarSlots": "Snooze, Delete"
+    ]
+
+    h.sync.accountReported("u1234abcd")
+
+    #expect(h.local("bottomBarSlots") as? String == "Pin, Archive")
+    #expect(h.local("topBarItems") as? String == "3")
+    #expect(h.store.values["u1234abcd.bar.ipad.bottomBarSlots"] as? String == "Pin, Archive")
+    #expect(h.sync.isJoinedBar("u1234abcd"))
+}
+
+@Test @MainActor func aSecondDeviceOfTheSameTypeTakesTheOrderTheFirstSent() {
+    let h = Harness(#function, deviceType: .ipad)
+    h.defaults.set("Snooze, Delete", forKey: "fastmailCustom.bottomBarSlots")
+    h.store.values = ["u1234abcd.bar.ipad.bottomBarSlots": "Pin, Archive"]
+
+    h.sync.accountReported("u1234abcd")
+
+    #expect(h.local("bottomBarSlots") as? String == "Pin, Archive")
+    #expect(h.store.writes.isEmpty)
+}
+
+// A device that joined its bar bucket before the order was part of it
+// joins again, once, so its order reaches the bucket
+@Test @MainActor func aDeviceJoinedBeforeTheOrderMovedJoinsItsBucketAgain() {
+    let h = Harness(#function, deviceType: .iphone)
+    h.defaults.set(true, forKey: "settingsSync.joined.u1234abcd")
+    h.defaults.set(true, forKey: "settingsSync.joinedBar.u1234abcd")
+    h.defaults.set("Pin, Archive", forKey: "fastmailCustom.bottomBarSlots")
+    h.store.values = ["u1234abcd.bar.iphone.bottomBarItems": "4", "u1234abcd.triageLabel": "Todo"]
+
+    h.sync.accountReported("u1234abcd")
+
+    #expect(h.store.values["u1234abcd.bar.iphone.bottomBarSlots"] as? String == "Pin, Archive")
+    #expect(h.sync.isJoinedBar("u1234abcd"))
+    #expect(h.defaults.object(forKey: "settingsSync.joinedBar.u1234abcd") == nil)
+}
+
 @Test @MainActor func aLocalBarChangeWritesTheDeviceTypeKeyOnceJoinedAndNotBefore() {
     let unjoined = Harness(#function + ".unjoined")
     unjoined.sync.accountReported("u1234abcd")

@@ -11,11 +11,12 @@ enum SettingsSyncRules {
     /// Between the account id and the setting: `u1234abcd.labelColours`.
     static let keySeparator = "."
 
-    /// How many actions fit on a bar depends on the screen, so these two
-    /// sync per device type (`mac`, `iphone`, `ipad`) instead of per account:
-    /// every device of the same type shares one value, rather than sharing
-    /// with every device on the account or staying on a single device.
-    static let deviceTypeKeys: Set<String> = ["bottomBarItems", "topBarItems"]
+    /// What a bar shows depends on the screen, so its order and its two
+    /// lengths sync per device type (`mac`, `iphone`, `ipad`) instead of per
+    /// account: every device of the same type shares one value, rather than
+    /// sharing with every device on the account or staying on a single
+    /// device.
+    static let deviceTypeKeys: Set<String> = ["bottomBarSlots", "bottomBarItems", "topBarItems"]
 
     /// The store key segment marking a device-type key, between the account
     /// id and the device type: `u1234abcd.bar.mac.bottomBarItems`. Makes the
@@ -244,17 +245,31 @@ enum SettingsSyncRules {
         return Adoption(set: set, remove: remove)
     }
 
-    /// The same decision as `adoption(local:inStore:)`, for one account's
-    /// device-type bucket. `local` and `inStore` are already scoped to
-    /// `deviceTypeKeys` by the caller, so this does not call `isSyncedKey`.
-    static func deviceTypeAdoption(local: [String: Any], inStore: [String: Any]) -> Adoption {
+    /// Taking one account's device-type bucket: what it holds is set where
+    /// it differs, and what it lacks is sent from this device. Unlike the
+    /// plain settings nothing is removed, because nothing ever clears a bar
+    /// key from the store; a missing one only means no device of this type
+    /// has sent it yet, as with the order, which was one list for every
+    /// device before it moved into the bucket.
+    struct DeviceTypeAdoption {
+        var set: [String: Any]
+        var send: [String: Any]
+    }
+
+    /// `local` and `inStore` are already scoped to `deviceTypeKeys` by the
+    /// caller, so this does not call `isSyncedKey`.
+    static func deviceTypeAdoption(local: [String: Any], inStore: [String: Any]) -> DeviceTypeAdoption {
         var set: [String: Any] = [:]
         for (key, item) in inStore where deviceTypeKeys.contains(key) {
             guard let value = settingValue(item), !sameValue(local[key], item) else { continue }
             set[key] = plain(value)
         }
-        let remove = local.keys.filter { deviceTypeKeys.contains($0) && inStore[$0] == nil }.sorted()
-        return Adoption(set: set, remove: remove)
+        var send: [String: Any] = [:]
+        for (key, item) in local where deviceTypeKeys.contains(key) && inStore[key] == nil {
+            guard let value = settingValue(item) else { continue }
+            send[key] = plain(value)
+        }
+        return DeviceTypeAdoption(set: set, send: send)
     }
 
     // MARK: The Safari extension
