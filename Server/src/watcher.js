@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { alertPayload, badgePayload, matchesChoice, selectFresh } from './notify.js';
+import { alertPayload, badgePayload, dismissPayload, matchesChoice, selectFresh } from './notify.js';
 import { MODES } from './choice.js';
 import { addressSets } from './contacts.js';
-import { rememberNotified, saveState } from './state.js';
+import { forgetShown, rememberNotified, rememberShown, saveState } from './state.js';
 import { deviceOutcome } from './apns.js';
 import { eventSourceURL, runEventSource } from './jmap.js';
 import { decrypt, generateKeys, subscriptionKeys } from './webpush.js';
@@ -252,6 +252,8 @@ export class AccountWatcher {
         const badgeChanged = badge !== null && badge !== this.state.badge;
 
         const alerted = new Set();
+        // Message id → the devices it was shown on
+        const banners = new Map();
         for (const { token, notify } of devices) {
             const wanted = fresh.filter((email) => matchesChoice(notify, email, context));
             let alive = true;
@@ -259,17 +261,62 @@ export class AccountWatcher {
                 alive = await this.send(token, alertPayload(email, { badge }), email.id);
                 if (!alive) break;
                 alerted.add(email.id);
+                banners.set(email.id, [...(banners.get(email.id) ?? []), token]);
             }
             // An alert carries the count; a device that got none hears it on its own
             if (alive && !wanted.length && badgeChanged) await this.send(token, badgePayload(badge), 'badge');
         }
 
+        const dismissed = await this.dismissRead(changes);
+
         // Announced for the account: every fresh message has been put to every device
         this.state = rememberNotified(this.state, fresh.map((email) => email.id));
+        this.state = forgetShown(rememberShown(this.state, banners), dismissed);
         this.state.emailState = changes.newState;
         this.state.badge = badge;
         await this.persist();
         if (alerted.size) this.log.info(`[${this.name}] ${alerted.size} new (${source})`);
+        if (dismissed.length) this.log.info(`[${this.name}] ${dismissed.length} read (${source})`);
+    }
+
+    /*
+     * Banners for messages read or deleted since they were shown come off
+     * again: each device that showed any gets one silent push naming them,
+     * and the app takes them off. iOS rations silent pushes and gives none to
+     * an app swiped away, so this is best effort; opening the app still
+     * clears everything.
+     *
+     * Only messages with a banner are looked at. A lookup that fails leaves
+     * them shown, to be looked at with the next change. Returns the ids
+     * taken off.
+     */
+    async dismissRead(changes) {
+        const shown = new Map((this.state.shown ?? []).map((entry) => [entry.id, entry.tokens]));
+        const changed = new Set([...(changes.updated ?? []), ...(changes.destroyed ?? [])]);
+        const touched = [...shown.keys()].filter((id) => changed.has(id));
+        if (!touched.length) return [];
+
+        let keywords;
+        try {
+            keywords = new Map((await this.jmap.keywords(touched)).map((email) => [email.id, email.keywords ?? {}]));
+        } catch (error) {
+            this.log.warn(`[${this.name}] could not check whether shown messages were read: ${error.message}`);
+            return [];
+        }
+        const read = touched.filter((id) => !keywords.has(id) || keywords.get(id).$seen);
+        if (!read.length) return [];
+
+        const live = new Set(this.devices.entries(this.name).map((device) => device.token));
+        const perDevice = new Map();
+        for (const id of read) {
+            for (const token of shown.get(id)) {
+                if (live.has(token)) perDevice.set(token, [...(perDevice.get(token) ?? []), id]);
+            }
+        }
+        for (const [token, ids] of perDevice) {
+            await this.send(token, dismissPayload(ids), null, 'background');
+        }
+        return read;
     }
 
     /*
@@ -447,10 +494,10 @@ export class AccountWatcher {
 
     // One push to one device. False when APNs called the device dead and it
     // was dropped, so the caller sends it nothing more.
-    async send(token, payload, collapseId) {
+    async send(token, payload, collapseId, pushType = 'alert') {
         let result;
         try {
-            result = await this.apns.send(token, payload, { topic: this.account.topic, collapseId });
+            result = await this.apns.send(token, payload, { topic: this.account.topic, collapseId, pushType });
         } catch (error) {
             this.log.warn(`[${this.name}] apns: ${error.message}`);
             return true;

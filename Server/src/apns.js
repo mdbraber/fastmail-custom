@@ -108,11 +108,13 @@ export class APNsClient {
         });
     }
 
-    async send(deviceToken, payload, { topic, collapseId = null, expiration = null }) {
+    // An alert shows at once; a background push only wakes the app, and
+    // Apple wants one sent at priority 5.
+    async send(deviceToken, payload, { topic, collapseId = null, expiration = null, pushType = 'alert' }) {
         const headers = {
             'apns-topic': topic,
-            'apns-push-type': 'alert',
-            'apns-priority': '10',
+            'apns-push-type': pushType,
+            'apns-priority': pushType === 'background' ? '5' : '10',
             'apns-expiration': String(expiration ?? Math.floor(Date.now() / 1000) + 24 * 60 * 60),
         };
         if (collapseId) headers['apns-collapse-id'] = collapseId;

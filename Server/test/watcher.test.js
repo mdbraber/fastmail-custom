@@ -47,7 +47,10 @@ function fakeJMAP({
         },
         keywords: async (ids) => {
             calls.push(['keywords', ids]);
-            return Object.values(threadMessages).flat()
+            if (fake.keywordsError) throw fake.keywordsError;
+            const known = Object.values(threadMessages).flat()
+                .concat(Object.entries(fake.keywordsOf).map(([id, keywords]) => ({ id, keywords })));
+            return known
                 .filter((message) => ids.includes(message.id))
                 .map(({ id, keywords }) => ({ id, keywords }));
         },
@@ -71,10 +74,14 @@ function fakeJMAP({
         },
         emailState: async () => 's0',
         mailboxTotal: async () => counts.badge,
+        // `updated` and `destroyed` are properties so a test can set them
+        // between looks, and `keywordsOf` answers a keywords lookup for a
+        // message outside any thread; one it does not name is gone
+        updated: [], destroyed: [], keywordsOf: {}, keywordsError: null,
         emailChanges: async (since) => {
             calls.push(['changes', since]);
             if (changesError) throw changesError;
-            return { created, newState: 's1' };
+            return { created, updated: fake.updated, destroyed: fake.destroyed, newState: 's1' };
         },
         emails: async (ids) => emails.filter((e) => ids.includes(e.id)),
         pushSubscriptions: async () => [{ id: 'old', deviceClientId: 'fastmail-push-personal' }],
@@ -169,7 +176,9 @@ test('one new Inbox message becomes one alert per device, carrying the badge, an
 
     // M2 was put to every device too, and matched none: it counts as announced
     const saved = await loadState(t.dir, 'personal', silent);
-    assert.deepEqual(saved, { emailState: 's1', notified: ['M1', 'M2'], badge: 4 });
+    assert.deepEqual(saved, {
+        emailState: 's1', notified: ['M1', 'M2'], badge: 4, shown: [{ id: 'M1', tokens: ['tok1', 'tok2'] }],
+    });
 });
 
 test('a device whose choice is off hears only the count, and the count still follows every change', async () => {
@@ -728,4 +737,74 @@ test('health counts the devices per choice, and muted is the ones that are off',
         contacts: false,
         modes: { off: 2, important: 1, inbox: 1, custom: 1 },
     });
+});
+
+// A banner on each device, then the change log says what happened to it
+async function shownThenChanged({ devices = fakeDevices(['tok1', 'tok2']), choices } = {}) {
+    const created = ['M1', 'M2'];
+    const t = await setUp({ created, emails: [arrival('M1'), arrival('M2')] }, { devices });
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(t);
+    created.length = 0;
+    t.apns.sent.length = 0;
+    return t;
+}
+
+const changed = async (t) => {
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's2' } } });
+    await settle(t);
+};
+
+const dismissals = (t) => t.apns.sent
+    .filter((s) => s.pushType === 'background')
+    .map((s) => [s.token, s.payload.dismiss]);
+
+test('a message read elsewhere takes its banner off every device that showed it, in one silent push each', async () => {
+    const t = await shownThenChanged();
+    t.jmap.updated = ['M1', 'M2', 'M9'];
+    t.jmap.keywordsOf = { M1: { $seen: true }, M2: {}, M9: { $seen: true } };
+    await changed(t);
+    assert.deepEqual(dismissals(t), [['tok1', ['M1']], ['tok2', ['M1']]]);
+    const sent = t.apns.sent.find((s) => s.pushType === 'background');
+    assert.deepEqual(sent.payload, { aps: { 'content-available': 1 }, dismiss: ['M1'] });
+    assert.equal(sent.collapseId ?? null, null);
+    // M9 never had a banner, so it is not even looked up
+    assert.deepEqual(t.jmap.calls.filter((c) => c[0] === 'keywords').at(-1), ['keywords', ['M1', 'M2']]);
+    assert.deepEqual((await loadState(t.dir, 'personal', silent)).shown, [{ id: 'M2', tokens: ['tok1', 'tok2'] }]);
+});
+
+test('a deleted message takes its banner off too, and several go in one push', async () => {
+    const t = await shownThenChanged();
+    t.jmap.updated = ['M2'];
+    t.jmap.destroyed = ['M1'];
+    t.jmap.keywordsOf = { M2: { $seen: true } };
+    await changed(t);
+    assert.deepEqual(dismissals(t), [['tok1', ['M1', 'M2']], ['tok2', ['M1', 'M2']]]);
+    assert.deepEqual((await loadState(t.dir, 'personal', silent)).shown, []);
+});
+
+test('a banner is taken off only the devices that showed it', async () => {
+    const t = await shownThenChanged({ devices: fakeDevices(['tok1', 'tok2'], { tok2: OFF }) });
+    t.jmap.updated = ['M1'];
+    t.jmap.keywordsOf = { M1: { $seen: true } };
+    await changed(t);
+    assert.deepEqual(dismissals(t), [['tok1', ['M1']]]);
+});
+
+test('nothing read means no silent push, and a lookup that fails keeps the banners for the next look', async () => {
+    const t = await shownThenChanged();
+    t.jmap.updated = ['M1'];
+    t.jmap.keywordsOf = { M1: {} };
+    await changed(t);
+    assert.deepEqual(dismissals(t), []);
+
+    t.jmap.keywordsOf = { M1: { $seen: true } };
+    t.jmap.keywordsError = new Error('boom');
+    await changed(t);
+    assert.deepEqual(dismissals(t), []);
+    assert.equal((await loadState(t.dir, 'personal', silent)).shown.length, 2);
+
+    t.jmap.keywordsError = null;
+    await changed(t);
+    assert.deepEqual(dismissals(t), [['tok1', ['M1']], ['tok2', ['M1']]]);
 });

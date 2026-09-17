@@ -116,17 +116,22 @@ export class JMAPClient {
         return (await this.call('Email/get', { accountId: this.accountId, ids: [] })).state;
     }
 
-    // Every id created since `sinceState`, following the log to its end.
+    // Every id created, updated and destroyed since `sinceState`, following
+    // the log to its end.
     async emailChanges(sinceState) {
         const created = [];
+        const updated = [];
+        const destroyed = [];
         let state = sinceState;
         for (;;) {
             const result = await this.call('Email/changes', { accountId: this.accountId, sinceState: state, maxChanges: 500 });
             created.push(...result.created);
+            updated.push(...(result.updated ?? []));
+            destroyed.push(...(result.destroyed ?? []));
             state = result.newState;
             if (!result.hasMoreChanges) break;
         }
-        return { created, newState: state };
+        return { created, updated, destroyed, newState: state };
     }
 
     // A /get for any number of ids, in helpings Fastmail will accept, as one list.

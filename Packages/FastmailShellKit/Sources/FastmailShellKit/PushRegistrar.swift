@@ -148,6 +148,28 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         Task { await register() }
     }
 
+    /// The server's silent push after a message was read or deleted
+    /// elsewhere: its banner comes off. The banners are found by the message
+    /// id in their own payload rather than by their identifiers, which iOS
+    /// picks for a remote notification. iOS rations these wake-ups, so a
+    /// banner can stay until the app is next opened, which clears them all.
+    public func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any]
+    ) async -> UIBackgroundFetchResult {
+        let dismissed = PushPayload.dismissedIds(from: userInfo)
+        guard !dismissed.isEmpty else { return .noData }
+        let center = UNUserNotificationCenter.current()
+        let identifiers = await center.deliveredNotifications()
+            .filter { notification in
+                PushPayload.emailId(from: notification.request.content.userInfo).map(dismissed.contains) ?? false
+            }
+            .map(\.request.identifier)
+        guard !identifiers.isEmpty else { return .noData }
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+        return .newData
+    }
+
     public func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: any Error) {
         print("[push] Apple would not register this device: \(error.localizedDescription)")
     }

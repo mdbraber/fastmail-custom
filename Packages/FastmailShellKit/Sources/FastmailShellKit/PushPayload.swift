@@ -1,7 +1,8 @@
 import Foundation
 
-/// The one thing the app reads out of a push: the thread's address the server
-/// put in `url`.
+/// What the app reads out of a push: the thread's address the server put in
+/// `url`, the message in `emailId`, and, in a silent push, the messages whose
+/// banners should go in `dismiss`.
 public enum PushPayload {
     public static func url(from userInfo: [AnyHashable: Any]) -> URL? {
         guard
@@ -17,6 +18,13 @@ public enum PushPayload {
     public static func emailId(from userInfo: [AnyHashable: Any]) -> String? {
         guard let id = userInfo["emailId"] as? String, !id.isEmpty else { return nil }
         return id
+    }
+
+    /// The messages read or deleted since their banners were shown, from the
+    /// server's silent push. Empty for any other push.
+    public static func dismissedIds(from userInfo: [AnyHashable: Any]) -> Set<String> {
+        guard let ids = userInfo["dismiss"] as? [Any] else { return [] }
+        return Set(ids.compactMap { $0 as? String }.filter { !$0.isEmpty })
     }
 }
 

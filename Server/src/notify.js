@@ -86,6 +86,12 @@ export function alertPayload(email, { badge }) {
     return { aps, url: threadURL(email), emailId: email.id };
 }
 
+// A silent push naming messages whose banners should go: read or deleted
+// since. It wakes the app, which takes them off; it shows nothing itself.
+export function dismissPayload(emailIds) {
+    return { aps: { 'content-available': 1 }, dismiss: emailIds };
+}
+
 export function badgePayload(badge) {
     return { aps: { badge } };
 }

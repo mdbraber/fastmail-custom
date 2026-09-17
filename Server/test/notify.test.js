@@ -245,3 +245,8 @@ test('an alert names the category whose buttons the app registered', () => {
     // The button needs to say which message it is acting on
     assert.equal(payload.emailId, 'M1');
 });
+
+test('a dismissal wakes the app without showing anything, and names the messages', async () => {
+    const { dismissPayload } = await import('../src/notify.js');
+    assert.deepEqual(dismissPayload(['M1', 'M2']), { aps: { 'content-available': 1 }, dismiss: ['M1', 'M2'] });
+});

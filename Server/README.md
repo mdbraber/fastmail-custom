@@ -10,6 +10,15 @@ labels, from everyone, your contacts or your VIPs). An app build from before
 the choices registers with its on/off switch, which reads as All in inbox or
 Off.
 
+## Banners for mail read elsewhere
+
+A banner comes off when its message is read or deleted elsewhere. The server
+remembers which devices showed which message, and when the change log marks
+one read or gone it sends each of those devices one silent push naming the
+messages; the app takes their banners off. iOS rations silent pushes and
+sends none to an app swiped away, so a banner can stay until the app is next
+opened, which clears them all.
+
 ## The buttons on a notification
 
 Pulling a banner down shows Archive, Later and Pin. The phone holds no

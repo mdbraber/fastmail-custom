@@ -26,6 +26,10 @@
     <string>1</string>
     <key>NSFaceIDUsageDescription</key>
     <string>Unlock your mail with Face ID.</string>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>remote-notification</string>
+    </array>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UIFileSharingEnabled</key>

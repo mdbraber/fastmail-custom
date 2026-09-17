@@ -59,10 +59,12 @@ test('emailChanges follows the log to its end', async () => {
     const { client, calls } = await connected((method, args) => {
         page += 1;
         return ['Email/changes', page === 1
-            ? { created: ['M1'], updated: [], destroyed: [], newState: 's1', hasMoreChanges: true }
-            : { created: ['M2'], updated: [], destroyed: [], newState: 's2', hasMoreChanges: false }];
+            ? { created: ['M1'], updated: ['U1'], destroyed: [], newState: 's1', hasMoreChanges: true }
+            : { created: ['M2'], updated: ['U2'], destroyed: ['D1'], newState: 's2', hasMoreChanges: false }];
     });
-    assert.deepEqual(await client.emailChanges('s0'), { created: ['M1', 'M2'], newState: 's2' });
+    assert.deepEqual(await client.emailChanges('s0'), {
+        created: ['M1', 'M2'], updated: ['U1', 'U2'], destroyed: ['D1'], newState: 's2',
+    });
     assert.equal(calls.at(-2).body.methodCalls[0][1].sinceState, 's0');
     assert.equal(calls.at(-1).body.methodCalls[0][1].sinceState, 's1');
 });

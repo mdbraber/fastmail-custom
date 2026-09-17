@@ -24,6 +24,15 @@ import Testing
     #expect(PushPayload.emailId(from: ["emailId": 42]) == nil)
 }
 
+// A silent push names the messages whose banners should come off; anything
+// else in the list, or any other push, names none.
+@Test func theDismissedIdsComeOutOfASilentPush() {
+    #expect(PushPayload.dismissedIds(from: ["aps": ["content-available": 1], "dismiss": ["M1", "M2", "M1"]]) == ["M1", "M2"])
+    #expect(PushPayload.dismissedIds(from: ["dismiss": ["M1", 42, ""]]) == ["M1"])
+    #expect(PushPayload.dismissedIds(from: ["dismiss": "M1"]).isEmpty)
+    #expect(PushPayload.dismissedIds(from: ["url": "https://app.fastmail.com/mail/Inbox/T1", "emailId": "M1"]).isEmpty)
+}
+
 // The markdown a shortcut returns is built here rather than in the page, so
 // it carries the same canonical address as the URL beside it.
 @Test func markdownPairsTheTitleWithTheAddress() {

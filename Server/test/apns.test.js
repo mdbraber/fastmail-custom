@@ -63,6 +63,7 @@ async function fakeAPNs(answers) {
                 authorization: request.headers.authorization,
                 topic: request.headers['apns-topic'],
                 pushType: request.headers['apns-push-type'],
+                priority: request.headers['apns-priority'],
                 collapseId: request.headers['apns-collapse-id'],
                 body: JSON.parse(body),
             });
@@ -90,6 +91,17 @@ test('send posts the payload with topic and collapse id and reports the answer',
     assert.equal(apns.seen[0].collapseId, 'M1');
     assert.deepEqual(apns.seen[0].body, { aps: { badge: 2 } });
     assert.match(apns.seen[0].authorization, /^bearer /);
+    client.close();
+    await apns.close();
+});
+
+test('a background push says so, at the priority Apple requires for one', async () => {
+    const apns = await fakeAPNs([{ status: 200 }]);
+    const client = new APNsClient({ key: pem, keyId: 'K', teamId: 'T', host: apns.host, log: silent });
+    await client.send('abc123', { aps: { 'content-available': 1 }, dismiss: ['M1'] }, { topic: 'com.example.app', pushType: 'background' });
+    assert.equal(apns.seen[0].pushType, 'background');
+    assert.equal(apns.seen[0].priority, '5');
+    assert.equal(apns.seen[0].collapseId, undefined);
     client.close();
     await apns.close();
 });
