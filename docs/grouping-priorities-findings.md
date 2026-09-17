@@ -120,6 +120,21 @@ The local answer has neither bug.
 5. Optional: switch Fastmail's offline mail on by default in the iPhone and
    iPad apps, the way it is on for the Mac. Costs storage and a first sync.
 
+## Status (17 September 2026, later)
+
+Items 2 and 3 are built as a switch rather than a decision: **Groups →
+Sort priorities instead of adding groups** (`prioritiesAsSort`, off by
+default). With it on, a priority whose search Fastmail parses into a
+single keyword condition becomes a sort entry after the grouping
+(`prioritySortFor`); `is:unread` becomes the per-message unread sort,
+`is:read` and any non-keyword priority stay tiers, which then come first.
+`patchListSort` adds the entries in `Message.getQueryId`, the call
+Fastmail makes right after building the list's sort, so the query and its
+id both carry them. Checked live in the work app through Fastmail's own
+store (MMV group: pinned first) and in Node for the tiering with the
+switch on and off; not yet run as an installed build. Items 1, 4 and 5
+are still open.
+
 ## Where things are in the code
 
 `Userscript/fastmail-custom-mode.user.js` (line numbers as of commit

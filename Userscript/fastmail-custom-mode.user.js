@@ -179,7 +179,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // The phone's own big title over the list; Fastmail never builds
         // one at all past phone width, so this is a standalone element
         // rather than anything Fastmail's own could be un-hidden into.
-        showMailboxTitle: false
+        showMailboxTitle: false,
+        // A grouping's priorities that name a single keyword (is:unread,
+        // is:pinned, keyword:…) as sort entries inside each group rather
+        // than as a group of their own ahead of each group. See
+        // prioritySortFor.
+        prioritiesAsSort: false
     };
 
     // Named here, ahead of localSettings, so that writeSetting's own
@@ -332,6 +337,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             key: 'groupings', group: 'grouping', clearable: true, multiline: true,
             title: 'Group presets',
             hint: 'Each one is offered in a mailbox’s Group menu between None and Custom…, which stay Fastmail’s own; everything between them, including “by age”, “pinned first” and “unread first”, is yours to rename, reorder, edit or remove. Add group in a preset’s editor also offers Labels (root), a group for each top-level label, and Labels (all), a group for every label with sub-labels before their parent, so “labels” can be removed and built again. Groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Edit also renames a grouping; renaming one loses it on the mailboxes using it. A preset’s Edit dialog also lists its priorities, added with Add priority and dragged into order the way groups are: within every one of that preset’s groups, conversations matching the first priority come first, then those matching the next, then the rest. Fastmail sorts once for the whole mailbox, so this is the only way to put anything ahead within a group rather than across all of them.'
+        },
+        {
+            key: 'prioritiesAsSort', group: 'grouping',
+            title: 'Sort priorities instead of adding groups',
+            hint: 'A priority that names one flag, like is:unread, is:pinned or keyword:…, sorts conversations within each group instead of adding a group ahead of each one. Fastmail’s server refuses more than 32 groups and then shows an empty list, which this avoids. Any other priority still adds groups, and those come first. is:unread counts only unread messages in the mailbox shown, and the row then shows the unread message’s date.'
         },
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
@@ -2530,10 +2540,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (!parsed) return null;
 
         let next = 0;
-        return {
+        const splits = {
             categories: definition.categories.map(one => (one.filter ? one : parsed.categories[next++])),
             otherName: definition.otherName
         };
+        if (definition.prioritySort && definition.prioritySort.length) splits.prioritySort = definition.prioritySort;
+        return splits;
     };
 
     /*
@@ -2551,6 +2563,55 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             return (category && category.filter) || null;
         } catch (error) {
             return null;
+        }
+    };
+
+    /*
+     * A priority's filter as a sort entry, or nothing when it has none.
+     *
+     * The server sorts only by a keyword the message has (hasKeyword) or one
+     * some message in its conversation has (someInThreadHaveKeyword); every
+     * other sort it offers is a field such as a date or a sender. So only a
+     * filter naming one keyword can become a sort, and which way round
+     * follows from whether it asks for the keyword or its absence. Fastmail
+     * parses is:pinned, is:muted and is:followed into the conversation's
+     * forms, keyword:… and is:answered into the message's.
+     *
+     * is:unread arrives as "not every message in the conversation is read",
+     * which the server refuses as a sort (allInThreadHaveKeyword), so it
+     * becomes "unread messages first". With conversations collapsed the
+     * server sorts the messages and keeps each conversation's first, so an
+     * unread message anywhere in it still lifts the conversation, as long
+     * as that message is in the mailbox listed. is:read, "every message
+     * read", has no such stand-in and stays a group.
+     */
+    const prioritySortFor = (filter) => {
+        if (!filter) return null;
+        let negated = false;
+        let condition = filter;
+        if (condition.operator === 'NOT' && condition.conditions && condition.conditions.length === 1) {
+            negated = true;
+            condition = condition.conditions[0];
+        }
+        if (!condition || condition.operator) return null;
+        const keys = Object.keys(condition);
+        if (keys.length !== 1) return null;
+        const key = keys[0];
+        const keyword = condition[key];
+        if (typeof keyword !== 'string' || !keyword) return null;
+
+        const entry = (property, first) => ({
+            property: property, keyword: keyword, isAscending: first !== !negated
+        });
+        switch (key) {
+            case 'hasKeyword': return entry('hasKeyword', true);
+            case 'notKeyword': return entry('hasKeyword', false);
+            case 'someInThreadHaveKeyword': return entry('someInThreadHaveKeyword', true);
+            case 'noneInThreadHaveKeyword': return entry('someInThreadHaveKeyword', false);
+            case 'allInThreadHaveKeyword': return negated
+                ? { property: 'hasKeyword', keyword: keyword, isAscending: true }
+                : null;
+            default: return null;
         }
     };
 
@@ -2644,11 +2705,22 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * together, left for splitsFor's own call to Fastmail's parser to turn
      * into a filter the same way any other search-built category is. A
      * priority Fastmail cannot parse is left out.
+     *
+     * With prioritiesAsSort on, a priority prioritySortFor can turn into a
+     * sort entry is carried as one instead, in the priorities' order, on
+     * the definition's prioritySort, and patchListSort adds those to the
+     * list's query. Only the others are tiered. The server applies the
+     * grouping before any sort, so tiers still come ahead of sorted
+     * priorities whatever order they were written in.
      */
     const withPriorityTwins = (mailController, original, definition) => {
-        const priorities = (definition.priorities || [])
+        const parsed = (definition.priorities || [])
             .map(one => ({ query: one.query, filter: priorityFilterFor(mailController, original, one.query) }))
             .filter(one => one.filter);
+        const asSort = settingValue('prioritiesAsSort');
+        const prioritySort = asSort ? parsed.map(one => prioritySortFor(one.filter)).filter(Boolean) : [];
+        const priorities = asSort ? parsed.filter(one => !prioritySortFor(one.filter)) : parsed;
+        if (prioritySort.length) definition = Object.assign({}, definition, { prioritySort: prioritySort });
         if (!priorities.length) return definition;
 
         const categories = [];
@@ -2688,6 +2760,53 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 if (definition) return splitsFor(this, original, withPriorityTwins(this, original, definition));
             } catch (error) {
                 reportFault('could not build the groups', error);
+            }
+
+            return original.apply(this, arguments);
+        };
+    };
+
+    /*
+     * A mode grouping's sorted priorities, put into the list's query.
+     *
+     * Fastmail builds the list's sort inside the mail controller's
+     * mailboxMessageList, from the splits, in a function nothing outside its
+     * module can reach: the grouping first, then the sort field. It then
+     * asks Message.getQueryId for the query's id and hands the very same
+     * parameters to the store, so adding the entries to them there changes
+     * both the query and its id; the id is a digest of the parameters,
+     * which is also what lets the source resolve the response.
+     *
+     * Only the list built from the current splits is touched: its grouping
+     * holds exactly the splits' own filter objects, since Fastmail maps the
+     * categories to their filters just before this call. Every other query
+     * passes through unchanged, and so do parameters already holding the
+     * entries: the source recomputes the id from a request's own
+     * parameters to find its query, and adding them twice would lose it.
+     */
+    const patchListSort = () => {
+        const Message = FastMail.classes && FastMail.classes.Message;
+        if (!Message || Message.customListSort) return;
+        Message.customListSort = true;
+
+        const original = Message.getQueryId;
+
+        Message.getQueryId = function (params) {
+            try {
+                const sort = params && params.sort;
+                const grouping = sort && sort[0];
+                if (grouping && grouping.property === 'category' && Array.isArray(grouping.groupBy)) {
+                    const splits = controller().get('splits');
+                    const extra = splits && splits.prioritySort;
+                    if (extra && extra.length &&
+                        grouping.groupBy.length === splits.categories.length &&
+                        grouping.groupBy.every((filter, index) => filter === splits.categories[index].filter) &&
+                        JSON.stringify(sort.slice(1, 1 + extra.length)) !== JSON.stringify(extra)) {
+                        params.sort = [grouping].concat(extra, sort.slice(1));
+                    }
+                }
+            } catch (error) {
+                reportFault('could not sort the priorities', error);
             }
 
             return original.apply(this, arguments);
@@ -10468,6 +10587,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         patchMenus();
         patchRowContextMenu();
         patchSplits();
+        patchListSort();
         guardListRedraw();
         patchShortcuts();
         updateStyles();
