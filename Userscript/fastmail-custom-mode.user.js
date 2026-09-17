@@ -341,7 +341,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'prioritiesAsSort', group: 'grouping',
             title: 'Sort priorities instead of adding groups',
-            hint: 'A priority that names one flag, like is:unread, is:pinned or keyword:…, sorts conversations within each group instead of adding a group ahead of each one. Fastmail’s server refuses more than 32 groups and then shows an empty list, which this avoids. Any other priority still adds groups, and those come first. is:unread counts only unread messages in the mailbox shown, and the row then shows the unread message’s date. Switching this can change which groups are folded, since folds are remembered by each group’s position.'
+            hint: 'A priority that names one flag, like is:unread, is:pinned or keyword:…, sorts conversations within each group instead of adding a group ahead of each one. Fastmail’s server refuses more than 32 groups and then shows an empty list, which this avoids. Any other priority still adds groups, and those come first. is:unread counts only unread messages in the mailbox shown, and the row then shows the unread message’s date. Switching this unfolds the groups of every preset with priorities.'
         },
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
@@ -2896,12 +2896,41 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // stored either, so there is nothing on the server for it to hang off.
     const GROUPING_STORE_KEY = 'fastmail-custom-groups';
 
+    /*
+     * The prioritiesAsSort value the folds were kept under. The folds are
+     * group indexes, and a priority kept as tiers takes several of them per
+     * group where a sorted one takes none, so a preset with priorities folds
+     * different groups once the setting flips. Its folds are dropped then,
+     * the first time they are read, which also catches a flip that arrived
+     * from another device while this one was closed. A store from before
+     * this was kept counts as tiers, the setting's default. Presets without
+     * priorities number their groups the same either way and keep theirs.
+     */
+    const FOLDS_SORT_KEY = '#prioritiesAsSort';
+
     const foldedGroups = () => {
+        let store;
         try {
-            return JSON.parse(localStorage.getItem(GROUPING_STORE_KEY)) || {};
+            store = JSON.parse(localStorage.getItem(GROUPING_STORE_KEY)) || {};
         } catch (error) {
             return {};
         }
+
+        const asSort = !!settingValue('prioritiesAsSort');
+        if (!!store[FOLDS_SORT_KEY] === asSort) return store;
+
+        Object.keys(store).forEach((key) => {
+            if (key === FOLDS_SORT_KEY) return;
+            const preset = presetFor(key.slice(key.indexOf('|') + 1));
+            if (preset && preset.priorities && preset.priorities.length) delete store[key];
+        });
+        store[FOLDS_SORT_KEY] = asSort;
+        try {
+            localStorage.setItem(GROUPING_STORE_KEY, JSON.stringify(store));
+        } catch (error) {
+            // Dropped again on the next read
+        }
+        return store;
     };
 
     const foldKey = (mailbox, id) =>
