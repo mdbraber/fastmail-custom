@@ -336,17 +336,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'groupings', group: 'grouping', clearable: true, multiline: true,
             title: 'Group presets',
-            hint: 'Each one is offered in a mailbox’s Group menu between None and Custom…, which stay Fastmail’s own; everything between them, including “by age”, “pinned first” and “unread first”, is yours to rename, reorder, edit or remove. Add group in a preset’s editor also offers Labels (root), a group for each top-level label, and Labels (all), a group for every label with sub-labels before their parent, so “labels” can be removed and built again. Groups use Fastmail’s own search syntax, so an unrecognised word becomes a text search rather than an error. Edit also renames a grouping; renaming one loses it on the mailboxes using it. A preset’s Edit dialog also lists its priorities, added with Add priority and dragged into order the way groups are: within every one of that preset’s groups, conversations matching the first priority come first, then those matching the next, then the rest. Fastmail sorts once for the whole mailbox, so this is the only way to put anything ahead within a group rather than across all of them.'
+            hint: 'Shown in each mailbox’s Group menu. Groups and priorities use Fastmail’s search syntax; priorities put matching conversations first within every group. Labels (root) and Labels (all) add a group per label. Renaming a preset removes it from mailboxes using it.'
         },
         {
             key: 'prioritiesAsSort', group: 'grouping',
             title: 'Sort priorities instead of adding groups',
-            hint: 'A priority that names one flag, like is:unread, is:pinned or keyword:…, sorts conversations within each group instead of adding a group ahead of each one. Fastmail’s server refuses more than 32 groups and then shows an empty list, which this avoids. Any other priority still adds groups, and those come first. is:unread counts only unread messages in the mailbox shown, and the row then shows the unread message’s date. Switching this unfolds the groups of every preset with priorities.'
+            hint: 'Flag priorities like is:unread or is:pinned sort within each group instead of adding groups, staying under Fastmail’s 32-group limit. Other priorities still add groups, which come first. Switching this unfolds those presets’ groups.'
         },
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
             title: 'Snooze presets',
-            hint: 'Fastmail’s own Snooze button and shortcut (b) offer these instead of its own list, numbered so 1, 2, 3… picks one. Each needs a Date — today, tomorrow, this weekend, next week, a count and unit (2w, in 2 weeks), or a date as YYYY-MM-DD — and a Time; or a number of hours (+4h), counted from the start of this hour, with no Time. One whose time has passed is greyed out. “Choose a date and time…” is always added last.'
+            hint: 'Replaces Fastmail’s Snooze list; press 1, 2, 3… to pick. Give a date (today, tomorrow, this weekend, next week, 2w, YYYY-MM-DD) and a time, or hours from now (+4h).'
         },
         {
             key: 'swapArchiveExpand', group: 'keyboard',
@@ -356,7 +356,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'bottomBarSlots', group: 'bottomBar',
             title: 'Action bar actions',
-            hint: 'In order, with a separator you can drag: everything above shows on this device’s action bar, everything from the separator down goes under More. The phone, the iPad and the Mac each keep their own order and count, set from that device’s own settings.'
+            hint: 'Actions above the separator show on the bar, the rest under More. Phone, iPad and Mac each keep their own.'
         },
         {
             key: 'floatingMessageNav', group: 'appearance',
