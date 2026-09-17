@@ -155,9 +155,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // Keeping a message, by any of the Keep routes, adds from[0] to your
         // contacts when they are not one already
         keepAddsContact: false,
-        // The label a new message goes out with, ticked in the compose
+        // The labels a new message goes out with, ticked in the compose
         // window's own Labels menu as it opens; replies and forwards are left
-        // alone. Empty adds none.
+        // alone. Comma-separated paths; empty adds none.
         sentLabel: '',
         // The app icon's badge, for the shell apps: this label's total, Triage
         // is what is left to decide.
@@ -294,8 +294,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         },
         {
             key: 'sentLabel', group: 'labelsFiling', clearable: true,
-            title: 'Label for new messages you send',
-            hint: 'Ticked in the compose window’s Labels menu for a new message, where you can untick it; replies and forwards don’t get it. A label path; empty adds none.'
+            title: 'Labels for new messages you send',
+            hint: 'Ticked in the compose window’s Labels menu for a new message, where you can untick them; replies and forwards don’t get them. Comma-separated paths; empty adds none.'
         },
         {
             key: 'backToListAfterTriage', group: 'labelsFiling',
@@ -10524,14 +10524,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * The label every new message goes out with, from sentLabel. Fastmail's
+     * The labels every new message goes out with, from sentLabel. Fastmail's
      * compose keeps its Labels menu as a Set of mailboxes on the controller,
      * filled from the message it opens (or just Drafts for a blank one), and
-     * both the draft and the sent copy carry that Set; so ticking the label
-     * there as the controller opens is the same as picking it from the menu,
-     * and it can be unticked the same way. Replies, forwards and reopened
-     * drafts are left as they are; "asNew" is a template or Edit as new,
-     * which is a new message too.
+     * both the draft and the sent copy carry that Set; so ticking the labels
+     * there as the controller opens is the same as picking them from the
+     * menu, and they can be unticked the same way. Replies, forwards and
+     * reopened drafts are left as they are; "asNew" is a template or Edit as
+     * new, which is a new message too.
      *
      * The class's init is its constructor, so a patch on prototype.init never
      * runs. The constructor's last step before drawing is startAutoSave, with
@@ -10556,8 +10556,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 this.customSentLabelDone = true;
                 try {
                     if (NEW_MESSAGE_MODES.indexOf(this.mode) !== -1 && this.mailboxes) {
-                        const label = findByPath(this.accountId, settingValue('sentLabel'));
-                        if (label) this.mailboxes.add(label);
+                        pathsFromSetting(settingValue('sentLabel')).forEach((path) => {
+                            const label = findByPath(this.accountId, path);
+                            if (label) this.mailboxes.add(label);
+                        });
                     }
                 } catch (error) {
                     reportFault('could not add the label for sent mail', error);
