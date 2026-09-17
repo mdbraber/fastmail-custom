@@ -1,7 +1,6 @@
 # Fastmail Custom
 
-A personal set of tools for using Fastmail. I wanted to be able to quickly triage incoming messages (add a label in the Inbox so it feels less cluttered). That spun eh, a little out of control... :-)
-I merged all my previously written Fastmail tweaks and ideas into this repo and it's my daily driver. It supports all the features the stock Fastmail apps offer plus more.
+A personal set of tools for using Fastmail. I wanted to be able use separate apps for Personal and Work and to be able to quickly triage incoming messages (add a label in the Inbox so it feels less cluttered). That spun eh, a little out of control... :-) This repository can build Personal+Work apps on macOS + iOS + Safari extension (syncing settings between them via iCloud). It uses its own server component to deliver push notifications (requires Apple Developer account).
 
 ## Features
 
