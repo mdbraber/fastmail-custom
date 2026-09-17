@@ -1816,6 +1816,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         '.v-Button.custom-pinned svg.v-Icon * { fill: inherit; }'
     ];
 
+    // Compose's Remind button while the message has a reminder, in Fastmail's
+    // own success green, which follows the theme the way the pin's pair above
+    // does. On the phone the button is an icon alone, so the colour is the
+    // whole of what it says.
+    const REMINDER_STATE_RULES = [
+        '.v-Button.custom-reminder-set svg.v-Icon {' +
+        ' color: var(--ui-success-color-fg, #147b33); }'
+    ];
+
     // The badge's unread half: heavier than the total beside it, so the
     // pair reads at a glance as "of which"
     const BADGE_UNREAD_RULES = [
@@ -2126,6 +2135,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             .concat(sourceSeparatorRules())
             .concat(LONE_SECTION_RULES)
             .concat(PIN_STATE_RULES)
+            .concat(REMINDER_STATE_RULES)
             .concat(BADGE_UNREAD_RULES)
             .concat(TRIAGE_ICON_RULES)
             .concat(TOAST_RULES)
@@ -10793,6 +10803,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             const composer = composerOf();
             return composer ? reminderButtonLabel(composer) : 'Remind';
         };
+        // Set or not, in the button's own class as well as its label
+        const showState = () => {
+            const composer = composerOf();
+            const set = !!(composer && reminderMoment(composer));
+            button.set('type', type + (set ? ' custom-reminder-set' : ''));
+            const layer = button.get('layer');
+            if (layer) layer.classList.toggle('custom-reminder-set', set);
+        };
         const choose = (menu, choice, name) => {
             const composer = composerOf();
             if (composer) {
@@ -10800,10 +10818,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 composer.customReminderName = name || '';
             }
             button.set('label', label());
+            showState();
             menu.hide();
         };
         button = new FastMail.classes.MenuButtonView({
-            type: type,
+            type: type + (composerOf() && reminderMoment(composerOf()) ? ' custom-reminder-set' : ''),
             icon: reminderIcon(),
             label: label(),
             destroyMenuViewOnClose: true,
@@ -10822,7 +10841,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             }.property().nocache()
         });
         button.customReminderButton = true;
-        button.customRelabel = () => button.set('label', label());
+        button.customRelabel = () => {
+            button.set('label', label());
+            showState();
+        };
+        // The layer exists only once it is drawn
+        setTimeout(showState, 0);
         return button;
     };
 
