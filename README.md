@@ -5,9 +5,7 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 
 ## Features
 
-| | | | |
-|---|---|---|---|
-| <img width="620" alt="CleanShot 2026-09-15 at 08 54 17@2x" src="https://github.com/user-attachments/assets/1451fe56-e2ef-46f5-9762-b75a8bdf4140" /> | <img width="620" alt="CleanShot 2026-09-15 at 08 54 38@2x" src="https://github.com/user-attachments/assets/6c638117-d91d-417f-b651-961c9d8d2206" /> | <img width="620" alt="CleanShot 2026-09-15 at 08 54 54@2x" src="https://github.com/user-attachments/assets/be372f0a-e840-4603-b769-efe55fc0e8da" /> | <img width="620" alt="CleanShot 2026-09-15 at 08 55 16@2x" src="https://github.com/user-attachments/assets/4c00e4bf-0dd5-4765-8b8a-b6a58192c47a" /> |
+<img align="right" width="320" alt="All Fastmail Custom settings" src="docs/images/settings.png" />
 
 **Triage**
 
