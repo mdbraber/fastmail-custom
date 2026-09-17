@@ -295,12 +295,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         },
         {
             key: 'backToListAfterTriage', group: 'labelsFiling',
-            title: 'Back to the list when triage runs out',
+            title: 'Return to message list when no triage labels left',
             hint: 'Keeping steps to the next message only while that message still carries the triage label; otherwise the message list comes back.'
         },
         {
             key: 'dragAdditive', group: 'labelsFiling',
-            title: 'Dragging adds a label',
+            title: 'Dragging adds label instead of moving',
             hint: 'A drop keeps the message under that label and leaves it in the Inbox. Option moves it.'
         },
         {
@@ -320,7 +320,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         },
         {
             key: 'stickyInboxFilter', group: 'labelsFiling',
-            title: 'Filter a project label to the Inbox',
+            title: 'Apply “In Inbox” filter to project labels',
             hint: 'Its list opens showing only what is still in the Inbox, since that is the queue and the rest is history. Turning the filter off holds while you stay on that label.'
         },
         {
