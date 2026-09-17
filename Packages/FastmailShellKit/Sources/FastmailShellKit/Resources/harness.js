@@ -1,6 +1,17 @@
 (function () {
     if (window.__fmshell && window.__fmshell.report) return;
 
+    // A window Fastmail opened on its own, a message popped out, runs
+    // without the offline copy. Every page that joins the shared offline
+    // worker makes it sync mail first, holding everyone's requests until it
+    // is done, and a popout sat on "Loading…" for four to seven seconds.
+    // Fastmail leaves the worker out when IDBTransaction is missing and asks
+    // the server directly, as it does with offline mode off; the database
+    // itself is untouched, and the windows that opened it keep using it.
+    if (window.opener && /[?&]ui=minimal(?:&|$)/.test(location.search)) {
+        try { delete window.IDBTransaction; } catch (error) {}
+    }
+
     var routeCallbacks = [];
     var lastHref = location.href;
 
