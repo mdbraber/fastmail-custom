@@ -124,6 +124,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // picker, always comes last and is not part of this setting.
         snoozePresets: 'Later today = +4h\nThis Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
             'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
+        // What the Snoozed folder's own grouping is called, in the Group
+        // menu and among the group presets, where it is renamed
+        snoozeGroupName: 'By return date',
         // Groups for the Snoozed folder, by when a conversation comes back,
         // written the way snooze presets are: a name and how far out the
         // group reaches. Cumulative, first match wins, and whatever is
@@ -1827,6 +1830,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         '.v-Button.custom-pinned svg.v-Icon * { fill: inherit; }'
     ];
 
+    // A group's heading over the list: its name a step larger than the rows
+    // under it, and the count beside it as heavy as the name, so the pair
+    // reads as one line rather than a label with a footnote.
+    const GROUP_TITLE_RULES = [
+        '.v-MailboxListTitles-title b { font-size: 1.1em; }',
+        '.v-MailboxListTitles-title b + span { font-weight: 700; }'
+    ];
+
     // Compose's Remind button while the message has a reminder, in Fastmail's
     // own success green, which follows the theme the way the pin's pair above
     // does. On the phone the button is an icon alone, so the colour is the
@@ -2147,6 +2158,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             .concat(LONE_SECTION_RULES)
             .concat(PIN_STATE_RULES)
             .concat(REMINDER_STATE_RULES)
+            .concat(GROUP_TITLE_RULES)
             .concat(BADGE_UNREAD_RULES)
             .concat(TRIAGE_ICON_RULES)
             .concat(TOAST_RULES)
@@ -2445,6 +2457,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const SNOOZE_GROUPING_NAME = 'By return date';
     const SNOOZE_OTHER_NAME = 'Later';
+    const SNOOZE_ONLY_NOTE = '(only shown in Snoozed)';
+
+    const snoozeGroupingName = () =>
+        String(settingValue('snoozeGroupName') || '').trim() || SNOOZE_GROUPING_NAME;
 
     // One grouping, whose groups are the setting's own rows
     const snoozeGroupings = () => {
@@ -2452,7 +2468,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (!rows.length) return [];
         return [{
             id: SNOOZE_PREFIX + 'return',
-            name: SNOOZE_GROUPING_NAME,
+            name: snoozeGroupingName(),
             categories: rows.map(row => ({ name: row.name, date: row.date, time: row.time })),
             otherName: SNOOZE_OTHER_NAME,
             snooze: true
@@ -10228,6 +10244,29 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 const list = reorderList(classes, items, reorder);
 
+                // The Snoozed folder's own grouping, which nothing here can
+                // order or remove: its groups are a list of their own, under
+                // Snooze, and it is offered in no other mailbox. Its name is
+                // its own, and is changed from here.
+                const snoozeRow = new classes.View({
+                    className: 'u-list-body u-list-body--borders',
+                    draw: () => [new classes.View({
+                        className: 'u-list-item u-flex u-items-center u-space-x-2',
+                        draw: () => reorderRowParts(classes, {
+                            id: SNOOZE_PREFIX,
+                            label: el('span.u-flex.u-items-center.u-space-x-2', [
+                                el('span.u-truncate', [snoozeGroupingName()]),
+                                el('span.u-flex-none.u-color-unimportant.u-text-sm',
+                                    { style: 'font-style: italic' }, [SNOOZE_ONLY_NOTE])
+                            ]),
+                            edit: () => renameGrouping(classes, snoozeGroupingName(), (name) => {
+                                writeSetting('snoozeGroupName', name);
+                                redraw();
+                            })
+                        }, false)
+                    })]
+                });
+
                 const addButton = new classes.ButtonView({
                     type: 'v-Button--standard v-Button--sizeM',
                     label: 'Add a group preset',
@@ -10238,6 +10277,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 return [
                     el('h3.u-trim.u-font-bold', [option.title]),
                     list,
+                    snoozeRow,
                     addButton,
                     el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint])
                 ];
@@ -10423,6 +10463,57 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const dialog = framedModal(classes, view, 420, event => view.keyOutside(event));
         view.on('modal:hide', { close: () => dialog.modal.hide() }, 'close');
 
+        dialog.modal.show().then(() => {
+            dialog.takeApart();
+            if (saved) done(saved);
+        });
+    };
+
+    // The one grouping that is renamed rather than edited: its groups live
+    // in a list of their own, and it cannot be removed.
+    const renameGrouping = (classes, current, done) => {
+        if (!classes.ModalOverlayView || !classes.TextInputView || !classes.ButtonView) {
+            reportFault('the rename dialog is not available here');
+            return;
+        }
+
+        const el = FastMail.el;
+        let saved = null;
+        const nameField = new classes.TextInputView({ placeholder: 'Name', value: current });
+
+        const save = () => {
+            saved = (nameField.get('value') || '').trim() || current;
+            view.fire('modal:hide');
+        };
+        const cancel = () => view.fire('modal:hide');
+
+        const view = new classes.View({
+            className: 'u-p-6 u-space-y-5',
+            draw: () => [
+                el('h1.u-trim.u-font-bold', ['Rename group preset']),
+                el('div.u-space-y-1', [
+                    el('div.u-text-sm.u-color-unimportant', ['Name']), nameField
+                ]),
+                el('div.u-flex.u-space-x-2', [
+                    new classes.ButtonView({
+                        type: 'v-Button--cta v-Button--sizeM', label: 'Save',
+                        target: { go: save }, method: 'go'
+                    }),
+                    new classes.ButtonView({
+                        type: 'v-Button--standard v-Button--sizeM', label: 'Cancel',
+                        target: { go: cancel }, method: 'go'
+                    })
+                ])
+            ],
+            keyOutside: (event) => {
+                if (event.type !== 'keydown') return;
+                if (event.key === 'Enter') save();
+                else if (event.key === 'Escape') cancel();
+            }
+        });
+
+        const dialog = framedModal(classes, view, 420, event => view.keyOutside(event));
+        view.on('modal:hide', { close: () => dialog.modal.hide() }, 'close');
         dialog.modal.show().then(() => {
             dialog.takeApart();
             if (saved) done(saved);
