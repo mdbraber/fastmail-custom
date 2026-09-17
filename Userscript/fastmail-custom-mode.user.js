@@ -124,12 +124,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // picker, always comes last and is not part of this setting.
         snoozePresets: 'Later today = +4h\nThis Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
             'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
-        // Groups for the Snoozed folder, by when a conversation comes back:
-        // the same block shape as `groupings`, with a horizon instead of a
-        // search (7d, tomorrow, 1m). Cumulative, first match wins, and
-        // whatever is further out falls into the last group. Offered in the
-        // Snoozed folder's Group menu, beside the ordinary presets.
-        snoozeGroups: 'by return date\n  Next 7 days = 7d\n  Next 30 days = 30d\n  Next 90 days = 90d',
+        // Groups for the Snoozed folder, by when a conversation comes back,
+        // written the way snooze presets are: a name and how far out the
+        // group reaches. Cumulative, first match wins, and whatever is
+        // further out falls into the last group. Offered in the Snoozed
+        // folder's Group menu, beside the ordinary presets.
+        snoozeGroups: 'Next 7 days = 7d\nNext 30 days = 30d\nNext 90 days = 90d',
         // The times compose's Remind button offers for a message to come
         // back if nobody replies, written the way snoozePresets are
         reminderPresets: 'Tomorrow = tomorrow @ 08:00\nIn 3 days = 3d @ 08:00\n' +
@@ -388,7 +388,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'snoozeGroups', group: 'snooze', clearable: true, multiline: true,
             title: 'Snooze groups',
-            hint: 'Groups for the Snoozed folder, by when a conversation comes back, offered in its Group menu beside the ordinary presets. A name per line with a horizon (7d, tomorrow, 1m); each group takes what the ones above it did not, and anything further out goes in the last group.'
+            hint: 'Groups the Snoozed folder by when a conversation comes back, offered in its Group menu beside the ordinary presets. Each group reaches to its own time (7d, tomorrow, 1m, or a date and time) and takes what the ones above it did not; anything further out falls in the last group.'
         },
         {
             key: 'remindNewMessages', group: 'reminders', clearable: true,
@@ -2443,9 +2443,21 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         conditions: [{ hasKeyword: '$draft' }, { notKeyword: '$draft' }]
     });
 
-    const snoozeGroupings = () => readGroupingBlocks(settings.snoozeGroups)
-        .filter(one => one.categories.length)
-        .map(one => Object.assign({}, one, { id: SNOOZE_PREFIX + one.name, snooze: true }));
+    const SNOOZE_GROUPING_NAME = 'By return date';
+    const SNOOZE_OTHER_NAME = 'Later';
+
+    // One grouping, whose groups are the setting's own rows
+    const snoozeGroupings = () => {
+        const rows = parseSnoozePresets(settings.snoozeGroups);
+        if (!rows.length) return [];
+        return [{
+            id: SNOOZE_PREFIX + 'return',
+            name: SNOOZE_GROUPING_NAME,
+            categories: rows.map(row => ({ name: row.name, date: row.date, time: row.time })),
+            otherName: SNOOZE_OTHER_NAME,
+            snooze: true
+        }];
+    };
 
     const isSnoozeMailbox = (mailbox) => {
         try {
@@ -2457,10 +2469,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // How far out a group reaches: a period counts from now, a day keyword
     // reaches to the end of that day, so "tomorrow" takes all of tomorrow.
-    const snoozeHorizon = (now, query) => {
-        const text = String(query || '').trim();
+    const snoozeHorizon = (now, category) => {
+        const text = String(category.date || '').trim();
         const hours = snoozeHoursTarget(now, text);
         if (hours) return hours;
+        // A time of its own is the moment the group reaches to; a period
+        // counts from now; a day without a time reaches to the end of it, so
+        // "tomorrow" takes all of tomorrow.
+        if (category.time) return snoozePresetTarget(now, category);
         if (SNOOZE_PERIOD.test(text)) return snoozeDateKeyword(now, text);
         const day = snoozeDateKeyword(now, text);
         day.setHours(23, 59, 59, 999);
@@ -3209,7 +3225,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      */
     const snoozeCountsFor = (definition, list) => {
         const now = new Date();
-        const edges = definition.categories.map(one => snoozeHorizon(now, one.query).getTime());
+        const edges = definition.categories.map(one => snoozeHorizon(now, one).getTime());
         const counts = edges.map(() => 0);
         const length = list.get('length') || 0;
 
@@ -10479,9 +10495,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 const list = reorderList(classes, items, reorder);
 
-                // What every menu adds after the presets
-                const customRow = el('div', [CHOOSE_SNOOZE_DATE_LABEL]
-                    .concat(key === 'reminderPresets' ? [NO_REMINDER_LABEL] : [])
+                // What the menu, or the list, adds after the rows themselves
+                const trailing = key === 'snoozeGroups'
+                    ? [SNOOZE_OTHER_NAME]
+                    : [CHOOSE_SNOOZE_DATE_LABEL].concat(key === 'reminderPresets' ? [NO_REMINDER_LABEL] : []);
+                const customRow = el('div', trailing
                     .map(label => el('div.u-list-item.u-color-unimportant', [label])));
 
                 const addButton = new classes.ButtonView({
@@ -10506,7 +10524,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const sectionRow = (classes, option, register) => {
         if (option.key === 'groupings') return groupingsSection(classes);
         if (option.key === 'bottomBarSlots') return barSlotsSection(classes);
-        if (option.key === 'snoozePresets' || option.key === 'reminderPresets') {
+        if (option.key === 'snoozePresets' || option.key === 'reminderPresets' ||
+                option.key === 'snoozeGroups') {
             return presetListSection(classes, option.key);
         }
         return settingRow(classes, option, register);
