@@ -7550,8 +7550,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * ----------------------------------------------------------------
      */
 
+    // A window of its own, a popped-out message or a compose window, is
+    // Fastmail's minimal page, which never draws a sidebar
+    const isMinimalWindow = /[?&]ui=minimal(?:&|$)/.test(location.search);
+
     // FastMail.activeViews is empty outside debug builds, so readiness is
-    // checked against the controller, the store and a drawn sidebar instead
+    // checked against the controller, the store and a drawn sidebar instead;
+    // a minimal window goes on the controller and the store alone
     const isReady = () => {
         try {
             return !!(
@@ -7561,7 +7566,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 FastMail.getViewFromNode &&
                 FastMail.router &&
                 FastMail.router.getAppController('mail') &&
-                document.querySelector('.v-MailboxSource')
+                (isMinimalWindow || document.querySelector('.v-MailboxSource'))
             );
         } catch (error) {
             return false;
