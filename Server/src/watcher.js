@@ -6,6 +6,7 @@ import { forgetShown, rememberNotified, rememberShown, saveState } from './state
 import { deviceOutcome } from './apns.js';
 import { eventSourceURL, runEventSource } from './jmap.js';
 import { decrypt, generateKeys, subscriptionKeys } from './webpush.js';
+import { REMIND, answered, answers, cancelPatch, snoozePatch } from './reminders.js';
 
 export const COALESCE_MS = 2000;
 export const POLL_MS = 5 * 60 * 1000;
@@ -37,6 +38,11 @@ export class AccountWatcher {
         this.archiveMailboxId = null;
         this.junkId = null;
         this.trashId = null;
+        // Where reminders for unanswered mail wait; without Sent and Snoozed
+        // there are none
+        this.sentId = null;
+        this.draftsId = null;
+        this.snoozedId = null;
         // The contacts of every address book the token can read, as two sets
         // of lowercased addresses that are the union across those accounts,
         // and the ContactCard state each account was read at (by account
@@ -99,6 +105,10 @@ export class AccountWatcher {
         // Important leaves out what Fastmail filed as junk or deleted
         this.junkId = mailboxes.find((m) => m.role === 'junk')?.id ?? null;
         this.trashId = mailboxes.find((m) => m.role === 'trash')?.id ?? null;
+        this.sentId = mailboxes.find((m) => m.role === 'sent')?.id ?? null;
+        this.draftsId = mailboxes.find((m) => m.role === 'drafts')?.id ?? null;
+        this.snoozedId = mailboxes.find((m) => m.role === 'snoozed')?.id ?? null;
+        if (!this.sentId || !this.snoozedId) this.log.warn(`[${this.name}] no Sent or Snoozed folder: reminders for unanswered mail are off`);
         if (!this.hasContacts) this.log.warn(`[${this.name}] the token cannot read contacts: VIPs and contacts match nobody`);
         await this.loadContacts();
         if (!this.state.emailState) await this.resync();
@@ -268,6 +278,7 @@ export class AccountWatcher {
         }
 
         const dismissed = await this.dismissRead(changes);
+        await this.remind(emails);
 
         // Announced for the account: every fresh message has been put to every device
         this.state = rememberNotified(this.state, fresh.map((email) => email.id));
@@ -317,6 +328,46 @@ export class AccountWatcher {
             await this.send(token, dismissPayload(ids), null, 'background');
         }
         return read;
+    }
+
+    /*
+     * Reminders for sent mail nobody answered (see reminders.js): the ones
+     * that have reached Sent are snoozed, and the ones an arriving message
+     * answers are taken out of Snoozed again. A failure costs this look's
+     * reminders, which the next look picks up, and never its alerts.
+     */
+    async remind(arrived) {
+        if (!this.sentId || !this.snoozedId) return;
+        const ids = { sentId: this.sentId, draftsId: this.draftsId, junkId: this.junkId, trashId: this.trashId, snoozedId: this.snoozedId };
+        try {
+            const waiting = await this.jmap.queryEmails({
+                operator: 'AND',
+                conditions: [
+                    { inMailbox: this.sentId },
+                    { hasKeyword: REMIND },
+                    { operator: 'NOT', conditions: [{ inMailbox: this.snoozedId }] },
+                ],
+            });
+            for (const email of waiting.length ? await this.jmap.emails(waiting) : []) {
+                const patch = snoozePatch(email, { snoozedId: this.snoozedId, inboxId: this.inboxId });
+                if (!patch) continue;
+                await this.jmap.patchEmail(email.id, patch);
+                this.log.info(`[${this.name}] reminder set for ${email.id} at ${patch.snoozed.until}`);
+            }
+
+            const replies = answers(arrived, ids);
+            if (!replies.length) return;
+            const threads = await this.jmap.threads([...new Set(replies.map((email) => email.threadId))]);
+            const replyIds = new Set(replies.map((email) => email.id));
+            const others = [...new Set(threads.flatMap((thread) => thread.emailIds ?? []))].filter((id) => !replyIds.has(id));
+            if (!others.length) return;
+            for (const email of answered(await this.jmap.emails(others), replies, ids)) {
+                await this.jmap.patchEmail(email.id, cancelPatch(ids));
+                this.log.info(`[${this.name}] reminder for ${email.id} cancelled by a reply`);
+            }
+        } catch (error) {
+            this.log.warn(`[${this.name}] reminders: ${error.message}`);
+        }
     }
 
     /*

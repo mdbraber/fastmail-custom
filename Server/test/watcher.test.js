@@ -20,7 +20,7 @@ const arrival = (id, over = {}) => ({
 // test can change its mind after start(), which is where renewals happen.
 function fakeJMAP({
     emails = [], created = [], counts = { badge: 4 }, refusePush = false, changesError = null,
-    contactsAccountIds = [], books = {}, threadMessages = {},
+    contactsAccountIds = [], books = {}, threadMessages = {}, reminderBoxes = false,
 } = {}) {
     const calls = [];
     const fake = {
@@ -67,7 +67,15 @@ function fakeJMAP({
             { id: 'archive', name: 'Archive', role: 'archive', hidden: 0 },
             { id: 'junk', name: 'Spam', role: 'junk', hidden: 0 },
             { id: 'trash', name: 'Trash', role: 'trash', hidden: 0 },
+            ...(reminderBoxes ? [
+                { id: 'sent', name: 'Sent', role: 'sent', hidden: 0 },
+                { id: 'drafts', name: 'Drafts', role: 'drafts', hidden: 0 },
+                { id: 'snoozed', name: 'Snoozed', role: 'snoozed', hidden: 0 },
+            ] : []),
         ],
+        // What an Email/query finds; a property, so a test can change it
+        queried: [],
+        queryEmails: async (filter) => { calls.push(['query', filter]); return fake.queried; },
         patchEmail: async (id, patch) => {
             calls.push(['set', id, patch]);
             if (id === 'M-missing') throw new JMAPError('Email/set: notFound', { type: 'notFound' });
@@ -807,4 +815,92 @@ test('nothing read means no silent push, and a lookup that fails keeps the banne
     t.jmap.keywordsError = null;
     await changed(t);
     assert.deepEqual(dismissals(t), [['tok1', ['M1']], ['tok2', ['M1']]]);
+});
+
+// Reminders for sent mail nobody answered
+
+const sentMessage = (id, over = {}) => arrival(id, {
+    threadId: 'T-conv', mailboxIds: { sent: true }, receivedAt: '2026-09-17T10:00:00Z',
+    from: [{ name: 'Me', email: 'me@example.net' }], ...over,
+});
+
+test('a marked message in Sent is snoozed to come back to the Inbox unread, once', async () => {
+    const remindAt = Math.floor(Date.now() / 1000) + 3600;
+    const waiting = sentMessage('S1', { keywords: { $seen: true, '$fmc-remind': true, [`$fmc-remind-${remindAt}`]: true } });
+    const t = await setUp({ reminderBoxes: true, created: [], emails: [waiting] });
+    t.jmap.queried = ['S1'];
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(t);
+
+    const query = t.jmap.calls.find((c) => c[0] === 'query')[1];
+    assert.deepEqual(query.conditions, [
+        { inMailbox: 'sent' }, { hasKeyword: '$fmc-remind' },
+        { operator: 'NOT', conditions: [{ inMailbox: 'snoozed' }] },
+    ]);
+    const set = t.jmap.calls.filter((c) => c[0] === 'set');
+    assert.deepEqual(set, [['set', 'S1', {
+        'mailboxIds/snoozed': true,
+        snoozed: { until: new Date(remindAt * 1000).toISOString().replace(/\.\d+Z$/, 'Z'), moveToMailboxId: 'inbox', setKeywords: { $seen: false } },
+        'keywords/$fmc-remind': null,
+        'keywords/$fmc-reminding': true,
+    }]]);
+    // A message in Sent is nobody's news
+    assert.equal(t.apns.sent.filter((s) => s.payload.aps.alert).length, 0);
+});
+
+test('a reply in the conversation takes an older reminder out of Snoozed; one in another conversation does not', async () => {
+    const reminding = sentMessage('S1', { mailboxIds: { sent: true, snoozed: true }, keywords: { $seen: true, '$fmc-reminding': true } });
+    const elsewhere = sentMessage('S2', { threadId: 'T-other', mailboxIds: { sent: true, snoozed: true }, keywords: { '$fmc-reminding': true } });
+    const reply = arrival('R1', { threadId: 'T-conv', receivedAt: '2026-09-17T12:00:00Z' });
+    const t = await setUp({
+        reminderBoxes: true, created: ['R1'], emails: [reminding, elsewhere, reply],
+        threadMessages: { 'T-conv': [reminding, reply] },
+    });
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(t);
+
+    assert.deepEqual(t.jmap.calls.filter((c) => c[0] === 'set'), [['set', 'S1', {
+        'mailboxIds/snoozed': null, snoozed: null, 'keywords/$fmc-reminding': null,
+    }]]);
+});
+
+test('my own message, a draft, spam or an older message does not cancel a reminder', async () => {
+    const reminding = sentMessage('S1', { receivedAt: '2026-09-17T10:00:00Z', mailboxIds: { sent: true, snoozed: true }, keywords: { '$fmc-reminding': true } });
+    const mine = sentMessage('S3', { receivedAt: '2026-09-17T11:00:00Z' });
+    const draft = arrival('D1', { threadId: 'T-conv', mailboxIds: { drafts: true }, keywords: { $draft: true }, receivedAt: '2026-09-17T11:00:00Z' });
+    const spam = arrival('J1', { threadId: 'T-conv', mailboxIds: { junk: true }, receivedAt: '2026-09-17T11:00:00Z' });
+    const older = arrival('O1', { threadId: 'T-conv', receivedAt: '2026-09-17T09:00:00Z' });
+    const t = await setUp({
+        reminderBoxes: true, created: ['S3', 'D1', 'J1', 'O1'], emails: [reminding, mine, draft, spam, older],
+        threadMessages: { 'T-conv': [reminding, mine, draft, spam, older] },
+    });
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(t);
+    assert.deepEqual(t.jmap.calls.filter((c) => c[0] === 'set'), []);
+});
+
+test('a reminder that already came back is left alone by a later reply', async () => {
+    const woken = sentMessage('S1', { mailboxIds: { sent: true, inbox: true }, keywords: { '$fmc-reminding': true } });
+    const reply = arrival('R1', { threadId: 'T-conv', receivedAt: '2026-09-17T12:00:00Z' });
+    const t = await setUp({
+        reminderBoxes: true, created: ['R1'], emails: [woken, reply],
+        threadMessages: { 'T-conv': [woken, reply] },
+    });
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(t);
+    assert.deepEqual(t.jmap.calls.filter((c) => c[0] === 'set'), []);
+});
+
+test('without Sent or Snoozed there are no reminders, and a failing lookup costs no alerts', async () => {
+    const t = await setUp({ created: ['M1'], emails: [arrival('M1')] });
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(t);
+    assert.equal(t.jmap.calls.filter((c) => c[0] === 'query').length, 0);
+    assert.equal(t.apns.sent.length, 2);
+
+    const u = await setUp({ reminderBoxes: true, created: ['M1'], emails: [arrival('M1')] });
+    u.jmap.queryEmails = async () => { throw new Error('boom'); };
+    await u.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(u);
+    assert.equal(u.apns.sent.length, 2);
 });
