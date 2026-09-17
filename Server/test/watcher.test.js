@@ -73,9 +73,7 @@ function fakeJMAP({
                 { id: 'snoozed', name: 'Snoozed', role: 'snoozed', hidden: 0 },
             ] : []),
         ],
-        // What an Email/query finds; a property, so a test can change it
-        queried: [],
-        queryEmails: async (filter) => { calls.push(['query', filter]); return fake.queried; },
+
         patchEmail: async (id, patch) => {
             calls.push(['set', id, patch]);
             if (id === 'M-missing') throw new JMAPError('Email/set: notFound', { type: 'notFound' });
@@ -824,30 +822,6 @@ const sentMessage = (id, over = {}) => arrival(id, {
     from: [{ name: 'Me', email: 'me@example.net' }], ...over,
 });
 
-test('a marked message in Sent is snoozed to come back to the Inbox unread, once', async () => {
-    const remindAt = Math.floor(Date.now() / 1000) + 3600;
-    const waiting = sentMessage('S1', { keywords: { $seen: true, '$fmc-remind': true, [`$fmc-remind-${remindAt}`]: true } });
-    const t = await setUp({ reminderBoxes: true, created: [], emails: [waiting] });
-    t.jmap.queried = ['S1'];
-    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
-    await settle(t);
-
-    const query = t.jmap.calls.find((c) => c[0] === 'query')[1];
-    assert.deepEqual(query.conditions, [
-        { inMailbox: 'sent' }, { hasKeyword: '$fmc-remind' },
-        { operator: 'NOT', conditions: [{ inMailbox: 'snoozed' }] },
-    ]);
-    const set = t.jmap.calls.filter((c) => c[0] === 'set');
-    assert.deepEqual(set, [['set', 'S1', {
-        'mailboxIds/snoozed': true,
-        snoozed: { until: new Date(remindAt * 1000).toISOString().replace(/\.\d+Z$/, 'Z'), moveToMailboxId: 'inbox', setKeywords: { $seen: false } },
-        'keywords/$fmc-remind': null,
-        'keywords/$fmc-reminding': true,
-    }]]);
-    // A message in Sent is nobody's news
-    assert.equal(t.apns.sent.filter((s) => s.payload.aps.alert).length, 0);
-});
-
 test('a reply in the conversation takes an older reminder out of Snoozed; one in another conversation does not', async () => {
     const reminding = sentMessage('S1', { mailboxIds: { sent: true, snoozed: true }, keywords: { $seen: true, '$fmc-reminding': true } });
     const elsewhere = sentMessage('S2', { threadId: 'T-other', mailboxIds: { sent: true, snoozed: true }, keywords: { '$fmc-reminding': true } });
@@ -860,7 +834,7 @@ test('a reply in the conversation takes an older reminder out of Snoozed; one in
     await settle(t);
 
     assert.deepEqual(t.jmap.calls.filter((c) => c[0] === 'set'), [['set', 'S1', {
-        'mailboxIds/snoozed': null, snoozed: null, 'keywords/$fmc-reminding': null,
+        'mailboxIds/snoozed': null, 'keywords/$fmc-reminding': null,
     }]]);
 });
 
@@ -892,15 +866,20 @@ test('a reminder that already came back is left alone by a later reply', async (
 });
 
 test('without Sent or Snoozed there are no reminders, and a failing lookup costs no alerts', async () => {
-    const t = await setUp({ created: ['M1'], emails: [arrival('M1')] });
+    const reminding = sentMessage('S1', { mailboxIds: { sent: true, snoozed: true }, keywords: { '$fmc-reminding': true } });
+    const reply = arrival('R1', { threadId: 'T-conv', receivedAt: '2026-09-17T12:00:00Z' });
+    const options = { created: ['R1'], emails: [reminding, reply], threadMessages: { 'T-conv': [reminding, reply] } };
+
+    const t = await setUp(options);
     await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
     await settle(t);
-    assert.equal(t.jmap.calls.filter((c) => c[0] === 'query').length, 0);
+    assert.equal(t.jmap.calls.filter((c) => c[0] === 'set').length, 0);
     assert.equal(t.apns.sent.length, 2);
 
-    const u = await setUp({ reminderBoxes: true, created: ['M1'], emails: [arrival('M1')] });
-    u.jmap.queryEmails = async () => { throw new Error('boom'); };
+    const u = await setUp({ ...options, reminderBoxes: true });
+    u.jmap.threadsError = new Error('boom');
     await u.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
     await settle(u);
+    assert.equal(u.jmap.calls.filter((c) => c[0] === 'set').length, 0);
     assert.equal(u.apns.sent.length, 2);
 });

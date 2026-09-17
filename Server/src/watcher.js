@@ -6,7 +6,7 @@ import { forgetShown, rememberNotified, rememberShown, saveState } from './state
 import { deviceOutcome } from './apns.js';
 import { eventSourceURL, runEventSource } from './jmap.js';
 import { decrypt, generateKeys, subscriptionKeys } from './webpush.js';
-import { REMIND, answered, answers, cancelPatch, snoozePatch } from './reminders.js';
+import { answered, answers, cancelPatch } from './reminders.js';
 
 export const COALESCE_MS = 2000;
 export const POLL_MS = 5 * 60 * 1000;
@@ -332,29 +332,13 @@ export class AccountWatcher {
 
     /*
      * Reminders for sent mail nobody answered (see reminders.js): the ones
-     * that have reached Sent are snoozed, and the ones an arriving message
-     * answers are taken out of Snoozed again. A failure costs this look's
-     * reminders, which the next look picks up, and never its alerts.
+     * an arriving message answers are taken out of Snoozed again. A failure
+     * costs this look's cancellations, and never its alerts.
      */
     async remind(arrived) {
         if (!this.sentId || !this.snoozedId) return;
         const ids = { sentId: this.sentId, draftsId: this.draftsId, junkId: this.junkId, trashId: this.trashId, snoozedId: this.snoozedId };
         try {
-            const waiting = await this.jmap.queryEmails({
-                operator: 'AND',
-                conditions: [
-                    { inMailbox: this.sentId },
-                    { hasKeyword: REMIND },
-                    { operator: 'NOT', conditions: [{ inMailbox: this.snoozedId }] },
-                ],
-            });
-            for (const email of waiting.length ? await this.jmap.emails(waiting) : []) {
-                const patch = snoozePatch(email, { snoozedId: this.snoozedId, inboxId: this.inboxId });
-                if (!patch) continue;
-                await this.jmap.patchEmail(email.id, patch);
-                this.log.info(`[${this.name}] reminder set for ${email.id} at ${patch.snoozed.until}`);
-            }
-
             const replies = answers(arrived, ids);
             if (!replies.length) return;
             const threads = await this.jmap.threads([...new Set(replies.map((email) => email.threadId))]);

@@ -10624,9 +10624,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     /*
      * Reminders for sent mail nobody answers. A message goes out marked with
      * two keywords, REMIND_KEYWORD and the moment to come back after
-     * REMIND_AT_PREFIX, in seconds since the epoch; the push server snoozes
-     * it once it is in Sent, and takes it out of Snoozed again when a reply
-     * arrives (Server/src/reminders.js).
+     * REMIND_AT_PREFIX, in seconds since the epoch. Once it is in Sent, the
+     * mailbox window snoozes it there (sweepReminders), swapping
+     * REMIND_KEYWORD for REMINDING_KEYWORD; the push server takes it out of
+     * Snoozed again when a reply arrives (Server/src/reminders.js). The
+     * snooze is set here because Fastmail keeps `snoozed` from API tokens,
+     * which the server has; leaving Snoozed clears it, which the server may
+     * do.
      *
      * The marks ride on the submission's own onSuccess patch, the one that
      * takes $draft off as the message is sent, so they land exactly when it
@@ -10639,6 +10643,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      */
     const REMIND_KEYWORD = '$fmc-remind';
     const REMIND_AT_PREFIX = '$fmc-remind-';
+    const REMINDING_KEYWORD = '$fmc-reminding';
+    // A moment already gone still comes back, a minute from now
+    const REMINDER_OVERDUE_MS = 60 * 1000;
+    // Scheduled mail reaches Sent with nothing else changing, so the sweep
+    // also runs this often
+    const REMINDER_SWEEP_MS = 5 * 60 * 1000;
 
     // The compose controllers open in this page, to find the one a
     // submission comes from
@@ -10764,6 +10774,92 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         submission.set('onSuccess', patch);
     };
 
+    // The moment a message asks to come back, or null; the latest if several
+    const reminderAt = (keywords) => Object.keys(keywords || {}).reduce((latest, keyword) => {
+        if (!keywords[keyword] || keyword.indexOf(REMIND_AT_PREFIX) !== 0) return latest;
+        const seconds = keyword.slice(REMIND_AT_PREFIX.length);
+        if (!/^\d+$/.test(seconds)) return latest;
+        const moment = new Date(Number(seconds) * 1000);
+        return !latest || moment > latest ? moment : latest;
+    }, null);
+
+    const jmapDate = (date) => date.toISOString().replace(/\.\d+Z$/, 'Z');
+
+    // Marked messages that have reached Sent are snoozed there, to come back
+    // to the Inbox unread. Several windows and devices may sweep at once;
+    // they all write the same thing.
+    let reminderSweepTimer = null;
+    let reminderSweeping = false;
+
+    const sweepReminders = async () => {
+        reminderSweepTimer = null;
+        if (reminderSweeping) return;
+        const accountId = controller().get('accountId');
+        const byRole = (role) => mailboxesOf(accountId).filter(m => m.get('role') === role)[0];
+        const sent = byRole('sent');
+        const snoozed = byRole('snoozed');
+        const inbox = byRole('inbox');
+        if (!sent || !snoozed || !inbox) return;
+        reminderSweeping = true;
+        try {
+            const found = await FastMail.callJMAPMethod('Email/query', {
+                accountId,
+                filter: {
+                    operator: 'AND',
+                    conditions: [
+                        { inMailbox: sent.get('id') },
+                        { hasKeyword: REMIND_KEYWORD },
+                        { operator: 'NOT', conditions: [{ inMailbox: snoozed.get('id') }] }
+                    ]
+                },
+                limit: 50
+            });
+            if (!found.ids.length) return;
+            const got = await FastMail.callJMAPMethod('Email/get', {
+                accountId, ids: found.ids, properties: ['keywords']
+            });
+            const soonest = Date.now() + REMINDER_OVERDUE_MS;
+            const update = {};
+            got.list.forEach((email) => {
+                const at = reminderAt(email.keywords);
+                if (!at) return;
+                update[email.id] = {
+                    ['mailboxIds/' + snoozed.get('id')]: true,
+                    snoozed: {
+                        until: jmapDate(new Date(Math.max(at.getTime(), soonest))),
+                        moveToMailboxId: inbox.get('id'),
+                        setKeywords: { $seen: false }
+                    },
+                    ['keywords/' + REMIND_KEYWORD]: null,
+                    ['keywords/' + REMINDING_KEYWORD]: true
+                };
+            });
+            if (Object.keys(update).length) {
+                await FastMail.callJMAPMethod('Email/set', { accountId, update });
+            }
+        } catch (error) {
+            // Offline, or the server said no: the next sweep tries again
+            console.warn('Fastmail Custom: reminders not set yet', error);
+        } finally {
+            reminderSweeping = false;
+        }
+    };
+
+    // The mailbox window sweeps; a window of its own closes too soon to
+    // see its message reach Sent
+    const scheduleReminderSweep = () => {
+        if (isMinimalWindow) return;
+        if (reminderSweepTimer) clearTimeout(reminderSweepTimer);
+        reminderSweepTimer = setTimeout(sweepReminders, 3000);
+    };
+
+    const watchReminders = () => {
+        if (isMinimalWindow) return;
+        FastMail.store.on(FastMail.classes.Message, { go: scheduleReminderSweep }, 'go');
+        setInterval(scheduleReminderSweep, REMINDER_SWEEP_MS);
+        scheduleReminderSweep();
+    };
+
     const patchSubmission = () => {
         const Submission = FastMail.classes.MessageSubmission;
         if (!Submission || Submission.prototype.customReminder) return;
@@ -10827,6 +10923,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         watchGroupCounts();
         watchMailboxSummaryList();
         refreshMailboxSummary();
+        watchReminders();
 
         // Handy from the console, and how the counts can be checked by hand
         window.fastmailCustom = {

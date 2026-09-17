@@ -148,12 +148,6 @@ export class JMAPClient {
         return this.getInChunks('Email/get', ids, { accountId: this.accountId, properties: EMAIL_PROPERTIES });
     }
 
-    // The ids of the messages matching a filter, up to `limit`
-    async queryEmails(filter, limit = GET_CHUNK) {
-        const result = await this.call('Email/query', { accountId: this.accountId, filter, limit });
-        return result.ids;
-    }
-
     // Each thread with the ids of its messages: `{ id, emailIds }`.
     async threads(ids) {
         return this.getInChunks('Thread/get', ids, { accountId: this.accountId });

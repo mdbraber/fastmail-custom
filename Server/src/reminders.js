@@ -1,58 +1,24 @@
 /*
  * Reminders for sent mail nobody answered.
  *
- * The compose window marks a message it sends with two keywords: REMIND, and
- * REMIND_AT_PREFIX followed by the moment to come back, in seconds since the
- * epoch. Once the message is in Sent, the server snoozes it there: it stays
- * in Sent, is also in Snoozed, and Fastmail puts it in the Inbox, unread, at
- * that moment. REMIND is swapped for REMINDING, so it is snoozed only once.
+ * The compose window marks a message it sends with `$fmc-remind` and
+ * `$fmc-remind-<seconds since the epoch>`. Once the message is in Sent, the
+ * apps snooze it there: it stays in Sent, is also in Snoozed, and Fastmail
+ * puts it in the Inbox, unread, at that moment; `$fmc-remind` becomes
+ * REMINDING as they do. The apps do it because Fastmail keeps the `snoozed`
+ * property from API tokens.
  *
- * A reply cancels the reminder: a message arriving in the same conversation,
- * later than the reminder, takes it out of Snoozed again.
+ * What the server does is the part that has to happen while no app is
+ * open: a reply cancels the reminder. A message arriving in the same
+ * conversation, later than the reminder, takes it out of Snoozed again,
+ * which clears its snooze as well.
  */
 
-export const REMIND = '$fmc-remind';
 export const REMINDING = '$fmc-reminding';
-export const REMIND_AT_PREFIX = '$fmc-remind-';
-
-// A moment already gone still comes back, a minute from now
-export const OVERDUE_MS = 60 * 1000;
-
-// The moment a message asks to come back, or null. Should it carry more than
-// one, the latest counts.
-export function remindAt(keywords) {
-    let latest = null;
-    for (const [keyword, set] of Object.entries(keywords ?? {})) {
-        if (!set || !keyword.startsWith(REMIND_AT_PREFIX)) continue;
-        const seconds = keyword.slice(REMIND_AT_PREFIX.length);
-        if (!/^\d+$/.test(seconds)) continue;
-        const moment = new Date(Number(seconds) * 1000);
-        if (!latest || moment > latest) latest = moment;
-    }
-    return latest;
-}
-
-// JMAP dates are UTC to the second
-export function utcDate(date) {
-    return date.toISOString().replace(/\.\d+Z$/, 'Z');
-}
-
-export function snoozePatch(email, { snoozedId, inboxId, now = new Date() }) {
-    const at = remindAt(email.keywords);
-    if (!at) return null;
-    const until = at.getTime() > now.getTime() ? at : new Date(now.getTime() + OVERDUE_MS);
-    return {
-        [`mailboxIds/${snoozedId}`]: true,
-        snoozed: { until: utcDate(until), moveToMailboxId: inboxId, setKeywords: { $seen: false } },
-        [`keywords/${REMIND}`]: null,
-        [`keywords/${REMINDING}`]: true,
-    };
-}
 
 export function cancelPatch({ snoozedId }) {
     return {
         [`mailboxIds/${snoozedId}`]: null,
-        snoozed: null,
         [`keywords/${REMINDING}`]: null,
     };
 }
