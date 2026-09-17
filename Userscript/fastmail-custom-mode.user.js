@@ -124,6 +124,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // picker, always comes last and is not part of this setting.
         snoozePresets: 'Later today = +4h\nThis Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
             'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
+        // When a message you send comes back to the Inbox if nobody has
+        // replied: the name of a snooze preset, or a Date @ Time the way a
+        // preset writes one, counted from when the message goes out. One for
+        // new messages and forwards, one for replies; empty sets none, and
+        // compose's More menu changes it for the message at hand.
+        remindNewMessages: '',
+        remindReplies: '',
         // The action bar's verbs, as one ordered list over all of them: the
         // bar takes as many leading ones as fit; More always keeps a slot,
         // and the rest wait inside More, in the same order. Each kind of
@@ -202,10 +209,20 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
+    // A window Fastmail opened itself starts from the settings its host had
+    // when the app started; the window that opened it has them as they are
+    const openerSettings = () => {
+        try {
+            return window.opener && window.opener.__fastmailCustomSettings;
+        } catch (error) {
+            return null;
+        }
+    };
+
     let settings = Object.assign(
         {},
         DEFAULT_SETTINGS,
-        window.__fastmailCustomSettings || localSettings()
+        openerSettings() || window.__fastmailCustomSettings || localSettings()
     );
 
     /*
@@ -351,6 +368,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
             title: 'Snooze presets',
             hint: 'Replaces Fastmail’s Snooze list; press 1, 2, 3… to pick. Give a date (today, tomorrow, this weekend, next week, 2w, YYYY-MM-DD) and a time, or hours from now (+4h).'
+        },
+        {
+            key: 'remindNewMessages', group: 'snooze', clearable: true,
+            title: 'Remind me if nobody replies to a new message',
+            hint: 'A new message or forward you send comes back to the Inbox, unread and still in Sent, unless a reply arrives first. A snooze preset’s name, or a date and time like a preset’s (3d @ 08:00); empty sets no reminder. Change it per message under More in compose. Needs the push server.'
+        },
+        {
+            key: 'remindReplies', group: 'snooze', clearable: true,
+            title: 'Remind me if nobody replies to a reply',
+            hint: 'The same for replies you send.'
         },
         {
             key: 'swapArchiveExpand', group: 'keyboard',
@@ -4677,8 +4704,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * that quirk lives in FutureCustomTimeView, not in this call. Passing a
      * falsy `keys` (as `controller().actions.archive(null)` already does
      * elsewhere in this file) snoozes the current selection, exactly as
-     * pressing `b` and choosing a stock preset would. So each preset below
-     * calls this directly, rather than driving the picker's own Save.
+     * pressing `b` and choosing a stock preset would. Each preset below
+     * hands its date to the menu's own didSelect, as a stock preset does,
+     * because the same menu class also asks when to send (Schedule send)
+     * and when to be reminded, and each of those says what a date means.
      *
      * "Choose a date and time…" is not a preset: it reuses Fastmail's own
      * Custom… option's target and method (showCustomPicker), taken off
@@ -4893,6 +4922,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const CHOOSE_SNOOZE_DATE_LABEL = 'Choose a date and time…';
+    const NO_REMINDER_LABEL = 'No reminder';
 
     // Replaces Fastmail's own preset list with this mode's, through the
     // same patched MenuView.prototype.draw as addGroupings (see patchMenus
@@ -4906,6 +4936,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const custom = snoozeMenuCustomOption(options);
         if (!custom) return;
         const futureTimeMenuView = custom.get('target');
+        if (!futureTimeMenuView || typeof futureTimeMenuView.didSelect !== 'function') return;
 
         const now = new Date();
         const presets = parseSnoozePresets(settings.snoozePresets).map(preset => ({
@@ -4916,12 +4947,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // greyed out rather than hidden, keeping every number where it was.
         const entries = presets.map((preset, index) => snoozePresetOption(String(index + 1),
             snoozePresetLabel(preset.name, snoozePresetRightText(now, preset.target)),
-            () => controller().actions.snooze(null, preset.target),
+            () => futureTimeMenuView.didSelect(preset.target),
             preset.target.getTime() <= now.getTime()));
 
-        if (futureTimeMenuView && typeof futureTimeMenuView.showCustomPicker === 'function') {
+        if (typeof futureTimeMenuView.showCustomPicker === 'function') {
             entries.push(snoozePresetOption(String(entries.length + 1), CHOOSE_SNOOZE_DATE_LABEL,
                 () => futureTimeMenuView.showCustomPicker()));
+        }
+
+        // The reminder menu can also be told there is to be none
+        if (typeof futureTimeMenuView.customNoReminder === 'function') {
+            entries.push(snoozePresetOption(String(entries.length + 1), NO_REMINDER_LABEL,
+                () => futureTimeMenuView.customNoReminder()));
         }
 
         if (!entries.length) return;
@@ -8008,6 +8045,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     }
                     addGroupings(options);
                     addSnoozePresets(options);
+                    addReminderOption(options);
                 }
             } catch (error) {
                 reportFault('could not add to a menu', error);
@@ -10559,6 +10597,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         proto.startAutoSave = function () {
             if (!this.customSentLabelDone) {
                 this.customSentLabelDone = true;
+                openComposers.add(this);
                 try {
                     if (NEW_MESSAGE_MODES.indexOf(this.mode) !== -1 && this.mailboxes) {
                         pathsFromSetting(settingValue('sentLabel')).forEach((path) => {
@@ -10571,6 +10610,173 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 }
             }
             return originalStartAutoSave.apply(this, arguments);
+        };
+
+        const originalDestroy = proto.destroy;
+        proto.destroy = function () {
+            openComposers.delete(this);
+            return originalDestroy.apply(this, arguments);
+        };
+
+        patchSubmission();
+    };
+
+    /*
+     * Reminders for sent mail nobody answers. A message goes out marked with
+     * two keywords, REMIND_KEYWORD and the moment to come back after
+     * REMIND_AT_PREFIX, in seconds since the epoch; the push server snoozes
+     * it once it is in Sent, and takes it out of Snoozed again when a reply
+     * arrives (Server/src/reminders.js).
+     *
+     * The marks ride on the submission's own onSuccess patch, the one that
+     * takes $draft off as the message is sent, so they land exactly when it
+     * goes, after an undo-send wait or at a scheduled time, and a send that
+     * is undone or fails never carries them to Sent.
+     *
+     * Each open compose window has a choice: undefined takes the default
+     * from the settings, counted from when the message goes out; null is no
+     * reminder; a Date is one picked in the More menu.
+     */
+    const REMIND_KEYWORD = '$fmc-remind';
+    const REMIND_AT_PREFIX = '$fmc-remind-';
+
+    // The compose controllers open in this page, to find the one a
+    // submission comes from
+    const openComposers = new Set();
+
+    const isReplyCompose = (composer) => {
+        const inReplyTo = composer.get('inReplyTo');
+        return !!(inReplyTo && inReplyTo.length);
+    };
+
+    const defaultReminder = (composer) =>
+        settingValue(isReplyCompose(composer) ? 'remindReplies' : 'remindNewMessages');
+
+    // A snooze preset by name, or a Date @ Time written the way a preset's
+    // is; `named` says which
+    const reminderPreset = (spec) => {
+        const text = String(spec || '').trim();
+        if (!text) return null;
+        const named = parseSnoozePresets(settings.snoozePresets)
+            .find(preset => preset.name.toLowerCase() === text.toLowerCase());
+        if (named) return { preset: named, named: true };
+        const written = parseSnoozePresets('Reminder = ' + text)[0];
+        return written ? { preset: written, named: false } : null;
+    };
+
+    // When the message is to come back, or null for no reminder
+    const reminderMoment = (composer) => {
+        const chosen = composer.customReminder;
+        if (chosen === null) return null;
+        if (chosen) return chosen;
+        const found = reminderPreset(defaultReminder(composer));
+        if (!found) return null;
+        const base = composer._scheduleSend ? new Date(composer._scheduleSend) : new Date();
+        const target = snoozePresetTarget(base, found.preset);
+        return target.getTime() > base.getTime() ? target : null;
+    };
+
+    // The right-hand side of the More menu's entry
+    const reminderSummary = (composer) => {
+        const moment = reminderMoment(composer);
+        if (!moment) return NO_REMINDER_LABEL;
+        const found = composer.customReminder === undefined ? reminderPreset(defaultReminder(composer)) : null;
+        return found && found.named ? found.preset.name : snoozePresetRightText(new Date(), moment);
+    };
+
+    const optionMethod = (option) => {
+        try {
+            return option && typeof option.get === 'function' ? option.get('method') : null;
+        } catch (error) {
+            return null;
+        }
+    };
+
+    // Compose's More menu gains the reminder, in a section of its own above
+    // High priority; the menu is drawn afresh each time it opens, so the
+    // entry always shows the choice as it stands.
+    const addReminderOption = (options) => {
+        if (options.some(option => option && option.customReminderOption)) return;
+        const at = options.findIndex(option => optionMethod(option) === 'toggleHighPriority');
+        if (at === -1) return;
+        const composer = options[at].get('target');
+        if (!composer || typeof composer.get !== 'function') return;
+
+        // A choice closes More as well, which shows it the next time it
+        // opens; the submenu is a popover of its own rather than one inside
+        // More's, and hiding More's takes it along
+        let option = null;
+        const closeMenus = (view) => {
+            const more = option && option.getParent(FastMail.classes.PopOverView);
+            (more || view).hide();
+        };
+        const menuView = new FastMail.classes.FutureTimeMenuView({
+            title: 'Remind me if nobody replies',
+            lastCustomKey: 'lastUsedReminderDelta',
+            didSelect(date) {
+                composer.customReminder = new Date(date);
+                closeMenus(this);
+            },
+            customNoReminder() {
+                composer.customReminder = null;
+                closeMenus(this);
+            }
+        });
+        // The same blank icon the entries around it carry, so the labels line up
+        const blank = options.find(option => optionMethod(option) === 'toggleRich');
+        const icon = blank && blank.get('icon');
+        option = new FastMail.classes.MenuButtonView({
+            icon: icon && icon.cloneNode ? icon.cloneNode(true) : null,
+            label: snoozePresetLabel('Remind if no reply', reminderSummary(composer)),
+            menuView: menuView,
+            destroyMenuViewOnClose: true,
+            isLastOfSection: true
+        });
+        option.customReminderOption = true;
+        options.splice(at, 0, option);
+    };
+
+    const markReminder = (submission) => {
+        const onSuccess = submission.get('onSuccess');
+        // No patch means the message is destroyed once sent; nothing to mark
+        if (!onSuccess || typeof onSuccess !== 'object') return;
+        const message = submission.get('message');
+        if (!message) return;
+        const storeKey = message.get('storeKey');
+        const composer = [...openComposers].find((one) => {
+            const own = one.get('message');
+            return own && own.get('storeKey') === storeKey;
+        });
+        if (!composer) return;
+
+        const patch = Object.assign({}, onSuccess);
+        // A draft sent before, and undone, may still carry an old mark
+        Object.keys(message.get('keywords') || {}).forEach((keyword) => {
+            if (keyword === REMIND_KEYWORD || keyword.indexOf(REMIND_AT_PREFIX) === 0) {
+                patch['keywords/' + keyword] = null;
+            }
+        });
+        const moment = reminderMoment(composer);
+        if (moment) {
+            patch['keywords/' + REMIND_KEYWORD] = true;
+            patch['keywords/' + REMIND_AT_PREFIX + Math.floor(moment.getTime() / 1000)] = true;
+        }
+        submission.set('onSuccess', patch);
+    };
+
+    const patchSubmission = () => {
+        const Submission = FastMail.classes.MessageSubmission;
+        if (!Submission || Submission.prototype.customReminder) return;
+        Submission.prototype.customReminder = true;
+
+        const original = Submission.prototype.saveToStore;
+        Submission.prototype.saveToStore = function () {
+            try {
+                markReminder(this);
+            } catch (error) {
+                reportFault('could not set the reminder for sent mail', error);
+            }
+            return original.apply(this, arguments);
         };
     };
 

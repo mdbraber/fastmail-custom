@@ -33,6 +33,16 @@ ones hidden from Fastmail's folder list; the history shelves, are never
 touched. A press that fails says so on the phone rather than going quiet,
 so the tokens have to be able to write.
 
+## Reminders for unanswered mail
+
+A message sent with a reminder carries two keywords, `$fmc-remind` and
+`$fmc-remind-<seconds since the epoch>`. Once it is in Sent the server
+snoozes it there: it stays in Sent, and Fastmail puts it in the Inbox,
+unread, at that moment. A message arriving later in the same conversation,
+not in Sent, Drafts, Spam or Trash, takes the reminder out of Snoozed again.
+The keyword swaps to `$fmc-reminding` once snoozed, so each message is
+snoozed once. Accounts without a Sent or Snoozed folder have no reminders.
+
 ## One-time setup
 
 1. **APNs key**; developer portal → Certificates, Identifiers & Profiles →
