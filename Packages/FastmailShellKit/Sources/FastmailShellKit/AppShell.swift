@@ -241,9 +241,19 @@ public struct AppShell: View {
             openInOtherApp(target)
         case .compose(let mailto):
             #if canImport(AppKit) && !targetEnvironment(macCatalyst)
-            // A message gets a window of its own rather than displacing
-            // whatever you were reading.
-            ComposeWindows.shared.compose(mailto: mailto, profile: live)
+            // Where compose opens says where the message goes: a window of
+            // its own, a tab, or Fastmail's own compose in the mailbox window
+            switch ComposeMode.stored() {
+            case .inline:
+                model.pendingLoad = LinkRouter.composeURL(
+                    mailto: mailto, accountID: live.accountID, backend: live.backend
+                )
+                NSApp.activate()
+            case .tab:
+                ComposeWindows.shared.compose(mailto: mailto, profile: live, mode: .tab)
+            case .window:
+                ComposeWindows.shared.compose(mailto: mailto, profile: live)
+            }
             #else
             model.pendingLoad = LinkRouter.composeURL(
                 mailto: mailto, accountID: live.accountID, backend: live.backend

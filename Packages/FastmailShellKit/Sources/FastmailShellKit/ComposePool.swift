@@ -576,16 +576,32 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     }
 
     /// The same window, opened on a message someone asked to write, a mailto
-    /// link clicked anywhere on the Mac.
-    public func compose(mailto: String, profile: Profile) {
+    /// link clicked anywhere on the Mac: a window of its own, or a tab of the
+    /// mailbox window in front when that is where messages are written.
+    public func compose(mailto: String, profile: Profile, mode: ComposeMode = .window) {
         configure(profile: profile)
         guard let pool else { return }
+        // A link from another app finds this one inactive, with no key window
+        let host = mode == .tab ? Self.tabHost(NSApp.keyWindow) ?? Self.mailboxWindow() : nil
         let window = pool.take()
         Self.webView(of: window)?
             .load(URLRequest(url: ComposeURL.url(for: profile, mailto: mailto)))
-        Self.place(window)
+        if let host {
+            window.tabbingMode = .preferred
+            Self.dress(window, like: host)
+            host.addTabbedWindow(window, ordered: .above)
+        } else {
+            Self.place(window)
+        }
         fitTabbedWindows()
         Self.bringForward(window)
+    }
+
+    /// The mailbox window nearest the front, the one a tab joins
+    static func mailboxWindow() -> NSWindow? {
+        NSApp.orderedWindows.first { window in
+            tabHost(window) != nil && (window.isVisible || window.isMiniaturized)
+        }
     }
 
     /// A window for a page Fastmail asked to open on its own: a draft or a
