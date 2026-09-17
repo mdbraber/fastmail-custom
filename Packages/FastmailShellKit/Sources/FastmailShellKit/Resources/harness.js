@@ -1133,11 +1133,12 @@
          * photo's type, which Fastmail's stored contacts call mediaType; the
          * lookup throws and the notification is dropped without a word. So
          * the same broadcast the service worker answers is heard here too,
-         * and if its notification has not come through within
-         * FALLBACK_DELAY, this page shows the message itself, formatted the
-         * way the service worker formats it and with the sound Fastmail's
-         * page would add. Fastmail's own, when it arrives in time, is the one
-         * shown; one arriving after this is not shown again.
+         * and this page shows the message itself, formatted the way the
+         * service worker formats it and with the sound Fastmail's page would
+         * add: straight away when the sender has a contact photo, since that
+         * is what the service worker fails on, and otherwise only if its
+         * notification has not come through within FALLBACK_DELAY. Whichever
+         * comes first is the one shown; the other is not shown again.
          *
          * Only the message Fastmail's offline worker has already decided
          * should notify is broadcast, so Fastmail's notification setting
@@ -1146,22 +1147,26 @@
         var FALLBACK_DELAY = 2000;
         var pageUserId = (/[?&]u=(\w+)/.exec(location.search) || [])[1] || '';
 
-        // The service worker's title: the sender's name, or the address when
-        // the name is dressed up as an address or as Fastmail, unless the
-        // message is trusted; a clock ahead of it for snoozed mail coming
-        // back. Fastmail's own test also catches lookalike characters; this
-        // one catches the plain spellings.
-        var fallbackTitle = function (push) {
+        // The sender as the service worker sees them: a name dressed up as an
+        // address or as Fastmail, on a message that is not trusted, is not
+        // believed. Fastmail's own test also catches lookalike characters;
+        // this one catches the plain spellings.
+        var senderOf = function (push) {
             var email = push.email;
             var from = (email.from && email.from[0]) || {};
             var address = String(from.email || '');
             var name = String(from.name || '').trim().replace(/\s+/g, ' ') || address;
             var keywords = email.keywords || {};
-            if (name !== address && !keywords.$istrusted &&
-                    (/[@\uFF20\uFE6B]/.test(name) || /f\W*a\W*s\W*t\W*m\W*a\W*i\W*l/i.test(name))) {
-                name = address;
-            }
-            return (push.isAwakened ? '\uD83D\uDD52 ' : '') + (name || 'New message');
+            var dressedUp = name !== address && !keywords.$istrusted &&
+                (/[@\uFF20\uFE6B]/.test(name) || /f\W*a\W*s\W*t\W*m\W*a\W*i\W*l/i.test(name));
+            return { address: address, name: dressedUp ? address : name, dressedUp: dressedUp };
+        };
+
+        // The service worker's title: the sender's name, or the address for a
+        // name that is not believed; a clock ahead of it for snoozed mail
+        // coming back
+        var fallbackTitle = function (push) {
+            return (push.isAwakened ? '\uD83D\uDD52 ' : '') + (senderOf(push).name || 'New message');
         };
 
         // What Fastmail's page reads before asking for a sound
@@ -1177,13 +1182,25 @@
          * The contact photo the service worker failed to read, looked up the
          * way it looks: a contact card holding the sender's address and a
          * photo, the default address book's account first, downloaded at the
-         * size it asks for. Contact search matches parts of addresses, so the
-         * address itself is checked on each card. Its photo's type is read
-         * from mediaType, where the service worker reads type. A lookup that
-         * fails or takes too long leaves the notification without a picture.
+         * size it asks for. Its photo's type is read from mediaType, where the
+         * service worker reads type.
+         *
+         * The cards are read from Fastmail's offline copy, as the service
+         * worker reads them, which takes a fraction of a second; asking the
+         * server's contact search took one and a half to two and a half.
+         * Without an offline copy the server is asked, and its search matches
+         * parts of addresses, so the address itself is checked on each card.
+         *
+         * Resolves to the picture as a data: URL, or '' for none, and to
+         * whether a photo was found at all: that is what makes the service
+         * worker drop the notification, whether or not the download worked.
          */
         var PHOTO_TIMEOUT = 4000;
         var CONTACTS = 'urn:ietf:params:jmap:contacts';
+        // How Fastmail's offline copy marks a record's account and a record
+        // that has been destroyed, as its service worker reads them
+        var OFFLINE_ACCOUNT = '_a';
+        var OFFLINE_DESTROYED = '_d';
 
         var photoOnCard = function (card, address) {
             if (!card || card.kind === 'group') return null;
@@ -1199,24 +1216,59 @@
             return key ? media[key] : null;
         };
 
-        var contactPhotoOf = function (push) {
-            var from = (push.email.from && push.email.from[0]) || {};
-            var address = String(from.email || '').trim().toLowerCase();
-            var fastmail = window.FastMail;
-            var auth = fastmail && fastmail.auth;
-            if (!address || !auth || typeof auth.get !== 'function' || typeof auth.signUrl !== 'function' ||
-                    typeof fastmail.callJMAPMethod !== 'function') {
-                return Promise.resolve('');
+        // The default address book's account first, then the newest card,
+        // the service worker's order
+        var betterPhoto = function (found, candidate, primary) {
+            if (!found) return candidate;
+            if ((candidate.accountId === primary) !== (found.accountId === primary)) {
+                return candidate.accountId === primary ? candidate : found;
             }
+            return candidate.cardId > found.cardId ? candidate : found;
+        };
 
-            var accounts = auth.get('accounts') || {};
-            var primary = (auth.get('primaryAccounts') || {})[CONTACTS];
-            var accountIds = Object.keys(accounts).filter(function (id) {
-                return !!((accounts[id] || {}).accountCapabilities || {})[CONTACTS];
-            }).sort(function (a, b) {
-                return (b === primary ? 1 : 0) - (a === primary ? 1 : 0);
+        // undefined when there is no offline copy to read
+        var offlinePhotoOf = function (address, primary) {
+            var name = 'JMAP-v2-' + pageUserId;
+            if (!pageUserId || !window.indexedDB || typeof indexedDB.databases !== 'function') {
+                return Promise.resolve(undefined);
+            }
+            return indexedDB.databases().then(function (databases) {
+                if (!databases.some(function (each) { return each.name === name; })) return undefined;
+                return new Promise(function (resolve) {
+                    var opening = indexedDB.open(name);
+                    // Never create one: a database that is not there stays not there
+                    opening.onupgradeneeded = function () { opening.transaction.abort(); };
+                    opening.onerror = opening.onblocked = function () { resolve(undefined); };
+                    opening.onsuccess = function () {
+                        var db = opening.result;
+                        if (!db.objectStoreNames.contains('ContactCard')) {
+                            db.close();
+                            resolve(undefined);
+                            return;
+                        }
+                        var reading = db.transaction(['ContactCard'], 'readonly').objectStore('ContactCard').getAll();
+                        reading.onerror = function () { db.close(); resolve(undefined); };
+                        reading.onsuccess = function () {
+                            db.close();
+                            var found = null;
+                            (reading.result || []).forEach(function (card) {
+                                var accountId = card && card[OFFLINE_ACCOUNT];
+                                if (typeof accountId !== 'string' || card[OFFLINE_DESTROYED]) return;
+                                var photo = photoOnCard(card, address);
+                                if (photo) {
+                                    found = betterPhoto(found, { accountId: accountId, cardId: String(card.id), photo: photo }, primary);
+                                }
+                            });
+                            resolve(found);
+                        };
+                    };
+                });
+            }).catch(function () {
+                return undefined;
             });
+        };
 
+        var serverPhotoOf = function (fastmail, address, accountIds) {
             var photoIn = function (accountId) {
                 return fastmail.callJMAPMethod('ContactCard/query', {
                     accountId: accountId, filter: { email: address }, limit: 20
@@ -1234,12 +1286,35 @@
                     return photo ? { accountId: accountId, photo: photo } : null;
                 });
             };
-
-            var lookup = accountIds.reduce(function (previous, accountId) {
+            return accountIds.reduce(function (previous, accountId) {
                 return previous.then(function (found) { return found || photoIn(accountId); });
-            }, Promise.resolve(null)).then(function (found) {
+            }, Promise.resolve(null));
+        };
+
+        var contactPhotoOf = function (push) {
+            var none = { image: '', hasPhoto: false };
+            var address = senderOf(push).address.trim().toLowerCase();
+            var fastmail = window.FastMail;
+            var auth = fastmail && fastmail.auth;
+            if (!address || !auth || typeof auth.get !== 'function' || typeof auth.signUrl !== 'function' ||
+                    typeof fastmail.callJMAPMethod !== 'function') {
+                return Promise.resolve(none);
+            }
+
+            var accounts = auth.get('accounts') || {};
+            var primary = (auth.get('primaryAccounts') || {})[CONTACTS];
+            var accountIds = Object.keys(accounts).filter(function (id) {
+                return !!((accounts[id] || {}).accountCapabilities || {})[CONTACTS];
+            }).sort(function (a, b) {
+                return (b === primary ? 1 : 0) - (a === primary ? 1 : 0);
+            });
+
+            var lookup = offlinePhotoOf(address, primary).then(function (found) {
+                return found === undefined ? serverPhotoOf(fastmail, address, accountIds) : found;
+            }).then(function (found) {
                 var template = String(auth.get('downloadUrl') || '');
-                if (!found || !template) return '';
+                if (!found) return none;
+                if (!template) return { image: '', hasPhoto: true };
                 var type = String(found.photo.mediaType || found.photo.type || 'image/jpeg');
                 var url = template
                     .replace('{accountId}', encodeURIComponent(found.accountId))
@@ -1258,13 +1333,17 @@
                         reader.onloadend = function () { resolve(imageOf(reader.result)); };
                         reader.readAsDataURL(blob);
                     });
+                }).catch(function () {
+                    return '';
+                }).then(function (image) {
+                    return { image: image, hasPhoto: true };
                 });
             }).catch(function () {
-                return '';
+                return none;
             });
 
             return Promise.race([lookup, new Promise(function (resolve) {
-                setTimeout(function () { resolve(''); }, PHOTO_TIMEOUT);
+                setTimeout(function () { resolve(none); }, PHOTO_TIMEOUT);
             })]);
         };
 
@@ -1281,21 +1360,32 @@
                 // Another account's window is the one Fastmail would pick
                 if (pageUserId && push.userId && push.userId !== pageUserId) return;
 
-                setTimeout(function () {
-                    if (!claimEmail(push)) return;
-                    contactPhotoOf(push).then(function (photo) {
+                // Looked up straight away rather than after the wait. The
+                // service worker looks no picture up for a sender it does not
+                // believe, and so does not fail on one.
+                var announcedAt = Date.now();
+                var lookup = senderOf(push).dressedUp ? Promise.resolve({ image: '', hasPhoto: false }) : contactPhotoOf(push);
+                lookup.then(function (found) {
+                    // A contact photo, with no BIMI logo to show ahead of it,
+                    // is exactly what the service worker fails on: nothing is
+                    // coming from it, so there is nothing to wait for. Anything
+                    // else it may still show, and gets the rest of its time.
+                    var dropped = found.hasPhoto && !email.bimiBlobId;
+                    var wait = dropped ? 0 : Math.max(0, FALLBACK_DELAY - (Date.now() - announcedAt));
+                    setTimeout(function () {
+                        if (!claimEmail(push)) return;
                         queueNotification({
                             id: String(email.id),
                             title: fallbackTitle(push),
                             body: String(email.subject || '') || 'New message',
                             sound: mailSoundWanted(push.userId),
                             threadId: String(email.threadId || ''),
-                            icon: photo,
+                            icon: found.image,
                             url: messageUrlFor(push),
                             data: jsonOf(push)
                         });
-                    });
-                }, FALLBACK_DELAY);
+                    }, wait);
+                });
             });
         } catch (error) {
             report(error);
