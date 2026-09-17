@@ -62,6 +62,22 @@ public struct PushConfig: Equatable, Sendable {
         return request
     }
 
+    /// The app has taken every banner off this device, which it does
+    /// whenever it comes to the front. The server keeps its own list of what
+    /// it put on which device, so that it can take a banner off once its
+    /// message is read elsewhere; told this, it drops this device from that
+    /// list rather than sending silent pushes about banners already gone.
+    public func cleared(account: String, deviceToken: Data) -> URLRequest {
+        var request = URLRequest(url: server.appendingPathComponent("cleared"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["account": account, "token": Self.hex(deviceToken)]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return request
+    }
+
     /// The `contacts` flag of a registration reply, or nothing when the reply
     /// carries no such flag (a server from before it) or is not JSON. Only a
     /// real boolean counts: a JSON 1 is a number, not a flag.

@@ -883,3 +883,20 @@ test('without Sent or Snoozed there are no reminders, and a failing lookup costs
     assert.equal(u.jmap.calls.filter((c) => c[0] === 'set').length, 0);
     assert.equal(u.apns.sent.length, 2);
 });
+
+test('a device that says its banners are gone hears nothing more about them', async () => {
+    const t = await shownThenChanged();
+    await t.watcher.deviceCleared('TOK1');
+    assert.deepEqual((await loadState(t.dir, 'personal', silent)).shown, [
+        { id: 'M1', tokens: ['tok2'] }, { id: 'M2', tokens: ['tok2'] },
+    ]);
+
+    t.jmap.updated = ['M1'];
+    t.jmap.keywordsOf = { M1: { $seen: true } };
+    await changed(t);
+    assert.deepEqual(dismissals(t), [['tok2', ['M1']]]);
+
+    // Saying it again with nothing of that device left writes nothing
+    await t.watcher.deviceCleared('tok9');
+    assert.deepEqual((await loadState(t.dir, 'personal', silent)).shown, [{ id: 'M2', tokens: ['tok2'] }]);
+});

@@ -140,3 +140,17 @@ import Testing
     #expect(PushAction.pin.failureTitle == "Not pinned")
     #expect(PushAction.archive.failureBody == "The message is still in your Inbox.")
 }
+
+// The app takes every banner off itself whenever it comes to the front, and
+// says so, so the server stops waking it about banners already gone.
+@Test func clearedPostsTheHexTokenWithTheSecret() throws {
+    let config = try #require(PushConfig(host: "push.example.net", secret: "s3cret"))
+    let request = config.cleared(account: "personal", deviceToken: Data([0x01, 0x02]))
+    #expect(request.url?.absoluteString == "https://push.example.net/cleared")
+    #expect(request.httpMethod == "POST")
+    #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer s3cret")
+    let body = try #require(request.httpBody)
+    let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    #expect(json["account"] as? String == "personal")
+    #expect(json["token"] as? String == "0102")
+}

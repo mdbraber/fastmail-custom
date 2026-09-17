@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { alertPayload, badgePayload, dismissPayload, matchesChoice, selectFresh } from './notify.js';
 import { MODES } from './choice.js';
 import { addressSets } from './contacts.js';
-import { forgetShown, rememberNotified, rememberShown, saveState } from './state.js';
+import { forgetShown, forgetShownOn, rememberNotified, rememberShown, saveState } from './state.js';
 import { deviceOutcome } from './apns.js';
 import { eventSourceURL, runEventSource } from './jmap.js';
 import { decrypt, generateKeys, subscriptionKeys } from './webpush.js';
@@ -328,6 +328,17 @@ export class AccountWatcher {
             await this.send(token, dismissPayload(ids), null, 'background');
         }
         return read;
+    }
+
+    /// A device says it has taken every banner off itself, which the apps do
+    /// whenever they come to the front. Nothing is sent about those banners
+    /// again, so the silent pushes are kept for the ones that are still up.
+    async deviceCleared(token) {
+        const before = JSON.stringify(this.state.shown ?? []);
+        const next = forgetShownOn(this.state, token);
+        if (JSON.stringify(next.shown) === before) return;
+        this.state = next;
+        await this.persist();
     }
 
     /*

@@ -49,6 +49,22 @@ async function route({ config, watchers, devices }, request, response) {
         return reply(response, 200, { ok: true, notify, contacts });
     }
 
+    // The app has taken every banner off a device, which it does whenever it
+    // comes to the front. What the server still thinks is showing there is
+    // not, so it forgets, rather than waking the device about banners that
+    // are already gone.
+    if (request.method === 'POST' && url.pathname === '/cleared') {
+        if (!bearerMatches(request.headers.authorization, config.deviceSecret)) {
+            return reply(response, 401, { error: 'unauthorized' });
+        }
+        const body = await readJSON(request);
+        if (!body || typeof body.account !== 'string' || !Object.hasOwn(watchers, body.account) || !isDeviceToken(body.token)) {
+            return reply(response, 400, { error: 'account and token required' });
+        }
+        await watchers[body.account].deviceCleared(body.token);
+        return reply(response, 200, { ok: true });
+    }
+
     // The buttons on a notification. The phone has no Fastmail credentials of
     // its own and a background action gets a few seconds, so it says what it
     // wants in one request and this does the work; with the same device secret

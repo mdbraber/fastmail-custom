@@ -115,6 +115,7 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
     public func becameActive() {
         // Whatever was announced is on screen now
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+        tellServerCleared()
         if deviceToken == nil {
             // Permission may have been granted in Settings since launch
             UNUserNotificationCenter.current().getNotificationSettings { settings in
@@ -125,6 +126,19 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
             }
         } else if registrationDue || PushPreferences.registrationDue() {
             Task { await register() }
+        }
+    }
+
+    /// Says the banners are gone, so the server sends none of its silent
+    /// pushes about them. Nothing is retried: the next activation says it
+    /// again, and a message the server still thinks is showing costs one
+    /// wasted push, not a lost one.
+    private func tellServerCleared() {
+        guard let config, let account, let deviceToken else { return }
+        Task {
+            _ = try? await URLSession.shared.data(
+                for: config.cleared(account: account, deviceToken: deviceToken)
+            )
         }
     }
 

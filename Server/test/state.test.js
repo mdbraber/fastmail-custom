@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { emptyState, loadState, saveState, rememberNotified, rememberShown, forgetShown, NOTIFIED_CAP, SHOWN_CAP } from '../src/state.js';
+import { NOTIFIED_CAP, SHOWN_CAP, emptyState, forgetShown, forgetShownOn, loadState, rememberNotified, rememberShown, saveState } from '../src/state.js';
 
 const silent = { warn() {}, info() {}, error() {} };
 const scratch = () => mkdtemp(path.join(os.tmpdir(), 'state-'));
@@ -53,4 +53,11 @@ test('shown banners gather their devices, are forgotten by id, and are capped', 
     const capped = rememberShown(emptyState(), many);
     assert.equal(capped.shown.length, SHOWN_CAP);
     assert.equal(capped.shown.at(-1).id, `M${SHOWN_CAP + 4}`);
+});
+
+test('a device that cleared its banners drops out of what is showing, and an entry nobody shows goes', () => {
+    const state = { shown: [{ id: 'M1', tokens: ['TOK1', 'tok2'] }, { id: 'M2', tokens: ['tok1'] }] };
+    assert.deepEqual(forgetShownOn(state, 'tok1').shown, [{ id: 'M1', tokens: ['tok2'] }]);
+    assert.deepEqual(forgetShownOn(state, 'tok9').shown, state.shown);
+    assert.deepEqual(forgetShownOn({}, 'tok1').shown, []);
 });

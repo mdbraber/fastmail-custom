@@ -30,11 +30,13 @@ async function running() {
             done.push([verb, emailId]);
         };
     }
+    const cleared = [];
+    watchers.personal.deviceCleared = async (value) => { cleared.push(value); };
     const devices = { register: async (account, value, options) => { registered.push([account, value, options]); } };
     const server = createServer({ config: { deviceSecret: 's3cret' }, watchers, devices, log: silent });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
-    return { base, watchers, received, registered, done, close: () => new Promise((resolve) => server.close(resolve)) };
+    return { base, watchers, received, registered, done, cleared, close: () => new Promise((resolve) => server.close(resolve)) };
 }
 
 const register = (s, body) => fetch(`${s.base}/devices`, {
@@ -250,4 +252,26 @@ test('a notification action is carried out, and anything it cannot vouch for is 
     assert.equal((await post(good, { account: 'personal', action: 'archive', emailId: 'M-missing' })).status, 500);
 
     await s.close();
+});
+
+test('a device that cleared its own banners is taken off what is showing; a bad one is refused', async () => {
+    const s = await running();
+    try {
+        const post = (body, secret = 's3cret') => fetch(`${s.base}/cleared`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const ok = await post({ account: 'personal', token });
+        assert.equal(ok.status, 200);
+        assert.deepEqual(await ok.json(), { ok: true });
+        assert.deepEqual(s.cleared, [token]);
+
+        assert.equal((await post({ account: 'personal', token }, 'wrong')).status, 401);
+        assert.equal((await post({ account: 'nobody', token })).status, 400);
+        assert.equal((await post({ account: 'personal', token: 'nonsense' })).status, 400);
+        assert.deepEqual(s.cleared, [token]);
+    } finally {
+        await s.close();
+    }
 });

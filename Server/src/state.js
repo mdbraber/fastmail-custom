@@ -59,6 +59,17 @@ export function rememberShown(state, banners) {
     return { ...state, shown: shown.slice(-SHOWN_CAP) };
 }
 
+// Every banner this device has taken off itself, which it does whenever the
+// app comes to the front: the device drops out of what is still showing, and
+// an entry nobody shows drops with it.
+export function forgetShownOn(state, token) {
+    const lower = String(token).toLowerCase();
+    const shown = (state.shown ?? [])
+        .map((entry) => ({ ...entry, tokens: entry.tokens.filter((one) => one.toLowerCase() !== lower) }))
+        .filter((entry) => entry.tokens.length);
+    return { ...state, shown };
+}
+
 export function forgetShown(state, ids) {
     return { ...state, shown: (state.shown ?? []).filter((entry) => !ids.includes(entry.id)) };
 }

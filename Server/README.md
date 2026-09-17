@@ -19,6 +19,11 @@ messages; the app takes their banners off. iOS rations silent pushes and
 sends none to an app swiped away, so a banner can stay until the app is next
 opened, which clears them all.
 
+The app takes every banner off itself whenever it comes to the front, and
+posts the device to `/cleared`, which drops it from what the server thinks is
+showing. Without that the server would send a silent push about a banner iOS
+had already taken off, spending a wake-up iOS rations.
+
 ## The buttons on a notification
 
 Pulling a banner down shows Archive, Later and Pin. The phone holds no
