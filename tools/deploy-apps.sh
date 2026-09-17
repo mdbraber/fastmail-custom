@@ -5,12 +5,15 @@
 # Devices are discovered rather than named, so a new phone or an iPad needs no
 # change here; set FASTMAIL_DEVICES to a space-separated list of UDIDs to
 # target specific ones instead. FASTMAIL_DEPLOY_TRIES bounds the wait for a
-# device that is asleep (default 60 attempts, 20s apart).
+# device that is asleep (default 3 attempts, 10s apart): one that has not
+# taken the apps by then is off the network rather than busy, and is named at
+# the end instead of held on to.
 set -o pipefail
 
 cd "${0:a:h}/.." || exit 1
 
-TRIES=${FASTMAIL_DEPLOY_TRIES:-60}
+TRIES=${FASTMAIL_DEPLOY_TRIES:-3}
+WAIT=${FASTMAIL_DEPLOY_WAIT:-10}
 
 # A device identifier as `devicectl list devices` prints it. That is the
 # hardware UDID (00008103-000904293A60801E) since the devices were paired
@@ -184,19 +187,23 @@ for try in $(seq 1 $TRIES); do
     fi
   fi
 
-  sleep 20
+  [ $try -lt $TRIES ] && sleep $WAIT
 done
 
-# Whatever landed still landed, so say which: a device that never woke up
-# should read as a missing device rather than as a failed build. The reason
-# goes with it; without one, a device that only needed unlocking is
-# indistinguishable from a broken build, which is a long way to look for a
-# short answer.
+# Whatever landed still landed, so say which: a device that never woke up is
+# a missing device rather than a failed build, and the builds above have
+# already had to succeed for this to be reached. The reason goes with it;
+# without one, a device that only needed unlocking is indistinguishable from
+# a broken build, which is a long way to look for a short answer.
 for udid in ${(k)seen}; do
   state=""
   for i in {1..${#APPS}}; do state+="${NAMES[$i]}=${installed[$udid:$i]:-0} "; done
   echo "$(device_name $udid) ($udid): ${state},  ${last_error[$udid]:-no error recorded}"
 done
 [ ${#seen} -eq 0 ] && echo "no paired devices found"
-echo "IOS INSTALL TIMED OUT"
-exit 1
+echo "NOT INSTALLED EVERYWHERE: the devices above did not take the apps within $(( TRIES * WAIT ))s"
+if [ $macos_check -ne 0 ]; then
+  echo "AND THE MAC APPS FAILED THEIR CHECK (see above)"
+  exit 1
+fi
+exit 0

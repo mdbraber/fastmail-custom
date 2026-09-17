@@ -74,9 +74,9 @@ install: install-macos install-ios install-extension
 
 # install-ios takes DEVICE, which defaults to the first device listed, so
 # `install` reaches one of them and quietly leaves the others behind. deploy
-# is the everywhere version: every paired device, waiting on ones that are
-# asleep, and relaunching the macOS shells so they actually load what was
-# just installed.
+# is the everywhere version: every paired device that answers within half a
+# minute, naming the ones that do not, and relaunching the macOS shells so
+# they actually load what was just installed.
 deploy:
 	tools/deploy-apps.sh
 
