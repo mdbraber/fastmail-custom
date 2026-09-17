@@ -284,8 +284,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         },
         {
             key: 'keepAddsContact', group: 'contacts',
-            title: 'Add the sender to contacts when keeping',
-            hint: 'Keeping a message, or archiving it into a label with Shift-E, adds its sender to your contacts if they are not there yet. A plain archive does not.'
+            title: 'Add the sender to contacts when filing under a label',
+            hint: 'Keeping a message under a label, or archiving it into one with Shift-E, adds its sender to your contacts if they are not there yet. A plain archive does not.'
         },
         {
             key: 'contactGroupLabels', group: 'contacts', clearable: true,
@@ -4496,8 +4496,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * Keeping a message adds its sender to contacts, with keepAddsContact on;
-     * so does archiving it into a label with Shift-E.
+     * Filing a message under a label adds its sender to contacts, with
+     * keepAddsContact on: keeping it, or archiving it into one with Shift-E.
      * The same find-or-make a contact group label uses, without the group;
      * and it runs after the group, so a label that names one has made the
      * contact already and there is nothing left to add.
@@ -6053,8 +6053,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * the archive verb already carries its own removals. The label is put on
      * by the ordinary route, so the rules under every menu still apply; the
      * hold replaces Triage and any project label, and a label that names a
-     * contact group still files the sender. It counts as a keep for
-     * keepAddsContact, so the sender is added to contacts too.
+     * contact group still files the sender. It is a filing under a label
+     * too, so keepAddsContact adds the sender to contacts, as a keep does.
      *
      * Then the archive verb, unchanged: Inbox off, Triage off, every project
      * label off, the pin off, and hold labels left alone; which is what
