@@ -285,7 +285,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'keepAddsContact', group: 'contacts',
             title: 'Add the sender to contacts when keeping',
-            hint: 'Keeping a message adds its sender to your contacts if they are not there yet. Archiving does not.'
+            hint: 'Keeping a message, or archiving it into a label with Shift-E, adds its sender to your contacts if they are not there yet. A plain archive does not.'
         },
         {
             key: 'contactGroupLabels', group: 'contacts', clearable: true,
@@ -4496,7 +4496,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * Keeping a message adds its sender to contacts, with keepAddsContact on.
+     * Keeping a message adds its sender to contacts, with keepAddsContact on;
+     * so does archiving it into a label with Shift-E.
      * The same find-or-make a contact group label uses, without the group;
      * and it runs after the group, so a label that names one has made the
      * contact already and there is nothing left to add.
@@ -6052,7 +6053,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * the archive verb already carries its own removals. The label is put on
      * by the ordinary route, so the rules under every menu still apply; the
      * hold replaces Triage and any project label, and a label that names a
-     * contact group still files the sender.
+     * contact group still files the sender. It counts as a keep for
+     * keepAddsContact, so the sender is added to contacts too.
      *
      * Then the archive verb, unchanged: Inbox off, Triage off, every project
      * label off, the pin off, and hold labels left alone; which is what
@@ -6067,13 +6069,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const actions = controller().actions;
 
         silencingDidAction(actions, () => {
-            asFiling(null, () => {
+            asFiling(null, () => asKeep(() => {
                 if (FastMail.preferences.get('inLabelsMode')) {
                     actions.add(null, mailbox);
                 } else {
                     actions.copy(null, mailbox);
                 }
-            });
+            }));
         });
         actions.archive(null);
     };
