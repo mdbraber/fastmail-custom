@@ -1403,7 +1403,9 @@
             })]);
         };
 
-        try {
+        // A compose window leaves this to the mailbox window it came from,
+        // rather than every open one looking the same sender up again.
+        if (!window.__fmshellComposeWindow) try {
             // Held on to: a channel nothing refers to is collected, listener
             // and all, a few seconds after the page has loaded
             window.__fmshell.proxyWorkerChannel = new BroadcastChannel('proxyworker');

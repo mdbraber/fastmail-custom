@@ -308,17 +308,34 @@ private func makePlainWindow() -> NSWindow {
 // A compose page waiting in the pool carries the script that keeps it off
 // Fastmail's roll call of open windows, ahead of anything Fastmail runs; once
 // the window is opened its pages load without it, and still watch the To line.
+// Both run Fastmail as its desktop app, through the harness, marked as a
+// compose window's first.
 @Test @MainActor func onlyAComposePageWaitingInThePoolCarriesThePoolScript() {
     let controller = WKUserContentController()
+    ComposeWindows.composeHost = "app.fastmail.com"
+    // The bridge needs a notification centre, which a test has none of
+    ComposeWindows.bridgedControllers.insert(ObjectIdentifier(controller))
     ComposeWindows.useScripts(pooled: true, in: controller)
-    #expect(controller.userScripts.count == 2)
+    #expect(controller.userScripts.count == 4)
     let pooled = controller.userScripts.filter { $0.source == ComposeWindows.poolScript }
     #expect(pooled.count == 1)
     #expect(pooled.first?.injectionTime == .atDocumentStart)
     #expect(pooled.first?.isForMainFrameOnly == true)
+    let marker = controller.userScripts.firstIndex { $0.source == ComposeWindows.composeMarkerScript }
+    let harness = controller.userScripts.firstIndex { $0.source.contains("window.electron = {") }
+    #expect(marker != nil && harness != nil && marker! < harness!)
 
     ComposeWindows.useScripts(pooled: false, in: controller)
-    #expect(controller.userScripts.count == 1)
+    #expect(controller.userScripts.count == 3)
     #expect(!controller.userScripts.contains { $0.source == ComposeWindows.poolScript })
+    #expect(controller.userScripts.contains { $0.source.contains("window.electron = {") })
+}
+
+// Without a server to answer to there is no harness to gate, and none is added
+@Test @MainActor func noComposeHostMeansNoHarness() {
+    let controller = WKUserContentController()
+    ComposeWindows.composeHost = ""
+    ComposeWindows.useScripts(pooled: false, in: controller)
+    #expect(controller.userScripts.count == 1)
 }
 #endif

@@ -98,6 +98,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         let composeURL = ComposeURL.url(for: profile)
         guard configuredURL != composeURL else { return }
         configuredURL = composeURL
+        Self.composeHost = composeURL.host ?? ""
         pool = ComposePool(
             create: { [weak self] in self?.makeWindow() ?? NSWindow() },
             prepare: { window in
@@ -467,26 +468,6 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     })();
     """
 
-    /// Stands in for WebKit's own window.Notification in a compose window,
-    /// which has no harness. WebKit's reports "default" and turns every
-    /// request down, and Fastmail, starting up with notifications on and
-    /// permission "default", asks and on a refusal switches new-mail and
-    /// calendar notifications off in localStorage, which the mailbox window
-    /// shares. Every compose page start did that. Answered "denied" here, it
-    /// never asks; a compose window shows no notifications either way, the
-    /// mailbox window does.
-    static let notificationScript = """
-    (function(){
-      var Shim=function(){};
-      Object.defineProperty(Shim,'permission',{get:function(){return 'denied';}});
-      Shim.requestPermission=function(callback){
-        if(typeof callback==='function'){callback('denied');}
-        return Promise.resolve('denied');
-      };
-      window.Notification=Shim;
-    })();
-    """
-
     /// Keeps a compose page waiting in the pool off Fastmail's roll call of
     /// open windows. A page that sees another window open holds new mail back
     /// for up to twenty seconds whenever it is not focused, so a hidden page
@@ -684,11 +665,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     static func useScripts(pooled: Bool, in controller: WKUserContentController) {
         controller.removeAllUserScripts()
         controller.addUserScript(recipientUserScript)
-        controller.addUserScript(WKUserScript(
-            source: notificationScript,
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true
-        ))
+        useHarness(in: controller)
         guard pooled else { return }
         // Ahead of Fastmail, which says hello as soon as it starts.
         controller.addUserScript(WKUserScript(
@@ -696,6 +673,67 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
+    }
+
+    /// The server the compose pages come from, which the harness and the
+    /// bridge answer to
+    static var composeHost = ""
+
+    /// Marks the page as a compose window's, for the harness, ahead of it
+    static let composeMarkerScript = "window.__fmshellComposeWindow = true;"
+
+    static var bridgedControllers: Set<ObjectIdentifier> = []
+
+    /// A compose window runs Fastmail the way the mailbox window does: as
+    /// Fastmail's desktop app, through the same harness. Without it Fastmail
+    /// took the window for a browser tab: it asked WebKit for notification
+    /// permission, was refused, and switched new-mail notifications off for
+    /// every window, and it told its offline worker, which every window
+    /// shares, that this user wants no new-mail notifications.
+    ///
+    /// Its bridge carries only what a compose window has a say in:
+    /// notifications and their permission, and Fastmail's menus and
+    /// printing. The badge, the Shortcuts actions, the theme and the
+    /// settings stay the mailbox window's.
+    static func useHarness(in controller: WKUserContentController) {
+        let host = composeHost
+        guard !host.isEmpty, let harness = BundleResourceLoader().string(named: "harness.js") else { return }
+        controller.addUserScript(WKUserScript(
+            source: composeMarkerScript,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
+        controller.addUserScript(WKUserScript(
+            source: ScriptInjector.gatedToHost(harness, host: host),
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
+        // A controller takes a handler's name once; the scripts above are
+        // laid down again each time, the bridge only the first.
+        guard bridgedControllers.insert(ObjectIdentifier(controller)).inserted else { return }
+        controller.addScriptMessageHandler(bridge(host: host), contentWorld: .page, name: "native")
+    }
+
+    static func bridge(host: String) -> NativeBridge {
+        NativeBridge(
+            expectedHost: host,
+            onLog: { message in Swift.print("[compose] \(message)") },
+            onError: { message in Swift.print("[compose] \(message)") },
+            onNotify: { NotificationPresenter.shared.show($0) },
+            onDismissNotifications: { NotificationPresenter.shared.dismiss(ids: $0) },
+            onShowWindow: { NotificationPresenter.shared.showWindow() },
+            onNotificationPermission: { await NotificationPresenter.shared.permissionStatus() },
+            onRequestNotificationPermission: { await NotificationPresenter.shared.requestPermission() },
+            onMenu: { menu, view in
+                if let view { PageMenus.shared.set(PageMenu.parse(menu), for: view) }
+            },
+            onPrint: { view in
+                if let view { await PagePrinter.print(view) }
+            },
+            onPrintToPDF: { view in
+                if let view { await PagePrinter.exportPDF(view, suggestedName: view.title) }
+            }
+        )
     }
 
     /// Puts a window's page on the roll call: the page already there says

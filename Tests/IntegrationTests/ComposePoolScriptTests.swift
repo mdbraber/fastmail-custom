@@ -132,7 +132,8 @@ final class ComposePoolScriptTests: XCTestCase {
     // Fastmail's own start-up check, word for word apart from names: with
     // notifications on and permission "default" it asks, and on a refusal
     // switches new-mail and calendar notifications off in localStorage,
-    // which every Fastmail window shares. A compose window must not ask.
+    // which every Fastmail window shares. A compose window must not be
+    // refused: it asks the app, as the mailbox window does.
     private static let fastmailStartupCheck = """
     localStorage.setItem('mail', 'inbox');
     const prefs = { get: (key) => localStorage.getItem(key), set: (key, value) => localStorage.setItem(key, value) };
@@ -146,11 +147,36 @@ final class ComposePoolScriptTests: XCTestCase {
     return localStorage.getItem('mail');
     """
 
-    private func loadPage(scripted: Bool) async throws {
+    /// The app's answers to the harness, standing in for the compose bridge,
+    /// which needs a notification centre a test does not have
+    private final class GrantingBridge: NSObject, WKScriptMessageHandlerWithReply {
+        var asked: [String] = []
+
+        func userContentController(
+            _ userContentController: WKUserContentController,
+            didReceive message: WKScriptMessage,
+            replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void
+        ) {
+            let action = (message.body as? [String: Any])?["action"] as? String ?? ""
+            asked.append(action)
+            replyHandler(action.hasSuffix("otificationPermission") ? "granted" : nil, nil)
+        }
+    }
+
+    private var bridge: GrantingBridge?
+
+    private func loadPage(asComposeWindow: Bool) async throws {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
-        if scripted {
-            ComposeWindows.useScripts(pooled: true, in: configuration.userContentController)
+        configuration.applicationNameForUserAgent = WebContainer.electronUserAgentToken
+        if asComposeWindow {
+            let controller = configuration.userContentController
+            let bridge = GrantingBridge()
+            self.bridge = bridge
+            controller.addScriptMessageHandler(bridge, contentWorld: .page, name: "native")
+            ComposeWindows.bridgedControllers.insert(ObjectIdentifier(controller))
+            ComposeWindows.composeHost = "app.fastmail.com"
+            ComposeWindows.useScripts(pooled: true, in: controller)
         }
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.loadHTMLString("<html><body></body></html>", baseURL: URL(string: "https://app.fastmail.com/")!)
@@ -161,17 +187,27 @@ final class ComposePoolScriptTests: XCTestCase {
         }
     }
 
+    func testAComposeWindowRunsFastmailAsItsDesktopApp() async throws {
+        try await loadPage(asComposeWindow: true)
+        let state = try await webView.evaluateJavaScript("""
+        [typeof electron === 'object', window.__fmshellComposeWindow === true,
+         typeof window.native.menuActivate === 'function', !window.__fmshell.proxyWorkerChannel].join(',')
+        """) as? String
+        XCTAssertEqual(state, "true,true,true,true")
+    }
+
     func testAComposeWindowLeavesFastmailsNotificationSettingAlone() async throws {
-        try await loadPage(scripted: true)
+        try await loadPage(asComposeWindow: true)
         let setting = try await webView.callAsyncJavaScript(
             Self.fastmailStartupCheck, arguments: [:], in: nil, contentWorld: .page
         ) as? String
         XCTAssertEqual(setting, "inbox")
+        XCTAssertTrue(bridge?.asked.contains("notificationPermission") == true)
     }
 
-    // What the stand-in is there for: WebKit's own answers switch it off
-    func testWithoutTheStandInFastmailSwitchesNotificationsOff() async throws {
-        try await loadPage(scripted: false)
+    // What the harness is there for: WebKit's own answers switch it off
+    func testWithoutTheHarnessFastmailSwitchesNotificationsOff() async throws {
+        try await loadPage(asComposeWindow: false)
         let setting = try await webView.callAsyncJavaScript(
             Self.fastmailStartupCheck, arguments: [:], in: nil, contentWorld: .page
         ) as? String
