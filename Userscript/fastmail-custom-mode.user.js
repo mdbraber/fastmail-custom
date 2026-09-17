@@ -1219,10 +1219,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // The mirror of mailboxTitleActive() for phone and tablet: Fastmail
     // draws its own title there unconditionally, which is why the
     // standalone one never activates on those layouts, but the setting
-    // should still reach what that native title says.
+    // should still reach what that native title says. Only in Mail: every
+    // app draws its title in the same .v-Page-title, and the mail
+    // controller keeps its mailbox while Contacts or Files is showing.
     const nativeMailboxTitleActive = () =>
         modeIsOn && settings.showMailboxTitle &&
-        (isPhoneLayout() || isTabletLayout());
+        (isPhoneLayout() || isTabletLayout()) &&
+        FastMail.router.get('app') === 'mail';
 
     // Fastmail's own title, replaced wholesale rather than appended to
     // like dressPageSubtitle: mailboxSummaryLine() is already the full
@@ -1234,8 +1237,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const dressNativeMailboxTitle = (node) => {
         if (!nativeMailboxTitleActive()) return;
         const text = mailboxSummaryLine();
-        if (text === null) return;
-        if (node.textContent !== text) node.textContent = text;
+        if (text === null || node.textContent === text) return;
+        // Into Fastmail's own text node where there is one, rather than
+        // replacing it: if Fastmail updates that node when its title
+        // changes, a replaced node would leave the title stuck on the
+        // mailbox after switching to another app.
+        const only = node.childNodes.length === 1 && node.firstChild;
+        if (only && only.nodeType === Node.TEXT_NODE) only.data = text;
+        else node.textContent = text;
     };
 
     const removeMailboxTitle = () => {
