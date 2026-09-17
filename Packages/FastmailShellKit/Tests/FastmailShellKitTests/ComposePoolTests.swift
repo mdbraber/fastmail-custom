@@ -309,14 +309,23 @@ private func makePlainWindow() -> NSWindow {
 // Fastmail's roll call of open windows, ahead of anything Fastmail runs; once
 // the window is opened its pages load without it, and still watch the To line.
 // Both run Fastmail as its desktop app, through the harness, marked as a
-// compose window's first.
+// compose window's first, with the settings and the userscript as in the
+// mailbox window.
 @Test @MainActor func onlyAComposePageWaitingInThePoolCarriesThePoolScript() {
     let controller = WKUserContentController()
     ComposeWindows.composeHost = "app.fastmail.com"
+    ComposeWindows.composeURL = URL(string: "https://app.fastmail.com/mail/Inbox/compose?ui=minimal")
+    ComposeWindows.scriptLoader = StubScripts()
+    defer { ComposeWindows.scriptLoader = BundleResourceLoader() }
     // The bridge needs a notification centre, which a test has none of
     ComposeWindows.bridgedControllers.insert(ObjectIdentifier(controller))
     ComposeWindows.useScripts(pooled: true, in: controller)
-    #expect(controller.userScripts.count == 4)
+    #expect(controller.userScripts.count == 6)
+    let settings = controller.userScripts.firstIndex { $0.source.hasPrefix("window.__fastmailCustomSettings = ") }
+    let userScript = controller.userScripts.firstIndex { $0.source.contains("window.stubUserScript = true") }
+    let harnessAt = controller.userScripts.firstIndex { $0.source.contains("window.electron = {") }
+    #expect(settings != nil && harnessAt != nil && userScript != nil)
+    #expect(settings! < harnessAt! && harnessAt! < userScript!)
     let pooled = controller.userScripts.filter { $0.source == ComposeWindows.poolScript }
     #expect(pooled.count == 1)
     #expect(pooled.first?.injectionTime == .atDocumentStart)
@@ -326,9 +335,26 @@ private func makePlainWindow() -> NSWindow {
     #expect(marker != nil && harness != nil && marker! < harness!)
 
     ComposeWindows.useScripts(pooled: false, in: controller)
-    #expect(controller.userScripts.count == 3)
+    #expect(controller.userScripts.count == 5)
     #expect(!controller.userScripts.contains { $0.source == ComposeWindows.poolScript })
     #expect(controller.userScripts.contains { $0.source.contains("window.electron = {") })
+}
+
+private struct StubScripts: ResourceLoading {
+    func string(named name: String) -> String? {
+        switch name {
+        case "harness.js": return "window.electron = {};"
+        case "userscript.js":
+            return """
+            // ==UserScript==
+            // @name Stub
+            // @match https://app.fastmail.com/*
+            // ==/UserScript==
+            window.stubUserScript = true;
+            """
+        default: return nil
+        }
+    }
 }
 
 // Without a server to answer to there is no harness to gate, and none is added

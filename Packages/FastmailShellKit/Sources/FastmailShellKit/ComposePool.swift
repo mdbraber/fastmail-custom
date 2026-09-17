@@ -99,6 +99,8 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         guard configuredURL != composeURL else { return }
         configuredURL = composeURL
         Self.composeHost = composeURL.host ?? ""
+        Self.composeURL = composeURL
+        Self.overlayName = profile.overlayScriptName
         pool = ComposePool(
             create: { [weak self] in self?.makeWindow() ?? NSWindow() },
             prepare: { window in
@@ -107,6 +109,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
                 // A page loaded to wait unseen must not count as an open
                 // window; poolScript says why.
                 ComposeWindows.useScripts(pooled: true, in: view.configuration.userContentController)
+                ComposeWindows.settingsPusher(for: view).pageLoaded()
                 view.load(URLRequest(url: composeURL))
             },
             release: { window in ComposeWindows.leavePool(window) }
@@ -678,6 +681,35 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     /// The server the compose pages come from, which the harness and the
     /// bridge answer to
     static var composeHost = ""
+    static var composeURL: URL?
+    static var overlayName: String?
+    /// Where the userscript is read from; the app's own bundle
+    static var scriptLoader: ResourceLoading = BundleResourceLoader()
+
+    /// Settings changed while a pool window is open reach it the way they
+    /// reach the mailbox window
+    private final class PushedView {
+        weak var view: WKWebView?
+        let pusher: FastmailCustomSettingsPusher
+
+        init(view: WKWebView, pusher: FastmailCustomSettingsPusher) {
+            self.view = view
+            self.pusher = pusher
+        }
+    }
+
+    private static var settingsPushers: [PushedView] = []
+
+    static func settingsPusher(for view: WKWebView) -> FastmailCustomSettingsPusher {
+        settingsPushers.removeAll { $0.view == nil }
+        if let known = settingsPushers.first(where: { $0.view === view }) { return known.pusher }
+        let pusher = FastmailCustomSettingsPusher(
+            webView: view,
+            syncEnabled: { FastmailCustomSettingsSync.current?.isEnabled }
+        )
+        settingsPushers.append(PushedView(view: view, pusher: pusher))
+        return pusher
+    }
 
     /// Marks the page as a compose window's, for the harness, ahead of it
     static let composeMarkerScript = "window.__fmshellComposeWindow = true;"
@@ -704,15 +736,36 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
+        // The userscript reads its settings the moment it starts, so they go
+        // in ahead of it
+        controller.addUserScript(
+            FastmailCustomSettings.bootstrapScript(syncEnabled: FastmailCustomSettingsSync.current?.isEnabled)
+        )
         controller.addUserScript(WKUserScript(
             source: ScriptInjector.gatedToHost(harness, host: host),
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
+        useUserScript(in: controller)
         // A controller takes a handler's name once; the scripts above are
         // laid down again each time, the bridge only the first.
         guard bridgedControllers.insert(ObjectIdentifier(controller)).inserted else { return }
         controller.addScriptMessageHandler(bridge(host: host), contentWorld: .page, name: "native")
+    }
+
+    /// The mode runs in a compose window as it does in the mailbox window:
+    /// its label for new messages is ticked here, and its keys work here.
+    static func useUserScript(in controller: WKUserContentController) {
+        guard
+            let url = composeURL,
+            let bundle = try? ScriptStore(loader: scriptLoader, overlayName: overlayName).load(),
+            let injected = try? ScriptInjector.userScripts(from: bundle, url: url),
+            injected.userScriptIncluded
+        else { return }
+        // The first is the harness, laid down above already
+        for script in injected.scripts.dropFirst() {
+            controller.addUserScript(script)
+        }
     }
 
     static func bridge(host: String) -> NativeBridge {
