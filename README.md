@@ -12,12 +12,15 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 **Triage**
 
 - 🏷️ **Inbox triage**: quick add a label to inbox message or archive
-- 📦 **Keep or Archive**: keeping allows to add a label, archiving strips all project labels/pins
+- 📦 **Keep or Archive**: keeping allows to add a label, archiving strips all project labels/pins. Keep is also in a message's right-click menu
+- 📇 **Add sender to contacts on Keep**: keeping a message can add its sender to your contacts
 - 👥 **Add sender to group via label**: add to a specific label and the sender gets automatically added to a Contacts group (like Hey.com)
 
 **Grouping**
 - 🗃️ **Custom groups**: Fastmail recently introduced "Mailbox groups" - create as
   many custom groups as you like, change the built-in groups and easily switch between them
+- 🏷️ **Label groups**: any preset can hold a group per top-level label (Labels (root)) or per label (Labels (all))
+- 📌 **Priorities**: put pinned, unread or any search first within every group, either as sort or as extra groups
 
 **Snoozing**
 - ⏰ **Snooze presets**: your own list of times on Fastmail's own Snooze
@@ -27,6 +30,8 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 
 - 🪟 **Native UI (macOS) with tabs**: Fastmail runs in a WKWebView (fast, energy-efficient) and supports tabs
 - ✉️ **Compose inline, window or tab (macOS)**: compose messages without losing focus
+- 🍎 **Fastmail's own menus (macOS)**: Fastmail's File and View items live in the Mac menu bar
+- 🧰 **Action bar**: choose and order the actions on the bar, per device (phone, iPad, Mac)
 - ↗️ **Pop-out windows (macOS)**: open any message or draft in its own window.
 - 🖨️ **Printing**: print a message from its window.
 - ⬇️ **Downloads**: attachments go to a folder you choose.
@@ -41,11 +46,12 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 
 - 🗂️ **Grouped sidebar**: folders, labels and saved searches kept apart with sections
 - 🔻 **Triage icon**: the triage label has its own icon
-- 🔢 **Filtered counts**: counts show the number with the filter applied
+- 🔢 **Filtered counts**: counts show the number with the filter applied; a root label can count only while collapsed
 - 🎨 **Label colours**: show the full message row in the label color
 
  **Notifications**
  - 🔔 **Push notifications**: choose Off, Important, All in Inbox or labels of your own per device; a banner carries Archive, Later and Pin. Push notifications needs the server component (see [Server/](Server/))
+ - 🖼️ **Mac notifications**: with the sender's picture; clicking one opens the message
 
 **Scripting support**
 - 🤖 **Shortcuts, AppleScript and the menu bar**: get URL / Title or Markdown Link via AppleScript or Shortcuts.
