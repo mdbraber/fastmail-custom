@@ -559,8 +559,20 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         let window = pool.take()
         Self.place(window)
         fitTabbedWindows()
-        window.makeKeyAndOrderFront(nil)
+        Self.bringForward(window)
+    }
+
+    /// Activates the app before the window comes forward, and brings it
+    /// forward again once activation has settled: a link opened from another
+    /// app activates this one after the window was ordered in, and
+    /// activating brings the window that was last in front back over it.
+    static func bringForward(_ window: NSWindow) {
         NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+        DispatchQueue.main.async {
+            guard window.isVisible else { return }
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     /// The same window, opened on a message someone asked to write, a mailto
@@ -573,8 +585,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
             .load(URLRequest(url: ComposeURL.url(for: profile, mailto: mailto)))
         Self.place(window)
         fitTabbedWindows()
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        Self.bringForward(window)
     }
 
     /// A window for a page Fastmail asked to open on its own: a draft or a
@@ -602,8 +613,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         // Placed once it is dressed: the chrome it borrows changes its height,
         // and a corner set before that lands somewhere else.
         Self.place(window)
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        Self.bringForward(window)
         return view
     }
 
@@ -618,9 +628,8 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         window.tabbingMode = .preferred
         Self.dress(window, like: host)
         host.addTabbedWindow(window, ordered: .above)
-        window.makeKeyAndOrderFront(nil)
         fitTabbedWindows()
-        NSApp.activate()
+        Self.bringForward(window)
     }
 
     /// The page, held in a plain view with room above it for the band.

@@ -18,8 +18,7 @@ public enum WindowFocus {
             guard pageName == name else { continue }
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.tabGroup?.selectedWindow = window
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate()
+            ComposeWindows.bringForward(window)
             return true
         }
         return false
