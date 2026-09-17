@@ -10230,7 +10230,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 const addButton = new classes.ButtonView({
                     type: 'v-Button--standard v-Button--sizeM',
-                    label: 'Add a preset',
+                    label: 'Add a group preset',
                     target: { go: add },
                     method: 'go'
                 });
@@ -10362,7 +10362,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // editor sits in (framedModal, read off Fastmail's bundle) - just with
     // three plain fields as its content instead of Fastmail's splits
     // editor, which three short fields have no use for.
-    const editSnoozePreset = (classes, preset, done) => {
+    const editSnoozePreset = (classes, preset, done, fields) => {
         if (!classes.ModalOverlayView || !classes.ScrollView ||
             !classes.TextInputView || !classes.ButtonView) {
             reportFault('the preset dialog is not available here');
@@ -10398,7 +10398,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             draw: () => [
                 el('h1.u-trim.u-font-bold', ['Edit preset']),
                 el('div.u-space-y-3', [
-                    field('Name', nameField), field('Date', dateField), field('Time', timeField)
+                    field('Name', nameField),
+                    field((fields && fields.date) || 'Date', dateField),
+                    field((fields && fields.time) || 'Time', timeField)
                 ]),
                 el('div.u-flex.u-space-x-2', [
                     new classes.ButtonView({
@@ -10442,6 +10444,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * actually built - so there is nothing here for them to move, edit or
      * remove.
      */
+    const ADD_LABELS = {
+        snoozePresets: 'Add a snooze preset',
+        reminderPresets: 'Add a reminder preset',
+        snoozeGroups: 'Add a snooze group'
+    };
+
+    // A group reaches to a time rather than naming one, so its dialog asks
+    // for the time it reaches to and does not need one of its own
+    const PRESET_FIELDS = {
+        snoozeGroups: { date: 'Up to', time: 'Time (optional)' }
+    };
+
     const presetListSection = (classes, key) => {
         const el = FastMail.el;
         const option = settingFor(key);
@@ -10470,7 +10484,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             const now = parseSnoozePresets(settingValue(key));
             let name = NEW_SNOOZE_PRESET_NAME;
             for (let count = 2; named(now, name); count += 1) name = NEW_SNOOZE_PRESET_NAME + ' ' + count;
-            save(now.concat([{ name: name, date: 'today', time: '08:00' }]));
+            const seed = key === 'snoozeGroups'
+                ? { date: '7d', time: '' }
+                : { date: 'today', time: '08:00' };
+            save(now.concat([{ name: name, date: seed.date, time: seed.time }]));
         };
 
         const edit = (name) => {
@@ -10490,7 +10507,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 }
                 then[at] = value;
                 save(then);
-            });
+            }, PRESET_FIELDS[key]);
         };
 
         const holder = new classes.View({
@@ -10518,7 +10535,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 const addButton = new classes.ButtonView({
                     type: 'v-Button--standard v-Button--sizeM',
-                    label: 'Add a preset',
+                    label: ADD_LABELS[key] || 'Add a preset',
                     target: { go: add }, method: 'go'
                 });
 
