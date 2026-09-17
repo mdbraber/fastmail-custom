@@ -1,7 +1,7 @@
 # Fastmail Custom
 
 A personal set of tools for using Fastmail. I wanted to be able to quickly triage incoming messages (add a label in the Inbox so it feels less cluttered). That spun eh, a little out of control... :-)
-I merged all my previously written Fastmail tweaks and ideas into this repo and it's now my daily driver. It supports all the features the stock Fastmail apps offer plus more.
+I merged all my previously written Fastmail tweaks and ideas into this repo and it's my daily driver. It supports all the features the stock Fastmail apps offer plus more.
 
 ## Features
 
@@ -12,27 +12,26 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 **Triage**
 
 - 🏷️ **Inbox triage**: quick add a label to inbox message or archive
-- 📦 **Keep or Archive**: keeping allows to add a label, archiving strips all project labels/pins. Keep is also in a message's right-click menu
-- 📇 **Add sender to contacts on Keep**: keeping a message can add its sender to your contacts
-- 👥 **Add sender to group via label**: add to a specific label and the sender gets automatically added to a Contacts group (like Hey.com)
+- 📦 **Keep or Archive**: keeping adds a label (also from a message's right-click menu), archiving strips all project labels/pins
+- 👥 **Sender to contacts**: keeping can add the sender to your contacts, and a specific label adds them to a Contacts group (like Hey.com)
 
 **Grouping**
-- 🗃️ **Custom groups**: Fastmail recently introduced "Mailbox groups" - create as
-  many custom groups as you like, change the built-in groups and easily switch between them
-- 🏷️ **Label groups**: any preset can hold a group per top-level label (Labels (root)) or per label (Labels (all))
-- 📌 **Priorities**: put pinned, unread or any search first within every group, either as sort or as extra groups
+
+- 🗃️ **Custom groups**: build on Fastmail's "Mailbox groups" - create as many custom groups as you like, change the built-in groups
+  and easily switch between them. A group can be one per top-level label or per label, and priorities (pinned, unread or any
+  search) come first within every group, as sort or as extra groups
 
 **Snoozing**
+
 - ⏰ **Snooze presets**: your own list of times on Fastmail's own Snooze
   button, one whose time has passed greyed out rather than offered.
 
 **User experience**
 
-- 🪟 **Native UI (macOS) with tabs**: Fastmail runs in a WKWebView (fast, energy-efficient) and supports tabs
+- 🪟 **Native UI (macOS) with tabs**: Fastmail runs in a WKWebView (fast, energy-efficient) and supports tabs, with Fastmail's own File and View items in the menu bar
 - ✉️ **Compose inline, window or tab (macOS)**: compose messages without losing focus
-- 🍎 **Fastmail's own menus (macOS)**: Fastmail's File and View items live in the Mac menu bar
-- 🧰 **Action bar**: choose and order the actions on the bar, per device (phone, iPad, Mac)
 - ↗️ **Pop-out windows (macOS)**: open any message or draft in its own window.
+- 🧰 **Action bar**: choose and order its actions, separately on phone, iPad and Mac
 - 🖨️ **Printing**: print a message from its window.
 - ⬇️ **Downloads**: attachments go to a folder you choose.
 - 📮 **mailto handling**: mail links open in the right account on iOS (via a separate app showing a chooser).
@@ -46,14 +45,16 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 
 - 🗂️ **Grouped sidebar**: folders, labels and saved searches kept apart with sections
 - 🔻 **Triage icon**: the triage label has its own icon
-- 🔢 **Filtered counts**: counts show the number with the filter applied; a root label can count only while collapsed
+- 🔢 **Filtered counts**: counts show the number with the filter applied, and a root label can count only while collapsed
 - 🎨 **Label colours**: show the full message row in the label color
 
- **Notifications**
- - 🔔 **Push notifications**: choose Off, Important, All in Inbox or labels of your own per device; a banner carries Archive, Later and Pin. Push notifications needs the server component (see [Server/](Server/))
- - 🖼️ **Mac notifications**: with the sender's picture; clicking one opens the message
+**Notifications**
+
+- 🔔 **Notifications**: on iOS choose Off, Important, All in Inbox or labels of your own per device; a banner carries Archive, Later and Pin
+  (needs the server component, see [Server/](Server/)). On the Mac they show the sender's picture, and clicking one opens the message
 
 **Scripting support**
+
 - 🤖 **Shortcuts, AppleScript and the menu bar**: get URL / Title or Markdown Link via AppleScript or Shortcuts.
   Also allow running custom JavaScript to fully customize your experience
 
