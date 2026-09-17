@@ -244,6 +244,13 @@ public struct WebContainer {
                     await PagePrinter.exportPDF(view, suggestedName: WebViewRegistry.shared.subject(for: view))
                 }
                 #endif
+            },
+            onFocusWindow: { name in
+                #if os(macOS)
+                return await WindowFocus.focus(named: name)
+                #else
+                return false
+                #endif
             }
         )
         configuration.userContentController.addScriptMessageHandler(

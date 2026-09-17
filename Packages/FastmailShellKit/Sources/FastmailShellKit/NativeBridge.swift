@@ -50,6 +50,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     /// Print the page, or save it as a PDF; answered once that is done.
     private let onPrint: @MainActor (WKWebView?) async -> Void
     private let onPrintToPDF: @MainActor (WKWebView?) async -> Void
+    /// Brings forward the window whose page is named this, as Electron does
+    /// for Fastmail's desktop app; answers whether there was one.
+    private let onFocusWindow: @MainActor (String) async -> Bool
 
     public init(
         expectedHost: String,
@@ -76,7 +79,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onRequestNotificationPermission: @escaping @MainActor () async -> String = { "denied" },
         onMenu: @escaping @MainActor ([String: Any], WKWebView?) -> Void = { _, _ in },
         onPrint: @escaping @MainActor (WKWebView?) async -> Void = { _ in },
-        onPrintToPDF: @escaping @MainActor (WKWebView?) async -> Void = { _ in }
+        onPrintToPDF: @escaping @MainActor (WKWebView?) async -> Void = { _ in },
+        onFocusWindow: @escaping @MainActor (String) async -> Bool = { _ in false }
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
@@ -103,6 +107,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onMenu = onMenu
         self.onPrint = onPrint
         self.onPrintToPDF = onPrintToPDF
+        self.onFocusWindow = onFocusWindow
     }
 
     static func rect(from values: [Double]) -> CGRect? {
@@ -288,6 +293,12 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "printToPDF":
             await onPrintToPDF(webView)
             return BridgeReply(value: nil, error: nil)
+        case "focusWindow":
+            guard let name = payload["name"] as? String, !name.isEmpty else {
+                return BridgeReply(value: nil, error: "focusWindow has no name")
+            }
+            let found = await onFocusWindow(name)
+            return BridgeReply(value: found ? "true" : "false", error: nil)
         default:
             return BridgeReply(value: nil, error: "unknown action: \(action)")
         }

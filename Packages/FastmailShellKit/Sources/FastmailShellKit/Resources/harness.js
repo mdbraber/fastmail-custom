@@ -1154,6 +1154,24 @@
             restartAndUpdate: function () {}
         };
 
+        // Fastmail's desktop app brings another of its windows forward, the
+        // one a draft is being written in say, with open(<its address>, <its
+        // name>, "popup=true"), and Electron finds the window of that name.
+        // WebKit looks only among windows this page opened, which a compose
+        // window never is, and opened yet another; the app finds it instead,
+        // and only when it has none is a window opened after all.
+        var openWindow = window.open;
+        window.open = function (url, name, features) {
+            if (features !== 'popup=true' || typeof name !== 'string' || !name ||
+                name.charAt(0) === '_' || name === window.name) {
+                return openWindow.apply(window, arguments);
+            }
+            post('focusWindow', { name: name }).then(function (found) {
+                if (found !== 'true') openWindow.call(window, url, name, features);
+            });
+            return null;
+        };
+
         var menuActivate = null;
         window.native.menuActivate = function (action) {
             if (!menuActivate || typeof action !== 'string') return false;

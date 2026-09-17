@@ -485,3 +485,26 @@ private func replyObject(_ reply: BridgeReply) throws -> [String: Any] {
     #expect(missing.error != nil)
     #expect(received == [true, false])
 }
+
+// Fastmail's desktop app brings another of its windows forward by that
+// window's name; the app says whether it had one, so the page can open a
+// window after all when it did not.
+@Test @MainActor func focusWindowAsksTheAppByNameAndIsToldWhetherItWasThere() async {
+    var asked: [String] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onFocusWindow: { name in
+            asked.append(name)
+            return name == "open"
+        }
+    )
+    let found = await bridge.handle(body: ["action": "focusWindow", "payload": ["name": "open"]])
+    let missing = await bridge.handle(body: ["action": "focusWindow", "payload": ["name": "gone"]])
+    let nameless = await bridge.handle(body: ["action": "focusWindow", "payload": [:]])
+    #expect(asked == ["open", "gone"])
+    #expect(found.value == "true")
+    #expect(missing.value == "false")
+    #expect(nameless.error != nil)
+}
