@@ -96,6 +96,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // And the badge counts the same set the filtered list shows, rather
         // than everything the label has ever held.
         filteredLabelCounts: true,
+        // In the sidebar, a label with sublabels shows its own badge only
+        // while collapsed; expanding it hands the count to each sublabel
+        // instead. Leaves the count above its own message list alone.
+        collapsedLabelCounts: false,
         // The groupings offered in Fastmail's Group menu between None, which
         // stays Fastmail's own, and Custom…, which does too. A block each: a
         // line naming it, then indented Name = search lines, then a bare
@@ -318,6 +322,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             key: 'filteredLabelCounts', group: 'labelsFiling',
             title: 'Count only what is in the Inbox',
             hint: 'A project label’s badge counts the same messages its filtered list shows, rather than everything it has ever held.'
+        },
+        {
+            key: 'collapsedLabelCounts', group: 'labelsFiling',
+            title: 'Count root labels in the sidebar only when collapsed',
+            hint: 'In the sidebar, a label with sublabels, like Projects or Boards, shows a badge only while it’s collapsed; expand it and the count moves to each sublabel underneath. Leaves the count above its own message list alone.'
         },
         {
             key: 'groupings', group: 'grouping', clearable: true, multiline: true,
@@ -772,6 +781,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const forgetLabelCache = () => {
         labelCache.clear();
         sublabelCache.clear();
+        expandedRootLabelIds.clear();
     };
 
     const pathsFromSetting = (value) => String(value || '')
@@ -1430,10 +1440,43 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return rows;
     };
 
+    // Root labels whose children are currently drawn beneath them. Fastmail
+    // expresses collapse by removing the child rows from the DOM rather than
+    // flagging the mailbox or its view (see watchLabels below), so this is
+    // read off the drawn rows themselves: a root label counts as expanded
+    // when the very next drawn row belongs to one of its children.
+    let expandedRootLabelIds = new Set();
+
+    const refreshRootLabelExpansion = () => {
+        const rows = sidebarRows();
+        const next = new Set();
+
+        rows.forEach((row, index) => {
+            if (!isRootLabel(row.mailbox)) return;
+            const child = rows[index + 1];
+            if (child && parentOf(child.mailbox) === row.mailbox) {
+                next.add(row.mailbox.get('id'));
+            }
+        });
+
+        let changed = next.size !== expandedRootLabelIds.size;
+        if (!changed) {
+            expandedRootLabelIds.forEach((id) => { if (!next.has(id)) changed = true; });
+        }
+
+        expandedRootLabelIds = next;
+        if (changed) scheduleBadgeRepaint();
+    };
+
     // Run fn while our count stands in for the mailbox's badge count.
     const withInboxCount = (mailbox, fn) => {
         const stock = mailbox.badgeCount;
-        mailbox.badgeCount = countFor(mailbox);
+        // Collapsed root labels count as usual; expanded ones hand the count
+        // to their children instead, if the setting for that is on.
+        const hideExpandedRoot = settings.collapsedLabelCounts && isRootLabel(mailbox) &&
+            expandedRootLabelIds.has(mailbox.get('id'));
+
+        mailbox.badgeCount = hideExpandedRoot ? 0 : countFor(mailbox);
         try {
             return fn();
         } finally {
@@ -6970,6 +7013,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 markSourceGroups();
                 dressTriageRows();
                 dressSourceSections();
+                refreshRootLabelExpansion();
             }
         });
 
@@ -6979,6 +7023,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         markSourceGroups();
         dressTriageRows();
         dressSourceSections();
+        refreshRootLabelExpansion();
         dressToolbar();
         updatePinState();
     };
@@ -7203,6 +7248,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
 
     const refresh = () => {
+        refreshRootLabelExpansion();
         repaintBadges();
         pushAppBadge();
         dropStaleChips();
