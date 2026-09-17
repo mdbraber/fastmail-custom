@@ -124,6 +124,8 @@ private extension NSWindow {
 
 public struct ShellCommands: Commands {
     @Environment(\.openWindow) private var openWindow
+    /// What Fastmail's page puts in File and View, for the window in front
+    @ObservedObject private var pageMenus = PageMenus.shared
 
     public init() {}
 
@@ -147,6 +149,21 @@ public struct ShellCommands: Commands {
                 openWindow(id: "main")
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
+            let items = pageMenus.current.fileItems
+            if !items.isEmpty {
+                Divider()
+                PageMenuEntries(items: items)
+            }
+        }
+        CommandGroup(replacing: .printItem) {
+            PageMenuEntries(items: pageMenus.current.printItems)
+        }
+        CommandGroup(before: .toolbar) {
+            let items = pageMenus.current.viewItems
+            if !items.isEmpty {
+                PageMenuEntries(items: items)
+                Divider()
+            }
         }
         CommandGroup(after: .toolbar) {
             Button("Reload Page") {
@@ -185,6 +202,42 @@ public struct ShellCommands: Commands {
                 NotificationCenter.default.post(name: .fmshellSearch, object: nil)
             }
             .keyboardShortcut("f", modifiers: [.command, .option])
+        }
+    }
+}
+
+/// A page's menu entries, drawn as the Mac draws its own
+struct PageMenuEntries: View {
+    let items: [PageMenuItem]
+
+    var body: some View {
+        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+            switch item.kind {
+            case .separator:
+                Divider()
+            case .action:
+                Button(item.title) { PageMenus.shared.activate(item.action) }
+                    .disabled(!item.isEnabled)
+                    .pageShortcut(item.shortcut)
+            case .toggle(let isOn):
+                Toggle(item.title, isOn: Binding(
+                    get: { isOn },
+                    set: { _ in PageMenus.shared.activate(item.action) }
+                ))
+                .disabled(!item.isEnabled)
+                .pageShortcut(item.shortcut)
+            }
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func pageShortcut(_ shortcut: PageMenuShortcut?) -> some View {
+        if let shortcut {
+            keyboardShortcut(KeyEquivalent(shortcut.key), modifiers: shortcut.modifiers)
+        } else {
+            self
         }
     }
 }

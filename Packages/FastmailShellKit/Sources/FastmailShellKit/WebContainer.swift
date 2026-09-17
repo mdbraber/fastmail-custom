@@ -225,6 +225,25 @@ public struct WebContainer {
                 #else
                 return "denied"
                 #endif
+            },
+            // Fastmail's desktop module describes the Mac's File and View
+            // menus and prints through the app
+            onMenu: { menu, view in
+                #if os(macOS)
+                if let view { PageMenus.shared.set(PageMenu.parse(menu), for: view) }
+                #endif
+            },
+            onPrint: { view in
+                #if os(macOS)
+                if let view { await PagePrinter.print(view) }
+                #endif
+            },
+            onPrintToPDF: { view in
+                #if os(macOS)
+                if let view {
+                    await PagePrinter.exportPDF(view, suggestedName: WebViewRegistry.shared.subject(for: view))
+                }
+                #endif
             }
         )
         configuration.userContentController.addScriptMessageHandler(

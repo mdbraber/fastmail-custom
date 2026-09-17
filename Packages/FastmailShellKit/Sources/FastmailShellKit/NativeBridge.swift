@@ -44,6 +44,12 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onNotificationPermission: @MainActor () async -> String
     /// The Mac's stand-in for window.Notification.requestPermission().
     private let onRequestNotificationPermission: @MainActor () async -> String
+    /// The File and View menus the page describes, as Fastmail's desktop
+    /// module hands them to Electron, from the page that sent them.
+    private let onMenu: @MainActor ([String: Any], WKWebView?) -> Void
+    /// Print the page, or save it as a PDF; answered once that is done.
+    private let onPrint: @MainActor (WKWebView?) async -> Void
+    private let onPrintToPDF: @MainActor (WKWebView?) async -> Void
 
     public init(
         expectedHost: String,
@@ -67,7 +73,10 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onAccount: @escaping @MainActor (String) -> Void = { _ in },
         onSettingsSync: @escaping @MainActor (Bool) -> Void = { _ in },
         onNotificationPermission: @escaping @MainActor () async -> String = { "denied" },
-        onRequestNotificationPermission: @escaping @MainActor () async -> String = { "denied" }
+        onRequestNotificationPermission: @escaping @MainActor () async -> String = { "denied" },
+        onMenu: @escaping @MainActor ([String: Any], WKWebView?) -> Void = { _, _ in },
+        onPrint: @escaping @MainActor (WKWebView?) async -> Void = { _ in },
+        onPrintToPDF: @escaping @MainActor (WKWebView?) async -> Void = { _ in }
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
@@ -91,6 +100,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onSettingsSync = onSettingsSync
         self.onNotificationPermission = onNotificationPermission
         self.onRequestNotificationPermission = onRequestNotificationPermission
+        self.onMenu = onMenu
+        self.onPrint = onPrint
+        self.onPrintToPDF = onPrintToPDF
     }
 
     static func rect(from values: [Double]) -> CGRect? {
@@ -264,6 +276,18 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             return BridgeReply(value: await onNotificationPermission(), error: nil)
         case "requestNotificationPermission":
             return BridgeReply(value: await onRequestNotificationPermission(), error: nil)
+        case "setMenu":
+            guard let menu = payload["menu"] as? [String: Any] else {
+                return BridgeReply(value: nil, error: "setMenu payload has no menu")
+            }
+            onMenu(menu, webView)
+            return BridgeReply(value: nil, error: nil)
+        case "print":
+            await onPrint(webView)
+            return BridgeReply(value: nil, error: nil)
+        case "printToPDF":
+            await onPrintToPDF(webView)
+            return BridgeReply(value: nil, error: nil)
         default:
             return BridgeReply(value: nil, error: "unknown action: \(action)")
         }

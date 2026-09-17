@@ -1122,7 +1122,63 @@
             // Fastmail's own app gives it: the page waits on it together with
             // its preferences, and a bare false reaches the switch as on.
             getIsDefaultApp: function () { return Promise.resolve(false); },
-            setIsDefaultApp: function () {}
+            setIsDefaultApp: function () {},
+            // Fastmail's desktop module builds the app's File and View menus
+            // itself and hands them over whole, again whenever they change;
+            // a click comes back as the item's action.
+            setMenu: function (menu) {
+                post('setMenu', { menu: menuOf(menu) });
+            },
+            onMenuActivate: function (callback) {
+                menuActivate = typeof callback === 'function' ? callback : null;
+            },
+            // Its desktop module wraps window.print around this, since WebKit
+            // does nothing with a page's own print(); the app prints the view.
+            print: function () {
+                return post('print', {});
+            },
+            // Offered in File only while this exists
+            printToPDF: function () {
+                return post('printToPDF', {});
+            },
+            // Handled by the app before the page ever hears of them: mailto
+            // links arrive through the app, and it has no updater or links of
+            // its own scheme.
+            onMailto: function () {},
+            onDeeplink: function () {},
+            onUpdateCheck: function () {},
+            onUpdateAvailable: function () {},
+            onUpdateNotAvailable: function () {},
+            onUpdateDownloaded: function () {},
+            onUpdateError: function () {},
+            restartAndUpdate: function () {}
+        };
+
+        var menuActivate = null;
+        window.native.menuActivate = function (action) {
+            if (!menuActivate || typeof action !== 'string') return false;
+            menuActivate(action);
+            return true;
+        };
+
+        // Only what a menu item is made of crosses over
+        var MENU_KEYS = ['label', 'type', 'role', 'action', 'accelerator', 'enabled', 'checked'];
+        var menuItemsOf = function (items) {
+            return (Array.isArray(items) ? items : []).filter(Boolean).map(function (item) {
+                var copy = {};
+                MENU_KEYS.forEach(function (key) {
+                    var value = item[key];
+                    if (typeof value === 'string' || typeof value === 'boolean') copy[key] = value;
+                });
+                return copy;
+            });
+        };
+        var menuOf = function (menu) {
+            var copy = {};
+            Object.keys(menu || {}).forEach(function (name) {
+                if (Array.isArray(menu[name])) copy[name] = menuItemsOf(menu[name]);
+            });
+            return copy;
         };
 
         /*
