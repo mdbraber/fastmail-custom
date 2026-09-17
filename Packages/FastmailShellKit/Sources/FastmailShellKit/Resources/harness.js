@@ -1588,8 +1588,22 @@
         }
         report(event.error || event.message);
     });
+    // Fastmail rejects with plain objects as part of its own flow, a record
+    // that could not be loaded say, and leaves some of those unhandled; they
+    // are logged rather than shown, which read "[object Object]".
     window.addEventListener('unhandledrejection', function (event) {
-        report(event.reason);
+        var reason = event.reason;
+        if (reason instanceof Error) {
+            report(reason);
+            return;
+        }
+        var described;
+        try {
+            described = reason && typeof reason === 'object' ? Object.keys(reason).join(',') : String(reason);
+        } catch (error) {
+            described = typeof reason;
+        }
+        post('log', { message: 'unhandled rejection: ' + described });
     });
 
     installRouteHooks();

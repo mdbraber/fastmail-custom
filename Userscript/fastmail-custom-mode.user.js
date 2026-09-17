@@ -124,8 +124,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // picker, always comes last and is not part of this setting.
         snoozePresets: 'Later today = +4h\nThis Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
             'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
+        // The times compose's Remind button offers for a message to come
+        // back if nobody replies, written the way snoozePresets are
+        reminderPresets: 'Tomorrow = tomorrow @ 08:00\nIn 3 days = 3d @ 08:00\n' +
+            'Next week = next week @ 08:00\nIn 2 weeks = 2w @ 08:00',
         // When a message you send comes back to the Inbox if nobody has
-        // replied: the name of a snooze preset, or a Date @ Time the way a
+        // replied: the name of a reminder preset, or a Date @ Time the way a
         // preset writes one, counted from when the message goes out. One for
         // new messages and forwards, one for replies; empty sets none, and
         // compose's Remind button changes it for the message at hand.
@@ -245,7 +249,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         { id: 'contacts', title: 'Contacts' },
         { id: 'bottomBar', title: 'Action bar' },
         { id: 'grouping', title: 'Groups' },
-        { id: 'snooze', title: 'Snooze' }
+        { id: 'snooze', title: 'Snooze' },
+        { id: 'reminders', title: 'Reminders' }
     ];
 
     const SETTINGS = [
@@ -370,12 +375,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             hint: 'Replaces Fastmail’s Snooze list; press 1, 2, 3… to pick. Give a date (today, tomorrow, this weekend, next week, 2w, YYYY-MM-DD) and a time, or hours from now (+4h).'
         },
         {
-            key: 'remindNewMessages', group: 'snooze', clearable: true,
-            title: 'Remind me if nobody replies to a new message',
-            hint: 'A new message or forward you send comes back to the Inbox, unread and still in Sent, unless a reply arrives first. A snooze preset’s name, or a date and time like a preset’s (3d @ 08:00); empty sets no reminder. Change it per message with the Remind button beside Schedule send. Needs the push server.'
+            key: 'reminderPresets', group: 'reminders', clearable: true, multiline: true,
+            title: 'Reminder presets',
+            hint: 'The times compose’s Remind button offers, beside Schedule send, for a message you send to come back to the Inbox, unread and still in Sent, if nobody replies. Written like snooze presets.'
         },
         {
-            key: 'remindReplies', group: 'snooze', clearable: true,
+            key: 'remindNewMessages', group: 'reminders', clearable: true,
+            title: 'Remind me if nobody replies to a new message',
+            hint: 'The reminder a new message or forward starts with: a reminder preset’s name, or a date and time like a preset’s (3d @ 08:00); empty sets none. A reply takes the reminder off when the push server runs; without it the reply still brings the conversation back to the Inbox, and the reminder comes back as well.'
+        },
+        {
+            key: 'remindReplies', group: 'reminders', clearable: true,
             title: 'Remind me if nobody replies to a reply',
             hint: 'The same for replies you send.'
         },
@@ -4939,7 +4949,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (!futureTimeMenuView || typeof futureTimeMenuView.didSelect !== 'function') return;
 
         const now = new Date();
-        const presets = parseSnoozePresets(settings.snoozePresets).map(preset => ({
+        const list = futureTimeMenuView.customPresetsKey === 'reminderPresets'
+            ? settings.reminderPresets : settings.snoozePresets;
+        const presets = parseSnoozePresets(list).map(preset => ({
             name: preset.name, target: snoozePresetTarget(now, preset)
         }));
 
@@ -10145,7 +10157,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const editSnoozePreset = (classes, preset, done) => {
         if (!classes.ModalOverlayView || !classes.ScrollView ||
             !classes.TextInputView || !classes.ButtonView) {
-            reportFault('the snooze preset dialog is not available here');
+            reportFault('the preset dialog is not available here');
             return;
         }
 
@@ -10210,59 +10222,61 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const NEW_SNOOZE_PRESET_NAME = 'New preset';
 
     /*
-     * Your snooze presets, a drag-reorderable list built the same way
-     * groupingsSection builds its own (reorderList, names as ids, a dialog
-     * to edit one, discrete add/remove/reorder actions that read the
-     * setting fresh and write it back whole).
+     * A list of presets, snooze or reminder (`key` names the setting), a
+     * drag-reorderable list built the same way groupingsSection builds its
+     * own (reorderList, names as ids, a dialog to edit one, discrete
+     * add/remove/reorder actions that read the setting fresh and write it
+     * back whole).
      *
-     * "Choose a date and time…" is drawn last, always, and is not part of
-     * the setting at all - see addSnoozePresets, which appends it itself
-     * whenever the menu is actually built - so there is nothing here for it
-     * to move, edit or remove.
+     * "Choose a date and time…", and for reminders "No reminder", are drawn
+     * last, always, and are not part of the setting at all - see
+     * addSnoozePresets, which appends them itself whenever the menu is
+     * actually built - so there is nothing here for them to move, edit or
+     * remove.
      */
-    const snoozePresetsSection = (classes) => {
+    const presetListSection = (classes, key) => {
         const el = FastMail.el;
-        const option = settingFor('snoozePresets');
+        const option = settingFor(key);
 
         const named = (presets, name) => presets.filter(one => one.name === name)[0] || null;
 
         const redraw = () => holder.viewNeedsRedraw();
         const save = (presets) => {
-            writeSetting('snoozePresets', formatSnoozePresets(presets));
+            writeSetting(key, formatSnoozePresets(presets));
             redraw();
         };
 
         const reorder = (order) => {
-            const now = parseSnoozePresets(settingValue('snoozePresets'));
+            const now = parseSnoozePresets(settingValue(key));
             save(mergeOrder(now.map(one => one.name), order).map(name => named(now, name)));
         };
 
         const remove = (name) => {
-            const now = parseSnoozePresets(settingValue('snoozePresets'));
+            const now = parseSnoozePresets(settingValue(key));
             save(now.filter(one => one.name !== name));
         };
 
         // A name no preset has yet, the same dedup groupingsSection's own
         // add() uses for "New grouping".
         const add = () => {
-            const now = parseSnoozePresets(settingValue('snoozePresets'));
+            const now = parseSnoozePresets(settingValue(key));
             let name = NEW_SNOOZE_PRESET_NAME;
             for (let count = 2; named(now, name); count += 1) name = NEW_SNOOZE_PRESET_NAME + ' ' + count;
             save(now.concat([{ name: name, date: 'today', time: '08:00' }]));
         };
 
         const edit = (name) => {
-            const now = parseSnoozePresets(settingValue('snoozePresets'));
+            const now = parseSnoozePresets(settingValue(key));
             const seed = named(now, name);
             if (!seed) {
                 redraw();
                 return;
             }
             editSnoozePreset(classes, seed, (value) => {
-                const then = parseSnoozePresets(settingValue('snoozePresets'));
+                const then = parseSnoozePresets(settingValue(key));
                 const at = then.map(one => one.name).indexOf(name);
                 if (at === -1) {
-                    reportFault('“' + name + '” is no longer in your snooze presets, so its edit was not saved');
+                    reportFault('“' + name + '” is no longer in ' + option.title.toLowerCase() + ', so its edit was not saved');
                     redraw();
                     return;
                 }
@@ -10275,7 +10289,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             className: 'u-space-y-3',
             draw: () => {
                 // Drawn from, and never written from.
-                const presets = parseSnoozePresets(settingValue('snoozePresets'));
+                const presets = parseSnoozePresets(settingValue(key));
 
                 // The name alone; its Date and Time are for its Edit dialog.
                 const items = presets.map(one => ({
@@ -10287,7 +10301,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 const list = reorderList(classes, items, reorder);
 
-                const customRow = el('div.u-list-item.u-color-unimportant', [CHOOSE_SNOOZE_DATE_LABEL]);
+                // What every menu adds after the presets
+                const customRow = el('div', [CHOOSE_SNOOZE_DATE_LABEL]
+                    .concat(key === 'reminderPresets' ? [NO_REMINDER_LABEL] : [])
+                    .map(label => el('div.u-list-item.u-color-unimportant', [label])));
 
                 const addButton = new classes.ButtonView({
                     type: 'v-Button--standard v-Button--sizeM',
@@ -10307,11 +10324,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return holder;
     };
 
-    // Three options are lists rather than fields; everything else is a row.
+    // Four options are lists rather than fields; everything else is a row.
     const sectionRow = (classes, option, register) => {
         if (option.key === 'groupings') return groupingsSection(classes);
         if (option.key === 'bottomBarSlots') return barSlotsSection(classes);
-        if (option.key === 'snoozePresets') return snoozePresetsSection(classes);
+        if (option.key === 'snoozePresets' || option.key === 'reminderPresets') {
+            return presetListSection(classes, option.key);
+        }
         return settingRow(classes, option, register);
     };
 
@@ -10676,12 +10695,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const defaultReminder = (composer) =>
         settingValue(isReplyCompose(composer) ? 'remindReplies' : 'remindNewMessages');
 
-    // A snooze preset by name, or a Date @ Time written the way a preset's
+    // A reminder preset by name, or a Date @ Time written the way a preset's
     // is; `named` says which
     const reminderPreset = (spec) => {
         const text = String(spec || '').trim();
         if (!text) return null;
-        const named = parseSnoozePresets(settings.snoozePresets)
+        const named = parseSnoozePresets(settings.reminderPresets)
             .find(preset => preset.name.toLowerCase() === text.toLowerCase());
         if (named) return { preset: named, named: true };
         const written = parseSnoozePresets('Reminder = ' + text)[0];
@@ -10753,6 +10772,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             destroyMenuViewOnClose: true,
             menuView: function () {
                 return new FastMail.classes.FutureTimeMenuView({
+                    customPresetsKey: 'reminderPresets',
                     title: 'Remind me if nobody replies',
                     lastCustomKey: 'lastUsedReminderDelta',
                     didSelect(date, name) {
@@ -10891,6 +10911,46 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         scheduleReminderSweep();
     };
 
+    /*
+     * A message sent from a window of its own is announced to the mailbox
+     * window, which loads its EmailSubmission to show the Sent toast and its
+     * Undo. Windows of their own run without the offline worker, so the
+     * worker here has never seen that submission and answers notFound: the
+     * load failed and the toast never came. Requests that only read
+     * submissions go to the server directly, the way they do with offline
+     * mode off; cancelling one still goes through the worker, which handles
+     * it.
+     */
+    const patchSubmissionFetch = () => {
+        if (isMinimalWindow || typeof IDBTransaction === 'undefined') return;
+        const source = FastMail.store && FastMail.store.source;
+        const connections = (source && (source.sources || source.get('sources'))) || [];
+        connections.forEach((connection) => {
+            const original = connection.sendRequest;
+            if (typeof original !== 'function' || connection.customSubmissionFetch) return;
+            connection.customSubmissionFetch = true;
+            connection.sendRequest = function (request) {
+                const calls = request && request.methodCalls;
+                const onlySubmissions = !!(calls && calls.length) &&
+                    calls.every(call => call[0] === 'EmailSubmission/get');
+                if (!onlySubmissions) return original.apply(this, arguments);
+                return fetch(FastMail.auth.get('apiUrl'), {
+                    method: 'POST',
+                    mode: 'cors',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: FastMail.auth.get('authHeaderValue')
+                    },
+                    body: JSON.stringify(request)
+                }).then((response) => {
+                    if (!response.ok) throw new Error('EmailSubmission/get: HTTP ' + response.status);
+                    return response.json();
+                });
+            };
+        });
+    };
+
     const patchSubmission = () => {
         const Submission = FastMail.classes.MessageSubmission;
         if (!Submission || Submission.prototype.customReminder) return;
@@ -10910,6 +10970,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const start = () => {
         passContextMenuThrough();
         patchCompose();
+        patchSubmissionFetch();
         patchBadgeRendering();
         patchDrop();
         patchMailboxMenu();

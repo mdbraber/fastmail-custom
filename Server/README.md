@@ -39,10 +39,14 @@ A message sent with a reminder carries `$fmc-remind` and
 `$fmc-remind-<seconds since the epoch>`, and once it is in Sent the apps
 snooze it there, marking it `$fmc-reminding`: it stays in Sent, and Fastmail
 puts it in the Inbox, unread, at that moment. Fastmail keeps the `snoozed`
-property from API tokens, which is why the apps set it. The server cancels
-it: a message arriving later in the same conversation, not in Sent, Drafts,
-Spam or Trash, takes the reminder out of Snoozed again, which clears the
-snooze. Accounts without a Sent or Snoozed folder have no reminders.
+property from API tokens, which is why the apps set it.
+
+The server is only needed to take a reminder off once someone replies: a
+message arriving later in the same conversation, not in Sent, Drafts, Spam
+or Trash, takes it out of Snoozed again, which clears the snooze. Without
+the server the reply still brings the conversation back to the Inbox, and
+the reminder comes back as well at its time. Accounts without a Sent or
+Snoozed folder have no reminders.
 
 ## One-time setup
 
