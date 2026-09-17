@@ -6476,6 +6476,35 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         });
     };
 
+    /*
+     * Snoozing takes the triage label off, whichever route asks for it: a
+     * conversation coming back later is one you have decided about, and it
+     * comes back to the Inbox rather than to a queue that has already been
+     * through. Project and hold labels stay, because where a message belongs
+     * is not what snoozing changes. Taken off with its own didAction
+     * silenced, so the snooze's own checkpoint carries both and one undo puts
+     * both back.
+     */
+    const patchSnooze = (actions) => {
+        const original = actions.snooze;
+        if (typeof original !== 'function') return;
+
+        actions.snooze = function (storeKeys, date) {
+            try {
+                const keys = resolveKeys(this, storeKeys);
+                const removes = keys ? triageAmong(keys) : [];
+                if (removes.length) {
+                    silencingDidAction(this, () => {
+                        removingOnPurpose(() => this.addremove(keys, [], removes));
+                    });
+                }
+            } catch (error) {
+                reportFault('could not take the triage label off a snoozed message', error);
+            }
+            return original.apply(this, arguments);
+        };
+    };
+
     const patchArchive = () => {
         const actions = controller().actions;
         if (actions.customTriageArchive) return;
@@ -6525,6 +6554,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         });
 
         patchFiling(actions);
+        patchSnooze(actions);
 
         // The stamp rides the checkpoint: whichever didAction cuts one takes
         // the pending return with it; the archive verbs set it the moment
