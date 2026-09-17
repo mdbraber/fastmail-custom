@@ -1058,6 +1058,20 @@
             }
         };
 
+        // The address a click should open: exactly what sw-desktop.js's own
+        // notificationclick handler (`he`) falls back to when it finds no
+        // open window to hand the click to instead - host + /mail/Inbox/<id>,
+        // no thread segment, since the router resolves that once the message
+        // loads. Built here rather than left to the service worker, since
+        // nothing guarantees WKWebView's Clients API finds this window the
+        // way a real browser tab would.
+        var messageUrlFor = function (data) {
+            var email = data && data['@type'] === 'EmailPush' && data.email;
+            if (!email || !email.id || !data.userId) return '';
+            return location.origin + '/mail/Inbox/' + encodeURIComponent(String(email.id)) +
+                '?u=' + encodeURIComponent(String(data.userId));
+        };
+
         // Fastmail's service worker hands its icon over already read into a
         // data: URL: the sender's BIMI logo, contact photo, Gravatar or the
         // logo for their domain. Only that form is passed on, and only while
@@ -1079,6 +1093,7 @@
                     sound: false,
                     threadId: String((email && email.threadId) || data.threadId || ''),
                     icon: imageOf(payload.icon),
+                    url: messageUrlFor(data),
                     data: jsonOf(data)
                 });
             },
@@ -1276,6 +1291,7 @@
                             sound: mailSoundWanted(push.userId),
                             threadId: String(email.threadId || ''),
                             icon: photo,
+                            url: messageUrlFor(push),
                             data: jsonOf(push)
                         });
                     });
@@ -1333,6 +1349,33 @@
             var data;
             try { data = JSON.parse(dataJSON); } catch (error) { return; }
             worker.postMessage({ type: 'notificationclick', data: data });
+        };
+
+        // A mail click, opened by Fastmail's own entry point for its native
+        // apps: the action its service worker posts for a click. It marks the
+        // thread out of date before opening it, so a window left idle shows
+        // the thread as it is now, and it picks the message's own mailbox.
+        // Answers false when the page cannot take it (not signed in, another
+        // user, an account this session lacks), so the app opens the address.
+        window.native.openMessage = function (dataJSON) {
+            var data;
+            try { data = JSON.parse(dataJSON); } catch (error) { return false; }
+            var email = data && data['@type'] === 'EmailPush' && data.email;
+            var app = window.FastMail;
+            if (!email || !email.id || !email.mailboxIds || !data.accountId) return false;
+            if (!app || typeof app.doAction !== 'function' || !app.auth || !app.store) return false;
+            // FastMail.userId is only filled in when the page was loaded with
+            // ?u=, so a user is turned away only when both are known; the
+            // account check is what keeps another user's mail out.
+            if (app.userId && data.userId && String(app.userId) !== String(data.userId)) return false;
+            if (!app.auth.get('isAuthenticated') || !(data.accountId in (app.auth.get('accounts') || {}))) return false;
+            app.doAction('goMessage', {
+                accountId: data.accountId,
+                emailId: email.id,
+                threadId: email.threadId || null,
+                mailboxIds: email.mailboxIds
+            });
+            return true;
         };
     }
 

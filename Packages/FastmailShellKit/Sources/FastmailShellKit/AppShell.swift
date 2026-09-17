@@ -161,19 +161,45 @@ public struct AppShell: View {
             ComposeWindows.shared.configure(profile: live)
             NotificationPresenter.shared.install()
             TabSwitcher.install()
-            NotificationPresenter.shared.onClick = { data in
-                // Hand the click to the page's service worker, which wrote the
-                // payload and knows how to open the message
-                guard let view = WebViewRegistry.shared.active else { return }
-                let literal = String(data: try! JSONEncoder().encode(data), encoding: .utf8) ?? "\"{}\""
+            NotificationPresenter.shared.onClick = { data, url in
+                // A mail click goes first to Fastmail's own entry point for
+                // its apps, which refreshes the thread before showing it; a
+                // page that cannot take it answers false.
+                guard let view = WebViewRegistry.shared.active else {
+                    if let url { PendingLinks.shared.open(url) }
+                    return
+                }
                 view.callAsyncJavaScript(
-                    "window.native && window.native.notificationClicked && window.native.notificationClicked(\(literal));",
-                    arguments: [:], in: nil, in: .page, completionHandler: nil
-                )
+                    "return !!(window.native && window.native.openMessage && window.native.openMessage(data));",
+                    arguments: ["data": data], in: nil, in: .page
+                ) { result in
+                    if (try? result.get()) as? Bool == true { return }
+                    MainActor.assumeIsolated {
+                        // The page worked out the message's address too; open
+                        // it the way any other outside link opens, rather than
+                        // trusting WKWebView's Clients API to find this window
+                        // the way a real browser tab would for the service worker.
+                        if let url {
+                            PendingLinks.shared.open(url)
+                            return
+                        }
+                        // No address to open with (a calendar alert, say): hand
+                        // the click to the page's service worker, which wrote
+                        // the payload and knows how to open it.
+                        view.callAsyncJavaScript(
+                            "window.native && window.native.notificationClicked && window.native.notificationClicked(data);",
+                            arguments: ["data": data], in: nil, in: .page, completionHandler: nil
+                        )
+                    }
+                }
             }
         }
         .onChange(of: backendName) {
             ComposeWindows.shared.configure(profile: live)
+        }
+        .onChange(of: pendingLinks.url) {
+            // A tapped notification, routed exactly as a link from outside
+            if let url = pendingLinks.take() { route(live.backend.rehost(url)) }
         }
         // Without this the window group treats every URL handed to the app as
         // grounds for a new window, so a mailto arrived with a second copy of

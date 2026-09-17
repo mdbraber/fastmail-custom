@@ -8,9 +8,9 @@ import UserNotifications
 public final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     public static let shared = NotificationPresenter()
 
-    /// Given the notification's own click payload, verbatim, so the page can
-    /// hand it to the service worker that wrote it.
-    public var onClick: @MainActor (String) -> Void = { _ in }
+    /// The notification's own click payload, verbatim, and the message
+    /// address the page built from it, when it managed to build one.
+    public var onClick: @MainActor (String, URL?) -> Void = { _, _ in }
 
     private var authorizationGranted = false
     private var authorizationPending = false
@@ -85,7 +85,9 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
         content.body = notification.body
         if notification.sound { content.sound = .default }
         if let threadId = notification.threadId { content.threadIdentifier = threadId }
-        content.userInfo = ["data": notification.dataJSON]
+        var userInfo: [String: Any] = ["data": notification.dataJSON]
+        if let url = notification.url { userInfo["url"] = url.absoluteString }
+        content.userInfo = userInfo
         if let image = notification.image, let file = NotificationImageFile.write(image) {
             // Taken on, the file is moved into the notification's own store
             if let attachment = try? UNNotificationAttachment(identifier: "sender", url: file, options: nil) {
@@ -171,10 +173,12 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping @Sendable () -> Void
     ) {
-        let data = response.notification.request.content.userInfo["data"] as? String ?? "{}"
+        let userInfo = response.notification.request.content.userInfo
+        let data = userInfo["data"] as? String ?? "{}"
+        let url = (userInfo["url"] as? String).flatMap(URL.init(string:))
         Task { @MainActor in
             self.showWindow()
-            self.onClick(data)
+            self.onClick(data, url)
             completionHandler()
         }
     }

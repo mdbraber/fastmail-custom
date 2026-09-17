@@ -342,6 +342,49 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(calls, "ContactCard/query A1, ContactCard/query A2, ContactCard/get A2")
     }
 
+    // A click goes to Fastmail's own goMessage action with the push's ids.
+    // FastMail.userId is empty when the page was loaded without ?u=, which
+    // must not turn the click away; a known other user or an account the
+    // session lacks must.
+    func testAMailClickIsHandedToFastmailsGoMessageAction() async throws {
+        webView = try await electronWebView()
+        _ = try await evaluate(webView, """
+        window.__actions = [];
+        window.FastMail = {
+            userId: '',
+            store: {},
+            auth: {get: function (key) {
+                return {isAuthenticated: true, accounts: {A1: {}}}[key];
+            }},
+            doAction: function (name, args) { window.__actions.push([name, args]); }
+        };
+        window.__push = function (changes) {
+            var push = {'@type': 'EmailPush', userId: 'u1', accountId: 'A1',
+                email: {id: 'M1', threadId: 'T1', mailboxIds: {I: true}}};
+            Object.assign(push, changes);
+            return window.native.openMessage(JSON.stringify(push));
+        };
+        true;
+        """)
+        let taken = try await evaluate(webView, "window.__push({})") as? Bool
+        XCTAssertEqual(taken, true)
+        let action = try await evaluate(webView, "JSON.stringify(window.__actions)") as? String
+        XCTAssertEqual(action, #"[["goMessage",{"accountId":"A1","emailId":"M1","threadId":"T1","mailboxIds":{"I":true}}]]"#)
+
+        let refused = try await evaluate(webView, """
+        [
+            window.__push({accountId: 'A9'}),
+            window.__push({email: {id: 'M1', threadId: 'T1'}}),
+            window.__push({'@type': 'CalendarAlert'}),
+            (FastMail.userId = 'u2', window.__push({})),
+            window.native.openMessage('{')
+        ]
+        """) as? [Bool]
+        XCTAssertEqual(refused, [false, false, false, false, false])
+        let count = try await evaluate(webView, "window.__actions.length") as? Int
+        XCTAssertEqual(count, 1)
+    }
+
     // Fastmail's Mail preferences page asks whether it is the default email
     // app before it draws, and its switch asks to become it. The shells leave
     // that to macOS, so the answer is always no and the switch does nothing;

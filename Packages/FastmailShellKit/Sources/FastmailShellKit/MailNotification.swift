@@ -12,9 +12,13 @@ public struct MailNotification: Equatable, Sendable {
     /// The sender's picture Fastmail's service worker found, or the contact
     /// photo the page script looked up for its fallback; shown beside the text.
     public let image: NotificationImage?
+    /// Where a click should go, built by the page from the same push data:
+    /// the message's address, so opening it does not depend on Fastmail's
+    /// service worker recognising the click.
+    public let url: URL?
 
     public init(id: String, title: String, body: String, sound: Bool, threadId: String?, dataJSON: String,
-                image: NotificationImage? = nil) {
+                image: NotificationImage? = nil, url: URL? = nil) {
         self.id = id
         self.title = title
         self.body = body
@@ -22,6 +26,7 @@ public struct MailNotification: Equatable, Sendable {
         self.threadId = threadId
         self.dataJSON = dataJSON
         self.image = image
+        self.url = url
     }
 
     public static func parse(_ payload: [String: Any]) -> MailNotification? {
@@ -30,6 +35,9 @@ public struct MailNotification: Equatable, Sendable {
             let title = payload["title"] as? String, !title.isEmpty
         else { return nil }
         let threadId = (payload["threadId"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let url = (payload["url"] as? String).flatMap(URL.init(string:)).flatMap {
+            $0.scheme?.lowercased() == "https" ? $0 : nil
+        }
         return MailNotification(
             id: id,
             title: title,
@@ -37,7 +45,8 @@ public struct MailNotification: Equatable, Sendable {
             sound: payload["sound"] as? Bool ?? false,
             threadId: threadId,
             dataJSON: payload["data"] as? String ?? "{}",
-            image: (payload["icon"] as? String).flatMap(NotificationImage.parse(dataURL:))
+            image: (payload["icon"] as? String).flatMap(NotificationImage.parse(dataURL:)),
+            url: url
         )
     }
 }
