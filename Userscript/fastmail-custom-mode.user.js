@@ -128,7 +128,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // replied: the name of a snooze preset, or a Date @ Time the way a
         // preset writes one, counted from when the message goes out. One for
         // new messages and forwards, one for replies; empty sets none, and
-        // compose's More menu changes it for the message at hand.
+        // compose's Remind button changes it for the message at hand.
         remindNewMessages: '',
         remindReplies: '',
         // The action bar's verbs, as one ordered list over all of them: the
@@ -372,7 +372,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'remindNewMessages', group: 'snooze', clearable: true,
             title: 'Remind me if nobody replies to a new message',
-            hint: 'A new message or forward you send comes back to the Inbox, unread and still in Sent, unless a reply arrives first. A snooze preset’s name, or a date and time like a preset’s (3d @ 08:00); empty sets no reminder. Change it per message under More in compose. Needs the push server.'
+            hint: 'A new message or forward you send comes back to the Inbox, unread and still in Sent, unless a reply arrives first. A snooze preset’s name, or a date and time like a preset’s (3d @ 08:00); empty sets no reminder. Change it per message with the Remind button beside Schedule send. Needs the push server.'
         },
         {
             key: 'remindReplies', group: 'snooze', clearable: true,
@@ -4947,7 +4947,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // greyed out rather than hidden, keeping every number where it was.
         const entries = presets.map((preset, index) => snoozePresetOption(String(index + 1),
             snoozePresetLabel(preset.name, snoozePresetRightText(now, preset.target)),
-            () => futureTimeMenuView.didSelect(preset.target),
+            // The name rides along for a menu that shows it; Fastmail's own
+            // menus take the date alone
+            () => futureTimeMenuView.didSelect(preset.target, preset.name),
             preset.target.getTime() <= now.getTime()));
 
         if (typeof futureTimeMenuView.showCustomPicker === 'function') {
@@ -8045,7 +8047,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     }
                     addGroupings(options);
                     addSnoozePresets(options);
-                    addReminderOption(options);
                 }
             } catch (error) {
                 reportFault('could not add to a menu', error);
@@ -10612,6 +10613,19 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             return originalStartAutoSave.apply(this, arguments);
         };
 
+        const originalDrawToolbarButtons = proto.drawToolbarButtons;
+        if (typeof originalDrawToolbarButtons === 'function') {
+            proto.drawToolbarButtons = function () {
+                const parts = originalDrawToolbarButtons.apply(this, arguments);
+                try {
+                    addReminderButton(this, parts);
+                } catch (error) {
+                    reportFault('could not add the reminder button', error);
+                }
+                return parts;
+            };
+        }
+
         const originalDestroy = proto.destroy;
         proto.destroy = function () {
             openComposers.delete(this);
@@ -10639,7 +10653,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      *
      * Each open compose window has a choice: undefined takes the default
      * from the settings, counted from when the message goes out; null is no
-     * reminder; a Date is one picked in the More menu.
+     * reminder; a Date is one picked from the toolbar.
      */
     const REMIND_KEYWORD = '$fmc-remind';
     const REMIND_AT_PREFIX = '$fmc-remind-';
@@ -10686,64 +10700,81 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return target.getTime() > base.getTime() ? target : null;
     };
 
-    // The right-hand side of the More menu's entry
+    // The choice, in words: a preset's name, or when
     const reminderSummary = (composer) => {
         const moment = reminderMoment(composer);
         if (!moment) return NO_REMINDER_LABEL;
-        const found = composer.customReminder === undefined ? reminderPreset(defaultReminder(composer)) : null;
+        if (composer.customReminder) {
+            return composer.customReminderName || snoozePresetRightText(new Date(), moment);
+        }
+        const found = reminderPreset(defaultReminder(composer));
         return found && found.named ? found.preset.name : snoozePresetRightText(new Date(), moment);
     };
 
-    const optionMethod = (option) => {
-        try {
-            return option && typeof option.get === 'function' ? option.get('method') : null;
-        } catch (error) {
-            return null;
-        }
+    // An alarm clock, drawn the way Fastmail's own toolbar icons are
+    const REMINDER_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="u-standardicon">' +
+        '<circle cx="12" cy="13" r="8"/><polyline points="12 9 12 13 14 15"/>' +
+        '<line x1="5" y1="3" x2="2" y2="6"/><line x1="22" y1="6" x2="19" y2="3"/>' +
+        '<line x1="6.38" y1="18.7" x2="4" y2="21"/><line x1="17.64" y1="18.67" x2="20" y2="21"/></svg>';
+
+    const reminderIcon = () => {
+        const svg = document.importNode(
+            new DOMParser().parseFromString(REMINDER_ICON, 'image/svg+xml').documentElement, true);
+        svg.setAttribute('role', 'presentation');
+        svg.classList.add('v-Icon', 'i-reminder');
+        return svg;
     };
 
-    // Compose's More menu gains the reminder, in a section of its own above
-    // High priority; the menu is drawn afresh each time it opens, so the
-    // entry always shows the choice as it stands.
-    const addReminderOption = (options) => {
-        if (options.some(option => option && option.customReminderOption)) return;
-        const at = options.findIndex(option => optionMethod(option) === 'toggleHighPriority');
-        if (at === -1) return;
-        const composer = options[at].get('target');
-        if (!composer || typeof composer.get !== 'function') return;
+    const reminderButtonLabel = (composer) => 'Remind: ' +
+        (reminderMoment(composer) ? reminderSummary(composer) : 'Off');
 
-        // A choice closes More as well, which shows it the next time it
-        // opens; the submenu is a popover of its own rather than one inside
-        // More's, and hiding More's takes it along
-        let option = null;
-        const closeMenus = (view) => {
-            const more = option && option.getParent(FastMail.classes.PopOverView);
-            (more || view).hide();
+    /*
+     * The reminder sits on compose's own toolbar, just after Schedule send:
+     * a labelled button on a wide layout, an icon on the phone's, its label
+     * the tooltip. drawToolbarButtons hands back what the toolbar's view is
+     * drawing, so the button is made with Fastmail's own element builder,
+     * which makes it a child of that view, and then moved into place beside
+     * Schedule send (or Send, where there is no Schedule send).
+     */
+    const reminderButton = (composer) => {
+        let button = null;
+        const choose = (menu, choice, name) => {
+            composer.customReminder = choice;
+            composer.customReminderName = name || '';
+            if (button) button.set('label', reminderButtonLabel(composer));
+            menu.hide();
         };
-        const menuView = new FastMail.classes.FutureTimeMenuView({
-            title: 'Remind me if nobody replies',
-            lastCustomKey: 'lastUsedReminderDelta',
-            didSelect(date) {
-                composer.customReminder = new Date(date);
-                closeMenus(this);
-            },
-            customNoReminder() {
-                composer.customReminder = null;
-                closeMenus(this);
-            }
-        });
-        // The same blank icon the entries around it carry, so the labels line up
-        const blank = options.find(option => optionMethod(option) === 'toggleRich');
-        const icon = blank && blank.get('icon');
-        option = new FastMail.classes.MenuButtonView({
-            icon: icon && icon.cloneNode ? icon.cloneNode(true) : null,
-            label: snoozePresetLabel('Remind if no reply', reminderSummary(composer)),
-            menuView: menuView,
+        button = new FastMail.classes.MenuButtonView({
+            type: 'v-Button--subtleStandard v-Button--sizeM u-ml-2' +
+                (isPhoneLayout() ? ' v-Button--iconOnly v-Button--tooltipLabel' : ''),
+            icon: reminderIcon(),
+            label: reminderButtonLabel(composer),
+            isDisabled: composer.get('isSending'),
             destroyMenuViewOnClose: true,
-            isLastOfSection: true
+            menuView: function () {
+                return new FastMail.classes.FutureTimeMenuView({
+                    title: 'Remind me if nobody replies',
+                    lastCustomKey: 'lastUsedReminderDelta',
+                    didSelect(date, name) {
+                        choose(this, new Date(date), name);
+                    },
+                    customNoReminder() {
+                        choose(this, null);
+                    }
+                });
+            }.property().nocache()
         });
-        option.customReminderOption = true;
-        options.splice(at, 0, option);
+        button.customReminderButton = true;
+        return button;
+    };
+
+    const addReminderButton = (composer, parts) => {
+        const group = parts && parts[0];
+        if (!(group instanceof Element) || group.querySelector('.i-reminder')) return;
+        const beside = group.querySelector('.v-Button--mergeLeft') || group.querySelector('.s-send');
+        if (!beside) return;
+        const holder = FastMail.el('div', [reminderButton(composer)]);
+        if (holder.firstElementChild) beside.after(holder.firstElementChild);
     };
 
     const markReminder = (submission) => {
