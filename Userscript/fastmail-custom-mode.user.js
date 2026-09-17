@@ -10755,20 +10755,27 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * which makes it a child of that view, and then moved into place beside
      * Schedule send (or Send, where there is no Schedule send).
      */
-    const reminderButton = (composer) => {
+    // `composerOf` answers the message the button is for: always the same
+    // one on a wide layout, whichever is being written on the phone
+    const reminderButton = (composerOf, type) => {
         let button = null;
+        const label = () => {
+            const composer = composerOf();
+            return composer ? reminderButtonLabel(composer) : 'Remind';
+        };
         const choose = (menu, choice, name) => {
-            composer.customReminder = choice;
-            composer.customReminderName = name || '';
-            if (button) button.set('label', reminderButtonLabel(composer));
+            const composer = composerOf();
+            if (composer) {
+                composer.customReminder = choice;
+                composer.customReminderName = name || '';
+            }
+            button.set('label', label());
             menu.hide();
         };
         button = new FastMail.classes.MenuButtonView({
-            type: 'v-Button--subtleStandard v-Button--sizeM u-ml-2' +
-                (isPhoneLayout() ? ' v-Button--iconOnly v-Button--tooltipLabel' : ''),
+            type: type,
             icon: reminderIcon(),
-            label: reminderButtonLabel(composer),
-            isDisabled: composer.get('isSending'),
+            label: label(),
             destroyMenuViewOnClose: true,
             menuView: function () {
                 return new FastMail.classes.FutureTimeMenuView({
@@ -10785,6 +10792,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             }.property().nocache()
         });
         button.customReminderButton = true;
+        button.customRelabel = () => button.set('label', label());
         return button;
     };
 
@@ -10793,8 +10801,53 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (!(group instanceof Element) || group.querySelector('.i-reminder')) return;
         const beside = group.querySelector('.v-Button--mergeLeft') || group.querySelector('.s-send');
         if (!beside) return;
-        const holder = FastMail.el('div', [reminderButton(composer)]);
+        const type = 'v-Button--subtleStandard v-Button--sizeM u-ml-2' +
+            (isPhoneLayout() ? ' v-Button--iconOnly v-Button--tooltipLabel' : '');
+        const holder = FastMail.el('div', [reminderButton(() => composer, type)]);
         if (holder.firstElementChild) beside.after(holder.firstElementChild);
+    };
+
+    /*
+     * The phone draws compose's header from a fixed list of buttons, and its
+     * build never calls drawToolbarButtons, so there the button goes in
+     * beside the header's own Schedule send, an icon like it, once a
+     * message is being written. The header is shared by every message, so
+     * the button asks the mail controller which one that is.
+     */
+    let phoneReminderButton = null;
+
+    const addPhoneReminderButton = () => {
+        const mail = controller();
+        const composer = mail.get('draft');
+        if (!composer) return false;
+        if (phoneReminderButton && phoneReminderButton.get('isInDocument')) {
+            phoneReminderButton.customRelabel();
+            return true;
+        }
+        const MenuButton = FastMail.classes.MenuButtonView;
+        const schedule = Array.prototype.map.call(document.querySelectorAll('button'), node => FastMail.getViewFromNode(node))
+            .filter(view => view instanceof MenuButton && view.get('shortcut') === 'Cmd-Shift-Enter')[0];
+        const parent = schedule && schedule.get('parentView');
+        if (!parent) return false;
+        phoneReminderButton = reminderButton(() => mail.get('draft'), 'v-Button--iconOnly');
+        parent.insertView(phoneReminderButton, schedule, 'before');
+        return true;
+    };
+
+    const watchPhoneCompose = () => {
+        if (!isPhoneLayout()) return;
+        // The header is drawn a moment after the message is set
+        const attempt = (left) => {
+            try {
+                if (addPhoneReminderButton() || !left) return;
+            } catch (error) {
+                reportFault('could not add the reminder button', error);
+                return;
+            }
+            setTimeout(() => attempt(left - 1), 150);
+        };
+        controller().addObserverForKey('draft', { go: () => attempt(20) }, 'go');
+        attempt(20);
     };
 
     const markReminder = (submission) => {
@@ -11016,6 +11069,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         watchMailboxSummaryList();
         refreshMailboxSummary();
         watchReminders();
+        watchPhoneCompose();
 
         // Handy from the console, and how the counts can be checked by hand
         window.fastmailCustom = {
