@@ -2599,8 +2599,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const chooseGrouping = (id) => {
         const mailController = controller();
         const sort = mailController.get('sort') || [];
-        const sortField = sort[sort.length - 1];
+        let sortField = sort[sort.length - 1];
         if (!sortField) return;
+
+        // Groups by return date are counted off the rows in the order they
+        // come back, so they are chosen together with that order: date,
+        // soonest first, which is what the Snoozed folder turns into a sort
+        // by return date. Any other order would slice the groups somewhere
+        // else than where they belong.
+        if (id && id.indexOf(SNOOZE_PREFIX) === 0) {
+            sortField = { property: 'receivedAt', isAscending: true };
+        }
 
         mailController.set('sort',
             id ? [{ property: id, isAscending: false }, sortField] : [sortField]);
@@ -3229,12 +3238,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const counts = edges.map(() => 0);
         const length = list.get('length') || 0;
 
+        let previous = 0;
         for (let index = 0; index < length; index += 1) {
             const record = list.getObjectAt(index);
             if (!record || typeof record.get !== 'function') break;
             const snoozed = record.get('snoozed');
             const until = snoozed && snoozed.until ? new Date(snoozed.until).getTime() : null;
             if (!until) break;
+            // Sorted some other way than by return date, so the groups would
+            // take rows that are not theirs: better no groups than wrong ones
+            if (until < previous) return edges.map(() => 0);
+            previous = until;
             let at = -1;
             for (let edge = 0; edge < edges.length; edge += 1) {
                 if (until <= edges[edge]) { at = edge; break; }
