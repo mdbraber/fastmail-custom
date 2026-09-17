@@ -24,7 +24,7 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
 **User experience**
 
 - 🪟 **Native UI (macOS) with tabs**: Fastmail runs in a WKWebView (fast, energy-efficient) and supports tabs, with Fastmail's own File and View items in the menu bar
-- ✉️ **Compose inline, window or tab (macOS)**: compose messages without losing focus
+- ✉️ **Compose inline, window or tab (macOS)**: compose messages without losing focus; new messages can carry a label of your choice, ticked in the compose window's Labels menu
 - ↗️ **Pop-out windows (macOS)**: open any message or draft in its own window.
 - 🧰 **Action bar**: choose and order its actions, separately on phone, iPad and Mac
 - 🖨️ **Printing**: print a message from its window.
