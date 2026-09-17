@@ -26,10 +26,6 @@ const api = globalThis.browser || globalThis.chrome;
 document.documentElement.dataset.fastmailCustomHost = 'extension';
 
 const EARLY_KEY = 'fastmail-custom-early';
-const MODE_KEY = 'fastmail-custom';
-// What it was called before the rename; the page script migrates it, but this
-// runs first and would otherwise read nothing on the load that migrates it
-const LEGACY_MODE_KEY = 'custom-inbox-mode';
 const STYLE_ID = 'fastmail-custom-style';
 const HIDE_CLASS = 'custom-hideInboxLabel';
 
@@ -68,12 +64,8 @@ if (early.css) {
     document.documentElement.appendChild(style);
 }
 
-// The chip rules only bite while the class is set, and the class only belongs
-// there with the mode on
-const storedMode = () => { const v = read(MODE_KEY); return v === null ? read(LEGACY_MODE_KEY) : v; };
-
-const shouldHide = storedMode() !== '0' &&
-    !!early.hide && early.hide[urlKey()] === true;
+// The chip rules only bite while the class is set
+const shouldHide = !!early.hide && early.hide[urlKey()] === true;
 
 // On <html>, which also means there is nothing to wait for: at document_start
 // <body> may not exist yet, but the document element always does.

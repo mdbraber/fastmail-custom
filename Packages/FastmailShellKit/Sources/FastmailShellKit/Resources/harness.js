@@ -731,8 +731,7 @@
     function badgeFromScript() {
         var api = window.fastmailCustom;
         var fm = window.FastMail;
-        if (!api || typeof api.isOn !== 'function' || !api.isOn() ||
-            typeof api.countFor !== 'function') return null;
+        if (!api || typeof api.countFor !== 'function') return null;
         if (!fm || !fm.store || !fm.classes || !fm.classes.Mailbox) return null;
         try {
             var inboxes = fm.store.getAll(fm.classes.Mailbox).filter(function (mailbox) {

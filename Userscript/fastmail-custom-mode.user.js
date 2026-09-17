@@ -51,11 +51,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'
     ];
 
-    // Where the on/off state is remembered across reloads
-    const STORAGE_KEY = 'fastmail-custom';
-    // What it was called before the mode was renamed, read once so a mode
-    // switched off stays off.
-    const LEGACY_STORAGE_KEY = 'custom-inbox-mode';
     // Set on <body> while the Inbox chip should be hidden on message rows
     const HIDE_INBOX_LABEL_CLASS = 'custom-hideInboxLabel';
     // Goes on the sidebar row that opens a run of a different kind, so the line
@@ -603,14 +598,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * ----------------------------------------------------------------
-     * State
-     * ----------------------------------------------------------------
-     */
-
-    let modeIsOn = false;
-
-    /*
-     * ----------------------------------------------------------------
      * General helper functions
      * ----------------------------------------------------------------
      */
@@ -1050,7 +1037,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const countFor = (mailbox) => {
-        if (settings.filteredLabelCounts && modeIsOn && isProject(mailbox)) {
+        if (settings.filteredLabelCounts && isProject(mailbox)) {
             const known = countKnown(countQueryFor(mailbox));
             if (known !== null) return known;
         }
@@ -1146,8 +1133,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         (mailbox.get('role') === 'inbox' || isTriage(mailbox) || isProject(mailbox));
 
     const mailboxSummaryText = () => {
-        if (!modeIsOn) return null;
-
         const mailController = controller();
         if (mailController.get('search')) return null;
 
@@ -1175,7 +1160,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // Whether ensureMailboxTitle is the one carrying the name and count
     // right now, the same three conditions it gates on itself.
     const mailboxTitleActive = () =>
-        modeIsOn && settings.showMailboxTitle &&
+        settings.showMailboxTitle &&
         !isPhoneLayout() && !isTabletLayout();
 
     // The bold label is only there to recognise the row the first time;
@@ -1207,8 +1192,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // own subtitle ("Personal • In Inbox"), and what is missing there is how
     // many the narrowed list actually holds.
     const mailboxFilteredCount = () => {
-        if (!modeIsOn) return null;
-
         const mailController = controller();
         if (mailController.get('search') || !mailController.get('mailboxFilter')) {
             return null;
@@ -1242,7 +1225,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // app draws its title in the same .v-Page-title, and the mail
     // controller keeps its mailbox while Contacts or Files is showing.
     const nativeMailboxTitleActive = () =>
-        modeIsOn && settings.showMailboxTitle &&
+        settings.showMailboxTitle &&
         (isPhoneLayout() || isTabletLayout()) &&
         FastMail.router.get('app') === 'mail';
 
@@ -1513,7 +1496,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     // Triage and the projects show their totals; a helper label keeps whatever Fastmail draws
-    const managesBadge = (mailbox) => modeIsOn && !!mailbox &&
+    const managesBadge = (mailbox) => !!mailbox &&
         (mailbox.get('role') === 'inbox' || isTriage(mailbox) || isProject(mailbox));
 
     // Wrap the two places that read badgeCount when painting a row:
@@ -1721,8 +1704,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const ROW_COLOUR_RULES = rowColourRules(PAGE_BG, '');
 
     const labelColourRules = () => {
-        // The colours are part of the mode, not of Fastmail
-        if (!settings.labelColours || !modeIsOn) return [];
+        if (!settings.labelColours) return [];
 
         const rules = ROW_COLOUR_RULES.slice();
 
@@ -1947,8 +1929,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // The fallback panel's own styles, added once by ensureSettingsPageStyles
     // rather than run through updateStyles: the plain panel can be opened
-    // with the mode off (openFallbackSettings does not check it) and before
-    // mail has ever loaded, so these rules must not wait on either.
+    // before mail has ever loaded, so these rules must not wait on it.
     const FALLBACK_PANEL_RULES = [
         '#fastmail-custom-fallback-settings {' +
         ' position: fixed; inset: 0; z-index: 2147483000;' +
@@ -1977,8 +1958,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // stylesheet has no class that dims a label and hint along with it; half
     // is what its own disabled menu entries use. Added once by
     // ensureSettingsPageStyles, alongside the fallback panel's own rules,
-    // for the same reason: the page opens with the mode off too, and before
-    // mail has ever loaded.
+    // for the same reason: the page opens before mail has ever loaded too.
     const SUB_OPTION_DIMMED = 'fastmail-custom-dimmed';
     const SUB_OPTION_RULES = ['.' + SUB_OPTION_DIMMED + ' { opacity: 0.5; }'];
 
@@ -2144,7 +2124,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const inboxOnly = isInboxSearch() ||
             (!!mailbox && (isTriage(mailbox) || isProject(mailbox)));
 
-        const hide = modeIsOn && settings.hideInboxLabel && inboxOnly;
+        const hide = settings.hideInboxLabel && inboxOnly;
 
         // On <html>, not <body>. Fastmail rewrites body.className wholesale
         // when its root view redraws; that is how is-kbmode comes and goes,
@@ -2485,7 +2465,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const modeGroupingIsActive = () => {
-        if (!modeIsOn || !sortNamesModeGrouping()) return null;
+        if (!sortNamesModeGrouping()) return null;
         return groupingFor(currentGroupingId(), controller().get('mailbox'));
     };
 
@@ -3105,11 +3085,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      *
      * adoptList returns early when no grouping of the mode's own is in
      * force, but the drift this guards against happens under Fastmail's own
-     * groupings too, so the watch is attached separately and unconditionally,
-     * unlike adoptList, rather than gated on modeIsOn. With the mode off and
-     * a mode grouping still named in the sort, stock Fastmail draws nothing
-     * for it, so there is no stock behaviour for the mode being off to fall
-     * back to, and the watch has to keep running to catch the same drift.
+     * groupings too, so the watch is attached separately, unlike adoptList.
      */
     const watchGroupCounts = () => {
         const list = controller().get('mailboxMessageList');
@@ -3299,7 +3275,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * left exactly as it is.
      */
     const applyStickyFilter = () => {
-        if (!modeIsOn || !settings.stickyInboxFilter) return;
+        if (!settings.stickyInboxFilter) return;
 
         const mailController = controller();
         if (mailController.get('search')) return;
@@ -3892,7 +3868,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         const wrapped = function () {
             const names = original.apply(this, arguments);
-            if (!modeIsOn) return names;
 
             try {
                 return arrangeActions(names, this);
@@ -3962,8 +3937,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
-    // The mode being switched off has to reach the bar: the wrapper hands
-    // back Fastmail's own answer then, but only the next time it is asked.
+    // A changed setting has to reach the bar, but the wrapper only answers
+    // again the next time it is asked.
     const refreshOwnedConfigs = () => {
         toolbarsOnScreen().forEach((toolbar) => {
             if (!toolbar.customOwnsConfig) return;
@@ -4075,7 +4050,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // and the message stays where it was. A row that took the drop and
         // then did nothing would look like a bug.
         proto.willAcceptDrag = function () {
-            if (modeIsOn && settings.dragAdditive && isRootLabel(this.get('content'))) {
+            if (settings.dragAdditive && isRootLabel(this.get('content'))) {
                 return false;
             }
 
@@ -4083,7 +4058,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         };
 
         proto.drop = function (drag) {
-            if (!modeIsOn || !settings.dragAdditive) return original.apply(this, arguments);
+            if (!settings.dragAdditive) return original.apply(this, arguments);
 
             const mailbox = this.get('content');
             if (!mailbox.get('mayAddItems')) return;
@@ -4301,7 +4276,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         menuController.customAdvance = takeAdvance();
 
         menuController.customMenu = menu;
-        menuController.customLabels = modeIsOn;
+        menuController.customLabels = true;
         // Opened by the Keep verb for a multi-selection, this menu files: a
         // hold label commits like a project. Opened from the L key it does not.
         menuController.customFiling = files;
@@ -4451,7 +4426,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const fileSendersIntoGroup = (mailbox, keys) => {
-        if (!modeIsOn || !mailbox || !wantsContactGroup(mailbox)) return;
+        if (!mailbox || !wantsContactGroup(mailbox)) return;
 
         try {
             const accountId = mailbox.get('accountId');
@@ -4542,7 +4517,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const addSendersToContacts = (keys) => {
-        if (!modeIsOn || !settings.keepAddsContact) return;
+        if (!settings.keepAddsContact) return;
 
         try {
             const seen = new Set();
@@ -4925,7 +4900,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // translation-proof and independent of Fastmail's own wording, the same
     // way boundToGroupBy tells the Group menu apart from any other.
     const addSnoozePresets = (options) => {
-        if (!modeIsOn) return;
         if (options.some(option => option && option.customSnoozePreset)) return;
 
         const custom = snoozeMenuCustomOption(options);
@@ -5011,7 +4985,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             if (typeof original !== 'function') return;
 
             actions[verb] = function (storeKeys) {
-                if (!modeIsOn || applyingLabelRules) {
+                if (applyingLabelRules) {
                     return original.apply(this, arguments);
                 }
 
@@ -5284,8 +5258,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * the list to the next one carrying Triage, stepping over any already
      * filed, and back to the list when none is left rather than opening a
      * filed one; and with nothing selected there, since an emptied queue
-     * should look empty. Only in the Inbox with the mode on, the triage
-     * surface.
+     * should look empty. Only in the Inbox, the triage surface.
      */
     // The same conversation however the two records were reached: the list
     // holds a thread's top message, the verb may hold another of its messages.
@@ -5300,7 +5273,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // The two lists a decision is made in: the Inbox and the triage label's
     // own view.
     const onTriageSurface = () => {
-        if (!modeIsOn) return false;
         const mailbox = controller().get('mailbox');
         return !!mailbox && !controller().get('search') &&
             (mailbox.get('role') === 'inbox' || isTriage(mailbox));
@@ -6266,7 +6238,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // sub-setting; the two are otherwise independent, each applied on its
     // own rather than one following the other.
     const applyFloatingNav = () => {
-        const message = modeIsOn ? openMessage() : null;
+        const message = openMessage();
         const onMessage = !!message && messageIsCurrentView(message) &&
             FastMail.router.get('app') === 'mail';
         const onPhoneMessage = onMessage && isPhoneLayout();
@@ -6364,7 +6336,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             undoGroupAdds();
 
             const result = original.apply(this, arguments);
-            if (modeIsOn && back) goToUrl(back);
+            if (back) goToUrl(back);
             return result;
         };
 
@@ -6466,13 +6438,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // bracket keys and Fastmail's contextual button all ask for,
                 // and on a project label it is not what any of them mean: the
                 // label is the queue, so leaving it is archiving.
-                if (verb === 'remove' && modeIsOn && !removingLabelOnPurpose &&
+                if (verb === 'remove' && !removingLabelOnPurpose &&
                         mailbox && typeof mailbox.get === 'function' &&
                         mailbox.get('role') !== 'inbox' && isProject(mailbox)) {
                     return this.archive(storeKeys);
                 }
 
-                const archiving = modeIsOn && isArchiving(verb, arguments);
+                const archiving = isArchiving(verb, arguments);
 
                 if (!archiving) {
                     const plain = original.apply(this, arguments);
@@ -6622,7 +6594,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return handler;
     };
 
-    const ourMoveWanted = () => modeIsOn && settings.labelsShortcut;
+    const ourMoveWanted = () => settings.labelsShortcut;
 
     // v is keep: on a filed selection it takes Triage off directly, and only
     // an unfiled one opens the picker; the same narrowed menu, opened with
@@ -6711,7 +6683,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         document.addEventListener('pointerdown', (event) => {
             cancel();
-            if (!modeIsOn || !archiveButtonUnder(event.target)) return;
+            if (!archiveButtonUnder(event.target)) return;
 
             from = { x: event.clientX, y: event.clientY };
             timer = setTimeout(() => {
@@ -6772,7 +6744,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const ARCHIVE_ALT_KEY = 'h';
 
     // Fastmail's own pin key, claimed so that pinning goes through the mode's
-    // verb while the mode is on.
+    // verb.
     const PIN_KEY = 's';
 
     // Registrations made before the patch below was installed keep the stock
@@ -6793,7 +6765,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // The verb keys the mode owns outright. Fastmail's own registrations, the
     // list's star on s, the conversation view's expandAll on Shift-E, land
-    // underneath and answer again the moment the mode is off.
+    // underneath and stay there unused.
     const claimedHandlers = {};
 
     // key -> verb, filled by reclaimKeys from the key settings; the handlers
@@ -6804,8 +6776,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const wantedClaims = () => {
         const wanted = {
             'Shift-V': () => openLabelPicker(),
-            // Archive into a hold label. Fastmail's expandAll sits underneath
-            // on this key and answers again the moment the mode is off.
+            // Archive into a hold label, over Fastmail's expandAll.
             'Shift-E': () => openArchiveIntoPicker(),
 
             // The sidebar, on the shifted pair of the keys that walk a list.
@@ -6850,20 +6821,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         const claimKey = (key) => {
             const handler = {
-                go: (event) => {
-                    if (modeIsOn) return claimedRun[key](event);
-
-                    // Mode off: behave as if we were not here; hand the key
-                    // to whatever Fastmail has registered underneath
-                    const list = kb._shortcuts[key] || [];
-                    for (let i = list.length - 1; i >= 0; i -= 1) {
-                        const entry = list[i];
-                        if (entry[0] !== handler) {
-                            return entry[0][entry[1]](event);
-                        }
-                    }
-                    return undefined;
-                }
+                go: (event) => claimedRun[key](event)
             };
 
             claimedHandlers[key] = handler;
@@ -7443,59 +7401,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     let refreshTimer = null;
 
     const scheduleRefresh = () => {
-        if (!modeIsOn || refreshTimer) return;
+        if (refreshTimer) return;
 
         refreshTimer = setTimeout(() => {
             refreshTimer = null;
             refresh();
         }, 100);
-    };
-
-    const setMode = (on) => {
-        modeIsOn = !!on;
-
-        try {
-            localStorage.setItem(STORAGE_KEY, modeIsOn ? '1' : '0');
-        } catch (error) {
-            reportFault('could not persist the mode', error);
-        }
-
-        // Nothing reads the counting queries with the mode off, so they stop
-        // running until it comes back on
-        if (!modeIsOn) forgetInboxCounts();
-
-        // The colour rules are only emitted while the mode is on
-        updateStyles();
-        // The bar decides what it holds from a list it caches; switching the
-        // mode changes the answer, so the list has to be asked again
-        refreshOwnedConfigs();
-        refresh();
-        // The mode going off has to put the list back to ungrouped, and the
-        // mode coming back on has to pick the clock back up if a grouping
-        // is already sitting in the sort.
-        refreshGroupings();
-        scheduleMidnight();
-        applyStickyFilter();
-        updateFloatingNav();
-    };
-
-    const toggleMode = () => setMode(!modeIsOn);
-
-    // On by default: the mode is meant to be the normal state, with the button
-    // there for the times you want out of it
-    const storedMode = () => {
-        try {
-            let stored = localStorage.getItem(STORAGE_KEY);
-            if (stored === null) {
-                stored = localStorage.getItem(LEGACY_STORAGE_KEY);
-                if (stored !== null) localStorage.setItem(STORAGE_KEY, stored);
-            }
-            localStorage.removeItem(LEGACY_STORAGE_KEY);
-            localStorage.removeItem(LEGACY_STORAGE_KEY + '-early');
-            return stored === null ? true : stored === '1';
-        } catch (error) {
-            return true;
-        }
     };
 
     /*
@@ -7915,11 +7826,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // which is the end of that section; the entry that was last gives up the
     // mark that says so.
     const addGroupings = (options) => {
-        // With the mode off this stays out of the menu entirely, so Fastmail's
-        // own menu is what opens; the toggle is how the user gets back to
-        // stock behaviour, and every divergence from it in this file honours
-        // that.
-        if (!modeIsOn) return;
         if (options.some(option => option && option.customGroupingOption)) return;
         if (!isGroupMenu(options)) return;
 
@@ -9334,7 +9240,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // before the mail controller a plain start() waits for: a cold reload
     // straight onto this page must not depend on mail ever having loaded.
     // updateStyles is left to start(): inboxChipRules needs the mailbox
-    // store, and labelColourRules needs modeIsOn, neither up yet this early,
+    // store, which is not up yet this early,
     // and rememberStyles would save an incomplete head start for the next
     // launch's own early load. The settings page's own rules need neither,
     // so they go up here instead, through ensureSettingsPageStyles.
@@ -10693,8 +10599,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         addObservers();
         watchMailboxListTitles();
 
-        setMode(storedMode());
+        // The bar's list and the groupings are cached, and were worked out
+        // before the observers above could see anything
+        updateStyles();
+        refreshOwnedConfigs();
+        refresh();
+        refreshGroupings();
         scheduleMidnight();
+        applyStickyFilter();
+        updateFloatingNav();
         adoptList();
         watchGroupCounts();
         watchMailboxSummaryList();
@@ -10702,9 +10615,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         // Handy from the console, and how the counts can be checked by hand
         window.fastmailCustom = {
-            isOn: () => modeIsOn,
-            setMode,
-            toggleMode,
             refresh,
             countFor,
             sourcesAboveLabels,
@@ -10746,7 +10656,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             }
         };
 
-        console.log(`Fastmail Custom ${modeIsOn ? 'on' : 'off'}; window.fastmailCustom.toggleMode() to switch it`);
+        console.log('Fastmail Custom running');
     };
 
     // What startSettingsPage needs, and no more; checked the same defensive

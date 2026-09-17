@@ -79,7 +79,7 @@
     }
 
     lines.push('list=' + mailbox +
-        '  mode=' + (mode ? (mode.isOn() ? 'on' : 'off') : 'not running') +
+        '  script=' + (mode ? 'running' : 'not running') +
         '  swapArchiveExpand=' + settings.swapArchiveExpand +
         '  excludedLabels=' + JSON.stringify(settings.excludedLabels) +
         '  triageLabel=' + JSON.stringify(settings.triageLabel));

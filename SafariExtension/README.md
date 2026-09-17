@@ -145,10 +145,10 @@ Extensions. Each Fastmail web app (`mdbraber.com.app` and friends) keeps its
 With a Fastmail tab open:
 
 ```js
-window.fastmailCustom.isOn()
+!!window.fastmailCustom
 ```
 
-The console also logs `Fastmail Custom on` or `off` on load. If the CSP
+The console also logs `Fastmail Custom running` on load. If the CSP
 error still appears, that is the Userscripts copy of the script failing; disable
 it there, since this extension now delivers it.
 
