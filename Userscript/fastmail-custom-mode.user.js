@@ -341,7 +341,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'prioritiesAsSort', group: 'grouping',
             title: 'Sort priorities instead of adding groups',
-            hint: 'A priority that names one flag, like is:unread, is:pinned or keyword:…, sorts conversations within each group instead of adding a group ahead of each one. Fastmail’s server refuses more than 32 groups and then shows an empty list, which this avoids. Any other priority still adds groups, and those come first. is:unread counts only unread messages in the mailbox shown, and the row then shows the unread message’s date.'
+            hint: 'A priority that names one flag, like is:unread, is:pinned or keyword:…, sorts conversations within each group instead of adding a group ahead of each one. Fastmail’s server refuses more than 32 groups and then shows an empty list, which this avoids. Any other priority still adds groups, and those come first. is:unread counts only unread messages in the mailbox shown, and the row then shows the unread message’s date. Switching this can change which groups are folded, since folds are remembered by each group’s position.'
         },
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
