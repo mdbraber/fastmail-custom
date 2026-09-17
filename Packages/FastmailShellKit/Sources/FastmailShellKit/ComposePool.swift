@@ -693,8 +693,9 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     ///
     /// Its bridge carries only what a compose window has a say in:
     /// notifications and their permission, Fastmail's menus and printing,
-    /// and bringing another of its windows forward. The badge, the Shortcuts
-    /// actions, the theme and the settings stay the mailbox window's.
+    /// bringing another of its windows forward, and closing its own. The
+    /// badge, the Shortcuts actions, the theme and the settings stay the
+    /// mailbox window's.
     static func useHarness(in controller: WKUserContentController) {
         let host = composeHost
         guard !host.isEmpty, let harness = BundleResourceLoader().string(named: "harness.js") else { return }
@@ -733,7 +734,9 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
             onPrintToPDF: { view in
                 if let view { await PagePrinter.exportPDF(view, suggestedName: view.title) }
             },
-            onFocusWindow: { await WindowFocus.focus(named: $0) }
+            onFocusWindow: { await WindowFocus.focus(named: $0) },
+            // Through the close button, so a pool window goes back to the pool
+            onCloseWindow: { view in view?.window?.performClose(nil) }
         )
     }
 

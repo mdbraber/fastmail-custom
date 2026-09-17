@@ -508,3 +508,18 @@ private func replyObject(_ reply: BridgeReply) throws -> [String: Any] {
     #expect(missing.value == "false")
     #expect(nameless.error != nil)
 }
+
+// Fastmail closes a compose window itself once its draft is gone; WebKit
+// ignores the page's window.close(), so the app is asked instead.
+@Test @MainActor func closeWindowIsPassedToTheApp() async {
+    var closed = 0
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onCloseWindow: { _ in closed += 1 }
+    )
+    let reply = await bridge.handle(body: ["action": "closeWindow", "payload": [:]])
+    #expect(closed == 1)
+    #expect(reply.error == nil)
+}

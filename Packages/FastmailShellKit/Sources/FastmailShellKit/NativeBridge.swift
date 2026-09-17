@@ -53,6 +53,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     /// Brings forward the window whose page is named this, as Electron does
     /// for Fastmail's desktop app; answers whether there was one.
     private let onFocusWindow: @MainActor (String) async -> Bool
+    /// The page closing its own window, which WebKit leaves undone.
+    private let onCloseWindow: @MainActor (WKWebView?) -> Void
 
     public init(
         expectedHost: String,
@@ -80,7 +82,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onMenu: @escaping @MainActor ([String: Any], WKWebView?) -> Void = { _, _ in },
         onPrint: @escaping @MainActor (WKWebView?) async -> Void = { _ in },
         onPrintToPDF: @escaping @MainActor (WKWebView?) async -> Void = { _ in },
-        onFocusWindow: @escaping @MainActor (String) async -> Bool = { _ in false }
+        onFocusWindow: @escaping @MainActor (String) async -> Bool = { _ in false },
+        onCloseWindow: @escaping @MainActor (WKWebView?) -> Void = { _ in }
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
@@ -108,6 +111,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onPrint = onPrint
         self.onPrintToPDF = onPrintToPDF
         self.onFocusWindow = onFocusWindow
+        self.onCloseWindow = onCloseWindow
     }
 
     static func rect(from values: [Double]) -> CGRect? {
@@ -299,6 +303,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             }
             let found = await onFocusWindow(name)
             return BridgeReply(value: found ? "true" : "false", error: nil)
+        case "closeWindow":
+            onCloseWindow(webView)
+            return BridgeReply(value: nil, error: nil)
         default:
             return BridgeReply(value: nil, error: "unknown action: \(action)")
         }

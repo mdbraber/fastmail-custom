@@ -1172,6 +1172,15 @@
             return null;
         };
 
+        // Fastmail closes a compose window of its own accord, once its draft
+        // is discarded, closed or deleted elsewhere, with window.close(),
+        // which WebKit ignores for a window no script opened.
+        if (window.__fmshellComposeWindow) {
+            window.close = function () {
+                post('closeWindow', {});
+            };
+        }
+
         var menuActivate = null;
         window.native.menuActivate = function (action) {
             if (!menuActivate || typeof action !== 'string') return false;
