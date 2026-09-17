@@ -1,5 +1,8 @@
 import Foundation
 import Testing
+#if os(macOS)
+import AppKit
+#endif
 @testable import FastmailShellKit
 
 @Test func aNotificationParsesFromTheBridgePayload() throws {
@@ -41,7 +44,57 @@ import Testing
     #expect(recent.isRepeat("M1", now: start.addingTimeInterval(RecentNotificationIds.window + 1)) == false)
 }
 
+// A 1×1 PNG
+private let pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
+@Test func aNotificationCarriesTheSendersPictureFromItsIcon() throws {
+    let notification = try #require(MailNotification.parse([
+        "id": "M1", "title": "Ada", "icon": "data:image/png;base64," + pngBase64
+    ]))
+    let image = try #require(notification.image)
+    #expect(image.mediaType == "image/png")
+    #expect(image.data == Data(base64Encoded: pngBase64))
+}
+
+@Test func onlyASmallBase64ImageIsTakenAsAPicture() throws {
+    let refused = [
+        "https://example.com/avatar.png",
+        "/static/favicons/FM-Notification-Icon-196.png",
+        "data:text/html;base64,PGI+aGk8L2I+",
+        "data:image/png,not-base64",
+        "data:image/png;base64,",
+        "data:image/png;base64," + String(repeating: "A", count: NotificationImage.maxBytes / 3 * 4 + 8)
+    ]
+    for icon in refused {
+        let notification = try #require(MailNotification.parse(["id": "M1", "title": "Ada", "icon": icon]))
+        #expect(notification.image == nil, "\(icon.prefix(40))")
+    }
+    #expect(NotificationImage.parse(dataURL: "data:IMAGE/SVG+XML;BASE64,PHN2Zy8+")?.mediaType == "image/svg+xml")
+}
+
 #if os(macOS)
+@Test func aPictureBecomesAFileANotificationCanAttach() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let png = try #require(NotificationImage.parse(dataURL: "data:image/png;base64," + pngBase64))
+    let pngFile = try #require(NotificationImageFile.write(png, into: directory))
+    #expect(pngFile.pathExtension == "png")
+    #expect(try Data(contentsOf: pngFile) == png.data)
+
+    // A BIMI logo is SVG, which an attachment does not take: drawn as a PNG
+    let svg = #"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><rect width="100" height="50" fill="red"/></svg>"#
+    let logo = NotificationImage(mediaType: "image/svg+xml", data: Data(svg.utf8))
+    let logoFile = try #require(NotificationImageFile.write(logo, into: directory))
+    #expect(logoFile.pathExtension == "png")
+    let drawn = try #require(NSBitmapImageRep(data: try Data(contentsOf: logoFile)))
+    #expect(drawn.pixelsWide == 212)
+    #expect(drawn.pixelsHigh == 106)
+
+    // Not an image, whatever it says
+    #expect(NotificationImageFile.write(NotificationImage(mediaType: "image/png", data: Data("hello".utf8)), into: directory) == nil)
+}
+
 @Test func aNotificationIsNotShownWhileTheAppIsFrontmost() {
     #expect(NotificationPresenter.shouldPresent(appActive: true) == false)
     #expect(NotificationPresenter.shouldPresent(appActive: false) == true)

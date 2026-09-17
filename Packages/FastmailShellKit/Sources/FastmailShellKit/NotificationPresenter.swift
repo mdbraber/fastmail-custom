@@ -86,6 +86,14 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
         if notification.sound { content.sound = .default }
         if let threadId = notification.threadId { content.threadIdentifier = threadId }
         content.userInfo = ["data": notification.dataJSON]
+        if let image = notification.image, let file = NotificationImageFile.write(image) {
+            // Taken on, the file is moved into the notification's own store
+            if let attachment = try? UNNotificationAttachment(identifier: "sender", url: file, options: nil) {
+                content.attachments = [attachment]
+            } else {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
 
         let request = UNNotificationRequest(identifier: notification.id, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in

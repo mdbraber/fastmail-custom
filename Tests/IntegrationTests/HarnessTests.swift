@@ -227,6 +227,8 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(shown["body"] as? String, "Lunch")
         XCTAssertEqual(shown["threadId"] as? String, "T-M2")
         XCTAssertEqual(shown["sound"] as? Bool, true)
+        // No Fastmail page to look a photo up in
+        XCTAssertEqual(shown["icon"] as? String, "")
         let data = try XCTUnwrap((shown["data"] as? String)?.data(using: .utf8))
         let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual((json["email"] as? [String: Any])?["id"] as? String, "M2")
@@ -269,6 +271,75 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(titles["M5"], "evil@example.com")
         XCTAssertEqual(titles["M6"], "evil@example.com")
         XCTAssertEqual(titles["M7"], "Fastmail Support")
+    }
+
+    private static let pngDataURL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
+    // Fastmail's service worker hands the sender's picture over already read
+    // into a data: URL; nothing else is passed on as one
+    func testFastmailsPictureIsPassedOnOnlyAsImageData() async throws {
+        webView = try await electronWebView()
+        _ = try await evaluate(webView, """
+        window.electron.showNotification({title: 'Ada', body: 'Hi', icon: '\(Self.pngDataURL)'},
+            {'@type': 'EmailPush', userId: 'u1', email: {id: 'P1', threadId: 'T1'}});
+        window.electron.showNotification({title: 'Bob', body: 'Hi', icon: '/static/favicons/FM-Notification-Icon-196.png'},
+            {'@type': 'EmailPush', userId: 'u1', email: {id: 'P2', threadId: 'T2'}});
+        true;
+        """)
+        try await waitUntil { self.notifications().count >= 2 }
+        let icons = Dictionary(uniqueKeysWithValues: notifications().compactMap { shown in
+            (shown["id"] as? String).map { ($0, shown["icon"] as? String ?? "missing") }
+        })
+        XCTAssertEqual(icons["P1"], Self.pngDataURL)
+        XCTAssertEqual(icons["P2"], "")
+    }
+
+    // Fastmail's service worker drops the notification for exactly the
+    // senders whose contact has a photo, so the fallback looks the photo up:
+    // default address book first, the address itself on the card, the photo's
+    // type from mediaType, at the size the service worker asks for
+    func testTheFallbackCarriesTheSendersContactPhoto() async throws {
+        webView = try await electronWebView()
+        _ = try await evaluate(webView, """
+        window.__calls = [];
+        window.FastMail = {
+            auth: {
+                get: function (key) {
+                    return {
+                        accounts: {
+                            A2: {accountCapabilities: {'urn:ietf:params:jmap:contacts': {}}},
+                            A3: {accountCapabilities: {}},
+                            A1: {accountCapabilities: {'urn:ietf:params:jmap:contacts': {}}}
+                        },
+                        primaryAccounts: {'urn:ietf:params:jmap:contacts': 'A1'},
+                        downloadUrl: 'https://download.test/{accountId}/{blobId}/{name}?type={type}'
+                    }[key];
+                },
+                signUrl: function (url) { window.__signed = url; return '\(Self.pngDataURL)'; }
+            },
+            callJMAPMethod: function (name, args) {
+                window.__calls.push(name + ' ' + args.accountId);
+                if (name === 'ContactCard/query') {
+                    return Promise.resolve({ids: args.accountId === 'A2' ? ['C1', 'C2'] : []});
+                }
+                return Promise.resolve({list: [
+                    {id: 'C1', kind: 'individual', emails: {e: {address: 'bob+later@example.com'}},
+                        media: {p: {kind: 'photo', blobId: 'WRONG', mediaType: 'image/jpeg'}}},
+                    {id: 'C2', kind: 'individual', emails: {e: {address: ' Bob@Example.com '}},
+                        media: {p: {kind: 'photo', blobId: 'B1', mediaType: 'image/jpeg'}}}
+                ]});
+            }
+        };
+        true;
+        """)
+        try await broadcastEmailPush(webView, id: "P3", name: "Bob", address: "bob@example.com", subject: "Photo")
+        try await waitUntil(timeout: 15) { self.notifications().contains { $0["id"] as? String == "P3" } }
+        let shown = try XCTUnwrap(notifications().first { $0["id"] as? String == "P3" })
+        XCTAssertEqual(shown["icon"] as? String, Self.pngDataURL)
+        let signed = try await evaluate(webView, "window.__signed") as? String
+        XCTAssertEqual(signed, "https://download.test/A2/B1/image.jpeg?type=image%2Fjpeg&max-width=212&max-height=212")
+        let calls = try await evaluate(webView, "window.__calls.join(', ')") as? String
+        XCTAssertEqual(calls, "ContactCard/query A1, ContactCard/query A2, ContactCard/get A2")
     }
 
     // Fastmail's Mail preferences page asks whether it is the default email

@@ -9,14 +9,19 @@ public struct MailNotification: Equatable, Sendable {
     public let sound: Bool
     public let threadId: String?
     public let dataJSON: String
+    /// The sender's picture Fastmail's service worker found, or the contact
+    /// photo the page script looked up for its fallback; shown beside the text.
+    public let image: NotificationImage?
 
-    public init(id: String, title: String, body: String, sound: Bool, threadId: String?, dataJSON: String) {
+    public init(id: String, title: String, body: String, sound: Bool, threadId: String?, dataJSON: String,
+                image: NotificationImage? = nil) {
         self.id = id
         self.title = title
         self.body = body
         self.sound = sound
         self.threadId = threadId
         self.dataJSON = dataJSON
+        self.image = image
     }
 
     public static func parse(_ payload: [String: Any]) -> MailNotification? {
@@ -31,8 +36,34 @@ public struct MailNotification: Equatable, Sendable {
             body: payload["body"] as? String ?? "",
             sound: payload["sound"] as? Bool ?? false,
             threadId: threadId,
-            dataJSON: payload["data"] as? String ?? "{}"
+            dataJSON: payload["data"] as? String ?? "{}",
+            image: (payload["icon"] as? String).flatMap(NotificationImage.parse(dataURL:))
         )
+    }
+}
+
+/// A picture handed over as a data: URL, the form Fastmail's service worker
+/// already gives its notification icon. Only image types, only base64, and
+/// only small: a contact photo is asked for at 212 pixels, some 20 KB.
+public struct NotificationImage: Equatable, Sendable {
+    static let maxBytes = 2 * 1024 * 1024
+    static let mediaTypes: Set<String> = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"]
+
+    public let mediaType: String
+    public let data: Data
+
+    public static func parse(dataURL: String) -> NotificationImage? {
+        guard dataURL.hasPrefix("data:"), let comma = dataURL.firstIndex(of: ",") else { return nil }
+        let header = dataURL[dataURL.index(dataURL.startIndex, offsetBy: 5)..<comma].lowercased()
+        let parts = header.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let mediaType = parts.first, mediaTypes.contains(mediaType), parts.contains("base64") else { return nil }
+        let encoded = dataURL[dataURL.index(after: comma)...]
+        // Base64 runs a third longer than what it holds
+        guard encoded.count <= maxBytes / 3 * 4 + 4,
+              let data = Data(base64Encoded: String(encoded), options: .ignoreUnknownCharacters),
+              !data.isEmpty, data.count <= maxBytes
+        else { return nil }
+        return NotificationImage(mediaType: mediaType, data: data)
     }
 }
 

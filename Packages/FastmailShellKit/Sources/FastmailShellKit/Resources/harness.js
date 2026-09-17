@@ -1058,6 +1058,14 @@
             }
         };
 
+        // Fastmail's service worker hands its icon over already read into a
+        // data: URL: the sender's BIMI logo, contact photo, Gravatar or the
+        // logo for their domain. Only that form is passed on, and only while
+        // small; the app shows it beside the notification's text.
+        var imageOf = function (icon) {
+            return typeof icon === 'string' && /^data:image\//i.test(icon) && icon.length < 2800000 ? icon : '';
+        };
+
         window.electron = {
             showNotification: function (payload, data) {
                 payload = payload || {};
@@ -1070,6 +1078,7 @@
                     body: String(payload.body || ''),
                     sound: false,
                     threadId: String((email && email.threadId) || data.threadId || ''),
+                    icon: imageOf(payload.icon),
                     data: jsonOf(data)
                 });
             },
@@ -1149,6 +1158,101 @@
             }
         };
 
+        /*
+         * The contact photo the service worker failed to read, looked up the
+         * way it looks: a contact card holding the sender's address and a
+         * photo, the default address book's account first, downloaded at the
+         * size it asks for. Contact search matches parts of addresses, so the
+         * address itself is checked on each card. Its photo's type is read
+         * from mediaType, where the service worker reads type. A lookup that
+         * fails or takes too long leaves the notification without a picture.
+         */
+        var PHOTO_TIMEOUT = 4000;
+        var CONTACTS = 'urn:ietf:params:jmap:contacts';
+
+        var photoOnCard = function (card, address) {
+            if (!card || card.kind === 'group') return null;
+            var emails = card.emails || {};
+            var hasAddress = Object.keys(emails).some(function (key) {
+                return String((emails[key] || {}).address || '').trim().toLowerCase() === address;
+            });
+            if (!hasAddress) return null;
+            var media = card.media || {};
+            var key = Object.keys(media).filter(function (each) {
+                return media[each] && media[each].kind === 'photo' && media[each].blobId;
+            })[0];
+            return key ? media[key] : null;
+        };
+
+        var contactPhotoOf = function (push) {
+            var from = (push.email.from && push.email.from[0]) || {};
+            var address = String(from.email || '').trim().toLowerCase();
+            var fastmail = window.FastMail;
+            var auth = fastmail && fastmail.auth;
+            if (!address || !auth || typeof auth.get !== 'function' || typeof auth.signUrl !== 'function' ||
+                    typeof fastmail.callJMAPMethod !== 'function') {
+                return Promise.resolve('');
+            }
+
+            var accounts = auth.get('accounts') || {};
+            var primary = (auth.get('primaryAccounts') || {})[CONTACTS];
+            var accountIds = Object.keys(accounts).filter(function (id) {
+                return !!((accounts[id] || {}).accountCapabilities || {})[CONTACTS];
+            }).sort(function (a, b) {
+                return (b === primary ? 1 : 0) - (a === primary ? 1 : 0);
+            });
+
+            var photoIn = function (accountId) {
+                return fastmail.callJMAPMethod('ContactCard/query', {
+                    accountId: accountId, filter: { email: address }, limit: 20
+                }).then(function (found) {
+                    if (!found || !found.ids || !found.ids.length) return null;
+                    return fastmail.callJMAPMethod('ContactCard/get', {
+                        accountId: accountId, ids: found.ids, properties: ['kind', 'emails', 'media']
+                    });
+                }).then(function (cards) {
+                    var photo = null;
+                    ((cards && cards.list) || []).some(function (card) {
+                        photo = photoOnCard(card, address);
+                        return !!photo;
+                    });
+                    return photo ? { accountId: accountId, photo: photo } : null;
+                });
+            };
+
+            var lookup = accountIds.reduce(function (previous, accountId) {
+                return previous.then(function (found) { return found || photoIn(accountId); });
+            }, Promise.resolve(null)).then(function (found) {
+                var template = String(auth.get('downloadUrl') || '');
+                if (!found || !template) return '';
+                var type = String(found.photo.mediaType || found.photo.type || 'image/jpeg');
+                var url = template
+                    .replace('{accountId}', encodeURIComponent(found.accountId))
+                    .replace('{blobId}', encodeURIComponent(found.photo.blobId))
+                    .replace('{type}', encodeURIComponent(type))
+                    .replace('{name}', encodeURIComponent(type.replace('/', '.')));
+                // Asked for inside the signed address: the signature covers
+                // the path only
+                url += (url.indexOf('?') === -1 ? '?' : '&') + 'max-width=212&max-height=212';
+                return fetch(auth.signUrl(url)).then(function (response) {
+                    return response.ok ? response.blob() : null;
+                }).then(function (blob) {
+                    if (!blob || !/^image\//.test(blob.type)) return '';
+                    return new Promise(function (resolve) {
+                        var reader = new FileReader();
+                        reader.onloadend = function () { resolve(imageOf(reader.result)); };
+                        reader.readAsDataURL(blob);
+                    });
+                });
+            }).catch(function () {
+                return '';
+            });
+
+            return Promise.race([lookup, new Promise(function (resolve) {
+                setTimeout(function () { resolve(''); }, PHOTO_TIMEOUT);
+            })]);
+        };
+
         try {
             // Held on to: a channel nothing refers to is collected, listener
             // and all, a few seconds after the page has loaded
@@ -1164,13 +1268,16 @@
 
                 setTimeout(function () {
                     if (!claimEmail(push)) return;
-                    queueNotification({
-                        id: String(email.id),
-                        title: fallbackTitle(push),
-                        body: String(email.subject || '') || 'New message',
-                        sound: mailSoundWanted(push.userId),
-                        threadId: String(email.threadId || ''),
-                        data: jsonOf(push)
+                    contactPhotoOf(push).then(function (photo) {
+                        queueNotification({
+                            id: String(email.id),
+                            title: fallbackTitle(push),
+                            body: String(email.subject || '') || 'New message',
+                            sound: mailSoundWanted(push.userId),
+                            threadId: String(email.threadId || ''),
+                            icon: photo,
+                            data: jsonOf(push)
+                        });
                     });
                 }, FALLBACK_DELAY);
             });
