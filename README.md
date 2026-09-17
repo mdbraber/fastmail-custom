@@ -5,8 +5,6 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 
 ## Features
 
-<img align="right" width="320" alt="All Fastmail Custom settings" src="docs/images/settings.png" />
-
 **Triage**
 
 - 🏷️ **Inbox triage**: quick add a label to inbox message or archive
@@ -55,6 +53,10 @@ I merged all my previously written Fastmail tweaks and ideas into this repo and 
 
 - 🤖 **Shortcuts, AppleScript and the menu bar**: get URL / Title or Markdown Link via AppleScript or Shortcuts.
   Also allow running custom JavaScript to fully customize your experience
+
+## Settings
+
+<img width="520" alt="All Fastmail Custom settings" src="docs/images/settings.png" />
 
 ## Repository
 
