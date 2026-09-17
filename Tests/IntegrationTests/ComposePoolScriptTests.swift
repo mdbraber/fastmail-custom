@@ -128,4 +128,53 @@ final class ComposePoolScriptTests: XCTestCase {
             "wc:hello:w2@https://app.fastmail.com/,wc:bye:w2,wc:hello:w2@https://app.fastmail.com/"
         )
     }
+
+    // Fastmail's own start-up check, word for word apart from names: with
+    // notifications on and permission "default" it asks, and on a refusal
+    // switches new-mail and calendar notifications off in localStorage,
+    // which every Fastmail window shares. A compose window must not ask.
+    private static let fastmailStartupCheck = """
+    localStorage.setItem('mail', 'inbox');
+    const prefs = { get: (key) => localStorage.getItem(key), set: (key, value) => localStorage.setItem(key, value) };
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default'
+        && prefs.get('mail') !== 'off') {
+        await new Promise((resolve) => Notification.requestPermission((answer) => {
+            if (answer !== 'granted') { prefs.set('mail', 'off'); }
+            resolve();
+        }));
+    }
+    return localStorage.getItem('mail');
+    """
+
+    private func loadPage(scripted: Bool) async throws {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        if scripted {
+            ComposeWindows.useScripts(pooled: true, in: configuration.userContentController)
+        }
+        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.loadHTMLString("<html><body></body></html>", baseURL: URL(string: "https://app.fastmail.com/")!)
+        try await waitUntil {
+            try await self.webView.evaluateJavaScript(
+                "document.readyState === 'complete' && location.host === 'app.fastmail.com'"
+            ) as? Bool == true
+        }
+    }
+
+    func testAComposeWindowLeavesFastmailsNotificationSettingAlone() async throws {
+        try await loadPage(scripted: true)
+        let setting = try await webView.callAsyncJavaScript(
+            Self.fastmailStartupCheck, arguments: [:], in: nil, contentWorld: .page
+        ) as? String
+        XCTAssertEqual(setting, "inbox")
+    }
+
+    // What the stand-in is there for: WebKit's own answers switch it off
+    func testWithoutTheStandInFastmailSwitchesNotificationsOff() async throws {
+        try await loadPage(scripted: false)
+        let setting = try await webView.callAsyncJavaScript(
+            Self.fastmailStartupCheck, arguments: [:], in: nil, contentWorld: .page
+        ) as? String
+        XCTAssertEqual(setting, "off")
+    }
 }
