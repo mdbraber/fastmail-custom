@@ -19,7 +19,8 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
 **Snoozing**
 
 - ⏰ **Snooze presets and reminders**: your own list of times on Fastmail's own Snooze
-  button, one whose time has passed greyed out rather than offered. A message you send comes back to the
+  button, one whose time has passed greyed out rather than offered, and its own groups for the Snoozed
+  folder, by when a conversation comes back. A message you send comes back to the
   Inbox, still in Sent, when nobody replies, at a time from a separate list of reminder presets; new messages
   and replies each have a default, changed per message with the Remind button beside Schedule send. The server
   component (see [Server/](Server/)) is only needed to take the reminder off once someone replies; without it

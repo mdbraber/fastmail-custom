@@ -124,6 +124,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // picker, always comes last and is not part of this setting.
         snoozePresets: 'Later today = +4h\nThis Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
             'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
+        // Groups for the Snoozed folder, by when a conversation comes back:
+        // the same block shape as `groupings`, with a horizon instead of a
+        // search (7d, tomorrow, 1m). Cumulative, first match wins, and
+        // whatever is further out falls into the last group. Offered in the
+        // Snoozed folder's Group menu, beside the ordinary presets.
+        snoozeGroups: 'by return date\n  Next 7 days = 7d\n  Next 30 days = 30d\n  Next 90 days = 90d',
         // The times compose's Remind button offers for a message to come
         // back if nobody replies, written the way snoozePresets are
         reminderPresets: 'Tomorrow = tomorrow @ 08:00\nIn 3 days = 3d @ 08:00\n' +
@@ -378,6 +384,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             key: 'reminderPresets', group: 'reminders', clearable: true, multiline: true,
             title: 'Reminder presets',
             hint: 'The times compose’s Remind button offers, beside Schedule send, for a message you send to come back to the Inbox, unread and still in Sent, if nobody replies. Written like snooze presets.'
+        },
+        {
+            key: 'snoozeGroups', group: 'snooze', clearable: true, multiline: true,
+            title: 'Snooze groups',
+            hint: 'Groups for the Snoozed folder, by when a conversation comes back, offered in its Group menu beside the ordinary presets. A name per line with a horizon (7d, tomorrow, 1m); each group takes what the ones above it did not, and anything further out goes in the last group.'
         },
         {
             key: 'remindNewMessages', group: 'reminders', clearable: true,
@@ -2413,6 +2424,49 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }], own.slice(at));
     };
 
+    /*
+     * Groups for the Snoozed folder, by when a conversation comes back.
+     *
+     * Fastmail groups a list on the server: the query carries a filter per
+     * group and the server answers with a count per group, which is what the
+     * list lays its headings out from. No filter can name a return date
+     * (snoozedBefore and its kind are refused, and a custom keyword cannot be
+     * grouped on), so these groups carry a filter nothing matches, leaving
+     * every row in the leftover group and in the order the Snoozed folder
+     * already has, by return date; and the counts are worked out here, from
+     * the rows, and handed to the list, which draws the rest itself.
+     */
+    const SNOOZE_PREFIX = 'snoozesplit:';
+
+    const NEVER_MATCHES = () => ({
+        operator: 'AND',
+        conditions: [{ hasKeyword: '$draft' }, { notKeyword: '$draft' }]
+    });
+
+    const snoozeGroupings = () => readGroupingBlocks(settings.snoozeGroups)
+        .filter(one => one.categories.length)
+        .map(one => Object.assign({}, one, { id: SNOOZE_PREFIX + one.name, snooze: true }));
+
+    const isSnoozeMailbox = (mailbox) => {
+        try {
+            return !!mailbox && mailbox.get('role') === 'snoozed';
+        } catch (error) {
+            return false;
+        }
+    };
+
+    // How far out a group reaches: a period counts from now, a day keyword
+    // reaches to the end of that day, so "tomorrow" takes all of tomorrow.
+    const snoozeHorizon = (now, query) => {
+        const text = String(query || '').trim();
+        const hours = snoozeHoursTarget(now, text);
+        if (hours) return hours;
+        if (SNOOZE_PERIOD.test(text)) return snoozeDateKeyword(now, text);
+        const day = snoozeDateKeyword(now, text);
+        day.setHours(23, 59, 59, 999);
+        return day;
+    };
+
     const legacyLabelsFolded = () => legacyLabelsIndex(0) === null;
 
     // The Inbox groups by the labels at the top level, which are nobody's
@@ -2480,6 +2534,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const presetFor = (id) => {
         if (!id) return null;
         if (id === LABELS_GROUPING) return presetForLegacyLabels();
+        if (id.indexOf(SNOOZE_PREFIX) === 0) {
+            return snoozeGroupings().filter(one => one.id === id)[0] || null;
+        }
         if (id.indexOf(SPLIT_PREFIX) !== 0) return null;
         return modeGroupings().filter(one => one.id === id)[0] || null;
     };
@@ -2508,7 +2565,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // had until something else recomputed it.
     const sortNamesModeGrouping = () => {
         const id = currentGroupingId();
-        return id === LABELS_GROUPING || id.indexOf(SPLIT_PREFIX) === 0;
+        return id === LABELS_GROUPING || id.indexOf(SPLIT_PREFIX) === 0 ||
+            id.indexOf(SNOOZE_PREFIX) === 0;
     };
 
     const modeGroupingIsActive = () => {
@@ -2566,6 +2624,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     const splitsFor = (mailController, original, definition) => {
+        if (definition.snooze) {
+            return {
+                categories: definition.categories.map(one => ({ name: one.name, filter: NEVER_MATCHES() })),
+                otherName: definition.otherName
+            };
+        }
         const searches = definition.categories.filter(one => !one.filter);
         const parsed = searches.length
             ? original.call(standInFor(mailController, {
@@ -3134,6 +3198,76 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * force, but the drift this guards against happens under Fastmail's own
      * groupings too, so the watch is attached separately, unlike adoptList.
      */
+    /*
+     * The counts a snooze grouping's headings are drawn from: how many rows
+     * come back within each horizon, taken from the rows themselves. The
+     * list is already in return order, so each group's rows are next to each
+     * other, and a row that reaches past the last horizon ends the count:
+     * everything after it is further out still, and falls in the last group.
+     * A row the list has not loaded ends it the same way, and the count
+     * settles as the rest arrive.
+     */
+    const snoozeCountsFor = (definition, list) => {
+        const now = new Date();
+        const edges = definition.categories.map(one => snoozeHorizon(now, one.query).getTime());
+        const counts = edges.map(() => 0);
+        const length = list.get('length') || 0;
+
+        for (let index = 0; index < length; index += 1) {
+            const record = list.getObjectAt(index);
+            if (!record || typeof record.get !== 'function') break;
+            const snoozed = record.get('snoozed');
+            const until = snoozed && snoozed.until ? new Date(snoozed.until).getTime() : null;
+            if (!until) break;
+            let at = -1;
+            for (let edge = 0; edge < edges.length; edge += 1) {
+                if (until <= edges[edge]) { at = edge; break; }
+            }
+            if (at === -1) break;
+            counts[at] += 1;
+        }
+
+        return counts;
+    };
+
+    let snoozeCountsTimer = null;
+
+    const refreshSnoozeCounts = () => {
+        snoozeCountsTimer = null;
+        try {
+            const definition = modeGroupingIsActive();
+            if (!definition || !definition.snooze) return;
+            const list = controller().get('mailboxMessageList');
+            if (!list || typeof list.getObjectAt !== 'function') return;
+            const counts = snoozeCountsFor(definition, list);
+            // Fastmail's own answer for these groups is a row of noughts, and
+            // it arrives again with every refresh; this puts the real counts
+            // back, and only when they differ, so the two cannot chase each
+            // other.
+            if (JSON.stringify(list.get('groupByCounts')) === JSON.stringify(counts)) return;
+            list.set('groupByCounts', counts);
+        } catch (error) {
+            reportFault('could not count the snooze groups', error);
+        }
+    };
+
+    const scheduleSnoozeCounts = () => {
+        if (snoozeCountsTimer) clearTimeout(snoozeCountsTimer);
+        snoozeCountsTimer = setTimeout(refreshSnoozeCounts, 50);
+    };
+
+    const watchSnoozeCounts = () => {
+        const list = controller().get('mailboxMessageList');
+        if (!list || list.customSnoozeCounts) return;
+        list.customSnoozeCounts = true;
+
+        const check = { go: () => scheduleSnoozeCounts() };
+        list.addObserverForKey('[]', check, 'go');
+        list.addObserverForKey('length', check, 'go');
+        list.addObserverForKey('groupByCounts', check, 'go');
+        scheduleSnoozeCounts();
+    };
+
     const watchGroupCounts = () => {
         const list = controller().get('mailboxMessageList');
         if (!list || !list.collapsedGroups || list.customCountWatch) return;
@@ -7628,6 +7762,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             go: () => {
                 adoptList();
                 watchGroupCounts();
+                watchSnoozeCounts();
                 updateFloatingNav();
                 watchMailboxSummaryList();
                 refreshMailboxSummary();
@@ -7950,7 +8085,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const icons = groupingIcons(options);
         const mailbox = controller().get('mailbox');
         // A preset with nothing to group by here is not offered here
-        const definitions = modeGroupings().filter(one => expandLabels(one, mailbox));
+        const definitions = modeGroupings().filter(one => expandLabels(one, mailbox))
+            // Groups by return date mean nothing anywhere else, so they are
+            // offered in the Snoozed folder and nowhere else, after the rest.
+            .concat(isSnoozeMailbox(mailbox) ? snoozeGroupings() : []);
         const entries = definitions.map(definition => groupingOption(definition, active, icons));
 
         if (!entries.length) return;
@@ -11120,6 +11258,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         updateFloatingNav();
         adoptList();
         watchGroupCounts();
+        watchSnoozeCounts();
         watchMailboxSummaryList();
         refreshMailboxSummary();
         watchReminders();
