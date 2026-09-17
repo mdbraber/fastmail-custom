@@ -270,7 +270,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         },
         {
             key: 'stripLabelPrefix', group: 'appearance',
-            title: 'Show only the label’s own name',
+            title: 'Hide the parent label',
             hint: '“Work” instead of “Projects/Work”. Hover for the full path.'
         },
         {
