@@ -15,7 +15,7 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
 
 - 🗃️ **Custom groups**: build on Fastmail's "Mailbox groups" - create as many custom groups as you like, change the built-in groups
   and easily switch between them. A group can be one per top-level label or per label, and priorities (pinned, unread or any
-  search) come first within every group, as sort or as extra groups; a button beside Sort collapses or expands every group at once
+  search) come first within every group, as sort or as extra groups; a button beside Sort (on iPhone and iPad an entry in the list's menu, under Group) collapses or expands every group at once
 
 **Snoozing**
 

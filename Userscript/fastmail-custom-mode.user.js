@@ -8666,6 +8666,49 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
+     * Collapse or expand every group, on the phone and the iPad. Their list has no bar
+     * beside Filter and Sort: Fastmail puts Filter, Group and Sort in the one
+     * menu next to the search field, which is built as a fixed pair rather
+     * than from a list a button could join. So the phone's is an entry at
+     * the end of that menu's Group section, below Custom…, doing what the
+     * bar's button does; greyed out when the list is not grouped.
+     */
+    const addFoldAllOption = (options) => {
+        // Wherever a list bar carries the button, the menu has no need to;
+        // the iPad runs the phone's build and has no such bar either
+        if (!isGroupMenu(options) || toolbarsOnScreen().some(toolbar => toolbar.customFoldGroups)) return;
+        if (options.some(option => option && option.customFoldAll)) return;
+
+        let at = -1;
+        options.forEach((option, index) => {
+            if (boundToGroupBy(option) || iconBoundToGroupBy(option) ||
+                    (option && option.customGroupingOption)) at = index;
+        });
+        if (at === -1) return;
+
+        const groups = listGroups();
+        const collapse = !groups || anyGroupOpen(groups);
+        const option = new FastMail.classes.ButtonView({
+            label: collapse ? 'Collapse all groups' : 'Expand all groups',
+            icon: standardIcon('i-fold-' + (collapse ? 'collapse' : 'expand'),
+                FOLD_ICON_SHAPES[collapse ? 'collapse' : 'expand']),
+            isDisabled: !groups,
+            isLastOfSection: true,
+            // After the menu has closed, which is when the list redraws
+            target: { run: () => setTimeout(foldAllGroups, 0) },
+            method: 'run'
+        });
+        option.customFoldAll = true;
+
+        try {
+            options[at].set('isLastOfSection', false);
+        } catch (error) {
+            // Without its line the entry is still there
+        }
+        options.splice(at + 1, 0, option);
+    };
+
+    /*
      * Keep in a message row's right-click menu, in Move to's place, while
      * Keep instead of move is on: the verb the bar's Keep and v run, so a
      * conversation still to be filed opens the limited picker and one
@@ -8778,6 +8821,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                         options.push(copyLinkOption());
                     }
                     addGroupings(options);
+                    addFoldAllOption(options);
                     addSnoozePresets(options);
                 }
             } catch (error) {
