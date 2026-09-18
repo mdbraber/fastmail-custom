@@ -5421,7 +5421,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // any other, so a contact group named after one still fills.
                 adds.forEach(mailbox => fileSendersIntoGroup(mailbox, keys));
                 // A keep adds the sender to contacts as well, after the groups
-                if (pendingKeep) addSendersToContacts(keys);
+                if (pendingKeep) {
+                    addSendersToContacts(keys);
+                    noteFollowUp('kept', keys);
+                }
 
                 // Set only by the call this one is nested inside, so an add
                 // that arrives on its own is just an add
@@ -6474,7 +6477,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // Nothing to take off is not nothing to do. A message already filed
         // and already past Triage is a decision that has been made, and the
         // answer to being asked again is the same as the first time: move on.
-        if (removes.length) actions.addremove(keys, [], removes);
+        if (removes.length) {
+            noteFollowUp('kept', keys);
+            actions.addremove(keys, [], removes);
+        }
         addSendersToContacts(keys);
         // Kept in place; the view moves on to where the setting says, or back
         // to the list, with nothing selected, when there is nothing that way.
@@ -6893,7 +6899,168 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             } catch (error) {
                 reportFault('could not take the triage label off a snoozed message', error);
             }
+            noteFollowUp('snoozed', resolveKeys(this, storeKeys));
             return original.apply(this, arguments);
+        };
+    };
+
+    /*
+     * The second decision, from the toast of the first. Snoozing, archiving
+     * and keeping each take the message out of view, so deciding a second
+     * thing about it meant searching it back. Fastmail's own toast for the
+     * first, the one with Undo, now offers the others for the same
+     * messages: after a snooze Keep… and Archive (done with it for now; it
+     * still comes back at its time), after an archive or a keep Snooze…. In
+     * labels mode none of them undoes another: a snooze moves Inbox to
+     * Snoozed and leaves the labels, an archive takes the Inbox and the
+     * project labels off and leaves Snoozed, a keep adds a label.
+     *
+     * The verb notes what it did and to which messages the moment before its
+     * didAction; the didAction wrapper in patchArchive hands that to the
+     * toast Fastmail shows from inside it, through the container's show. The
+     * buttons act on those messages, never the selection, which by then is
+     * something else; a second decision's own toast offers no third.
+     */
+    const FOLLOW_UPS = {
+        snoozed: ['keep', 'archive'],
+        archived: ['snooze'],
+        kept: ['snooze']
+    };
+    // A verb whose didAction never comes leaves nothing for a later one
+    const FOLLOW_UP_WAIT_MS = 3000;
+    let pendingFollowUp = null;
+    let showingFollowUp = null;
+    // The messages a toast's button just acted on, whose own toast then
+    // offers nothing more
+    let followingUp = { keys: new Set(), until: 0 };
+
+    const noteFollowUp = (kind, keys) => {
+        if (!keys || !keys.length) return;
+        if (Date.now() < followingUp.until && keys.every(key => followingUp.keys.has(key))) return;
+        pendingFollowUp = { kind, keys: keys.slice(), at: Date.now() };
+    };
+
+    const takeFollowUp = () => {
+        const was = pendingFollowUp;
+        pendingFollowUp = null;
+        return was && Date.now() - was.at < FOLLOW_UP_WAIT_MS ? was : null;
+    };
+
+    const markFollowingUp = (keys) => {
+        followingUp = { keys: new Set(keys), until: Date.now() + 60 * 1000 };
+    };
+
+    // Fastmail's time menu, the one its own Snooze button opens, hung off
+    // the toast and snoozing exactly these messages
+    const openFollowUpSnooze = (keys, notification) => {
+        const popOver = popOverForPicker();
+        const Menu = FastMail.classes.FutureTimeMenuView;
+        if (!popOver || typeof Menu !== 'function' || !anchorRect(notification)) return false;
+        const menu = new Menu({
+            didSelect(date) {
+                this.hide();
+                markFollowingUp(keys);
+                controller().actions.snooze(keys, new Date(date));
+            }
+        });
+        popOver.show({
+            view: menu,
+            alignWithView: notification,
+            positionToThe: 'top',
+            alignEdge: 'centre',
+            showCallout: true,
+            keepInHorizontalBounds: true,
+            keepInVerticalBounds: true
+        });
+        return true;
+    };
+
+    const FOLLOW_UP_BUTTONS = {
+        keep: {
+            label: 'Keep…',
+            // The label picker for these messages, hung off the toast; the
+            // toast stays up under it, since the picker is placed by it
+            run: (keys, notification) => {
+                markFollowingUp(keys);
+                // Nothing to step on to: the message is not the one in view
+                takeAdvance();
+                if (!buildPicker(keys, {
+                    alignWithView: notification, positionToThe: 'top', alignEdge: 'centre',
+                    offsetTop: 0, offsetLeft: 0
+                })) reportFault('no label menu to open');
+                return false;
+            }
+        },
+        archive: {
+            label: 'Archive',
+            run: (keys) => {
+                markFollowingUp(keys);
+                controller().actions.archive(keys);
+                return true;
+            }
+        },
+        snooze: {
+            label: 'Snooze…',
+            run: (keys, notification) => {
+                if (!openFollowUpSnooze(keys, notification)) reportFault('no snooze menu to open');
+                return false;
+            }
+        }
+    };
+
+    // The buttons go before Undo, in Fastmail's own action row and style
+    const addFollowUpButtons = (notification, parts) => {
+        const followUp = notification.customFollowUp;
+        const row = parts && parts[1];
+        if (!followUp || !(row instanceof Element)) return;
+        const el = FastMail.el;
+        const buttons = (FOLLOW_UPS[followUp.kind] || []).map((name) => {
+            const spec = FOLLOW_UP_BUTTONS[name];
+            const button = el('button.v-Notification-action', [spec.label]);
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                try {
+                    const done = spec.run(followUp.keys, notification);
+                    if (done && notification._controller) notification._controller.hide(notification);
+                } catch (error) {
+                    reportFault('the toast’s ' + spec.label.replace('…', '') + ' did not go through', error);
+                }
+            });
+            return button;
+        });
+        buttons.reverse().forEach(button => row.insertBefore(button, row.firstChild));
+    };
+
+    const patchFollowUpToasts = () => {
+        const Container = FastMail.classes.NotificationContainerView;
+        if (!Container || Container.prototype.customFollowUps) return;
+        Container.prototype.customFollowUps = true;
+        const show = Container.prototype.show;
+        Container.prototype.show = function (view) {
+            const followUp = showingFollowUp;
+            showingFollowUp = null;
+            // An undoable toast, which is the one a verb's didAction shows;
+            // its class is loaded with it, so it is patched the first time
+            if (followUp && view && typeof view === 'object' && view.undoTarget &&
+                    typeof view.drawNotification === 'function') {
+                const proto = Object.getPrototypeOf(view);
+                if (!Object.prototype.hasOwnProperty.call(proto, 'customFollowUpDraw')) {
+                    const draw = proto.drawNotification;
+                    proto.drawNotification = function () {
+                        const parts = draw.apply(this, arguments);
+                        try {
+                            addFollowUpButtons(this, parts);
+                        } catch (error) {
+                            reportFault('the toast’s follow-up buttons could not be drawn', error);
+                        }
+                        return parts;
+                    };
+                    proto.customFollowUpDraw = true;
+                }
+                view.customFollowUp = followUp;
+            }
+            return show.apply(this, arguments);
         };
     };
 
@@ -6935,6 +7102,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 const inbox = first && inboxMailbox(first.get('accountId'));
 
                 pendingUndoReturn = urlForMessage(first);
+                noteFollowUp('archived', keys);
                 runDone(self, keys, () => {
                     // The original gets its own arguments: passing resolved
                     // keys would flip isActioningFocused and move the focus
@@ -6957,6 +7125,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             pendingUndoReturn = null;
             lastGroupAdds = pendingGroupAdds;
             pendingGroupAdds = null;
+            showingFollowUp = takeFollowUp();
 
             if (!undoTarget) {
                 patchUndo();
@@ -6967,9 +7136,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 }
             }
 
-            return originalDidAction.apply(this, arguments);
+            try {
+                return originalDidAction.apply(this, arguments);
+            } finally {
+                showingFollowUp = null;
+            }
         };
 
+        patchFollowUpToasts();
         patchUndo();
     };
 

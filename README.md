@@ -7,7 +7,8 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
 **Triage**
 
 - 🏷️ **Inbox triage**: quick add a label to inbox message or archive
-- 📦 **Keep or Archive**: keeping adds a label (also from a message's right-click menu), archiving strips all project labels/pins
+- 📦 **Keep or Archive**: keeping adds a label (also from a message's right-click menu), archiving strips all project labels/pins;
+  the toast after a snooze offers Keep and Archive for the same message, and the one after a keep or an archive offers Snooze, so a second decision needs no search
 - 👥 **Sender to contacts**: filing under a label (keeping, or archiving into one) can add the sender to your contacts, and a specific label adds them to a Contacts group (like Hey.com)
 
 **Grouping**
