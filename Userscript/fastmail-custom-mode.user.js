@@ -3388,6 +3388,40 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         snoozeCountsTimer = setTimeout(refreshSnoozeCounts, 50);
     };
 
+    /*
+     * A grouping by return date is counted off the rows in the order they
+     * come back, so it holds only while that is the order. Sorting the list
+     * another way takes the grouping off rather than leaving headings cutting
+     * across rows that are not theirs; choosing it again sets the order back.
+     */
+    let revertingSnoozeGrouping = false;
+
+    const watchSnoozeSort = () => {
+        const mailController = controller();
+        if (mailController.customSnoozeSortWatch) return;
+        mailController.customSnoozeSortWatch = true;
+
+        mailController.addObserverForKey('sort', {
+            go: () => {
+                if (revertingSnoozeGrouping) return;
+                try {
+                    if (currentGroupingId().indexOf(SNOOZE_PREFIX) !== 0) return;
+                    const sort = mailController.get('sort') || [];
+                    const field = sort[sort.length - 1];
+                    if (field && field.property === 'receivedAt' && field.isAscending) return;
+                    revertingSnoozeGrouping = true;
+                    try {
+                        chooseGrouping('');
+                    } finally {
+                        revertingSnoozeGrouping = false;
+                    }
+                } catch (error) {
+                    reportFault('could not take the return-date grouping off a resorted list', error);
+                }
+            }
+        }, 'go');
+    };
+
     const watchSnoozeCounts = () => {
         const list = controller().get('mailboxMessageList');
         if (!list || list.customSnoozeCounts) return;
@@ -7897,6 +7931,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 adoptList();
                 watchGroupCounts();
                 watchSnoozeCounts();
+                watchSnoozeSort();
                 updateFloatingNav();
                 watchMailboxSummaryList();
                 refreshMailboxSummary();
@@ -11510,6 +11545,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         adoptList();
         watchGroupCounts();
         watchSnoozeCounts();
+        watchSnoozeSort();
         watchMailboxSummaryList();
         refreshMailboxSummary();
         watchReminders();
