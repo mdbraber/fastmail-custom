@@ -3275,109 +3275,113 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * settles as the rest arrive.
      */
     /*
-     * When each row comes back. A page keeps what its own copy of a message
-     * holds, and an offline copy need not hold the snooze; a row whose time
-     * is missing is asked for once and kept here, so the counting works the
-     * same wherever it runs.
+     * The counts a snooze grouping's headings are drawn from: how many
+     * conversations come back within each horizon.
+     *
+     * Asked of the server rather than read off the rows: a page holds only
+     * the rows it has drawn, and an offline copy need not carry the snooze at
+     * all, so counting what is to hand gave a different answer on each
+     * device; the same question asked of the server gives the same groups
+     * everywhere. The list's own filter and thread setting go with it, so the
+     * count is of the very rows the list shows, in the order it shows them.
      */
-    const snoozeUntilCache = new Map();
+    const SNOOZE_COUNT_LIMIT = 500;
 
-    const snoozeUntilOf = (record) => {
-        const snoozed = record.get('snoozed');
-        if (snoozed && snoozed.until) return new Date(snoozed.until).getTime();
-        const asked = snoozeUntilCache.get(record.get('id'));
-        return asked === undefined ? undefined : asked;
+    const snoozeCountsFrom = (moments, edges) => {
+        const counts = edges.map(() => 0);
+        moments.forEach((until) => {
+            for (let edge = 0; edge < edges.length; edge += 1) {
+                if (until <= edges[edge]) {
+                    counts[edge] += 1;
+                    return;
+                }
+            }
+        });
+        return counts;
     };
 
-    // The rows whose time neither the page nor this has; asked for in one go
-    const askSnoozeTimes = (ids, accountId) => FastMail
-        .callJMAPMethod('Email/get', { accountId: accountId, ids: ids, properties: ['snoozed'] })
-        .then((answer) => {
-            (answer.list || []).forEach((email) => {
-                snoozeUntilCache.set(email.id,
-                    email.snoozed && email.snoozed.until ? new Date(email.snoozed.until).getTime() : null);
-            });
-            (answer.notFound || []).forEach((id) => snoozeUntilCache.set(id, null));
+    const snoozeMomentsFor = (list, mailbox) => {
+        const accountId = mailbox.get('accountId');
+        const mailboxId = mailbox.get('id');
+        const filter = list.get('filter') || { inMailbox: mailboxId };
+        return FastMail.callJMAPMethod('Email/query', {
+            accountId: accountId,
+            filter: filter,
+            sort: [
+                { property: 'snoozedUntil', isAscending: true, mailboxId: mailboxId },
+                { property: 'receivedAt', isAscending: true }
+            ],
+            collapseThreads: list.get('collapseThreads') !== false,
+            limit: SNOOZE_COUNT_LIMIT
+        }).then((found) => {
+            if (!found.ids.length) return [];
+            return FastMail.callJMAPMethod('Email/get', {
+                accountId: accountId, ids: found.ids, properties: ['snoozed']
+            }).then(answer => (answer.list || [])
+                .map(email => (email.snoozed && email.snoozed.until ? new Date(email.snoozed.until).getTime() : 0))
+                .filter(Boolean));
         });
+    };
 
-    const snoozeCountsFor = (definition, list) => {
-        const now = new Date();
-        const edges = definition.categories.map(one => snoozeHorizon(now, one).getTime());
-        const counts = edges.map(() => 0);
-        const length = list.get('length') || 0;
-        const missing = [];
-        let accountId = null;
+    let applyingSnoozeCounts = false;
 
-        let previous = 0;
-        for (let index = 0; index < length; index += 1) {
-            const record = list.getObjectAt(index);
-            if (!record || typeof record.get !== 'function') break;
-            const until = snoozeUntilOf(record);
-            if (until === undefined) {
-                // Its time is not here yet: ask, and count again once it is
-                accountId = accountId || record.get('accountId');
-                missing.push(record.get('id'));
-                if (missing.length >= 200) break;
-                continue;
-            }
-            if (!until) break;
-            // Sorted some other way than by return date, so the groups would
-            // take rows that are not theirs: better no groups than wrong ones
-            if (until < previous) return edges.map(() => 0);
-            previous = until;
-            let at = -1;
-            for (let edge = 0; edge < edges.length; edge += 1) {
-                if (until <= edges[edge]) { at = edge; break; }
-            }
-            if (at === -1) break;
-            counts[at] += 1;
+    const applySnoozeCounts = (list, counts) => {
+        if (!counts) return;
+        if (JSON.stringify(list.get('groupByCounts')) === JSON.stringify(counts)) return;
+        applyingSnoozeCounts = true;
+        try {
+            list.set('groupByCounts', counts);
+        } finally {
+            applyingSnoozeCounts = false;
         }
-
-        if (missing.length) {
-            askSnoozeTimes(missing, accountId)
-                .then(scheduleSnoozeCounts)
-                .catch(() => {});
-            return null;
-        }
-
-        return counts;
     };
 
     let snoozeCountsTimer = null;
 
     /*
-     * Folding a group takes its rows out of the list, so counting the rows
-     * again while one is folded would count what is left and fold something
-     * else, which is what made the groups jump about when one was clicked.
-     * The counts are worked out from the whole list, and while anything is
-     * folded the ones already worked out stand; they are still put back when
+     * Folding a group takes its rows out of the list, so the counts already
+     * worked out stand while anything is folded; they are still put back when
      * Fastmail answers with its own row of noughts, which it does at every
-     * refresh, so the two cannot chase each other either.
+     * refresh, so the two cannot chase each other.
      */
-    let applyingSnoozeCounts = false;
-
     const refreshSnoozeCounts = () => {
         snoozeCountsTimer = null;
         try {
             const definition = modeGroupingIsActive();
             if (!definition || !definition.snooze) return;
-            const list = controller().get('mailboxMessageList');
-            if (!list || typeof list.getObjectAt !== 'function') return;
+            const mailController = controller();
+            const mailbox = mailController.get('mailbox');
+            const list = mailController.get('mailboxMessageList');
+            if (!mailbox || !list) return;
 
+            const now = new Date();
+            const edges = definition.categories.map(one => snoozeHorizon(now, one).getTime());
             const folded = !!(list.collapsedGroups && list.collapsedGroups.size);
-            const counts = folded
-                ? list.customSnoozeCountsValue
-                : snoozeCountsFor(definition, list);
-            if (!counts) return;
-            list.customSnoozeCountsValue = counts;
+            const asked = [mailbox.get('id'), list.get('length'), edges.join(',')].join('|');
 
-            if (JSON.stringify(list.get('groupByCounts')) === JSON.stringify(counts)) return;
-            applyingSnoozeCounts = true;
-            try {
-                list.set('groupByCounts', counts);
-            } finally {
-                applyingSnoozeCounts = false;
+            if (folded || asked === list.customSnoozeAsked) {
+                applySnoozeCounts(list, list.customSnoozeCounts);
+                return;
             }
+            if (list.customSnoozeAsking) return;
+            list.customSnoozeAsking = true;
+
+            snoozeMomentsFor(list, mailbox).then((moments) => {
+                list.customSnoozeAsked = asked;
+                list.customSnoozeCounts = snoozeCountsFrom(moments, edges);
+                applySnoozeCounts(list, list.customSnoozeCounts);
+                // Readable from the app's own log, which is how a phone says
+                // what it counted
+                if (window.native && window.native.log) {
+                    window.native.log('snooze groups: ' + moments.length + ' rows -> ' +
+                        JSON.stringify(list.customSnoozeCounts) + ' in ' + mailbox.get('name'));
+                }
+            }).catch((error) => {
+                // Offline, or the server said no: the next look asks again
+                console.warn('Fastmail Custom: could not count the snooze groups', error);
+            }).then(() => {
+                list.customSnoozeAsking = false;
+            });
         } catch (error) {
             reportFault('could not count the snooze groups', error);
         }
@@ -3388,13 +3392,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         snoozeCountsTimer = setTimeout(refreshSnoozeCounts, 50);
     };
 
-    /*
-     * A grouping by return date is counted off the rows in the order they
-     * come back, so it holds only while that is the order. Sorting the list
-     * another way takes the grouping off rather than leaving headings cutting
-     * across rows that are not theirs; choosing it again sets the order back.
-     */
-    let revertingSnoozeGrouping = false;
+    const watchSnoozeCounts = () => {
+        const list = controller().get('mailboxMessageList');
+        if (!list || list.customSnoozeCountWatch) return;
+        list.customSnoozeCountWatch = true;
+
+        const check = { go: () => { if (!applyingSnoozeCounts) scheduleSnoozeCounts(); } };
+        list.addObserverForKey('[]', check, 'go');
+        list.addObserverForKey('length', check, 'go');
+        list.addObserverForKey('groupByCounts', check, 'go');
+        scheduleSnoozeCounts();
+    };
 
     const watchSnoozeSort = () => {
         const mailController = controller();
@@ -3420,18 +3428,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 }
             }
         }, 'go');
-    };
-
-    const watchSnoozeCounts = () => {
-        const list = controller().get('mailboxMessageList');
-        if (!list || list.customSnoozeCounts) return;
-        list.customSnoozeCounts = true;
-
-        const check = { go: () => { if (!applyingSnoozeCounts) scheduleSnoozeCounts(); } };
-        list.addObserverForKey('[]', check, 'go');
-        list.addObserverForKey('length', check, 'go');
-        list.addObserverForKey('groupByCounts', check, 'go');
-        scheduleSnoozeCounts();
     };
 
     const watchGroupCounts = () => {
