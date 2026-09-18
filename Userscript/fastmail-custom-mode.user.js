@@ -107,9 +107,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         groupings: 'by age\n  Today = date:today\n  Yesterday = date:yesterday\n  This week = after:1w\n' +
             '  This month = after:1m\n  Older\n\npinned first\n  Pinned = is:pinned\n\n' +
             'unread first\n  Unread = is:unread',
-        // Filing steps on to the next message only while that message is
-        // still in triage; the run is over otherwise, and the list is where
-        // it ends.
+        // A decision about a message in triage steps on to the next message
+        // only while that one is in triage too; the run is over otherwise,
+        // and the list is where it ends. A decision about anything else goes
+        // where Fastmail's own setting says.
         backToListAfterTriage: true,
         // The label a rule puts on everything incoming. Taken off by keeping
         // or filing; the script never adds it.
@@ -338,7 +339,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'backToListAfterTriage', group: 'labelsFiling',
             title: 'Return to message list when no triage labels left',
-            hint: 'Keeping steps to the next message only while that message still carries the triage label; otherwise the message list comes back.'
+            hint: 'After a decision on a message carrying the triage label, the step to the next one is taken only while that one carries it too; otherwise the message list comes back. Decisions on any other message follow Fastmail’s own setting.'
         },
         {
             key: 'dragAdditive', group: 'labelsFiling',
@@ -5778,6 +5779,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return {
             index: index,
             reading: decidingOnOpenMessage(message),
+            // Only a message carrying the triage label is part of a run, so
+            // only a decision about one can end a run; a decision about
+            // anything else steps where Fastmail's own setting says.
+            inRun: carriesMailbox(message, message && triageMailbox(message.get('accountId'))),
             next: index < 0 ? null : at(index + 1),
             previous: index < 1 ? null : at(index - 1)
         };
@@ -5827,10 +5832,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * the step to make is the one that setting names.
      *
      * Fastmail's own setting says where to go; back to the mailbox, on to
-     * the next, back to the previous; so it decides, but only while there is
-     * still triage to do. A neighbour carrying no triage label is not part of
-     * the run, and landing on it means reading something nobody asked about,
-     * so the list catches that instead.
+     * the next, back to the previous; so it decides, except at the end of a
+     * run. A run is only what the triage label holds: a decision about a
+     * message carrying it, stepping to a neighbour that carries it too.
+     * Landing on a neighbour outside the run means reading something nobody
+     * asked about, so the list catches that instead; while a decision made
+     * outside the run in the first place is left to the setting.
      *
      * Run a tick after the decision, so the store has taken Triage off the
      * one just decided and the list has settled.
@@ -5873,10 +5880,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 : where === 'next' ? plan.next
                     : null;
 
-            // The run ends where the triage label does. With no triage label
-            // set there is no run to end, and the setting has the last word;
-            // the same for an archive of a message that was never in the run.
-            const triage = settings.backToListAfterTriage && plan.inRun !== false &&
+            // The run ends where the triage label does. A decision about a
+            // message that was not carrying it is no part of a run, so the
+            // setting has the last word there, as it does with no triage
+            // label set at all.
+            const triage = settings.backToListAfterTriage && plan.inRun &&
                 target && triageMailbox(target.get('accountId'));
             const stillTriage = !triage || carriesMailbox(target, triage);
 
@@ -6374,10 +6382,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // list, so neighbours read after it are already gone and the step
         // becomes a step back to the mailbox.
         const step = stepFrom(from);
-        // Only a message that carried the triage label was part of a run, so
-        // only its archive can end one. Any other moves on where Fastmail's
-        // own setting says, whatever the message beside it carries.
-        step.inRun = carriesMailbox(from, from && triageMailbox(from.get('accountId')));
 
         silencingDidAction(actions, () => {
             const dropped = [];
