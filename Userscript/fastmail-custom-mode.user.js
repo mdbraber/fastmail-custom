@@ -1955,7 +1955,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const MAILBOX_TITLE_COUNT_CLASS = 'custom-mailboxTitle-count';
     const MAILBOX_TITLE_COMPACT_ID = 'custom-mailboxTitle-compact';
     const MAILBOX_TITLE_SCROLLED_CLASS = 'custom-mailboxTitle-scrolled';
-    const MAILBOX_TITLE_FONT_SIZE = 24;
+    const MAILBOX_TITLE_FONT_SIZE = 26;
     const MAILBOX_TITLE_COMPACT_FONT_SIZE = 14;
 
     // Matches the phone's own two-copy technique: one title that fades
@@ -1977,7 +1977,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // plain message, and with no visible break the two read as one
         // clickable block when only the row is, leaving the title's own
         // share of it dead to hover and click.
-        ' padding: 12px 20px 8px; box-sizing: border-box;' +
+        ' padding: 12px 20px 4px; box-sizing: border-box;' +
         ' overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' +
         // No longer a child of the scrolling container, so it no longer
         // scrolls out of the way on its own; flex: none keeps .v-Page's
