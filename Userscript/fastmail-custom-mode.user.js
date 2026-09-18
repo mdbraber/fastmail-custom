@@ -124,6 +124,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // picker, always comes last and is not part of this setting.
         snoozePresets: 'Later today = +4h\nThis Evening = today @ 19:00\nTomorrow = tomorrow @ 08:00\n' +
             'This weekend = this weekend @ 08:00\nNext week = next week @ 08:00',
+        // What the group everything further out falls into is called, and
+        // what the reminder menu's own "none" entry says; both are changed
+        // from the row that shows them
+        snoozeGroupsOther: 'Later',
+        reminderNoneLabel: 'No reminder',
         // What the Snoozed folder's own grouping is called, in the Group
         // menu and among the group presets, where it is renamed
         snoozeGroupName: 'By return date',
@@ -2459,6 +2464,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const SNOOZE_GROUPING_NAME = 'By return date';
     const SNOOZE_OTHER_NAME = 'Later';
+    const snoozeOtherName = () =>
+        String(settingValue('snoozeGroupsOther') || '').trim() || SNOOZE_OTHER_NAME;
     const SNOOZE_ONLY_NOTE = '(only shown in Snoozed)';
 
     const snoozeGroupingName = () =>
@@ -2489,7 +2496,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             id: SNOOZE_PREFIX + 'return',
             name: snoozeGroupingName(),
             categories: rows.map(row => ({ name: row.name, date: row.date, time: row.time })),
-            otherName: SNOOZE_OTHER_NAME,
+            otherName: snoozeOtherName(),
             snooze: true
         }];
     };
@@ -5161,6 +5168,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const CHOOSE_SNOOZE_DATE_LABEL = 'Choose a date and time…';
     const NO_REMINDER_LABEL = 'No reminder';
+    const noReminderLabel = () =>
+        String(settingValue('reminderNoneLabel') || '').trim() || NO_REMINDER_LABEL;
 
     // Replaces Fastmail's own preset list with this mode's, through the
     // same patched MenuView.prototype.draw as addGroupings (see patchMenus
@@ -5199,7 +5208,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         // The reminder menu can also be told there is to be none
         if (typeof futureTimeMenuView.customNoReminder === 'function') {
-            entries.push(snoozePresetOption(String(entries.length + 1), NO_REMINDER_LABEL,
+            entries.push(snoozePresetOption(String(entries.length + 1), noReminderLabel(),
                 () => futureTimeMenuView.customNoReminder()));
         }
 
@@ -10508,7 +10517,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // The one grouping that is renamed rather than edited: its groups live
     // in a list of their own, and it cannot be removed.
-    const renameGrouping = (classes, current, done) => {
+    const renameGrouping = (classes, current, done, title) => {
         if (!classes.ModalOverlayView || !classes.TextInputView || !classes.ButtonView) {
             reportFault('the rename dialog is not available here');
             return;
@@ -10527,7 +10536,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const view = new classes.View({
             className: 'u-p-6 u-space-y-5',
             draw: () => [
-                el('h1.u-trim.u-font-bold', ['Rename group preset']),
+                el('h1.u-trim.u-font-bold', [title || 'Rename group preset']),
                 el('div.u-space-y-1', [
                     el('div.u-text-sm.u-color-unimportant', ['Name']), nameField
                 ]),
@@ -10654,12 +10663,35 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
                 const list = reorderList(classes, items, reorder);
 
-                // What the menu, or the list, adds after the rows themselves
+                /*
+                 * What the menu, or the list, puts after the rows themselves.
+                 * Drawn as the rows above are, without a grip, since nothing
+                 * orders them; the ones that are a wording of ours carry an
+                 * Edit, and Fastmail's own picker entry carries none.
+                 */
+                const wording = (setting, fallback) => ({
+                    label: settingValue(setting) || fallback,
+                    edit: () => renameGrouping(classes, settingValue(setting) || fallback, (value) => {
+                        writeSetting(setting, value);
+                        redraw();
+                    }, 'Rename')
+                });
                 const trailing = key === 'snoozeGroups'
-                    ? [SNOOZE_OTHER_NAME]
-                    : [CHOOSE_SNOOZE_DATE_LABEL].concat(key === 'reminderPresets' ? [NO_REMINDER_LABEL] : []);
-                const customRow = el('div', trailing
-                    .map(label => el('div.u-list-item.u-color-unimportant', [label])));
+                    ? [wording('snoozeGroupsOther', SNOOZE_OTHER_NAME)]
+                    : [{ label: CHOOSE_SNOOZE_DATE_LABEL }].concat(
+                        key === 'reminderPresets' ? [wording('reminderNoneLabel', NO_REMINDER_LABEL)] : []);
+
+                const customRow = new classes.View({
+                    className: 'u-list-body u-list-body--borders',
+                    draw: () => trailing.map(one => new classes.View({
+                        className: 'u-list-item u-flex u-items-center u-space-x-2',
+                        draw: () => reorderRowParts(classes, {
+                            id: one.label,
+                            label: el('span.u-color-unimportant', [one.label]),
+                            edit: one.edit
+                        }, false)
+                    }))
+                });
 
                 const addButton = new classes.ButtonView({
                     type: 'v-Button--standard v-Button--sizeM',
@@ -11078,7 +11110,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // The choice, in words: a preset's name, or when
     const reminderSummary = (composer) => {
         const moment = reminderMoment(composer);
-        if (!moment) return NO_REMINDER_LABEL;
+        if (!moment) return noReminderLabel();
         if (composer.customReminder) {
             return composer.customReminderName || snoozePresetRightText(new Date(), moment);
         }
