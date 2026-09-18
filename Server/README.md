@@ -38,6 +38,18 @@ ones hidden from Fastmail's folder list; the history shelves, are never
 touched. A press that fails says so on the phone rather than going quiet,
 so the tokens have to be able to write.
 
+## Replies wake snoozed mail
+
+Fastmail leaves a snoozed message snoozed when someone replies: the reply
+reaches the Inbox, and the message it answers comes back again at its own
+time. The server wakes it instead. A message arriving later in the same
+conversation, not in Sent, Drafts, Spam or Trash, takes the snoozed
+messages there out of Snoozed, which clears their snooze, and puts them
+back in the Inbox. The Inbox, because where else a snooze was meant to
+return is Fastmail's `snoozed` property, which an API token cannot read;
+the Inbox is where Fastmail returns snoozed mail unless told otherwise.
+Accounts without a Snoozed folder are left alone.
+
 ## Reminders for unanswered mail
 
 A message sent with a reminder carries `$fmc-remind` and
@@ -46,12 +58,12 @@ snooze it there, marking it `$fmc-reminding`: it stays in Sent, and Fastmail
 puts it in the Inbox, unread, at that moment. Fastmail keeps the `snoozed`
 property from API tokens, which is why the apps set it.
 
-The server is only needed to take a reminder off once someone replies: a
-message arriving later in the same conversation, not in Sent, Drafts, Spam
-or Trash, takes it out of Snoozed again, which clears the snooze. Without
-the server the reply still brings the conversation back to the Inbox, and
-the reminder comes back as well at its time. Accounts without a Sent or
-Snoozed folder have no reminders.
+The server is only needed to take a reminder off once someone replies: the
+same reply that wakes snoozed mail takes a reminder out of Snoozed again,
+which clears the snooze, and leaves it in Sent rather than moving it to the
+Inbox. Without the server the reply still brings the conversation back to
+the Inbox, and the reminder comes back as well at its time. Accounts
+without a Snoozed folder have no reminders.
 
 ## One-time setup
 

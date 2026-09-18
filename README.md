@@ -22,9 +22,10 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
   button, one whose time has passed greyed out rather than offered, and its own groups for the Snoozed
   folder, by when a conversation comes back. A message you send comes back to the
   Inbox, still in Sent, when nobody replies, at a time from a separate list of reminder presets; new messages
-  and replies each have a default, changed per message with the Remind button beside Schedule send. The server
-  component (see [Server/](Server/)) is only needed to take the reminder off once someone replies; without it
-  the reply already brings the conversation back to the Inbox, and the reminder comes back as well at its time
+  and replies each have a default, changed per message with the Remind button beside Schedule send. With the
+  server component (see [Server/](Server/)) a reply wakes what it answers: a snoozed conversation comes back to
+  the Inbox at once rather than again at its time, and a reminder is taken off. Without it the reply still
+  reaches the Inbox, and the snoozed message or reminder comes back as well at its time
 
 **User experience**
 

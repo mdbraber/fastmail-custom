@@ -880,6 +880,35 @@ test('a reminder that already came back is left alone by a later reply', async (
     assert.deepEqual(t.jmap.calls.filter((c) => c[0] === 'set'), []);
 });
 
+test('a reply wakes an older snoozed message in its conversation, back to the Inbox', async () => {
+    const snoozed = arrival('Z1', { threadId: 'T-conv', mailboxIds: { snoozed: true }, keywords: { $seen: true }, receivedAt: '2026-09-17T10:00:00Z' });
+    const elsewhere = arrival('Z2', { threadId: 'T-other', mailboxIds: { snoozed: true }, receivedAt: '2026-09-17T10:00:00Z' });
+    const reply = arrival('R1', { threadId: 'T-conv', receivedAt: '2026-09-17T12:00:00Z' });
+    const t = await setUp({
+        reminderBoxes: true, created: ['R1'], emails: [snoozed, elsewhere, reply],
+        threadMessages: { 'T-conv': [snoozed, reply] },
+    });
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(t);
+    assert.deepEqual(t.jmap.calls.filter((c) => c[0] === 'set'), [['set', 'Z1', {
+        'mailboxIds/snoozed': null, 'mailboxIds/inbox': true,
+    }]]);
+    // The reply itself is announced as ever
+    assert.equal(t.apns.sent.length, 2);
+});
+
+test('my own reply does not wake a snoozed conversation', async () => {
+    const snoozed = arrival('Z1', { threadId: 'T-conv', mailboxIds: { snoozed: true }, receivedAt: '2026-09-17T10:00:00Z' });
+    const mine = sentMessage('S3', { receivedAt: '2026-09-17T11:00:00Z' });
+    const t = await setUp({
+        reminderBoxes: true, created: ['S3'], emails: [snoozed, mine],
+        threadMessages: { 'T-conv': [snoozed, mine] },
+    });
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(t);
+    assert.deepEqual(t.jmap.calls.filter((c) => c[0] === 'set'), []);
+});
+
 test('without Sent or Snoozed there are no reminders, and a failing lookup costs no alerts', async () => {
     const reminding = sentMessage('S1', { mailboxIds: { sent: true, snoozed: true }, keywords: { '$fmc-reminding': true } });
     const reply = arrival('R1', { threadId: 'T-conv', receivedAt: '2026-09-17T12:00:00Z' });

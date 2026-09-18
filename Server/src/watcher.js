@@ -6,7 +6,7 @@ import { forgetShown, forgetShownOn, rememberNotified, rememberShown, saveState 
 import { deviceOutcome } from './apns.js';
 import { eventSourceURL, runEventSource } from './jmap.js';
 import { decrypt, generateKeys, subscriptionKeys } from './webpush.js';
-import { answered, answers, cancelPatch } from './reminders.js';
+import { answered, answers, replyPatch, REMINDING } from './reminders.js';
 
 export const COALESCE_MS = 2000;
 export const POLL_MS = 5 * 60 * 1000;
@@ -38,8 +38,8 @@ export class AccountWatcher {
         this.archiveMailboxId = null;
         this.junkId = null;
         this.trashId = null;
-        // Where reminders for unanswered mail wait; without Sent and Snoozed
-        // there are none
+        // Where snoozed mail and reminders for unanswered mail wait; without
+        // Snoozed a reply wakes nothing
         this.sentId = null;
         this.draftsId = null;
         this.snoozedId = null;
@@ -108,7 +108,7 @@ export class AccountWatcher {
         this.sentId = mailboxes.find((m) => m.role === 'sent')?.id ?? null;
         this.draftsId = mailboxes.find((m) => m.role === 'drafts')?.id ?? null;
         this.snoozedId = mailboxes.find((m) => m.role === 'snoozed')?.id ?? null;
-        if (!this.sentId || !this.snoozedId) this.log.warn(`[${this.name}] no Sent or Snoozed folder: reminders for unanswered mail are off`);
+        if (!this.snoozedId) this.log.warn(`[${this.name}] no Snoozed folder: replies wake nothing, and reminders for unanswered mail are off`);
         if (!this.hasContacts) this.log.warn(`[${this.name}] the token cannot read contacts: VIPs and contacts match nobody`);
         await this.loadContacts();
         if (!this.state.emailState) await this.resync();
@@ -342,13 +342,17 @@ export class AccountWatcher {
     }
 
     /*
-     * Reminders for sent mail nobody answered (see reminders.js): the ones
-     * an arriving message answers are taken out of Snoozed again. A failure
-     * costs this look's cancellations, and never its alerts.
+     * A reply wakes what it answers (see reminders.js): snoozed messages in
+     * its conversation come back to the Inbox, and reminders for sent mail
+     * are cancelled. A failure costs this look's changes, and never its
+     * alerts.
      */
     async remind(arrived) {
-        if (!this.sentId || !this.snoozedId) return;
-        const ids = { sentId: this.sentId, draftsId: this.draftsId, junkId: this.junkId, trashId: this.trashId, snoozedId: this.snoozedId };
+        if (!this.snoozedId) return;
+        const ids = {
+            sentId: this.sentId, draftsId: this.draftsId, junkId: this.junkId, trashId: this.trashId,
+            snoozedId: this.snoozedId, inboxId: this.inboxId,
+        };
         try {
             const replies = answers(arrived, ids);
             if (!replies.length) return;
@@ -357,11 +361,12 @@ export class AccountWatcher {
             const others = [...new Set(threads.flatMap((thread) => thread.emailIds ?? []))].filter((id) => !replyIds.has(id));
             if (!others.length) return;
             for (const email of answered(await this.jmap.emails(others), replies, ids)) {
-                await this.jmap.patchEmail(email.id, cancelPatch(ids));
-                this.log.info(`[${this.name}] reminder for ${email.id} cancelled by a reply`);
+                await this.jmap.patchEmail(email.id, replyPatch(email, ids));
+                const what = email.keywords?.[REMINDING] ? 'reminder cancelled' : 'woken';
+                this.log.info(`[${this.name}] ${email.id} ${what} by a reply`);
             }
         } catch (error) {
-            this.log.warn(`[${this.name}] reminders: ${error.message}`);
+            this.log.warn(`[${this.name}] replies to snoozed mail: ${error.message}`);
         }
     }
 
