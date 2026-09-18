@@ -34,6 +34,8 @@ function fakeJMAP({
         contactCards: async (accountId) => {
             calls.push(['contacts', accountId]);
             const book = fake.books[accountId] ?? {};
+            // A test can hold a reading open, as a real one of thousands of cards is
+            if (book.hold) await book.hold;
             if (book.error) throw book.error;
             return { cards: book.cards ?? [], state: book.state ?? null };
         },
@@ -157,6 +159,8 @@ async function setUp(jmapOptions, options) {
 async function settle({ timers, watcher }) {
     await timers.run();
     await watcher.chain;
+    // Contacts are read beside the mail; a test looks once both are done
+    while (watcher.contactsLoading) await watcher.contactsLoading;
 }
 
 // Each device's banner is laid out as that device asked
@@ -529,6 +533,27 @@ test('a ContactCard change reads the cards again; a notice carrying the state al
     await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { ContactCard: 'cs3' } } });
     await settle(t);
     assert.equal(reads(), 2);
+});
+
+// Reading every card takes tens of seconds; mail that arrives meanwhile is
+// announced and wakes what it answers without waiting for it
+test('new mail does not wait for the contacts to be read again', async () => {
+    const t = await setUp({ contactsAccountIds: ['acc2'], books: { acc2: { cards: addressBook(), state: 'cs1' } }, created: ['M1'], emails: [arrival('M1')] });
+    let release;
+    t.jmap.books.acc2 = { cards: addressBook(), state: 'cs2', hold: new Promise((resolve) => { release = resolve; }) };
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' }, acc2: { ContactCard: 'cs2' } } });
+    await t.timers.run();
+    await t.watcher.chain;
+    assert.equal(t.apns.sent.length, 2, 'announced while the cards are still being read');
+    assert.ok(t.watcher.contactsLoading);
+
+    // A change during the reading is read after it
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc2: { ContactCard: 'cs3' } } });
+    t.jmap.books.acc2.state = 'cs3';
+    release();
+    await settle(t);
+    assert.equal(t.jmap.calls.filter((c) => c[0] === 'contacts').length, 3);
+    assert.deepEqual(t.watcher.contactsStates, { acc2: 'cs3' });
 });
 
 test('cards that cannot be read are tried again at the next look', async () => {

@@ -51,6 +51,10 @@ export class AccountWatcher {
         this.vipAddresses = new Set();
         this.contactsStates = {};
         this.contactsDue = false;
+        // The reading under way, if any, and whether the cards changed again
+        // while it was
+        this.contactsLoading = null;
+        this.contactsChangedWhileLoading = false;
         // Set once the JMAP session has been read, and never unset: until
         // then `hasContacts` is false for want of knowing, not because the
         // token cannot read contacts
@@ -219,7 +223,10 @@ export class AccountWatcher {
                 const cards = body.changed?.[id]?.[CONTACT_TYPE];
                 return cards !== undefined && cards !== this.contactsStates[id];
             });
-            if (cardsChanged) this.contactsDue = true;
+            if (cardsChanged) {
+                this.contactsDue = true;
+                if (this.contactsLoading) this.contactsChangedWhileLoading = true;
+            }
             if (cardsChanged || (mail && MAIL_TYPES.some((type) => type in mail))) this.notice('change');
         }
     }
@@ -238,8 +245,12 @@ export class AccountWatcher {
     }
 
     async process(source) {
-        // Before the mail, so a VIP added a moment ago already counts
-        if (this.contactsDue) await this.loadContacts();
+        // Beside the mail, never in front of it: reading every card takes
+        // tens of seconds, and a reply was waiting that long for its banner
+        // and to wake what it answers. Until it is done the mail is matched
+        // against the contacts read before, so a VIP added a moment ago
+        // counts once the cards are read.
+        if (this.contactsDue) this.refreshContacts();
         let changes;
         try {
             changes = await this.jmap.emailChanges(this.state.emailState);
@@ -476,6 +487,20 @@ export class AccountWatcher {
     // were and is tried again at the next look, so a hiccup at Fastmail
     // costs VIP alerts for a while, never every alert, and never half a
     // union.
+    // One reading at a time; cards changed during one are read again after it.
+    // A reading that fails leaves contactsDue set, for the next look.
+    refreshContacts() {
+        if (this.contactsLoading) return this.contactsLoading;
+        this.contactsLoading = this.loadContacts().finally(() => {
+            this.contactsLoading = null;
+            if (this.contactsChangedWhileLoading) {
+                this.contactsChangedWhileLoading = false;
+                this.refreshContacts();
+            }
+        });
+        return this.contactsLoading;
+    }
+
     async loadContacts() {
         this.contactsDue = false;
         if (!this.hasContacts) {
