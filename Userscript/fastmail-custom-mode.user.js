@@ -3287,6 +3287,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      */
     const SNOOZE_COUNT_LIMIT = 500;
 
+    // The unfolded query the mailbox's list is drawn from
+    const snoozeRowsOf = list => list.query || list;
+
     const snoozeCountsFrom = (moments, edges) => {
         const counts = edges.map(() => 0);
         moments.forEach((until) => {
@@ -3301,21 +3304,25 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * The return times of the whole list: what the rows to hand carry, and
-     * for the rest one ask for their snooze. The list itself is what says
-     * which messages are in the folder; a query of our own is refused where
-     * the offline worker answers ("offline"), which is every window but a
-     * compose one. Asking for a row the page has not loaded yet makes it
-     * load, and counting starts again when it arrives, so a list longer than
-     * one screen fills in over a moment rather than staying short.
+     * The return times of the whole folder: what the rows to hand carry, and
+     * for the rest one ask for their snooze. The folder's own list is what
+     * says which messages are in it; a query of our own is refused wherever
+     * Fastmail's offline worker answers, which is every window but a compose
+     * one. Counted off the query rather than the list drawn from it, so that
+     * folding a group, which takes its rows out of that list, does not take
+     * them out of the count as well. Asking for a row the page has not
+     * loaded yet makes it load, and counting starts again when it arrives,
+     * so a folder longer than one screen fills in over a moment rather than
+     * staying short.
      */
     const snoozeMomentsFor = (list, mailbox) => {
         const moments = [];
         const asking = [];
         let complete = true;
-        const length = Math.min(list.get('length') || 0, SNOOZE_COUNT_LIMIT);
+        const rows = snoozeRowsOf(list);
+        const length = Math.min(rows.get('length') || 0, SNOOZE_COUNT_LIMIT);
         for (let index = 0; index < length; index += 1) {
-            const record = list.getObjectAt(index);
+            const record = rows.getObjectAt(index);
             if (!record || typeof record.get !== 'function') {
                 complete = false;
                 continue;
@@ -3383,10 +3390,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
             const now = new Date();
             const edges = definition.categories.map(one => snoozeHorizon(now, one).getTime());
-            const folded = !!(list.collapsedGroups && list.collapsedGroups.size);
-            const asked = [mailbox.get('id'), list.get('length'), edges.join(',')].join('|');
+            const asked = [
+                mailbox.get('id'), snoozeRowsOf(list).get('length'), edges.join(',')
+            ].join('|');
 
-            if (folded || asked === list.customSnoozeAsked) {
+            if (asked === list.customSnoozeAsked) {
                 applySnoozeCounts(list, list.customSnoozeCounts);
                 return;
             }
