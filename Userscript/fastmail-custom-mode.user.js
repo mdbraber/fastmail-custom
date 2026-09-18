@@ -3274,18 +3274,52 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * A row the list has not loaded ends it the same way, and the count
      * settles as the rest arrive.
      */
+    /*
+     * When each row comes back. A page keeps what its own copy of a message
+     * holds, and an offline copy need not hold the snooze; a row whose time
+     * is missing is asked for once and kept here, so the counting works the
+     * same wherever it runs.
+     */
+    const snoozeUntilCache = new Map();
+
+    const snoozeUntilOf = (record) => {
+        const snoozed = record.get('snoozed');
+        if (snoozed && snoozed.until) return new Date(snoozed.until).getTime();
+        const asked = snoozeUntilCache.get(record.get('id'));
+        return asked === undefined ? undefined : asked;
+    };
+
+    // The rows whose time neither the page nor this has; asked for in one go
+    const askSnoozeTimes = (ids, accountId) => FastMail
+        .callJMAPMethod('Email/get', { accountId: accountId, ids: ids, properties: ['snoozed'] })
+        .then((answer) => {
+            (answer.list || []).forEach((email) => {
+                snoozeUntilCache.set(email.id,
+                    email.snoozed && email.snoozed.until ? new Date(email.snoozed.until).getTime() : null);
+            });
+            (answer.notFound || []).forEach((id) => snoozeUntilCache.set(id, null));
+        });
+
     const snoozeCountsFor = (definition, list) => {
         const now = new Date();
         const edges = definition.categories.map(one => snoozeHorizon(now, one).getTime());
         const counts = edges.map(() => 0);
         const length = list.get('length') || 0;
+        const missing = [];
+        let accountId = null;
 
         let previous = 0;
         for (let index = 0; index < length; index += 1) {
             const record = list.getObjectAt(index);
             if (!record || typeof record.get !== 'function') break;
-            const snoozed = record.get('snoozed');
-            const until = snoozed && snoozed.until ? new Date(snoozed.until).getTime() : null;
+            const until = snoozeUntilOf(record);
+            if (until === undefined) {
+                // Its time is not here yet: ask, and count again once it is
+                accountId = accountId || record.get('accountId');
+                missing.push(record.get('id'));
+                if (missing.length >= 200) break;
+                continue;
+            }
             if (!until) break;
             // Sorted some other way than by return date, so the groups would
             // take rows that are not theirs: better no groups than wrong ones
@@ -3297,6 +3331,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             }
             if (at === -1) break;
             counts[at] += 1;
+        }
+
+        if (missing.length) {
+            askSnoozeTimes(missing, accountId)
+                .then(scheduleSnoozeCounts)
+                .catch(() => {});
+            return null;
         }
 
         return counts;
