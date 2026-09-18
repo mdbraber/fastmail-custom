@@ -3300,30 +3300,57 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return counts;
     };
 
+    /*
+     * The return times of the whole list: what the rows to hand carry, and
+     * for the rest one ask for their snooze. The list itself is what says
+     * which messages are in the folder; a query of our own is refused where
+     * the offline worker answers ("offline"), which is every window but a
+     * compose one. Asking for a row the page has not loaded yet makes it
+     * load, and counting starts again when it arrives, so a list longer than
+     * one screen fills in over a moment rather than staying short.
+     */
     const snoozeMomentsFor = (list, mailbox) => {
-        const accountId = mailbox.get('accountId');
-        const mailboxId = mailbox.get('id');
-        const filter = list.get('filter') || { inMailbox: mailboxId };
-        return FastMail.callJMAPMethod('Email/query', {
-            accountId: accountId,
-            filter: filter,
-            sort: [
-                { property: 'snoozedUntil', isAscending: true, mailboxId: mailboxId },
-                { property: 'receivedAt', isAscending: true }
-            ],
-            collapseThreads: list.get('collapseThreads') !== false,
-            limit: SNOOZE_COUNT_LIMIT
-        }).then((found) => {
-            if (!found.ids.length) return [];
-            return FastMail.callJMAPMethod('Email/get', {
-                accountId: accountId, ids: found.ids, properties: ['snoozed']
-            }).then(answer => (answer.list || [])
-                .map(email => (email.snoozed && email.snoozed.until ? new Date(email.snoozed.until).getTime() : 0))
-                .filter(Boolean));
+        const moments = [];
+        const asking = [];
+        let complete = true;
+        const length = Math.min(list.get('length') || 0, SNOOZE_COUNT_LIMIT);
+        for (let index = 0; index < length; index += 1) {
+            const record = list.getObjectAt(index);
+            if (!record || typeof record.get !== 'function') {
+                complete = false;
+                continue;
+            }
+            const snoozed = record.get('snoozed');
+            if (snoozed && snoozed.until) {
+                moments.push(new Date(snoozed.until).getTime());
+                continue;
+            }
+            const id = record.get('id');
+            if (id) asking.push(id);
+            else complete = false;
+        }
+        if (!asking.length) return Promise.resolve({ moments: moments, complete: complete });
+        return FastMail.callJMAPMethod('Email/get', {
+            accountId: mailbox.get('accountId'),
+            ids: asking,
+            properties: ['snoozed']
+        }).then((answer) => {
+            (answer.list || []).forEach((email) => {
+                if (email.snoozed && email.snoozed.until) {
+                    moments.push(new Date(email.snoozed.until).getTime());
+                }
+            });
+            return { moments: moments, complete: complete };
+        }).catch((error) => {
+            console.warn('Fastmail Custom: could not ask for the return times', error);
+            return { moments: moments, complete: false };
         });
     };
 
     let applyingSnoozeCounts = false;
+    // On while the rule below writes a grouping back, so its own write does
+    // not read as the list being resorted again
+    let revertingSnoozeGrouping = false;
 
     const applySnoozeCounts = (list, counts) => {
         if (!counts) return;
@@ -3366,8 +3393,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             if (list.customSnoozeAsking) return;
             list.customSnoozeAsking = true;
 
-            snoozeMomentsFor(list, mailbox).then((moments) => {
-                list.customSnoozeAsked = asked;
+            snoozeMomentsFor(list, mailbox).then(({ moments, complete }) => {
+                // Only a full count is worth keeping: a short one is asked
+                // again once the rows it was missing have arrived
+                list.customSnoozeAsked = complete ? asked : null;
                 list.customSnoozeCounts = snoozeCountsFrom(moments, edges);
                 applySnoozeCounts(list, list.customSnoozeCounts);
                 // Readable from the app's own log, which is how a phone says
@@ -3412,20 +3441,27 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         mailController.addObserverForKey('sort', {
             go: () => {
                 if (revertingSnoozeGrouping) return;
-                try {
-                    if (currentGroupingId().indexOf(SNOOZE_PREFIX) !== 0) return;
-                    const sort = mailController.get('sort') || [];
-                    const field = sort[sort.length - 1];
-                    if (field && field.property === 'receivedAt' && field.isAscending) return;
-                    revertingSnoozeGrouping = true;
+                // After the change that brought it here has settled: a
+                // mailbox opening carries its own sort with it, and writing
+                // one back inside that change stopped the mailbox opening
+                setTimeout(() => {
+                    if (revertingSnoozeGrouping) return;
                     try {
-                        chooseGrouping('');
-                    } finally {
-                        revertingSnoozeGrouping = false;
+                        if (!isSnoozeMailbox(mailController.get('mailbox'))) return;
+                        if (currentGroupingId().indexOf(SNOOZE_PREFIX) !== 0) return;
+                        const sort = mailController.get('sort') || [];
+                        const field = sort[sort.length - 1];
+                        if (field && field.property === 'receivedAt' && field.isAscending) return;
+                        revertingSnoozeGrouping = true;
+                        try {
+                            chooseGrouping('');
+                        } finally {
+                            revertingSnoozeGrouping = false;
+                        }
+                    } catch (error) {
+                        reportFault('could not take the return-date grouping off a resorted list', error);
                     }
-                } catch (error) {
-                    reportFault('could not take the return-date grouping off a resorted list', error);
-                }
+                }, 0);
             }
         }, 'go');
     };
