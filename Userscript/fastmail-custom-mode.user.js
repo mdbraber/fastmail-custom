@@ -127,6 +127,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // What the Snoozed folder's own grouping is called, in the Group
         // menu and among the group presets, where it is renamed
         snoozeGroupName: 'By return date',
+        // Where it sits among them, as a number; empty puts it last
+        snoozeGroupAt: '',
         // Groups for the Snoozed folder, by when a conversation comes back,
         // written the way snooze presets are: a name and how far out the
         // group reaches. Cumulative, first match wins, and whatever is
@@ -390,7 +392,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         },
         {
             key: 'snoozeGroups', group: 'snooze', clearable: true, multiline: true,
-            title: 'Snooze groups',
+            title: 'Snooze group presets (return date)',
             hint: 'Groups the Snoozed folder by when a conversation comes back, offered in its Group menu beside the ordinary presets. Each group reaches to its own time (7d, tomorrow, 1m, or a date and time) and takes what the ones above it did not; anything further out falls in the last group.'
         },
         {
@@ -2461,6 +2463,23 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const snoozeGroupingName = () =>
         String(settingValue('snoozeGroupName') || '').trim() || SNOOZE_GROUPING_NAME;
+
+    // Its place among the group presets; anything unreadable puts it last
+    const snoozeGroupingAt = (total) => {
+        const at = parseInt(settingValue('snoozeGroupAt'), 10);
+        if (!isFinite(at) || at < 0) return total;
+        return Math.min(at, total);
+    };
+
+    // The presets a mailbox offers, the Snoozed folder's own among them in
+    // the place it was dragged to
+    const groupingsWithSnooze = (definitions, mailbox) => {
+        if (!isSnoozeMailbox(mailbox)) return definitions;
+        const snooze = snoozeGroupings();
+        if (!snooze.length) return definitions;
+        const at = snoozeGroupingAt(definitions.length);
+        return definitions.slice(0, at).concat(snooze, definitions.slice(at));
+    };
 
     // One grouping, whose groups are the setting's own rows
     const snoozeGroupings = () => {
@@ -8150,10 +8169,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const icons = groupingIcons(options);
         const mailbox = controller().get('mailbox');
         // A preset with nothing to group by here is not offered here
-        const definitions = modeGroupings().filter(one => expandLabels(one, mailbox))
-            // Groups by return date mean nothing anywhere else, so they are
-            // offered in the Snoozed folder and nowhere else, after the rest.
-            .concat(isSnoozeMailbox(mailbox) ? snoozeGroupings() : []);
+        // Groups by return date mean nothing anywhere else, so they are
+        // offered in the Snoozed folder and nowhere else, where they were put
+        const definitions = groupingsWithSnooze(
+            modeGroupings().filter(one => expandLabels(one, mailbox)), mailbox);
         const entries = definitions.map(definition => groupingOption(definition, active, icons));
 
         if (!entries.length) return;
@@ -10176,9 +10195,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             redraw();
         };
 
+        // The Snoozed folder's own grouping drags with the rest; it is not in
+        // the setting the others live in, so where it lands is kept on its own
+        const SNOOZE_ROW = '\u0000snooze-return';
+
         const reorder = (order) => {
             const now = current();
-            save(mergeOrder(now.map(one => one.name), order).map(name => named(now, name)));
+            const merged = mergeOrder(now.map(one => one.name).concat([SNOOZE_ROW]), order);
+            const at = merged.indexOf(SNOOZE_ROW);
+            writeSetting('snoozeGroupAt', String(at === -1 ? merged.length : at));
+            save(merged.filter(name => name !== SNOOZE_ROW).map(name => named(now, name)));
         };
 
         const remove = (name) => {
@@ -10261,30 +10287,23 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     remove: () => remove(one.name)
                 }));
 
-                const list = reorderList(classes, items, reorder);
-
-                // The Snoozed folder's own grouping, which nothing here can
-                // order or remove: its groups are a list of their own, under
-                // Snooze, and it is offered in no other mailbox. Its name is
-                // its own, and is changed from here.
-                const snoozeRow = new classes.View({
-                    className: 'u-list-body u-list-body--borders',
-                    draw: () => [new classes.View({
-                        className: 'u-list-item u-flex u-items-center u-space-x-2',
-                        draw: () => reorderRowParts(classes, {
-                            id: SNOOZE_PREFIX,
-                            label: el('span.u-flex.u-items-center.u-space-x-2', [
-                                el('span.u-truncate', [snoozeGroupingName()]),
-                                el('span.u-flex-none.u-color-unimportant.u-text-sm',
-                                    { style: 'font-style: italic' }, [SNOOZE_ONLY_NOTE])
-                            ]),
-                            edit: () => renameGrouping(classes, snoozeGroupingName(), (name) => {
-                                writeSetting('snoozeGroupName', name);
-                                redraw();
-                            })
-                        }, false)
-                    })]
+                // Its groups are a list of their own, under Snooze, and it is
+                // offered in no other mailbox; so it is renamed rather than
+                // edited here, and nothing removes it.
+                items.splice(snoozeGroupingAt(items.length), 0, {
+                    id: SNOOZE_ROW,
+                    label: el('span.u-flex.u-items-center.u-space-x-2', [
+                        el('span.u-truncate', [snoozeGroupingName()]),
+                        el('span.u-flex-none.u-color-unimportant.u-text-sm',
+                            { style: 'font-style: italic' }, [SNOOZE_ONLY_NOTE])
+                    ]),
+                    edit: () => renameGrouping(classes, snoozeGroupingName(), (name) => {
+                        writeSetting('snoozeGroupName', name);
+                        redraw();
+                    })
                 });
+
+                const list = reorderList(classes, items, reorder);
 
                 const addButton = new classes.ButtonView({
                     type: 'v-Button--standard v-Button--sizeM',
@@ -10296,7 +10315,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 return [
                     el('h3.u-trim.u-font-bold', [option.title]),
                     list,
-                    snoozeRow,
                     addButton,
                     el('p.u-trim.u-text-sm.u-color-unimportant', [option.hint])
                 ];
@@ -10557,7 +10575,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const ADD_LABELS = {
         snoozePresets: 'Add a snooze preset',
         reminderPresets: 'Add a reminder preset',
-        snoozeGroups: 'Add a snooze group'
+        snoozeGroups: 'Add a snooze group preset'
     };
 
     // A group reaches to a time rather than naming one, so its dialog asks
