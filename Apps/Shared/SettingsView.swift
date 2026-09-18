@@ -64,6 +64,7 @@ private struct GeneralSettingsView: View {
 #if os(macOS)
 private struct ComposeSettingsView: View {
     @AppStorage(ComposeMode.defaultsKey) private var composeMode = ComposeMode.fallback.rawValue
+    @AppStorage(ComposeMode.editDraftDefaultsKey) private var editDraftFollows = ComposeMode.editDraftFallback
 
     var body: some View {
         Form {
@@ -75,6 +76,13 @@ private struct ComposeSettingsView: View {
                 }
             } footer: {
                 Text("What the C key and the Compose button do. Hold Option for Fastmail's own compose in the page, Command and Option for a tab.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("Drafts open the same way", isOn: $editDraftFollows)
+            } footer: {
+                Text("Carrying on with a draft goes where the setting above says, rather than where Fastmail would put it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

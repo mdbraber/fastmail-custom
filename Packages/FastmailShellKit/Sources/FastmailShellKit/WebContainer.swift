@@ -181,6 +181,15 @@ public struct WebContainer {
                 return ComposeMode.inline.rawValue
                 #endif
             },
+            onEditDraft: { id in
+                #if os(macOS)
+                return ComposeCommands.editDraft(id: id)
+                #else
+                // A phone writes every message in the page, which is where
+                // Fastmail opens a draft anyway.
+                return ComposeMode.leaveItToFastmail
+                #endif
+            },
             // The Notifications page exists on iPhone and iPad only; the Mac
             // keeps Fastmail's own and answers nothing
             onNotificationState: {

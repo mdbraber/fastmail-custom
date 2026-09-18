@@ -302,6 +302,128 @@
         }, true);
     }
 
+    /*
+     * Carrying on with a draft, where the compose setting says.
+     *
+     * Fastmail decides this for itself: in the page, in the thread under the
+     * message, or a window of its own for a draft row double-clicked or
+     * shift-clicked. With the setting on, the app answers instead and the
+     * draft opens the way a new message does; with it off the app says
+     * "fastmail" and the original runs with the arguments it was given, so
+     * nothing changes for anyone who has not asked for this.
+     *
+     * Two entry points, because Fastmail has two. Every route that opens a
+     * draft in a window passes through the mail controller's goNewCompose:
+     * the double-click, a draft row clicked with no reading pane beside it,
+     * and undoing a discard or a send. The Edit draft button does not always
+     * get that far — beside a reading pane it drops the draft into the
+     * thread instead — so the thread controller's editDraft is asked in its
+     * own right, and hands over with `replaying` set so goNewCompose does
+     * not ask the app a second time about the same draft.
+     */
+    var replaying = false;
+
+    function draftIdOf(options) {
+        if (!options || options.mode !== 'draft') return null;
+        var message = options.message;
+        if (!message || typeof message.get !== 'function') return null;
+        var id = message.get('id');
+        return typeof id === 'string' && id ? id : null;
+    }
+
+    // Handing a draft back to Fastmail. Whatever this runs reaches the other
+    // patched call synchronously, and must pass straight through it.
+    function replay(run) {
+        replaying = true;
+        try {
+            run();
+        } finally {
+            replaying = false;
+        }
+    }
+
+    // Runs `decide` with whether the app wants this draft in the page. A
+    // draft the app opened itself never gets there, and neither does one it
+    // could not answer for, which is left exactly as Fastmail had it.
+    function askEditDraft(id, decide) {
+        function answered(answer) {
+            if (answer === 'window' || answer === 'tab') return;
+            replay(function () { decide(answer === 'inline'); });
+        }
+        post('editDraft', { id: id }).then(answered, function () { answered(null); });
+    }
+
+    // A window of its own, a compose window among them, opens the draft it
+    // was made for through the same calls, and asking the app then would
+    // find that very window and leave it empty. Only the mailbox asks.
+    // A compose window from the pool is known by the script it was given;
+    // any other by its minimal chrome or its address.
+    function isWindowOfItsOwn() {
+        return typeof window.fmshellLeavePool === 'function'
+            || /(^|[?&])ui=minimal(&|$)/.test(location.search.slice(1))
+            || /^\/mail\/compose(\/|$)/.test(location.pathname);
+    }
+
+    function patchEditDraft() {
+        var controller = mailController();
+        if (!controller || typeof controller.goNewCompose !== 'function') return false;
+        if (isWindowOfItsOwn()) return true;
+        if (controller.__fmshellEditDraft) return true;
+
+        var goNewCompose = controller.goNewCompose;
+        controller.goNewCompose = function (options) {
+            var id = replaying ? null : draftIdOf(options);
+            if (!id) return goNewCompose.apply(this, arguments);
+            var self = this;
+            var args = arguments;
+            askEditDraft(id, function (inline) {
+                if (!inline) {
+                    goNewCompose.apply(self, args);
+                    return;
+                }
+                // Fastmail's own compose in the page, which is what it does
+                // with a draft it was not asked to put in a window.
+                var inPage = {};
+                Object.keys(options).forEach(function (key) { inPage[key] = options[key]; });
+                inPage.inNewWindow = false;
+                goNewCompose.call(self, inPage);
+            });
+            return this;
+        };
+
+        var threads = typeof controller.get === 'function' ? controller.get('threadController') : null;
+        var prototype = threads ? Object.getPrototypeOf(threads) : null;
+        if (prototype && typeof prototype.editDraft === 'function' && !prototype.__fmshellEditDraft) {
+            var editDraft = prototype.editDraft;
+            prototype.editDraft = function (message, inNewWindow) {
+                var id = replaying ? null : draftIdOf({ mode: 'draft', message: message });
+                if (!id) return editDraft.apply(this, arguments);
+                var self = this;
+                var args = arguments;
+                askEditDraft(id, function (inline) {
+                    if (inline) editDraft.call(self, message, false);
+                    else editDraft.apply(self, args);
+                });
+                return this;
+            };
+            prototype.__fmshellEditDraft = true;
+        }
+
+        controller.__fmshellEditDraft = true;
+        return true;
+    }
+
+    // Fastmail builds the mail controller a moment after the page starts,
+    // and the thread controller with it.
+    function watchEditDraft() {
+        var attempts = 0;
+        (function poll() {
+            if (patchEditDraft() || attempts >= 120) return;
+            attempts += 1;
+            window.setTimeout(poll, 250);
+        })();
+    }
+
     // Fastmail's own toast host: the container view built with the root
     // view at boot and inserted right after it, on desktop and on the phone
     // alike, so its drawn node is always there to ask for the instance —
@@ -1609,6 +1731,7 @@
     installRouteHooks();
     watchTheme();
     watchComposeKey();
+    watchEditDraft();
     watchDragRegions();
     watchMenus();
     watchSettingsList();

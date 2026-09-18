@@ -19,6 +19,34 @@ public enum ComposeURL {
 }
 
 extension ComposeURL {
+    /// A draft that already exists, at Fastmail's own address for carrying
+    /// on with one: the compose page's address with the draft's id on the
+    /// end, keeping the account and the minimal chrome a window of its own
+    /// wants, and `mode=draft` the way Fastmail's own window for one has it.
+    /// Built from the compose address the app is already using, so nothing
+    /// has to be known about the profile here.
+    ///
+    /// The id comes from the page, so it is checked rather than trusted:
+    /// Fastmail's ids are letters, digits, dashes and underscores, and
+    /// anything else would be building a path out of something else's text.
+    public static func url(from composeURL: URL, draft id: String) -> URL? {
+        guard !id.isEmpty, id.count <= 128 else { return nil }
+        let allowed = { (character: Character) in
+            character.isASCII && (character.isLetter || character.isNumber || character == "-" || character == "_")
+        }
+        guard id.allSatisfy(allowed) else { return nil }
+        guard var components = URLComponents(url: composeURL, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        components.path = "/mail/compose/" + id
+        var items = (components.queryItems ?? []).filter { $0.name != "mode" }
+        items.append(URLQueryItem(name: "mode", value: "draft"))
+        components.queryItems = items
+        return components.url
+    }
+}
+
+extension ComposeURL {
     // A window opened for a mailto takes the path that is known to carry a
     // message, with the minimal chrome a window of its own wants: no sidebar,
     // no list, just what you are writing.
@@ -595,6 +623,48 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         }
         fitTabbedWindows()
         Self.bringForward(window)
+    }
+
+    /// A draft that already exists, opened the way a new message is: a
+    /// window of its own, or a tab of the mailbox window. False when there
+    /// is no pool to take a window from or the id is not one, and the page
+    /// is then left to open the draft itself.
+    @discardableResult
+    public func compose(draft id: String, mode: ComposeMode = .window) -> Bool {
+        guard
+            let pool,
+            let composeURL = Self.composeURL,
+            let url = ComposeURL.url(from: composeURL, draft: id)
+        else { return false }
+        // Asking for the same draft twice brings the window it is already in
+        // forward, the way Fastmail's own Edit draft does.
+        if let showing = Self.window(showing: url) {
+            Self.bringForward(showing)
+            return true
+        }
+        let host = mode == .tab ? Self.tabHost(NSApp.keyWindow) ?? Self.mailboxWindow() : nil
+        let window = pool.take()
+        Self.webView(of: window)?.load(URLRequest(url: url))
+        if let host {
+            window.tabbingMode = .preferred
+            Self.dress(window, like: host)
+            host.addTabbedWindow(window, ordered: .above)
+        } else {
+            Self.place(window)
+        }
+        fitTabbedWindows()
+        Self.bringForward(window)
+        return true
+    }
+
+    /// A window on screen whose page is this one, give or take the query. A
+    /// window waiting in the pool is ordered out and is not one of these.
+    static func window(showing url: URL) -> NSWindow? {
+        NSApp.windows.first { window in
+            guard window.isVisible || window.isMiniaturized else { return false }
+            guard let showing = webView(of: window)?.url else { return false }
+            return showing.host == url.host && showing.path == url.path
+        }
     }
 
     /// The mailbox window nearest the front, the one a tab joins

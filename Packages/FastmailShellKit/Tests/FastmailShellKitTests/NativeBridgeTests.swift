@@ -234,6 +234,30 @@ actor Recorder {
     #expect(reply.error != nil)
 }
 
+// A draft the page is about to open is asked about by its id; without one
+// there is nothing to ask, and a bridge nobody wired up leaves it to Fastmail.
+@Test @MainActor func editDraftAsksTheAppByTheDraftsId() async {
+    var asked: [String] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onEditDraft: { id in
+            asked.append(id)
+            return "tab"
+        }
+    )
+    let reply = await bridge.handle(body: ["action": "editDraft", "payload": ["id": "M123"]])
+    #expect(asked == ["M123"])
+    #expect(reply.value == "tab")
+    let refused = await bridge.handle(body: ["action": "editDraft", "payload": [:]])
+    #expect(refused.error != nil)
+
+    let unwired = NativeBridge(expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in })
+    let left = await unwired.handle(body: ["action": "editDraft", "payload": ["id": "M123"]])
+    #expect(left.value == "fastmail")
+}
+
 // The page reports the message it is showing, which titles the window and the
 // Handoff banner on another device. Leaving a message reports nothing, and
 // that has to arrive too, or the title outlives the message.

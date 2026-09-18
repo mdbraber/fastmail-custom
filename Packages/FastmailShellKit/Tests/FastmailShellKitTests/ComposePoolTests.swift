@@ -123,6 +123,32 @@ private final class FakeWindow {}
     #expect(query.contains("%26"))
 }
 
+// A draft opens at Fastmail's own address for one, keeping the account and
+// the minimal chrome, and an id that is not one builds no address at all.
+@Test func aDraftOpensAtFastmailsAddressForIt() {
+    let compose = URL(string: "https://app.fastmail.com/mail/Inbox/compose?u=f00dcafe&ui=minimal")!
+    let draft = ComposeURL.url(from: compose, draft: "Sto3rHszPGgk")
+    #expect(draft?.path == "/mail/compose/Sto3rHszPGgk")
+    let query = draft?.query ?? ""
+    #expect(query.contains("u=f00dcafe"))
+    #expect(query.contains("ui=minimal"))
+    #expect(query.contains("mode=draft"))
+    #expect(ComposeURL.url(from: compose, draft: "") == nil)
+    #expect(ComposeURL.url(from: compose, draft: "../settings") == nil)
+    #expect(ComposeURL.url(from: compose, draft: "a b") == nil)
+}
+
+// Drafts are left to Fastmail until the setting says otherwise, and then
+// go wherever a new message would.
+@Test func draftsFollowTheSettingOnlyWhenAskedTo() {
+    #expect(ComposeMode.editDraftFollowsCompose(in: [:]) == false)
+    #expect(ComposeMode.editDraftFollowsCompose(in: ["editDraftFollowsCompose": true]) == true)
+    #expect(ComposeMode.editDraft(follows: false, setting: .tab) == nil)
+    #expect(ComposeMode.editDraft(follows: true, setting: .tab) == .tab)
+    #expect(ComposeMode.editDraft(follows: true, setting: .inline) == .inline)
+    #expect(ComposeMode.editDraft(follows: true, setting: .window) == .window)
+}
+
 // Where a message opens when you ask for one without saying where: in the
 // page, in a tab, or in a window of its own.
 @Test func aMessageOpensInAWindowUnlessToldOtherwise() {

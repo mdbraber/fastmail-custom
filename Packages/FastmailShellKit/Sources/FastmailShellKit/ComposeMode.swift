@@ -44,6 +44,35 @@ public enum ComposeMode: String, CaseIterable, Sendable {
         stored(in: [defaultsKey: defaults.string(forKey: defaultsKey) as Any])
     }
 
+    /// Whether opening a draft to carry on writing it goes the same way as a
+    /// new message.
+    public static let editDraftDefaultsKey = "editDraftFollowsCompose"
+
+    /// Off unless it has been asked for. Fastmail has its own mind about a
+    /// draft, in the page or in a window of its own depending on how you
+    /// opened it, and a setting nobody has touched should leave that alone.
+    public static let editDraftFallback = false
+
+    public static func editDraftFollowsCompose(in values: [String: Any]) -> Bool {
+        values[editDraftDefaultsKey] as? Bool ?? editDraftFallback
+    }
+
+    public static func editDraftFollowsCompose(in defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: editDraftDefaultsKey) != nil else { return editDraftFallback }
+        return defaults.bool(forKey: editDraftDefaultsKey)
+    }
+
+    /// The answer Fastmail gets when the app did not take a draft off its
+    /// hands, and it should open the draft as it always has.
+    public static let leaveItToFastmail = "fastmail"
+
+    /// What the page should do with a draft it was about to open, given the
+    /// setting. `nil` leaves it to Fastmail, which is the answer whenever
+    /// the setting is off.
+    public static func editDraft(follows: Bool, setting: ComposeMode) -> ComposeMode? {
+        follows ? setting : nil
+    }
+
     /// What a press of the C key, or a click of the Compose button, is asking
     /// for.
     public static func asked(alt: Bool, command: Bool, shift: Bool) -> String? {
@@ -77,6 +106,28 @@ public enum ComposeCommands {
             ComposeWindows.shared.compose()
         case .tab:
             ComposeWindows.shared.compose(inTabOf: NSApp.keyWindow)
+        }
+        return mode.rawValue
+    }
+
+    /// Opens a draft that already exists where the compose setting says, and
+    /// says where it went.
+    @discardableResult
+    public static func editDraft(
+        id: String,
+        setting: ComposeMode = .stored(),
+        follows: Bool = ComposeMode.editDraftFollowsCompose()
+    ) -> String {
+        guard let mode = ComposeMode.editDraft(follows: follows, setting: setting) else {
+            return ComposeMode.leaveItToFastmail
+        }
+        switch mode {
+        case .inline:
+            break
+        case .window, .tab:
+            guard ComposeWindows.shared.compose(draft: id, mode: mode) else {
+                return ComposeMode.leaveItToFastmail
+            }
         }
         return mode.rawValue
     }

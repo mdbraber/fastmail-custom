@@ -28,6 +28,9 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     /// Asked where to put a message, and answers where it put it; so a page
     /// told "inline" knows to go ahead and open one itself.
     private let onCompose: @MainActor (String) -> String
+    /// Asked where to put a draft the page is about to open, by its id, and
+    /// answers where it put it; `fastmail` leaves the draft to the page.
+    private let onEditDraft: @MainActor (String) -> String
     /// What the Notifications page draws from; nothing where there is no such
     /// page, which is the Mac.
     private let onNotificationState: @MainActor () async -> NotificationState?
@@ -72,6 +75,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onShowWindow: @escaping @MainActor () -> Void = {},
         onSubject: @escaping @MainActor (String?) -> Void = { _ in },
         onCompose: @escaping @MainActor (String) -> String = { _ in ComposeMode.inline.rawValue },
+        // Nothing that has not been wired up takes a draft off Fastmail's hands
+        onEditDraft: @escaping @MainActor (String) -> String = { _ in ComposeMode.leaveItToFastmail },
         onNotificationState: @escaping @MainActor () async -> NotificationState? = { nil },
         onSetNotifications: @escaping @MainActor (NotificationChoice) -> NotificationChoice? = { _ in nil },
         onOpenNotificationSettings: @escaping @MainActor () -> Void = {},
@@ -100,6 +105,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onShowWindow = onShowWindow
         self.onSubject = onSubject
         self.onCompose = onCompose
+        self.onEditDraft = onEditDraft
         self.onNotificationState = onNotificationState
         self.onSetNotifications = onSetNotifications
         self.onOpenNotificationSettings = onOpenNotificationSettings
@@ -238,6 +244,11 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
                 return BridgeReply(value: nil, error: "compose has no mode")
             }
             return BridgeReply(value: onCompose(mode), error: nil)
+        case "editDraft":
+            guard let id = payload["id"] as? String, !id.isEmpty else {
+                return BridgeReply(value: nil, error: "editDraft has no id")
+            }
+            return BridgeReply(value: onEditDraft(id), error: nil)
         case "showWindow":
             onShowWindow()
             return BridgeReply(value: nil, error: nil)
