@@ -1992,6 +1992,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ' font-family: "Proxima Nova", system-ui, "Segoe UI", Roboto, Ubuntu,' +
         ' Cantarell, "Noto Sans", -apple-system, Arial, sans-serif;' +
         ' display: inline-block; margin-left: 12px; max-width: 40%;' +
+        // A label, never a target; and while it waits for the list to be
+        // scrolled it stands invisible over the first rows, scaled up to
+        // where the big title is. Taking clicks there left the first group
+        // heading unfoldable, since the click landed on this instead.
+        ' pointer-events: none;' +
         ' font-size: ' + MAILBOX_TITLE_COMPACT_FONT_SIZE + 'px; font-weight: 700;' +
         ' color: var(--ui-page-color-fg, rgb(27, 30, 32));' +
         ' overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' +
