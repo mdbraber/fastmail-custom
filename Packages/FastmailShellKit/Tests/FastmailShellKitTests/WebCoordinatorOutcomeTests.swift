@@ -103,3 +103,33 @@ import WebKit
 
     #expect(model.banner == "The page stopped responding and was reloaded.")
 }
+
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+import AppKit
+
+// A draft discarded in a window Fastmail popped out ends with the page
+// calling window.close() on itself. WebKit tears the page down and leaves
+// the window to the app, which used to leave it standing there empty.
+@MainActor
+@Test func aPageClosingItselfTakesItsPoppedOutWindowWithIt() {
+    let coordinator = WebCoordinator(
+        model: ShellModel(),
+        startURL: URL(string: "https://app.fastmail.com/mail/Inbox")!
+    )
+    let view = WKWebView()
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+        styleMask: [.titled, .closable],
+        backing: .buffered,
+        defer: true
+    )
+    window.isReleasedWhenClosed = false
+    window.contentView = view
+    window.orderFront(nil)
+    #expect(window.isVisible)
+
+    coordinator.webViewDidClose(view)
+
+    #expect(!window.isVisible)
+}
+#endif

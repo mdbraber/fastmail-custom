@@ -193,10 +193,16 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             // One window is all there is on a phone.
             webView.load(URLRequest(url: url))
             #else
-            return ComposeWindows.shared.window(
+            let opened = ComposeWindows.shared.window(
                 for: configuration,
                 size: Self.windowSize(windowFeatures)
             )
+            // The page in there asks for the same things this one does: to
+            // close its own window when it is done with it, and to put a
+            // confirm() on screen. Without a delegate of its own it got
+            // neither.
+            opened.uiDelegate = self
+            return opened
             #endif
         case .allow:
             webView.load(URLRequest(url: url))
@@ -208,6 +214,18 @@ public final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate 
             PageToast.show(Self.refusalBanner(for: url))
         }
         return nil
+    }
+
+    /// A page closing the window it lives in. Only a page this delegate
+    /// opened ever gets here, a message or a draft Fastmail popped out into
+    /// a window of its own; and it gets here because Fastmail is done with
+    /// it, the draft sent or discarded, the message filed. WebKit has torn
+    /// the page down by now, so the window would otherwise stay on screen
+    /// with nothing left in it.
+    public func webViewDidClose(_ webView: WKWebView) {
+        #if !canImport(UIKit)
+        webView.window?.performClose(nil)
+        #endif
     }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
