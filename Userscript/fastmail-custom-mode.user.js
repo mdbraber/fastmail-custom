@@ -9097,6 +9097,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * put into them, so a choice made in a control is not redrawn under the
      * finger that made it.
      */
+    // The previews switch, worded the same on the phone's page and on the
+    // Mac's, in a section of its own below the choice of which mail notifies
+    const PREVIEWS_LABEL = 'Show previews';
+    const PREVIEWS_DESCRIPTION = 'A banner shows the subject above the start of the message, rather than the subject alone.';
+    const previewsSection = (toggle) => pageSection(NOTIFICATIONS_PAGE_ID, { id: 'previews', title: 'Banners' }, [toggle]);
+
     const notificationsPane = (classes, controller, bridge) => {
         const el = FastMail.el;
         const mobile = isMobileSettings(controller);
@@ -9235,8 +9241,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const drawPreviews = () => {
             if (typeof classes.ToggleView !== 'function') return null;
             const toggle = new classes.ToggleView({
-                label: 'Show previews',
-                description: 'A banner shows the subject above the start of the message, rather than the subject alone.',
+                label: PREVIEWS_LABEL,
+                description: PREVIEWS_DESCRIPTION,
                 isDisabled: state.status !== 'ready',
                 value: state.previews
             });
@@ -9294,7 +9300,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 sections.push(pageSection(NOTIFICATIONS_PAGE_ID, { id: 'messages', title: 'New messages' }, controls));
                 views.previews = drawPreviews();
                 if (views.previews) {
-                    sections.push(pageSection(NOTIFICATIONS_PAGE_ID, { id: 'previews', title: 'Banners' }, [views.previews]));
+                    sections.push(previewsSection(views.previews));
                 }
                 if (state.pushToken) {
                     sections.push(el(NOTIFICATIONS_SECTION, [
@@ -9440,6 +9446,155 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         } catch (error) {
             notificationsPageState = 'unavailable';
             reportFault('the Notifications page could not be added; Fastmail’s own page stands in', error);
+        }
+    };
+
+    /*
+     * The Mac keeps Fastmail's own Notifications page: there Fastmail's
+     * offline worker decides which mail notifies, by that page's choices. The
+     * banner itself is the app's, so its previews switch is drawn onto
+     * Fastmail's page, below Fastmail's own section, the way the phone's page
+     * has it; and so is Custom's excluded labels list, under Fastmail's own
+     * labels, which the app applies to what Fastmail chose to show. Fastmail's pane class is only there once its module has loaded,
+     * which is when the page is first opened; the module registers the page
+     * as it loads, so that is when the class is looked for, before the page
+     * is built.
+     */
+    let notificationPreviewsState = 'waiting';
+
+    const notificationPreviewsBridge = () => {
+        const native = window.native;
+        const bridge = native && native.notificationPreviews;
+        return bridge && typeof bridge.get === 'function' && typeof bridge.set === 'function' ? bridge : null;
+    };
+
+    // The switch shows the app's setting once asked, and is held until then
+    const macPreviewsSection = (classes, bridge) => {
+        let ready = false;
+        const toggle = new classes.ToggleView({
+            label: PREVIEWS_LABEL, description: PREVIEWS_DESCRIPTION, value: true, isDisabled: true
+        });
+        toggle.addObserverForKey('value', {
+            changed: () => {
+                if (!ready) return;
+                Promise.resolve().then(() => bridge.set(toggle.get('value') === true)).then((saved) => {
+                    if (saved !== toggle.get('value')) toggle.set('value', saved);
+                }).catch((error) => reportFault('the previews setting could not be saved', error));
+            }
+        }, 'changed');
+        Promise.resolve().then(() => bridge.get()).then((value) => {
+            toggle.set('value', value === true);
+            toggle.set('isDisabled', false);
+            ready = true;
+        }).catch((error) => reportFault('the previews setting could not be read', error));
+        return previewsSection(toggle);
+    };
+
+    const notificationExclusionsBridge = () => {
+        const native = window.native;
+        const bridge = native && native.notificationExclusions;
+        return bridge && typeof bridge.get === 'function' && typeof bridge.set === 'function' ? bridge : null;
+    };
+
+    // Filled in once the app answers; a change is saved, and what the app
+    // kept is put back into the list
+    const macExcludedLabels = (classes, bridge) => {
+        const accountId = primaryMailAccountId();
+        const changed = (ids) => {
+            Promise.resolve().then(() => bridge.set(ids)).then((kept) => list.show(kept))
+                .catch((error) => reportFault('the excluded labels could not be saved', error));
+        };
+        const fastmails = ['ListInputView', 'MenuButtonView', 'MailboxMenuView']
+            .every(name => typeof classes[name] === 'function');
+        const list = fastmails
+            ? fastmailLabelList(classes, accountId, 'Excluded labels', [], changed)
+            : plainLabelList(classes, accountId, 'Excluded labels', [], changed);
+        Promise.resolve().then(() => bridge.get()).then((ids) => list.show(ids))
+            .catch((error) => reportFault('the excluded labels could not be read', error));
+        return list.view;
+    };
+
+    // False while Fastmail's pane is not there to add to
+    const patchNotificationsPane = (bridge) => {
+        const Pane = (FastMail.classes || {}).NotificationsPaneView;
+        const classes = findClasses(['ToggleView'], [
+            'ListInputView', 'MenuButtonView', 'MailboxMenuView', 'ButtonView', 'SelectView', 'View'
+        ]);
+        if (typeof Pane !== 'function' || !Pane.prototype || typeof Pane.prototype.draw !== 'function' || !classes) {
+            return false;
+        }
+        if (Pane.prototype.__fmcPreviews) return true;
+        const draw = Pane.prototype.draw;
+        Pane.prototype.draw = function () {
+            const drawn = draw.apply(this, arguments);
+            try {
+                return [].concat(drawn, macPreviewsSection(classes, bridge));
+            } catch (error) {
+                reportFault('the previews switch could not be drawn', error);
+                return drawn;
+            }
+        };
+        // Custom's label list is drawn only while Custom is the choice, so
+        // the excluded list beside it comes and goes with it
+        const exclusions = notificationExclusionsBridge();
+        const drawMailboxes = Pane.prototype.drawMailboxes;
+        const canList = ['ListInputView', 'MenuButtonView', 'MailboxMenuView'].every(name => classes[name]) ||
+            ['ButtonView', 'SelectView', 'View'].every(name => classes[name]);
+        if (exclusions && canList && typeof drawMailboxes === 'function') {
+            Pane.prototype.drawMailboxes = function () {
+                const theirs = drawMailboxes.apply(this, arguments);
+                try {
+                    return FastMail.el('div.u-space-y-5', [theirs, macExcludedLabels(classes, exclusions)]);
+                } catch (error) {
+                    reportFault('the excluded labels could not be drawn', error);
+                    return theirs;
+                }
+            };
+        }
+        Pane.prototype.__fmcPreviews = true;
+        return true;
+    };
+
+    // Called alongside ensureNotificationsPage. Without
+    // window.native.notificationPreviews, which is everywhere but the Mac,
+    // it does nothing at all.
+    const ensureNotificationPreviews = () => {
+        const bridge = notificationPreviewsBridge();
+        if (notificationPreviewsState !== 'waiting' || !bridge) return;
+        try {
+            const router = FastMail.router;
+            const controller = router && typeof router.getAppController === 'function'
+                ? router.getAppController('settings') : null;
+            if (!controller) return;
+            if (patchNotificationsPane(bridge)) {
+                notificationPreviewsState = 'installed';
+                return;
+            }
+            if (typeof controller.register !== 'function') {
+                notificationPreviewsState = 'unavailable';
+                reportFault('the previews switch could not be added to the Notifications page');
+                return;
+            }
+            const register = controller.register;
+            controller.register = function (id) {
+                const result = register.apply(this, arguments);
+                if (id === NOTIFICATIONS_PAGE_ID && notificationPreviewsState === 'watching') {
+                    try {
+                        notificationPreviewsState = patchNotificationsPane(bridge) ? 'installed' : 'unavailable';
+                        if (notificationPreviewsState === 'unavailable') {
+                            reportFault('the previews switch could not be added to the Notifications page');
+                        }
+                    } catch (error) {
+                        notificationPreviewsState = 'unavailable';
+                        reportFault('the previews switch could not be added to the Notifications page', error);
+                    }
+                }
+                return result;
+            };
+            notificationPreviewsState = 'watching';
+        } catch (error) {
+            notificationPreviewsState = 'unavailable';
+            reportFault('the previews switch could not be added to the Notifications page', error);
         }
     };
 
@@ -9716,11 +9871,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     }
                     ensureSettingsPage();
                     ensureNotificationsPage();
+                    ensureNotificationPreviews();
                 }
             }, 'check');
         }
         ensureSettingsPage();
         ensureNotificationsPage();
+        ensureNotificationPreviews();
     };
 
     const openSettings = () => {
@@ -11072,6 +11229,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const dressSettingsList = () => {
         ensureSettingsPage();
         ensureNotificationsPage();
+        ensureNotificationPreviews();
         const found = settingsSourceList();
         if (!found) return;
         const { list, swipes, offline } = found;

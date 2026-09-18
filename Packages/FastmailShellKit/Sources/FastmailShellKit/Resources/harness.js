@@ -1011,9 +1011,38 @@
     // The app answers state() and set() as JSON text, since a reply's value
     // is a string; they resolve to the object, and reject when there is no
     // answer to read, which is how post() hands on a refusal.
+    function exclusionsReply(text) {
+        var ids = JSON.parse(text).mailboxIds;
+        return Array.isArray(ids) ? ids : [];
+    }
+
     function notificationReply(text) {
         if (typeof text !== 'string') throw new Error('The app did not answer');
         return JSON.parse(text);
+    }
+
+    // The Mac's previews switch, which the userscript draws on Fastmail's
+    // own Notifications page there. get() and set() resolve to the setting
+    // as it stands.
+    if (/Electron\//.test(navigator.userAgent)) {
+        window.native.notificationPreviews = {
+            get: function () {
+                return post('notificationPreviews', {}).then(function (value) { return value === 'true'; });
+            },
+            set: function (enabled) {
+                return post('notificationPreviews', { enabled: enabled === true })
+                    .then(function (value) { return value === 'true'; });
+            }
+        };
+        // And Custom's excluded labels; both resolve to the ids as kept
+        window.native.notificationExclusions = {
+            get: function () {
+                return post('notificationExclusions', {}).then(exclusionsReply);
+            },
+            set: function (mailboxIds) {
+                return post('notificationExclusions', { mailboxIds: mailboxIds }).then(exclusionsReply);
+            }
+        };
     }
 
     if (!/Electron\//.test(navigator.userAgent)) {
@@ -1161,8 +1190,37 @@
             var queued = pendingNotifications;
             pendingNotifications = [];
             queued.forEach(function (notification) {
-                previewed(notification).then(function (shown) { post('notify', shown); });
+                excluded(notification).then(function (isExcluded) {
+                    if (isExcluded) return;
+                    return previewed(notification).then(function (shown) { post('notify', shown); });
+                });
             });
+        };
+
+        // Custom's excluded labels, which Fastmail's own choices have no room
+        // for: the Notifications page keeps them in the app, and a message in
+        // one of them is left out here, after Fastmail chose to show it. Only
+        // while Custom is the choice, as on the phone; anything unreadable
+        // leaves the notification be.
+        var excluded = function (notification) {
+            var push;
+            try {
+                push = JSON.parse(notification.data || '{}');
+            } catch (error) {
+                return Promise.resolve(false);
+            }
+            var email = emailOf(push);
+            if (!email || !email.mailboxIds || !push.userId) return Promise.resolve(false);
+            var mode;
+            try {
+                mode = JSON.parse(localStorage.getItem('preferences:' + push.userId + '.notificationsMail'));
+            } catch (error) {
+                return Promise.resolve(false);
+            }
+            if (mode !== 'custom') return Promise.resolve(false);
+            return window.native.notificationExclusions.get().then(function (ids) {
+                return ids.some(function (id) { return email.mailboxIds[id] === true; });
+            }, function () { return false; });
         };
 
         var queueNotification = function (notification) {

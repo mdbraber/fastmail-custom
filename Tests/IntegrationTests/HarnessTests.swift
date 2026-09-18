@@ -247,6 +247,34 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(asked, #"{"name":"Email/get","args":{"accountId":"A1","ids":["M8"],"properties":["preview"]}}"#)
     }
 
+    // Custom's excluded labels leave out a message Fastmail chose to show,
+    // and only while Custom is the choice
+    func testAMessageInAnExcludedLabelIsLeftOutInCustom() async throws {
+        webView = try await electronWebView()
+        _ = try await evaluate(webView, """
+        window.native.notificationExclusions.get = function () { return Promise.resolve(['L-later']); };
+        localStorage.setItem('preferences:u1.notificationsMail', JSON.stringify('custom'));
+        window.electron.showNotification({title: 'Ada', body: 'Later'},
+            {'@type': 'EmailPush', userId: 'u1', email: {id: 'X1', threadId: 'T1', mailboxIds: {'L-inbox': true, 'L-later': true}}});
+        window.electron.showNotification({title: 'Bob', body: 'Now'},
+            {'@type': 'EmailPush', userId: 'u1', email: {id: 'X2', threadId: 'T2', mailboxIds: {'L-inbox': true}}});
+        true;
+        """)
+        try await waitUntil(timeout: 10) { !self.notifications().isEmpty }
+        // Time for the excluded one to have arrived, were it coming
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(notifications().compactMap { $0["id"] as? String }, ["X2"])
+
+        _ = try await evaluate(webView, """
+        localStorage.setItem('preferences:u1.notificationsMail', JSON.stringify('inbox'));
+        window.electron.showNotification({title: 'Cy', body: 'Later'},
+            {'@type': 'EmailPush', userId: 'u1', email: {id: 'X3', threadId: 'T3', mailboxIds: {'L-inbox': true, 'L-later': true}}});
+        true;
+        """)
+        try await waitUntil(timeout: 10) { self.notifications().count >= 2 }
+        XCTAssertEqual(notifications().compactMap { $0["id"] as? String }, ["X2", "X3"])
+    }
+
     // Fastmail's service worker drops a notification when the sender's
     // contact has a photo, so the new-mail broadcast it would have answered
     // is answered here after a short wait

@@ -67,6 +67,20 @@ public enum PushPreferences {
         defaults.object(forKey: previewsKey) as? Bool ?? true
     }
 
+    public static func setPreviews(_ enabled: Bool, in defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: previewsKey)
+    }
+
+    /// The Mac's excluded labels, read and written on their own: its other
+    /// choices are Fastmail's, on Fastmail's own page.
+    public static func excludedMailboxIds(in defaults: UserDefaults = .standard) -> [String] {
+        NotificationChoice.cleaned(defaults.array(forKey: excludedMailboxIdsKey)?.compactMap { $0 as? String } ?? [])
+    }
+
+    public static func setExcludedMailboxIds(_ ids: [String], in defaults: UserDefaults = .standard) {
+        defaults.set(NotificationChoice.cleaned(ids), forKey: excludedMailboxIdsKey)
+    }
+
     public static func contacts(in defaults: UserDefaults = .standard) -> Bool? {
         defaults.object(forKey: contactsKey) as? Bool
     }

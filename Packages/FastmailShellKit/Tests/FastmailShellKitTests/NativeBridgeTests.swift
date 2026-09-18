@@ -258,6 +258,61 @@ actor Recorder {
     #expect(left.value == "fastmail")
 }
 
+// The Mac's previews switch: asked with nothing, set with a real boolean,
+// and refused where the app keeps no such switch
+@Test @MainActor func notificationPreviewsAreAskedAndSet() async {
+    var previews = true
+    var given: [Bool?] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onNotificationPreviews: { enabled in
+            given.append(enabled)
+            if let enabled { previews = enabled }
+            return previews
+        }
+    )
+    let asked = await bridge.handle(body: ["action": "notificationPreviews", "payload": [:]])
+    #expect(asked.value == "true")
+    let set = await bridge.handle(body: ["action": "notificationPreviews", "payload": ["enabled": false]])
+    #expect(set.value == "false")
+    let refused = await bridge.handle(body: ["action": "notificationPreviews", "payload": ["enabled": "no"]])
+    #expect(refused.error != nil)
+    #expect(given == [nil, false])
+
+    let phone = NativeBridge(expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in })
+    let none = await phone.handle(body: ["action": "notificationPreviews", "payload": [:]])
+    #expect(none.value == nil)
+    #expect(none.error != nil)
+}
+
+// The Mac's excluded labels: asked with nothing, set with a list checked the
+// way the phone's is, and refused where the app keeps no such list
+@Test @MainActor func notificationExclusionsAreAskedAndSet() async {
+    var kept: [String] = ["P9L"]
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onNotificationExclusions: { ids in
+            if let ids { kept = ids }
+            return kept
+        }
+    )
+    let asked = await bridge.handle(body: ["action": "notificationExclusions", "payload": [:]])
+    #expect(asked.value == #"{"mailboxIds":["P9L"]}"#)
+    let set = await bridge.handle(body: ["action": "notificationExclusions", "payload": ["mailboxIds": ["A", "A", "B"]]])
+    #expect(set.value == #"{"mailboxIds":["A","B"]}"#)
+    let refused = await bridge.handle(body: ["action": "notificationExclusions", "payload": ["mailboxIds": [""]]])
+    #expect(refused.error != nil)
+    #expect(kept == ["A", "B"])
+
+    let phone = NativeBridge(expectedHost: "app.fastmail.com", onLog: { _ in }, onError: { _ in })
+    let none = await phone.handle(body: ["action": "notificationExclusions", "payload": [:]])
+    #expect(none.error != nil)
+}
+
 // The page reports the message it is showing, which titles the window and the
 // Handoff banner on another device. Leaving a message reports nothing, and
 // that has to arrive too, or the title outlives the message.

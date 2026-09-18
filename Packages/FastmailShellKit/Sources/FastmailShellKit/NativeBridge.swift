@@ -38,6 +38,14 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     /// saved, or nothing where there is no such page.
     private let onSetNotifications: @MainActor (NotificationChoice) -> NotificationChoice?
     private let onOpenNotificationSettings: @MainActor () -> Void
+    /// The Mac's previews switch, drawn on Fastmail's own Notifications
+    /// page: sets it when given a value, and answers what it is. Nothing
+    /// where there is no such switch, which is the phone, whose previews
+    /// travel with its notification choice.
+    private let onNotificationPreviews: @MainActor (Bool?) -> Bool?
+    /// The Mac's excluded labels, the same way: set when given a list, and
+    /// answered as kept.
+    private let onNotificationExclusions: @MainActor ([String]?) -> [String]?
     /// The Fastmail account the page is on, already checked, for settings sync.
     private let onAccount: @MainActor (String) -> Void
     /// The settings page's "Sync settings with iCloud" switch.
@@ -80,6 +88,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onNotificationState: @escaping @MainActor () async -> NotificationState? = { nil },
         onSetNotifications: @escaping @MainActor (NotificationChoice) -> NotificationChoice? = { _ in nil },
         onOpenNotificationSettings: @escaping @MainActor () -> Void = {},
+        onNotificationPreviews: @escaping @MainActor (Bool?) -> Bool? = { _ in nil },
+        onNotificationExclusions: @escaping @MainActor ([String]?) -> [String]? = { _ in nil },
         onAccount: @escaping @MainActor (String) -> Void = { _ in },
         onSettingsSync: @escaping @MainActor (Bool) -> Void = { _ in },
         onNotificationPermission: @escaping @MainActor () async -> String = { "denied" },
@@ -109,6 +119,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onNotificationState = onNotificationState
         self.onSetNotifications = onSetNotifications
         self.onOpenNotificationSettings = onOpenNotificationSettings
+        self.onNotificationPreviews = onNotificationPreviews
+        self.onNotificationExclusions = onNotificationExclusions
         self.onAccount = onAccount
         self.onSettingsSync = onSettingsSync
         self.onNotificationPermission = onNotificationPermission
@@ -272,6 +284,38 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "openNotificationSettings":
             onOpenNotificationSettings()
             return BridgeReply(value: nil, error: nil)
+        case "notificationPreviews":
+            // A real boolean only, as for settingsSync; none at all asks
+            var enabled: Bool?
+            if let value = payload["enabled"] {
+                guard
+                    let number = value as? NSNumber,
+                    CFGetTypeID(number as CFTypeRef) == CFBooleanGetTypeID()
+                else {
+                    return BridgeReply(value: nil, error: "notificationPreviews enabled must be a boolean")
+                }
+                enabled = number.boolValue
+            }
+            guard let previews = onNotificationPreviews(enabled) else {
+                return BridgeReply(value: nil, error: "notification previews are not set here")
+            }
+            return BridgeReply(value: previews ? "true" : "false", error: nil)
+        case "notificationExclusions":
+            // Checked the way the phone's choice checks its lists
+            var given: [String]?
+            if payload["mailboxIds"] != nil {
+                switch NotificationChoice.parse(["mode": "custom", "excludedMailboxIds": payload["mailboxIds"] as Any]) {
+                case .failure(let invalid):
+                    return BridgeReply(value: nil, error: "notificationExclusions: \(invalid.message)")
+                case .success(let choice):
+                    given = choice.excludedMailboxIds
+                }
+            }
+            guard let kept = onNotificationExclusions(given) else {
+                return BridgeReply(value: nil, error: "notification exclusions are not set here")
+            }
+            // Text, as the notification state is: the harness parses it
+            return BridgeReply(value: NotificationChoice.jsonText(["mailboxIds": kept]), error: nil)
         case "account":
             // The id becomes part of every store key, so it is checked here
             guard

@@ -70,6 +70,15 @@ private func fresh() -> UserDefaults {
     #expect(defaults.object(forKey: "push.previews") as? Bool == false)
     #expect(PushPreferences.previews(in: defaults) == false)
     #expect(PushPreferences.choice(in: defaults).previews == false)
+    PushPreferences.setPreviews(true, in: defaults)
+    #expect(PushPreferences.previews(in: defaults) == true)
+}
+
+@Test func theMacsExcludedLabelsAreKeptCleaned() {
+    let defaults = fresh()
+    #expect(PushPreferences.excludedMailboxIds(in: defaults) == [])
+    PushPreferences.setExcludedMailboxIds(["P9L", "", "P9L", "P2F"], in: defaults)
+    #expect(PushPreferences.excludedMailboxIds(in: defaults) == ["P9L", "P2F"])
 }
 
 // An acknowledgement from before the previews switch was for previews shown,

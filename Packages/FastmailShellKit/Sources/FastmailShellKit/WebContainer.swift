@@ -211,6 +211,26 @@ public struct WebContainer {
                 NotificationSettings.openSystemSettings()
                 #endif
             },
+            // The Mac draws its own banners, so its previews switch is the
+            // app's alone; the phone's goes with its notification choice
+            onNotificationPreviews: { enabled in
+                #if os(macOS)
+                if let enabled { PushPreferences.setPreviews(enabled) }
+                return PushPreferences.previews()
+                #else
+                return nil
+                #endif
+            },
+            // And the Mac's excluded labels, which Fastmail's own choices
+            // have no room for; the page leaves out what they catch
+            onNotificationExclusions: { ids in
+                #if os(macOS)
+                if let ids { PushPreferences.setExcludedMailboxIds(ids) }
+                return PushPreferences.excludedMailboxIds()
+                #else
+                return nil
+                #endif
+            },
             // Settings sync, where the app installed it; nothing happens
             // without it
             onAccount: { accountId in
