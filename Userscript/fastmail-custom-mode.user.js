@@ -109,8 +109,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             'unread first\n  Unread = is:unread',
         // A decision about a message in triage steps on to the next message
         // only while that one is in triage too; the run is over otherwise,
-        // and the list is where it ends. A decision about anything else goes
-        // where Fastmail's own setting says.
+        // and the list is where it ends. Only where the message fills the
+        // window: beside a reading pane the list is on screen anyway, and
+        // there, as after a decision about any other message, Fastmail's own
+        // setting says where to go.
         backToListAfterTriage: true,
         // The label a rule puts on everything incoming. Taken off by keeping
         // or filing; the script never adds it.
@@ -339,7 +341,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'backToListAfterTriage', group: 'labelsFiling',
             title: 'Return to message list when no triage labels left',
-            hint: 'After a decision on a message carrying the triage label, the step to the next one is taken only while that one carries it too; otherwise the message list comes back. Decisions on any other message follow Fastmail’s own setting.'
+            hint: 'Where a message fills the window, such as the phone or with Fastmail’s reading pane off. After a decision on a message carrying the triage label, the step to the next one is taken only while that one carries it too; otherwise the message list comes back. Beside a reading pane, and after a decision on any other message, Fastmail’s own setting decides.'
         },
         {
             key: 'dragAdditive', group: 'labelsFiling',
@@ -5783,6 +5785,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // only a decision about one can end a run; a decision about
             // anything else steps where Fastmail's own setting says.
             inRun: carriesMailbox(message, message && triageMailbox(message.get('accountId'))),
+            listShowing: readingPaneShowing(),
             next: index < 0 ? null : at(index + 1),
             previous: index < 1 ? null : at(index - 1)
         };
@@ -5807,6 +5810,25 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             return AFTER_ACTION_DEFAULT;
         }
     };
+
+    /*
+     * Whether the mailbox list stands beside the open message. Fastmail's own
+     * answer: false on the phone, false with its reading pane switched off,
+     * and false in a window too narrow to hold both. Where it is true, coming
+     * back to the list is no move at all; the list never went anywhere, and
+     * all that happens is the open message closing, leaving an empty pane.
+     */
+    const readingPaneShowing = () => {
+        try {
+            return !!controller().get('showReadingPane');
+        } catch (error) {
+            return false;
+        }
+    };
+
+    // A message opened in a window of its own: no list beside it, and none
+    // behind it to come back to.
+    const inOwnWindow = () => !!(window.opener || window.__fmshellComposeWindow);
 
     // The current mailbox's list URL, built from a message in it; Fastmail
     // has no getUrlForMailbox; by dropping the message id off the end.
@@ -5839,6 +5861,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * asked about, so the list catches that instead; while a decision made
      * outside the run in the first place is left to the setting.
      *
+     * Only where a message fills the window, though. Beside a reading pane
+     * the list is on screen the whole time, so there is nothing to come back
+     * to and the setting keeps the last word there too.
+     *
      * Run a tick after the decision, so the store has taken Triage off the
      * one just decided and the list has settled.
      *
@@ -5849,6 +5875,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      */
     const advanceAfterDecision = (from, step) => {
         if (!onTriageSurface()) return;
+        // In a window of its own the decision is the whole of what happens:
+        // there is no list there to step along or come back to.
+        if (inOwnWindow()) return;
         const plan = step && typeof step === 'object' ? step : stepFrom(from);
         // A decision made from the list stays on the list: nothing was open
         // to move on from, so there is nowhere to move on to
@@ -5883,9 +5912,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             // The run ends where the triage label does. A decision about a
             // message that was not carrying it is no part of a run, so the
             // setting has the last word there, as it does with no triage
-            // label set at all.
+            // label set at all, and as it does beside a reading pane: the
+            // list is on screen there whatever happens, so ending the run on
+            // it would only blank the pane.
             const triage = settings.backToListAfterTriage && plan.inRun &&
-                target && triageMailbox(target.get('accountId'));
+                !plan.listShowing && target && triageMailbox(target.get('accountId'));
             const stillTriage = !triage || carriesMailbox(target, triage);
 
             // Nothing that way is the end of the list, and the mailbox is what
