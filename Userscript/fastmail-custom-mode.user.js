@@ -4410,7 +4410,126 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     // The bar is rebuilt as you move around, so it is dressed again on every
     // move rather than once.
+    /*
+     * Collapse or expand every group of the list at once, from the list's
+     * own bar beside Filter and Sort. One button: while any group with
+     * messages is open it collapses them all, otherwise it opens them all;
+     * greyed out when the list is not grouped.
+     *
+     * The bar draws from its computed rightConfig, which is wrapped on each
+     * list bar the way the message actions bar's list is, to put the button
+     * before Sort; not while a selection has the bar, which then shows the
+     * selection's own actions. The folds go in the way adoptList puts them
+     * in: the set first, then the length recounted and the range redrawn,
+     * then collapsedGroupsDidChange, which stores them where a heading's own
+     * click does (Fastmail's split, or the mode's remembered folds).
+     */
+    const FOLD_GROUPS_VIEW = 'customFoldGroups';
+
+    const FOLD_ICON_SHAPES = {
+        // Chevrons meeting, and parting
+        collapse: [['polyline', { points: '7 4.5 12 9.5 17 4.5' }], ['polyline', { points: '7 19.5 12 14.5 17 19.5' }]],
+        expand: [['polyline', { points: '7 9.5 12 4.5 17 9.5' }], ['polyline', { points: '7 14.5 12 19.5 17 14.5' }]]
+    };
+
+    // The open list's groups as the list view lays them out, or null when it
+    // is not grouped
+    const listGroups = () => {
+        try {
+            const list = controller().get('mailboxMessageList');
+            if (!list || !list.collapsedGroups || typeof list.computedPropertyDidChange !== 'function') return null;
+            const node = document.querySelector('.v-Mailbox');
+            const view = node && FastMail.getViewFromNode(node);
+            const offsets = view && typeof view.get === 'function' ? view.get('splitOffsets') : null;
+            if (!Array.isArray(offsets) || offsets.length < 2) return null;
+            return { list, offsets };
+        } catch (error) {
+            return null;
+        }
+    };
+
+    const anyGroupOpen = (groups) => groups.offsets.some(entry => entry.count && !entry.collapsed);
+
+    const foldAllGroups = () => {
+        const groups = listGroups();
+        if (!groups) return;
+        const { list, offsets } = groups;
+        const collapse = anyGroupOpen(groups);
+        const before = list.get('length') || 0;
+        offsets.forEach((entry, index) => {
+            if (collapse) list.collapsedGroups.add(index);
+            else list.collapsedGroups.delete(index);
+        });
+        list.computedPropertyDidChange('length');
+        list.rangeDidChange(0, Math.max(before, list.get('length') || 0));
+        if (typeof list.collapsedGroupsDidChange === 'function') list.collapsedGroupsDidChange();
+        setTimeout(updateFoldGroupsButton, 0);
+    };
+
+    const updateFoldGroupsButton = () => {
+        const groups = listGroups();
+        const collapse = !groups || anyGroupOpen(groups);
+        const label = collapse ? 'Collapse all groups' : 'Expand all groups';
+        toolbarsOnScreen().forEach((toolbar) => {
+            const button = toolbar.customFoldGroups && toolbar.getView(FOLD_GROUPS_VIEW);
+            if (!button) return;
+            try {
+                if (button.get('isDisabled') !== !groups) button.set('isDisabled', !groups);
+                if (button.get('label') !== label) {
+                    button.set('label', label);
+                    button.set('icon', standardIcon('i-fold-' + (collapse ? 'collapse' : 'expand'),
+                        FOLD_ICON_SHAPES[collapse ? 'collapse' : 'expand']));
+                }
+            } catch (error) {
+                // The bar is going away
+            }
+        });
+    };
+
+    // The mailbox list's bar: the one with Sort, and a rightConfig of its own
+    const dressListToolbars = () => {
+        toolbarsOnScreen().forEach((toolbar) => {
+            if (toolbar.customFoldGroups || !toolbar.getView('sort') ||
+                    !Object.prototype.hasOwnProperty.call(toolbar, 'rightConfig') ||
+                    typeof toolbar.rightConfig !== 'function') return;
+            const original = toolbar.rightConfig;
+            const wrapped = function () {
+                const names = original.apply(this, arguments);
+                if (!Array.isArray(names) || names.indexOf('selection') !== -1) return names;
+                const at = names.indexOf('sort');
+                if (at === -1 || names.indexOf(FOLD_GROUPS_VIEW) !== -1) return names;
+                return names.slice(0, at).concat(FOLD_GROUPS_VIEW, names.slice(at));
+            };
+            Object.getOwnPropertyNames(original).forEach((key) => {
+                if (key === 'length' || key === 'name' || key === 'prototype') return;
+                try {
+                    wrapped[key] = original[key];
+                } catch (error) {
+                    // Read-only; the ones that matter are not
+                }
+            });
+            try {
+                const sort = toolbar.getView('sort');
+                toolbar.registerView(FOLD_GROUPS_VIEW, new FastMail.classes.ButtonView({
+                    type: String(sort.get('type') || 'v-Button--subtleStandard v-Button--sizeM v-Button--iconOnly v-Button--tooltipLabel'),
+                    icon: standardIcon('i-fold-collapse', FOLD_ICON_SHAPES.collapse),
+                    label: 'Collapse all groups',
+                    target: { run: foldAllGroups },
+                    method: 'run'
+                }), true);
+                toolbar.rightConfig = wrapped;
+                toolbar.customFoldGroups = true;
+                toolbar.computedPropertyDidChange('rightConfig');
+            } catch (error) {
+                reportFault('could not add the collapse-all button', error);
+                toolbar.customFoldGroups = true;
+            }
+        });
+        updateFoldGroupsButton();
+    };
+
     const refreshToolbar = () => {
+        dressListToolbars();
         if (modeAppliesHere()) {
             // Every layout that has a message actions bar: along the bottom
             // on a phone, across the top of the message on a tablet and on
