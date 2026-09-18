@@ -22,12 +22,35 @@ public struct NotificationChoice: Equatable, Sendable, Codable {
     public var mailboxIds: [String]
     /// ...and in none of these.
     public var excludedMailboxIds: [String]
+    /// Whether a banner shows the start of the message's text, with the
+    /// subject above it, or the subject alone.
+    public var previews: Bool
 
-    public init(mode: Mode, senders: Senders = .everyone, mailboxIds: [String] = [], excludedMailboxIds: [String] = []) {
+    public init(
+        mode: Mode, senders: Senders = .everyone, mailboxIds: [String] = [], excludedMailboxIds: [String] = [],
+        previews: Bool = true
+    ) {
         self.mode = mode
         self.senders = senders
         self.mailboxIds = Self.cleaned(mailboxIds)
         self.excludedMailboxIds = Self.cleaned(excludedMailboxIds)
+        self.previews = previews
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mode, senders, mailboxIds, excludedMailboxIds, previews
+    }
+
+    /// A choice kept from before the previews switch reads with them on.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            mode: try container.decode(Mode.self, forKey: .mode),
+            senders: try container.decode(Senders.self, forKey: .senders),
+            mailboxIds: try container.decode([String].self, forKey: .mailboxIds),
+            excludedMailboxIds: try container.decode([String].self, forKey: .excludedMailboxIds),
+            previews: try container.decodeIfPresent(Bool.self, forKey: .previews) ?? true
+        )
     }
 
     /// In order, without blanks or repeats, and no longer than the server takes.
@@ -42,6 +65,7 @@ public struct NotificationChoice: Equatable, Sendable, Codable {
         [
             "mode": mode.rawValue, "senders": senders.rawValue,
             "mailboxIds": mailboxIds, "excludedMailboxIds": excludedMailboxIds,
+            "previews": previews,
         ]
     }
 
@@ -87,7 +111,18 @@ public struct NotificationChoice: Equatable, Sendable, Codable {
         case .success(let ids): excluded = ids
         }
 
-        return .success(NotificationChoice(mode: mode, senders: senders, mailboxIds: included, excludedMailboxIds: excluded))
+        // Missing or null is on, as it was before there was a switch
+        var previews = true
+        if let value = payload["previews"], !(value is NSNull) {
+            guard let flag = value as? Bool else {
+                return .failure(Invalid(message: "previews must be true or false"))
+            }
+            previews = flag
+        }
+
+        return .success(NotificationChoice(
+            mode: mode, senders: senders, mailboxIds: included, excludedMailboxIds: excluded, previews: previews
+        ))
     }
 
     /// One of the label lists as the page sent it.

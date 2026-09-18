@@ -220,6 +220,11 @@ test('a message with no text keeps the subject as the body', () => {
     }
 });
 
+test('a device that asked for no previews gets the subject as the body', () => {
+    const alert = alertPayload(email({ preview: 'Dear Charles' }), { badge: null, previews: false }).aps.alert;
+    assert.deepEqual(alert, { title: 'Ada Lovelace', body: 'Engines' });
+});
+
 test('a badge-only payload is just the number', () => {
     assert.deepEqual(badgePayload(0), { aps: { badge: 0 } });
 });

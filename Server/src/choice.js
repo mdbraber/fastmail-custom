@@ -9,7 +9,9 @@ const isPlainObject = (value) => value !== null && typeof value === 'object' && 
 
 // The choice an app build from before `notify` meant with its one switch.
 export function fromAlerts(alerts) {
-    return { mode: alerts === false ? 'off' : 'inbox', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
+    return {
+        mode: alerts === false ? 'off' : 'inbox', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [], previews: true,
+    };
 }
 
 const isLabelList = (ids) => Array.isArray(ids) && ids.length <= MAX_MAILBOX_IDS
@@ -33,7 +35,15 @@ export function normaliseNotify(value) {
     if (!isLabelList(excludedMailboxIds)) {
         return { error: `notify.excludedMailboxIds must be an array of at most ${MAX_MAILBOX_IDS} non-empty strings` };
     }
-    return { notify: { mode: value.mode, senders, mailboxIds: [...mailboxIds], excludedMailboxIds: [...excludedMailboxIds] } };
+    // Whether a banner shows the start of the message's text; a choice from
+    // before the switch shows it
+    const previews = value.previews === undefined ? true : value.previews;
+    if (typeof previews !== 'boolean') return { error: 'notify.previews must be true or false' };
+    return {
+        notify: {
+            mode: value.mode, senders, mailboxIds: [...mailboxIds], excludedMailboxIds: [...excludedMailboxIds], previews,
+        },
+    };
 }
 
 // A registration's choice: `notify` when it is there, otherwise the older

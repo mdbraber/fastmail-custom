@@ -6,6 +6,10 @@ public struct MailNotification: Equatable, Sendable {
     public let id: String
     public let title: String
     public let body: String
+    /// The message's subject and the start of its text, when the page could
+    /// find them; empty otherwise, and then the body is all there is to show.
+    public let subject: String
+    public let preview: String
     public let sound: Bool
     public let threadId: String?
     public let dataJSON: String
@@ -17,10 +21,12 @@ public struct MailNotification: Equatable, Sendable {
     /// service worker recognising the click.
     public let url: URL?
 
-    public init(id: String, title: String, body: String, sound: Bool, threadId: String?, dataJSON: String,
-                image: NotificationImage? = nil, url: URL? = nil) {
+    public init(id: String, title: String, body: String, subject: String = "", preview: String = "", sound: Bool,
+                threadId: String?, dataJSON: String, image: NotificationImage? = nil, url: URL? = nil) {
         self.id = id
         self.title = title
+        self.subject = subject
+        self.preview = preview
         self.body = body
         self.sound = sound
         self.threadId = threadId
@@ -42,12 +48,24 @@ public struct MailNotification: Equatable, Sendable {
             id: id,
             title: title,
             body: payload["body"] as? String ?? "",
+            subject: payload["subject"] as? String ?? "",
+            preview: payload["preview"] as? String ?? "",
             sound: payload["sound"] as? Bool ?? false,
             threadId: threadId,
             dataJSON: payload["data"] as? String ?? "{}",
             image: (payload["icon"] as? String).flatMap(NotificationImage.parse(dataURL:)),
             url: url
         )
+    }
+}
+
+extension MailNotification {
+    /// What the banner says under the sender. With previews, the way Mail
+    /// lays one out: the subject above the start of the text. Without them,
+    /// or with no text to show, Fastmail's own words and no subtitle.
+    public func lines(previews: Bool) -> (subtitle: String, body: String) {
+        guard previews, !preview.isEmpty else { return ("", body) }
+        return (subject.isEmpty ? "(no subject)" : subject, preview)
     }
 }
 

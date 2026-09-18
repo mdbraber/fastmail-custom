@@ -8971,7 +8971,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // the copy button each have a fallback, so they are optional.
     const notificationsPageClasses = () => findClasses(
         ['PageView', 'SettingsPaneView', 'RadioGroupView', 'SelectView', 'ButtonView', 'View'],
-        ['PageHeaderView', 'CopyTextView', 'ListInputView', 'MenuButtonView', 'MailboxMenuView', 'SubscreenSelectView']
+        ['PageHeaderView', 'CopyTextView', 'ListInputView', 'MenuButtonView', 'MailboxMenuView', 'SubscreenSelectView',
+            'ToggleView']
     );
 
     // The first eight characters shown, the whole token copied
@@ -9101,7 +9102,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const mobile = isMobileSettings(controller);
         const accountId = primaryMailAccountId();
         const state = {
-            status: 'loading', mode: null, senders: 'everyone', mailboxIds: [], excludedMailboxIds: [],
+            status: 'loading', mode: null, senders: 'everyone', mailboxIds: [], excludedMailboxIds: [], previews: true,
             permission: 'allowed', pushToken: null, contacts: null
         };
         let asked = 0;
@@ -9122,6 +9123,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             if (views.senders && views.senders.get('value') !== state.senders) views.senders.set('value', state.senders);
             if (views.labels) views.labels.show(state.mailboxIds);
             if (views.excludedLabels) views.excludedLabels.show(state.excludedMailboxIds);
+            if (views.previews && views.previews.get('value') !== state.previews) views.previews.set('value', state.previews);
         };
 
         // An app from before the excluded list answers without it: none
@@ -9135,6 +9137,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             state.senders = NOTIFICATION_SENDERS.some(one => one.value === reply.senders) ? reply.senders : 'everyone';
             state.mailboxIds = labelIds(reply.mailboxIds);
             state.excludedMailboxIds = labelIds(reply.excludedMailboxIds);
+            // An app from before the switch shows previews
+            state.previews = reply.previews !== false;
         };
 
         const refresh = () => {
@@ -9162,7 +9166,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             if (state.status !== 'ready') return;
             const next = {
                 mode: state.mode, senders: state.senders,
-                mailboxIds: state.mailboxIds.slice(), excludedMailboxIds: state.excludedMailboxIds.slice()
+                mailboxIds: state.mailboxIds.slice(), excludedMailboxIds: state.excludedMailboxIds.slice(),
+                previews: state.previews
             };
             Object.assign(next, change);
             // Custom chosen with no labels yet starts from the Inbox, for
@@ -9225,6 +9230,25 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 : plainLabelList(classes, accountId, title, state[key], changed);
         };
 
+        // Whether a banner shows the start of the message under its subject;
+        // left out where Fastmail has no switch to draw it with
+        const drawPreviews = () => {
+            if (typeof classes.ToggleView !== 'function') return null;
+            const toggle = new classes.ToggleView({
+                label: 'Show previews',
+                description: 'A banner shows the subject above the start of the message, rather than the subject alone.',
+                isDisabled: state.status !== 'ready',
+                value: state.previews
+            });
+            toggle.addObserverForKey('value', {
+                changed: () => {
+                    const value = toggle.get('value') === true;
+                    if (value !== state.previews) choose({ previews: value });
+                }
+            }, 'changed');
+            return toggle;
+        };
+
         const openSettingsButton = () => new classes.ButtonView({
             type: 'v-Button--standard v-Button--sizeM',
             label: 'Open Settings',
@@ -9268,6 +9292,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     controls.push(el('div.u-space-y-5', [views.senders, views.labels.view, views.excludedLabels.view]));
                 }
                 sections.push(pageSection(NOTIFICATIONS_PAGE_ID, { id: 'messages', title: 'New messages' }, controls));
+                views.previews = drawPreviews();
+                if (views.previews) {
+                    sections.push(pageSection(NOTIFICATIONS_PAGE_ID, { id: 'previews', title: 'Banners' }, [views.previews]));
+                }
                 if (state.pushToken) {
                     sections.push(el(NOTIFICATIONS_SECTION, [
                         el('p.u-trim.u-text-sm.u-color-unimportant', [

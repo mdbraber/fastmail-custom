@@ -60,20 +60,35 @@ import Testing
     #expect(message(["mode": "custom", "excludedMailboxIds": (0..<201).map { "M\($0)" }])?.hasPrefix("excludedMailboxIds") == true)
 }
 
-@Test func theJSONObjectCarriesAllFourFields() {
+@Test func theJSONObjectCarriesAllFiveFields() {
     let object = NotificationChoice(
-        mode: .custom, senders: .contacts, mailboxIds: ["P2F"], excludedMailboxIds: ["P9L"]
+        mode: .custom, senders: .contacts, mailboxIds: ["P2F"], excludedMailboxIds: ["P9L"], previews: false
     ).jsonObject
     #expect(object["mode"] as? String == "custom")
     #expect(object["senders"] as? String == "contacts")
     #expect(object["mailboxIds"] as? [String] == ["P2F"])
     #expect(object["excludedMailboxIds"] as? [String] == ["P9L"])
-    #expect(object.count == 4)
+    #expect(object["previews"] as? Bool == false)
+    #expect(object.count == 5)
+}
+
+// Previews are on unless the page says otherwise, and only a real boolean
+// turns them off
+@Test func previewsAreOnUnlessTurnedOff() throws {
+    let unsaid = try NotificationChoice.parse(["mode": "inbox"]).get()
+    #expect(unsaid.previews == true)
+    let off = try NotificationChoice.parse(["mode": "inbox", "previews": false]).get()
+    #expect(off.previews == false)
+    guard case .failure(let invalid) = NotificationChoice.parse(["mode": "inbox", "previews": "no"]) else {
+        Issue.record("a string was taken for previews")
+        return
+    }
+    #expect(invalid.message.hasPrefix("previews"))
 }
 
 @Test func theJSONTextIsSortedAndComplete() {
     let text = NotificationChoice(mode: .inbox).json
-    #expect(text == #"{"excludedMailboxIds":[],"mailboxIds":[],"mode":"inbox","senders":"everyone"}"#)
+    #expect(text == #"{"excludedMailboxIds":[],"mailboxIds":[],"mode":"inbox","previews":true,"senders":"everyone"}"#)
 }
 
 @Test func aChoiceSurvivesCodable() throws {

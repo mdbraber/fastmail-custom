@@ -213,6 +213,40 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(shown["threadId"] as? String, "T1")
     }
 
+    // The start of the message's text is asked of Fastmail for the message the
+    // push names, and becomes the body, with the subject moving up; without
+    // an answer the notification goes as Fastmail wrote it
+    func testANotificationShowsTheStartOfItsMessage() async throws {
+        webView = try await electronWebView()
+        _ = try await evaluate(webView, """
+        window.__asked = [];
+        window.FastMail = { callJMAPMethod: function (name, args) {
+            window.__asked.push({name: name, args: args});
+            if (args.ids[0] === 'M9') return new Promise(function () {});
+            return Promise.resolve({list: [{id: args.ids[0], preview: '  Dear Charles,\\n the  engine works. '}]});
+        } };
+        window.electron.showNotification({title: 'Ada', body: 'Engines'},
+            {'@type': 'EmailPush', userId: 'u1', accountId: 'A1', email: {id: 'M8', threadId: 'T8', subject: 'Engines'}});
+        window.electron.showNotification({title: 'Bob', body: 'Lunch'},
+            {'@type': 'EmailPush', userId: 'u1', accountId: 'A1', email: {id: 'M9', threadId: 'T9', subject: 'Lunch'}});
+        true;
+        """)
+        try await waitUntil(timeout: 10) { self.notifications().count >= 2 }
+        let shown = notifications()
+        let previewed = try XCTUnwrap(shown.first { $0["id"] as? String == "M8" })
+        XCTAssertEqual(previewed["title"] as? String, "Ada")
+        XCTAssertEqual(previewed["body"] as? String, "Engines")
+        XCTAssertEqual(previewed["subject"] as? String, "Engines")
+        XCTAssertEqual(previewed["preview"] as? String, "Dear Charles, the engine works.")
+        // Fastmail never answered for this one, so it went without, in time
+        let unanswered = try XCTUnwrap(shown.first { $0["id"] as? String == "M9" })
+        XCTAssertNil(unanswered["preview"])
+        XCTAssertEqual(unanswered["body"] as? String, "Lunch")
+
+        let asked = try await evaluate(webView, "JSON.stringify(window.__asked[0])") as? String
+        XCTAssertEqual(asked, #"{"name":"Email/get","args":{"accountId":"A1","ids":["M8"],"properties":["preview"]}}"#)
+    }
+
     // Fastmail's service worker drops a notification when the sender's
     // contact has a photo, so the new-mail broadcast it would have answered
     // is answered here after a short wait
@@ -339,7 +373,8 @@ final class HarnessTests: XCTestCase {
         let signed = try await evaluate(webView, "window.__signed") as? String
         XCTAssertEqual(signed, "https://download.test/A2/B1/image.jpeg?type=image%2Fjpeg&max-width=212&max-height=212")
         let calls = try await evaluate(webView, "window.__calls.join(', ')") as? String
-        XCTAssertEqual(calls, "ContactCard/query A1, ContactCard/query A2, ContactCard/get A2")
+        // Then the message's preview, asked once the notification is on its way
+        XCTAssertEqual(calls, "ContactCard/query A1, ContactCard/query A2, ContactCard/get A2, Email/get A1")
     }
 
     // A click goes to Fastmail's own goMessage action with the push's ids.

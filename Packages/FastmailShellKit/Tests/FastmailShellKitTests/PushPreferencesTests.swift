@@ -62,6 +62,28 @@ private func fresh() -> UserDefaults {
     ))
 }
 
+@Test func previewsAreOnUntilSavedOff() {
+    let defaults = fresh()
+    #expect(PushPreferences.previews(in: defaults) == true)
+    #expect(PushPreferences.choice(in: defaults).previews == true)
+    PushPreferences.save(NotificationChoice(mode: .inbox, previews: false), in: defaults)
+    #expect(defaults.object(forKey: "push.previews") as? Bool == false)
+    #expect(PushPreferences.previews(in: defaults) == false)
+    #expect(PushPreferences.choice(in: defaults).previews == false)
+}
+
+// An acknowledgement from before the previews switch was for previews shown,
+// which is what the server did with a choice that did not say; so it still
+// matches a choice with them on, and a device is not registered again for it
+@Test func anAcknowledgementFromBeforePreviewsMatchesThemOn() {
+    let defaults = fresh()
+    PushPreferences.save(NotificationChoice(mode: .inbox), in: defaults)
+    defaults.set(#"{"excludedMailboxIds":[],"mailboxIds":[],"mode":"inbox","senders":"everyone"}"#, forKey: "push.acknowledged")
+    #expect(PushPreferences.registrationDue(in: defaults) == false)
+    PushPreferences.save(NotificationChoice(mode: .inbox, previews: false), in: defaults)
+    #expect(PushPreferences.registrationDue(in: defaults) == true)
+}
+
 // The acknowledgement an app from before excluded labels kept has no such
 // field. Reading it as a match would never tell the server about the list,
 // so it reads as nothing acknowledged and the choice is registered once more.

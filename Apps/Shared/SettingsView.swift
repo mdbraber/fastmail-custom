@@ -14,6 +14,8 @@ struct SettingsView: View {
             #if os(macOS)
             ComposeSettingsView()
                 .tabItem { Label("Compose", systemImage: "square.and.pencil") }
+            NotificationsSettingsView()
+                .tabItem { Label("Notifications", systemImage: "bell") }
             DownloadsSettingsView()
                 .tabItem { Label("Downloads", systemImage: "arrow.down.circle") }
             #endif
@@ -83,6 +85,25 @@ private struct ComposeSettingsView: View {
                 Toggle("Drafts open the same way", isOn: $editDraftFollows)
             } footer: {
                 Text("Carrying on with a draft goes where the setting above says, rather than where Fastmail would put it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// Which mail notifies is Fastmail's own Notifications page on the Mac; how a
+// banner reads is the app's, since the app draws it.
+private struct NotificationsSettingsView: View {
+    @AppStorage(PushPreferences.previewsKey) private var previews = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Show previews", isOn: $previews)
+            } footer: {
+                Text("A banner shows the subject above the start of the message, rather than the subject alone.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

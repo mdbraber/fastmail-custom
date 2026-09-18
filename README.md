@@ -51,7 +51,7 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
 **Notifications**
 
 - 🔔 **Notifications**: on iOS choose Off, Important, All in Inbox or labels of your own per device; a banner carries Archive, Later and Pin
-  (needs the server component, see [Server/](Server/)). On the Mac they show the sender's picture, and clicking one opens the message
+  (needs the server component, see [Server/](Server/)). A banner shows the subject above the start of the message, or the subject alone if you switch previews off. On the Mac they show the sender's picture, and clicking one opens the message
 
 **Scripting support**
 

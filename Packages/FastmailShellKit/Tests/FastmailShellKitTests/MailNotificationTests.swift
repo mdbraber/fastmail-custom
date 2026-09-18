@@ -19,6 +19,24 @@ import AppKit
     #expect(notification.dataJSON == "{\"emailId\":\"M1\"}")
 }
 
+// With previews on, the subject moves up to the subtitle and the start of the
+// text becomes the body; off, or with no text, Fastmail's words stand alone
+@Test func aPreviewIsShownOnlyWhenPreviewsAreOn() throws {
+    let notification = try #require(MailNotification.parse([
+        "id": "M1", "title": "Ada", "body": "Engines", "subject": "Engines", "preview": "Dear Charles, the engine works."
+    ]))
+    #expect(notification.lines(previews: true) == ("Engines", "Dear Charles, the engine works."))
+    #expect(notification.lines(previews: false) == ("", "Engines"))
+
+    let untitled = try #require(MailNotification.parse([
+        "id": "M2", "title": "Ada", "body": "New message", "subject": "", "preview": "Hello"
+    ]))
+    #expect(untitled.lines(previews: true) == ("(no subject)", "Hello"))
+
+    let textless = try #require(MailNotification.parse(["id": "M3", "title": "Ada", "body": "Engines"]))
+    #expect(textless.lines(previews: true) == ("", "Engines"))
+}
+
 @Test func aNotificationWithoutAnIdOrTitleIsRefused() {
     #expect(MailNotification.parse(["title": "x"]) == nil)
     #expect(MailNotification.parse(["id": "x"]) == nil)
@@ -27,6 +45,8 @@ import AppKit
 
 @Test func missingOptionalFieldsHaveSafeDefaults() throws {
     let notification = try #require(MailNotification.parse(["id": "M2", "title": "Bob"]))
+    #expect(notification.subject == "")
+    #expect(notification.preview == "")
     #expect(notification.body == "")
     #expect(notification.sound == false)
     #expect(notification.threadId == nil)

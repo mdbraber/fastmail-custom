@@ -108,8 +108,8 @@ function fakeAPNs(answer = () => ({ status: 200, reason: null })) {
     return { sent, send: async (token, payload, options) => { sent.push({ token, payload, ...options }); return answer(token); } };
 }
 
-const INBOX = { mode: 'inbox', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
-const OFF = { mode: 'off', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] };
+const INBOX = { mode: 'inbox', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [], previews: true };
+const OFF = { mode: 'off', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [], previews: true };
 
 // Each token with its choice: inbox, unless `choices` names another
 function fakeDevices(tokens, choices = {}) {
@@ -158,6 +158,21 @@ async function settle({ timers, watcher }) {
     await timers.run();
     await watcher.chain;
 }
+
+// Each device's banner is laid out as that device asked
+test('a device that asked for no previews gets its banner without the text', async () => {
+    const quiet = { ...INBOX, previews: false };
+    const t = await setUp(
+        { created: ['M1'], emails: [arrival('M1', { preview: 'Dear Charles' })] },
+        { devices: fakeDevices(['tok1', 'tok2'], { tok2: quiet }) },
+    );
+    await t.watcher.receive({ '@type': 'StateChange', changed: { acc1: { Email: 's1' } } });
+    await settle(t);
+    const alerts = Object.fromEntries(t.apns.sent.map((s) => [s.token, s.payload.aps.alert]));
+    assert.equal(alerts.tok1.body, 'Dear Charles');
+    assert.equal(alerts.tok2.body, 'Subject M1');
+    assert.equal('subtitle' in alerts.tok2, false);
+});
 
 test('one new Inbox message becomes one alert per device, carrying the badge, and is remembered', async () => {
     const t = await setUp({ created: ['M1', 'M2'], emails: [arrival('M1'), arrival('M2', { mailboxIds: { other: true } })] });
@@ -634,8 +649,8 @@ test('one address book failing to read keeps every set and state as they were, u
 // VIP, Bob a contact; M5's thread is followed through another message.
 const choices = {
     'tok-inbox': INBOX,
-    'tok-important': { mode: 'important', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [] },
-    'tok-custom': { mode: 'custom', senders: 'contacts', mailboxIds: ['kerk'], excludedMailboxIds: [] },
+    'tok-important': { mode: 'important', senders: 'everyone', mailboxIds: [], excludedMailboxIds: [], previews: true },
+    'tok-custom': { mode: 'custom', senders: 'contacts', mailboxIds: ['kerk'], excludedMailboxIds: [], previews: true },
     'tok-off': OFF,
 };
 const batch = () => ({
@@ -676,7 +691,7 @@ test('each device hears the new messages its own choice matches', async () => {
 });
 
 test('a device that got no alert hears a changed count on its own; one that got an alert has it there', async () => {
-    const quiet = { ...choices, 'tok-quiet': { mode: 'custom', senders: 'vips', mailboxIds: ['kerk'], excludedMailboxIds: [] } };
+    const quiet = { ...choices, 'tok-quiet': { mode: 'custom', senders: 'vips', mailboxIds: ['kerk'], excludedMailboxIds: [], previews: true } };
     const t = await setUp(batch(), { devices: fakeDevices(Object.keys(quiet), quiet) });
     t.jmap.counts.badge = 5;
     await newMail(t);

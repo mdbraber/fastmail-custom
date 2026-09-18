@@ -1027,6 +1027,7 @@
                 if (choice.senders !== undefined) payload.senders = choice.senders;
                 if (choice.mailboxIds !== undefined) payload.mailboxIds = choice.mailboxIds;
                 if (choice.excludedMailboxIds !== undefined) payload.excludedMailboxIds = choice.excludedMailboxIds;
+                if (choice.previews !== undefined) payload.previews = choice.previews;
                 return post('setNotifications', payload).then(notificationReply);
             },
             openSettings: function () {
@@ -1154,15 +1155,71 @@
 
         // A sound, if wanted, is asked for right after the notification and
         // synchronously, so the send waits a tick and the two travel as one.
+        // The sound has been settled by now, so a notification can wait here
+        // for the start of its message's text without losing it.
         var flushNotifications = function () {
             var queued = pendingNotifications;
             pendingNotifications = [];
-            queued.forEach(function (notification) { post('notify', notification); });
+            queued.forEach(function (notification) {
+                previewed(notification).then(function (shown) { post('notify', shown); });
+            });
         };
 
         var queueNotification = function (notification) {
             pendingNotifications.push(notification);
             if (pendingNotifications.length === 1) setTimeout(flushNotifications, 0);
+        };
+
+        // How long a notification waits for its preview before it goes
+        // without one
+        var PREVIEW_WAIT = 1500;
+
+        // The start of a message's text, as Fastmail's own preview has it, on
+        // one line; empty when there is none or it could not be had in time.
+        var previewOf = function (push) {
+            var email = emailOf(push);
+            if (!email) return Promise.resolve('');
+            var oneLine = function (text) {
+                return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+            };
+            if (typeof email.preview === 'string') return Promise.resolve(oneLine(email.preview));
+            var fastmail = window.FastMail;
+            if (!push.accountId || !fastmail || typeof fastmail.callJMAPMethod !== 'function') {
+                return Promise.resolve('');
+            }
+            var asked = Promise.resolve().then(function () {
+                return fastmail.callJMAPMethod('Email/get', {
+                    accountId: push.accountId, ids: [String(email.id)], properties: ['preview']
+                });
+            }).then(function (answer) {
+                var found = answer && answer.list && answer.list[0];
+                return oneLine(found && found.preview);
+            }, function () { return ''; });
+            var late = new Promise(function (resolve) { setTimeout(function () { resolve(''); }, PREVIEW_WAIT); });
+            return Promise.race([asked, late]);
+        };
+
+        // The start of the text, and the subject to go above it, handed over
+        // beside the words Fastmail wrote; the app lays the banner out the
+        // way Mail does when its previews setting is on, and uses Fastmail's
+        // words when it is off or there is no text.
+        var previewed = function (notification) {
+            var push;
+            try {
+                push = JSON.parse(notification.data || '{}');
+            } catch (error) {
+                return Promise.resolve(notification);
+            }
+            var email = emailOf(push);
+            if (!email) return Promise.resolve(notification);
+            return previewOf(push).then(function (preview) {
+                if (!preview) return notification;
+                var shown = {};
+                Object.keys(notification).forEach(function (key) { shown[key] = notification[key]; });
+                shown.subject = String(email.subject || '').trim();
+                shown.preview = preview;
+                return shown;
+            });
         };
 
         // Fastmail hands its push over as the notification's data, with the

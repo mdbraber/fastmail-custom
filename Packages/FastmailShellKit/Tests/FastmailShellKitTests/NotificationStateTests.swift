@@ -27,7 +27,8 @@ import UserNotifications
     #expect(object["permission"] as? String == "denied")
     #expect(object["pushToken"] as? String == "00abff")
     #expect(object["contacts"] as? Bool == false)
-    #expect(object.count == 7)
+    #expect(object["previews"] as? Bool == true)
+    #expect(object.count == 8)
 }
 
 // Unknown is null, never false: false would raise the contacts warning

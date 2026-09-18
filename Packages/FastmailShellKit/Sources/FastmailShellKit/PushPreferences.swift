@@ -10,6 +10,8 @@ public enum PushPreferences {
     public static let sendersKey = "push.senders"
     public static let mailboxIdsKey = "push.mailboxIds"
     public static let excludedMailboxIdsKey = "push.excludedMailboxIds"
+    /// Whether banners show the start of the message; on until turned off
+    public static let previewsKey = "push.previews"
     /// What the push server's last registration reply said about reading the
     /// account's contacts; absent while no reply has said.
     public static let contactsKey = "push.contacts"
@@ -44,7 +46,9 @@ public enum PushPreferences {
             ?? .everyone
         let included = defaults.array(forKey: mailboxIdsKey)?.compactMap { $0 as? String } ?? []
         let excluded = defaults.array(forKey: excludedMailboxIdsKey)?.compactMap { $0 as? String } ?? []
-        return NotificationChoice(mode: mode, senders: senders, mailboxIds: included, excludedMailboxIds: excluded)
+        return NotificationChoice(
+            mode: mode, senders: senders, mailboxIds: included, excludedMailboxIds: excluded, previews: previews(in: defaults)
+        )
     }
 
     /// Senders and both label lists are kept whatever the mode, so leaving
@@ -54,6 +58,13 @@ public enum PushPreferences {
         defaults.set(choice.senders.rawValue, forKey: sendersKey)
         defaults.set(choice.mailboxIds, forKey: mailboxIdsKey)
         defaults.set(choice.excludedMailboxIds, forKey: excludedMailboxIdsKey)
+        defaults.set(choice.previews, forKey: previewsKey)
+    }
+
+    /// Read on its own by the Mac, which has no push choice but shows
+    /// previews in the banners it draws itself.
+    public static func previews(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: previewsKey) as? Bool ?? true
     }
 
     public static func contacts(in defaults: UserDefaults = .standard) -> Bool? {

@@ -79,17 +79,18 @@ export function previewText(email) {
 }
 
 // Sender, subject and the start of the text, the way Mail lays out a banner.
-// A message with no text keeps the subject as the body, not an empty line.
-function alertOf(email) {
+// A message with no text keeps the subject as the body, not an empty line, and
+// so does every message for a device that asked for no previews.
+function alertOf(email, previews) {
     const title = senderName(email);
     const subject = (email.subject || '').trim() || '(no subject)';
-    const preview = previewText(email);
+    const preview = previews ? previewText(email) : '';
     return preview ? { title, subtitle: subject, body: preview } : { title, body: subject };
 }
 
-export function alertPayload(email, { badge }) {
+export function alertPayload(email, { badge, previews = true }) {
     const aps = {
-        alert: alertOf(email),
+        alert: alertOf(email, previews),
         sound: 'default',
         'thread-id': email.threadId,
         category: ALERT_CATEGORY,

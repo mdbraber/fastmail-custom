@@ -82,7 +82,9 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
     private func deliver(_ notification: MailNotification) {
         let content = UNMutableNotificationContent()
         content.title = notification.title
-        content.body = notification.body
+        let lines = notification.lines(previews: PushPreferences.previews())
+        content.subtitle = lines.subtitle
+        content.body = lines.body
         if notification.sound { content.sound = .default }
         if let threadId = notification.threadId { content.threadIdentifier = threadId }
         var userInfo: [String: Any] = ["data": notification.dataJSON]
