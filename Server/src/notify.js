@@ -72,12 +72,24 @@ export function threadURL(email) {
 // show, or null when there is no badge label to count.
 export const ALERT_CATEGORY = 'message';
 
+// The start of the message's text, as Fastmail's own `preview` has it, on one
+// line. Empty when the message has no text to show.
+export function previewText(email) {
+    return typeof email.preview === 'string' ? email.preview.replace(/\s+/g, ' ').trim() : '';
+}
+
+// Sender, subject and the start of the text, the way Mail lays out a banner.
+// A message with no text keeps the subject as the body, not an empty line.
+function alertOf(email) {
+    const title = senderName(email);
+    const subject = (email.subject || '').trim() || '(no subject)';
+    const preview = previewText(email);
+    return preview ? { title, subtitle: subject, body: preview } : { title, body: subject };
+}
+
 export function alertPayload(email, { badge }) {
     const aps = {
-        alert: {
-            title: senderName(email),
-            body: (email.subject || '').trim() || '(no subject)',
-        },
+        alert: alertOf(email),
         sound: 'default',
         'thread-id': email.threadId,
         category: ALERT_CATEGORY,

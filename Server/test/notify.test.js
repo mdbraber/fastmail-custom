@@ -199,6 +199,27 @@ test('an empty subject and an unknown badge are handled', () => {
     assert.equal('badge' in payload.aps, false);
 });
 
+// With the start of the text, the banner reads like Mail's: who, what about,
+// and how it begins, on one line however the message was laid out.
+test('a preview becomes the body, and the subject moves up to the subtitle', () => {
+    const payload = alertPayload(email({ preview: '  Dear Charles,\n\nThe  engine\tworks.  ' }), { badge: null });
+    assert.deepEqual(payload.aps.alert, {
+        title: 'Ada Lovelace',
+        subtitle: 'Engines',
+        body: 'Dear Charles, The engine works.',
+    });
+    const untitled = alertPayload(email({ subject: '', preview: 'Hello' }), { badge: null });
+    assert.equal(untitled.aps.alert.subtitle, '(no subject)');
+    assert.equal(untitled.aps.alert.body, 'Hello');
+});
+
+test('a message with no text keeps the subject as the body', () => {
+    for (const preview of [undefined, null, '', '  \n ']) {
+        const alert = alertPayload(email({ preview }), { badge: null }).aps.alert;
+        assert.deepEqual(alert, { title: 'Ada Lovelace', body: 'Engines' });
+    }
+});
+
 test('a badge-only payload is just the number', () => {
     assert.deepEqual(badgePayload(0), { aps: { badge: 0 } });
 });

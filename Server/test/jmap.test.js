@@ -73,7 +73,7 @@ test('emails asks for exactly the properties the payload needs, and nothing for 
     const { client, calls } = await connected((method, args) => ['Email/get', { list: args.ids.map((id) => ({ id })) }]);
     assert.deepEqual(await client.emails([]), []);
     assert.deepEqual(await client.emails(['M1']), [{ id: 'M1' }]);
-    assert.deepEqual(calls.at(-1).body.methodCalls[0][1].properties, ['id', 'threadId', 'mailboxIds', 'keywords', 'from', 'subject', 'receivedAt']);
+    assert.deepEqual(calls.at(-1).body.methodCalls[0][1].properties, ['id', 'threadId', 'mailboxIds', 'keywords', 'from', 'subject', 'preview', 'receivedAt']);
 });
 
 test('a backlog is fetched in helpings Fastmail will accept', async () => {

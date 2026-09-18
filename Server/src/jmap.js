@@ -5,7 +5,7 @@ export const SESSION_URL = 'https://api.fastmail.com/jmap/session';
 export const CORE = 'urn:ietf:params:jmap:core';
 export const MAIL = 'urn:ietf:params:jmap:mail';
 export const CONTACTS = 'urn:ietf:params:jmap:contacts';
-export const EMAIL_PROPERTIES = ['id', 'threadId', 'mailboxIds', 'keywords', 'from', 'subject', 'receivedAt'];
+export const EMAIL_PROPERTIES = ['id', 'threadId', 'mailboxIds', 'keywords', 'from', 'subject', 'preview', 'receivedAt'];
 export const CONTACT_CARD_PROPERTIES = ['id', 'uid', 'kind', 'members', 'emails'];
 // Fastmail's `maxObjectsInGet` is 500; asking for more fails the whole call.
 export const GET_CHUNK = 500;
