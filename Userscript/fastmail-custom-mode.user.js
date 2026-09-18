@@ -3278,6 +3278,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     let snoozeCountsTimer = null;
 
+    /*
+     * Folding a group takes its rows out of the list, so counting the rows
+     * again while one is folded would count what is left and fold something
+     * else, which is what made the groups jump about when one was clicked.
+     * The counts are worked out from the whole list, and while anything is
+     * folded the ones already worked out stand; they are still put back when
+     * Fastmail answers with its own row of noughts, which it does at every
+     * refresh, so the two cannot chase each other either.
+     */
+    let applyingSnoozeCounts = false;
+
     const refreshSnoozeCounts = () => {
         snoozeCountsTimer = null;
         try {
@@ -3285,13 +3296,21 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             if (!definition || !definition.snooze) return;
             const list = controller().get('mailboxMessageList');
             if (!list || typeof list.getObjectAt !== 'function') return;
-            const counts = snoozeCountsFor(definition, list);
-            // Fastmail's own answer for these groups is a row of noughts, and
-            // it arrives again with every refresh; this puts the real counts
-            // back, and only when they differ, so the two cannot chase each
-            // other.
+
+            const folded = !!(list.collapsedGroups && list.collapsedGroups.size);
+            const counts = folded
+                ? list.customSnoozeCountsValue
+                : snoozeCountsFor(definition, list);
+            if (!counts) return;
+            list.customSnoozeCountsValue = counts;
+
             if (JSON.stringify(list.get('groupByCounts')) === JSON.stringify(counts)) return;
-            list.set('groupByCounts', counts);
+            applyingSnoozeCounts = true;
+            try {
+                list.set('groupByCounts', counts);
+            } finally {
+                applyingSnoozeCounts = false;
+            }
         } catch (error) {
             reportFault('could not count the snooze groups', error);
         }
@@ -3307,7 +3326,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (!list || list.customSnoozeCounts) return;
         list.customSnoozeCounts = true;
 
-        const check = { go: () => scheduleSnoozeCounts() };
+        const check = { go: () => { if (!applyingSnoozeCounts) scheduleSnoozeCounts(); } };
         list.addObserverForKey('[]', check, 'go');
         list.addObserverForKey('length', check, 'go');
         list.addObserverForKey('groupByCounts', check, 'go');
