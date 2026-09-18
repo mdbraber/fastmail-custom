@@ -364,6 +364,27 @@
             || /^\/mail\/compose(\/|$)/.test(location.pathname);
     }
 
+    function patchThreadEditDraft(controller) {
+        var threads = typeof controller.get === 'function' ? controller.get('threadController') : null;
+        var prototype = threads ? Object.getPrototypeOf(threads) : null;
+        if (!prototype || typeof prototype.editDraft !== 'function') return false;
+        if (prototype.__fmshellEditDraft) return true;
+        var editDraft = prototype.editDraft;
+        prototype.editDraft = function (message, inNewWindow) {
+            var id = replaying ? null : draftIdOf({ mode: 'draft', message: message });
+            if (!id) return editDraft.apply(this, arguments);
+            var self = this;
+            var args = arguments;
+            askEditDraft(id, function (inline) {
+                if (inline) editDraft.call(self, message, false);
+                else editDraft.apply(self, args);
+            });
+            return this;
+        };
+        prototype.__fmshellEditDraft = true;
+        return true;
+    }
+
     function patchEditDraft() {
         var controller = mailController();
         if (!controller || typeof controller.goNewCompose !== 'function') return false;
@@ -391,22 +412,11 @@
             return this;
         };
 
-        var threads = typeof controller.get === 'function' ? controller.get('threadController') : null;
-        var prototype = threads ? Object.getPrototypeOf(threads) : null;
-        if (prototype && typeof prototype.editDraft === 'function' && !prototype.__fmshellEditDraft) {
-            var editDraft = prototype.editDraft;
-            prototype.editDraft = function (message, inNewWindow) {
-                var id = replaying ? null : draftIdOf({ mode: 'draft', message: message });
-                if (!id) return editDraft.apply(this, arguments);
-                var self = this;
-                var args = arguments;
-                askEditDraft(id, function (inline) {
-                    if (inline) editDraft.call(self, message, false);
-                    else editDraft.apply(self, args);
-                });
-                return this;
-            };
-            prototype.__fmshellEditDraft = true;
+        // The thread controller is only made when a message first opens,
+        // which is after boot more often than not, and always on a route
+        // change; so it is looked for again on each one until it is found.
+        if (!patchThreadEditDraft(controller)) {
+            routeCallbacks.push(function () { patchThreadEditDraft(controller); });
         }
 
         controller.__fmshellEditDraft = true;
