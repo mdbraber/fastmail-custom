@@ -7398,6 +7398,18 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 const keys = resolveKeys(this, storeKeys);
                 if (!keys) return original.apply(this, arguments);
 
+                // A sent message waiting on a reminder: archiving it is
+                // dropping the reminder (see removeReminders)
+                if (verb === 'archive') {
+                    const reminders = pendingReminders(keys);
+                    if (reminders.length) {
+                        const onlyReminders = messagesFrom(keys)
+                            .every(message => pendingReminders([message.get('storeKey')]).length);
+                        removeReminders(reminders, !onlyReminders);
+                        if (onlyReminders) return this;
+                    }
+                }
+
                 const self = this;
                 const args = arguments;
                 const first = messagesFrom(keys)[0];
@@ -12279,6 +12291,88 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (isMinimalWindow) return;
         if (reminderSweepTimer) clearTimeout(reminderSweepTimer);
         reminderSweepTimer = setTimeout(sweepReminders, 3000);
+    };
+
+    /*
+     * Dropping a reminder by hand: Archive on a sent message that is waiting
+     * on one. It is in Sent and Snoozed, never the Inbox, so Fastmail's own
+     * archive finds nothing to take off and says "Already archived!", and
+     * Fastmail's Unsnooze sends it to the Inbox, where the reminder was to
+     * bring it. Here it leaves Snoozed, which clears the snooze, and stays
+     * in Sent, as when the push server sees a reply, with its snooze
+     * cleared as well. Undo marks it to be
+     * reminded again, and the next sweep snoozes it to the same moment,
+     * which its other keyword still holds.
+     */
+    const pendingReminders = (keys) => {
+        const found = [];
+        messagesFrom(keys).forEach((message) => {
+            const accountId = message.get('accountId');
+            const snoozed = mailboxesOf(accountId).filter(m => m.get('role') === 'snoozed')[0];
+            const inbox = inboxMailbox(accountId);
+            const thread = threadOf(message);
+            if (!snoozed || thread.some(other => toArray(other.get('mailboxes')).indexOf(inbox) !== -1)) return;
+            thread.forEach((other) => {
+                if ((other.get('keywords') || {})[REMINDING_KEYWORD] &&
+                        toArray(other.get('mailboxes')).indexOf(snoozed) !== -1 &&
+                        found.indexOf(other) === -1) {
+                    found.push(other);
+                }
+            });
+        });
+        return found;
+    };
+
+    const setReminders = (messages, patchFor) => {
+        const byAccount = {};
+        messages.forEach((message) => {
+            const accountId = message.get('accountId');
+            (byAccount[accountId] = byAccount[accountId] || {})[message.get('id')] = patchFor(message);
+        });
+        return Promise.all(Object.keys(byAccount).map(accountId =>
+            FastMail.callJMAPMethod('Email/set', { accountId, update: byAccount[accountId] })));
+    };
+
+    const undoableClass = () => Object.values(FastMail.classes).find(one =>
+        one && one.prototype && typeof one.prototype.drawNotification === 'function' &&
+        'undoTarget' in one.prototype) || null;
+
+    // Beside an archive of other messages the line joins that archive's
+    // toast rather than hiding its Undo
+    const removeReminders = (messages, besideArchive) => {
+        const text = messages.length === 1 ? 'Reminder removed' : messages.length + ' reminders removed';
+        setReminders(messages, (message) => {
+            const snoozed = mailboxesOf(message.get('accountId')).filter(m => m.get('role') === 'snoozed')[0];
+            // Leaving Snoozed keeps the snooze's time on the message, so it
+            // is cleared too; the web session may, where an API token may not
+            return {
+                ['mailboxIds/' + snoozed.get('id')]: null,
+                snoozed: null,
+                ['keywords/' + REMINDING_KEYWORD]: null
+            };
+        }).then(() => {
+            const again = () => setReminders(messages, () => ({ ['keywords/' + REMIND_KEYWORD]: true }))
+                .then(scheduleReminderSweep)
+                .catch(error => reportFault('could not set the reminder again', error));
+            if (besideArchive) {
+                showToastWithUndo(text);
+                return;
+            }
+            const Undoable = undoableClass();
+            const container = notificationContainer();
+            if (!Undoable || !container) {
+                showToast(text);
+                return;
+            }
+            container.show(new Undoable({
+                text,
+                timeout: TOAST_MS,
+                userMayClose: true,
+                // Fastmail's toast listens to its undo target for the moment
+                // to close; this one has nothing else to tell it
+                undoTarget: { on() { return this; }, off() { return this; }, undo: again }
+            }));
+        }).catch(error => reportFault('could not remove the reminder', error));
     };
 
     const watchReminders = () => {
