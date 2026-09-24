@@ -448,6 +448,35 @@ final class HarnessTests: XCTestCase {
         XCTAssertEqual(count, 1)
     }
 
+    // A tapped notification on the phone opens through Fastmail's own
+    // goMessage too, so a thread an idle window left stale is refreshed before
+    // it shows. The phone is not in Electron mode, so this entry point cannot
+    // be gated on it the way the service-worker notification shim is.
+    func testAMailClickReachesGoMessageWithoutTheElectronToken() async throws {
+        webView = try makeWebView(userScript: "", metadata: Self.meta())
+        try await load(webView)
+        let defined = try await evaluate(webView, "typeof window.native.openMessage") as? String
+        XCTAssertEqual(defined, "function")
+
+        _ = try await evaluate(webView, """
+        window.__actions = [];
+        window.FastMail = {
+            userId: '',
+            store: {},
+            auth: {get: function (key) {
+                return {isAuthenticated: true, accounts: {A1: {}}}[key];
+            }},
+            doAction: function (name, args) { window.__actions.push([name, args]); }
+        };
+        true;
+        """)
+        let push = #"{"@type":"EmailPush","accountId":"A1","email":{"id":"M1","threadId":"T1","mailboxIds":{"I":true}}}"#
+        let taken = try await evaluate(webView, "window.native.openMessage('\(push)')") as? Bool
+        XCTAssertEqual(taken, true)
+        let action = try await evaluate(webView, "JSON.stringify(window.__actions)") as? String
+        XCTAssertEqual(action, #"[["goMessage",{"accountId":"A1","emailId":"M1","threadId":"T1","mailboxIds":{"I":true}}]]"#)
+    }
+
     // Fastmail's Mail preferences page asks whether it is the default email
     // app before it draws, and its switch asks to become it. The shells leave
     // that to macOS, so the answer is always no and the switch does nothing;

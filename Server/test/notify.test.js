@@ -190,7 +190,17 @@ test('the alert payload carries title, body, badge, thread and the url to open',
         },
         url: 'https://app.fastmail.com/mail/Inbox/T1.M1',
         emailId: 'M1',
+        threadId: 'T1',
+        mailboxIds: { 'mbx-inbox': true },
     });
+});
+
+// The app opens a tapped notification through Fastmail's own goMessage, which
+// refreshes a thread an idle window left stale; that needs the message's
+// mailboxes and the account, so the payload carries them.
+test('the alert payload carries the account id when it is given, and leaves it out otherwise', () => {
+    assert.equal(alertPayload(email(), { badge: null, accountId: 'u123' }).accountId, 'u123');
+    assert.equal('accountId' in alertPayload(email(), { badge: null }), false);
 });
 
 test('an empty subject and an unknown badge are handled', () => {

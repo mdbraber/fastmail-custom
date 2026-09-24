@@ -24,6 +24,38 @@ import Testing
     #expect(PushPayload.emailId(from: ["emailId": 42]) == nil)
 }
 
+// A tapped notification opens through Fastmail's own goMessage, which
+// refreshes a thread an idle window left stale. That entry point reads an
+// EmailPush, so the payload's parts are packed back into one here.
+@Test func theMessageDataIsBuiltForOpeningInPlace() throws {
+    let json = PushPayload.messageData(from: [
+        "emailId": "M1",
+        "threadId": "T1",
+        "mailboxIds": ["mbx-inbox": true],
+        "accountId": "u123",
+    ])
+    let object = try JSONSerialization.jsonObject(
+        with: #require(json).data(using: .utf8)!
+    ) as! [String: Any]
+    #expect(object["@type"] as? String == "EmailPush")
+    #expect(object["accountId"] as? String == "u123")
+    let email = object["email"] as! [String: Any]
+    #expect(email["id"] as? String == "M1")
+    #expect(email["threadId"] as? String == "T1")
+    #expect((email["mailboxIds"] as? [String: Any])?["mbx-inbox"] as? Bool == true)
+}
+
+// Without the message, its mailboxes or the account there is nothing
+// goMessage can act on, so this is nothing and the app opens the address.
+@Test func theMessageDataIsNothingWithoutWhatGoMessageNeeds() {
+    #expect(PushPayload.messageData(from: ["emailId": "M1", "mailboxIds": ["mbx-inbox": true], "accountId": "u123"]) != nil)
+    #expect(PushPayload.messageData(from: [:]) == nil)
+    #expect(PushPayload.messageData(from: ["mailboxIds": ["mbx-inbox": true], "accountId": "u123"]) == nil)
+    #expect(PushPayload.messageData(from: ["emailId": "M1", "accountId": "u123"]) == nil)
+    #expect(PushPayload.messageData(from: ["emailId": "M1", "mailboxIds": [String: Any](), "accountId": "u123"]) == nil)
+    #expect(PushPayload.messageData(from: ["emailId": "M1", "mailboxIds": ["mbx-inbox": true]]) == nil)
+}
+
 // A silent push names the messages whose banners should come off; anything
 // else in the list, or any other push, names none.
 @Test func theDismissedIdsComeOutOfASilentPush() {

@@ -267,8 +267,9 @@ public final class PushRegistrar: NSObject, UIApplicationDelegate, UNUserNotific
         }
 
         let url = PushPayload.url(from: userInfo)
+        let message = PushPayload.messageData(from: userInfo)
         Task { @MainActor in
-            if let url { PendingLinks.shared.open(url) }
+            if let url { PendingLinks.shared.open(url, message: message) }
             completionHandler()
         }
     }

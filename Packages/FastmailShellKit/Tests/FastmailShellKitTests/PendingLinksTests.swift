@@ -7,8 +7,20 @@ import Testing
     let links = PendingLinks()
     #expect(links.take() == nil)
     links.open(URL(string: "https://app.fastmail.com/mail/Inbox/T1")!)
-    #expect(links.take()?.absoluteString == "https://app.fastmail.com/mail/Inbox/T1")
+    #expect(links.take()?.url.absoluteString == "https://app.fastmail.com/mail/Inbox/T1")
     #expect(links.take() == nil)
+}
+
+// A mail notification carries the EmailPush beside the address, so the tap can
+// open through Fastmail's own goMessage; an ordinary link carries none.
+@Test @MainActor func aMailNotificationCarriesItsMessageData() {
+    let links = PendingLinks()
+    links.open(URL(string: "https://app.fastmail.com/mail/Inbox/T1.M1")!, message: "{\"@type\":\"EmailPush\"}")
+    let taken = links.take()
+    #expect(taken?.message == "{\"@type\":\"EmailPush\"}")
+
+    links.open(URL(string: "https://app.fastmail.com/mail/Inbox")!)
+    #expect(links.take()?.message == nil)
 }
 
 // AppShell takes on every appearance, and a take that clears nothing would

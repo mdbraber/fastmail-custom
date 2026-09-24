@@ -279,7 +279,7 @@ export class AccountWatcher {
             const wanted = fresh.filter((email) => matchesChoice(notify, email, context));
             let alive = true;
             for (const email of wanted) {
-                alive = await this.send(token, alertPayload(email, { badge, previews: notify.previews }), email.id);
+                alive = await this.send(token, alertPayload(email, { badge, previews: notify.previews, accountId: this.jmap.accountId }), email.id);
                 if (!alive) break;
                 alerted.add(email.id);
                 banners.set(email.id, [...(banners.get(email.id) ?? []), token]);

@@ -88,7 +88,7 @@ function alertOf(email, previews) {
     return preview ? { title, subtitle: subject, body: preview } : { title, body: subject };
 }
 
-export function alertPayload(email, { badge, previews = true }) {
+export function alertPayload(email, { badge, previews = true, accountId = null }) {
     const aps = {
         alert: alertOf(email, previews),
         sound: 'default',
@@ -96,7 +96,18 @@ export function alertPayload(email, { badge, previews = true }) {
         category: ALERT_CATEGORY,
     };
     if (Number.isInteger(badge)) aps.badge = badge;
-    return { aps, url: threadURL(email), emailId: email.id };
+    // `threadId`, `mailboxIds` and `accountId` are what the app needs to open
+    // the tap through Fastmail's own goMessage, which refreshes a thread an
+    // idle window left stale. `accountId` is left out when the caller has none.
+    const payload = {
+        aps,
+        url: threadURL(email),
+        emailId: email.id,
+        threadId: email.threadId,
+        mailboxIds: email.mailboxIds,
+    };
+    if (accountId) payload.accountId = accountId;
+    return payload;
 }
 
 // A silent push naming messages whose banners should go: read or deleted

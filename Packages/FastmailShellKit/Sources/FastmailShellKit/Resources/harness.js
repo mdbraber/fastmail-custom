@@ -1171,6 +1171,35 @@
         });
     });
 
+    // Fastmail's own entry point for opening a message in its native apps.
+    // goMessage marks the thread out of date before showing it, so a window
+    // left idle shows the thread as it is now, and it picks the message's own
+    // mailbox. The Mac reaches it from a notification click and the phone from
+    // a tapped push; it lives outside the Electron block below because the
+    // phone is not in Electron mode. Answers false when the page cannot take
+    // it (not signed in, another user, an account this session lacks), so the
+    // app opens the address instead.
+    window.native.openMessage = function (dataJSON) {
+        var data;
+        try { data = JSON.parse(dataJSON); } catch (error) { return false; }
+        var email = data && data['@type'] === 'EmailPush' && data.email;
+        var app = window.FastMail;
+        if (!email || !email.id || !email.mailboxIds || !data.accountId) return false;
+        if (!app || typeof app.doAction !== 'function' || !app.auth || !app.store) return false;
+        // FastMail.userId is only filled in when the page was loaded with
+        // ?u=, so a user is turned away only when both are known; the
+        // account check is what keeps another user's mail out.
+        if (app.userId && data.userId && String(app.userId) !== String(data.userId)) return false;
+        if (!app.auth.get('isAuthenticated') || !(data.accountId in (app.auth.get('accounts') || {}))) return false;
+        app.doAction('goMessage', {
+            accountId: data.accountId,
+            emailId: email.id,
+            threadId: email.threadId || null,
+            mailboxIds: email.mailboxIds
+        });
+        return true;
+    };
+
     // Fastmail's desktop-app hook. Its offline worker decides which new mail
     // notifies, from the page's own live connection, so no push is needed, and
     // broadcasts it; its service worker formats it and, when it believes it is
@@ -1782,33 +1811,6 @@
             var data;
             try { data = JSON.parse(dataJSON); } catch (error) { return; }
             worker.postMessage({ type: 'notificationclick', data: data });
-        };
-
-        // A mail click, opened by Fastmail's own entry point for its native
-        // apps: the action its service worker posts for a click. It marks the
-        // thread out of date before opening it, so a window left idle shows
-        // the thread as it is now, and it picks the message's own mailbox.
-        // Answers false when the page cannot take it (not signed in, another
-        // user, an account this session lacks), so the app opens the address.
-        window.native.openMessage = function (dataJSON) {
-            var data;
-            try { data = JSON.parse(dataJSON); } catch (error) { return false; }
-            var email = data && data['@type'] === 'EmailPush' && data.email;
-            var app = window.FastMail;
-            if (!email || !email.id || !email.mailboxIds || !data.accountId) return false;
-            if (!app || typeof app.doAction !== 'function' || !app.auth || !app.store) return false;
-            // FastMail.userId is only filled in when the page was loaded with
-            // ?u=, so a user is turned away only when both are known; the
-            // account check is what keeps another user's mail out.
-            if (app.userId && data.userId && String(app.userId) !== String(data.userId)) return false;
-            if (!app.auth.get('isAuthenticated') || !(data.accountId in (app.auth.get('accounts') || {}))) return false;
-            app.doAction('goMessage', {
-                accountId: data.accountId,
-                emailId: email.id,
-                threadId: email.threadId || null,
-                mailboxIds: email.mailboxIds
-            });
-            return true;
         };
     }
 

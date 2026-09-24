@@ -18,7 +18,7 @@ public struct AppShell: View {
     #if canImport(UIKit)
     @ObservedObject private var lock = ScreenLock.shared
     /// Links handed in while the screen lock is up, opened once it opens.
-    @State private var heldLinks: [URL] = []
+    @State private var heldLinks: [PendingLink] = []
     #endif
 
     public init(profile: Profile) {
@@ -127,7 +127,7 @@ public struct AppShell: View {
             // anything that launched it is opened.
             lock.scenePhaseChanged(scenePhase)
             // The push names production; the page is on whichever server is selected
-            if let url = pendingLinks.take() { route(live.backend.rehost(url)) }
+            if let taken = pendingLinks.take() { route(live.backend.rehost(taken.url), message: taken.message) }
             if !lock.holdsLinks, let action = pendingActions.take() { model.pendingAction = action }
         }
         .onChange(of: scenePhase) {
@@ -146,7 +146,7 @@ public struct AppShell: View {
         }
         .onChange(of: pendingLinks.url) {
             // A tapped notification, routed exactly as a link from outside
-            if let url = pendingLinks.take() { route(live.backend.rehost(url)) }
+            if let taken = pendingLinks.take() { route(live.backend.rehost(taken.url), message: taken.message) }
         }
         .onChange(of: pendingActions.name) {
             // A shortcut that asks the page to do something rather than to go
@@ -199,7 +199,7 @@ public struct AppShell: View {
         }
         .onChange(of: pendingLinks.url) {
             // A tapped notification, routed exactly as a link from outside
-            if let url = pendingLinks.take() { route(live.backend.rehost(url)) }
+            if let taken = pendingLinks.take() { route(live.backend.rehost(taken.url), message: taken.message) }
         }
         // Without this the window group treats every URL handed to the app as
         // grounds for a new window, so a mailto arrived with a second copy of
@@ -210,14 +210,14 @@ public struct AppShell: View {
 
     /// A link from outside the page: opened now, or, on iPhone and iPad while
     /// the screen lock is up or about to be, held until it has opened.
-    private func route(_ url: URL) {
+    private func route(_ url: URL, message: String? = nil) {
         #if canImport(UIKit)
         if lock.holdsLinks {
-            heldLinks.append(url)
+            heldLinks.append(PendingLink(url: url, message: message))
             return
         }
         #endif
-        handle(url)
+        handle(url, message: message)
     }
 
     #if canImport(UIKit)
@@ -226,12 +226,22 @@ public struct AppShell: View {
         guard !lock.holdsLinks else { return }
         let waiting = heldLinks
         heldLinks.removeAll()
-        for url in waiting { handle(url) }
+        for link in waiting { handle(link.url, message: link.message) }
         if let action = pendingActions.take() { model.pendingAction = action }
     }
     #endif
 
-    private func handle(_ url: URL) {
+    private func handle(_ url: URL, message: String? = nil) {
+        #if canImport(UIKit)
+        // A tapped mail notification: open through Fastmail's own goMessage,
+        // which marks a thread an idle window left stale out of date first.
+        // Only a bare load, never a step, is the fallback, so a stale store is
+        // never asked to show a message it does not yet have.
+        if let message {
+            openMessage(message, orLoad: url)
+            return
+        }
+        #endif
         switch LinkRouter.route(url, profile: live) {
         case .load(let target):
             model.pendingLoad = target
@@ -261,6 +271,27 @@ public struct AppShell: View {
             #endif
         }
     }
+
+    #if canImport(UIKit)
+    /// Hands the message to Fastmail's own goMessage, the same entry point the
+    /// Mac uses; it refreshes a stale thread and picks the message's mailbox.
+    /// A page that cannot take it — not the mail app, not signed in, another
+    /// account — answers false, and then the address is loaded fresh. With no
+    /// live page yet (a cold launch) the ordinary load path builds one.
+    private func openMessage(_ message: String, orLoad url: URL) {
+        guard let view = WebViewRegistry.shared.active else {
+            model.pendingLoad = url
+            return
+        }
+        view.callAsyncJavaScript(
+            "return !!(window.native && window.native.openMessage && window.native.openMessage(data));",
+            arguments: ["data": message], in: nil, in: .page
+        ) { result in
+            if (try? result.get()) as? Bool == true { return }
+            MainActor.assumeIsolated { view.load(URLRequest(url: url)) }
+        }
+    }
+    #endif
 
     private func openInOtherApp(_ target: URL) {
         let model = model

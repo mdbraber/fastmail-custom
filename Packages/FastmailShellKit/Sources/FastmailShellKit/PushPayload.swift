@@ -20,6 +20,29 @@ public enum PushPayload {
         return id
     }
 
+    /// The payload packed back into the EmailPush that Fastmail's own
+    /// `openMessage` reads: a tapped notification opens through its goMessage,
+    /// which refreshes a thread an idle window left stale. Nothing without the
+    /// message, its mailboxes and the account, since goMessage needs all three;
+    /// then the app opens the address instead. `threadId` may be absent.
+    public static func messageData(from userInfo: [AnyHashable: Any]) -> String? {
+        guard
+            let emailId = emailId(from: userInfo),
+            let accountId = userInfo["accountId"] as? String, !accountId.isEmpty,
+            let mailboxIds = userInfo["mailboxIds"] as? [String: Any], !mailboxIds.isEmpty
+        else { return nil }
+        var email: [String: Any] = ["id": emailId, "mailboxIds": mailboxIds]
+        if let threadId = userInfo["threadId"] as? String, !threadId.isEmpty {
+            email["threadId"] = threadId
+        }
+        let payload: [String: Any] = ["@type": "EmailPush", "email": email, "accountId": accountId]
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: payload),
+            let json = String(data: data, encoding: .utf8)
+        else { return nil }
+        return json
+    }
+
     /// The messages read or deleted since their banners were shown, from the
     /// server's silent push. Empty for any other push.
     public static func dismissedIds(from userInfo: [AnyHashable: Any]) -> Set<String> {
