@@ -95,6 +95,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // while collapsed; expanding it hands the count to each sublabel
         // instead. Leaves the count above its own message list alone.
         collapsedLabelCounts: false,
+        // Fastmail draws no badge on Snoozed; this gives it its total, so
+        // what is waiting to come back is in sight.
+        snoozedCount: false,
         // The groupings offered in Fastmail's Group menu between None, which
         // stays Fastmail's own, and Custom…, which does too. A block each: a
         // line naming it, then indented Name = search lines, then a bare
@@ -389,6 +392,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             key: 'prioritiesAsSort', group: 'grouping',
             title: 'Sort priorities instead of adding groups',
             hint: 'Flag priorities like is:unread or is:pinned sort within each group instead of adding groups, staying under Fastmail’s 32-group limit. Other priorities still add groups, which come first. Switching this unfolds those presets’ groups.'
+        },
+        {
+            key: 'snoozedCount', group: 'snooze',
+            title: 'Count Snoozed in the sidebar',
+            hint: 'Snoozed shows a badge with how many conversations are waiting to come back, where Fastmail shows none.'
         },
         {
             key: 'snoozePresets', group: 'snooze', clearable: true, multiline: true,
@@ -1568,9 +1576,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
-    // Triage and the projects show their totals; a helper label keeps whatever Fastmail draws
+    // Triage and the projects show their totals, and Snoozed when asked to;
+    // a helper label keeps whatever Fastmail draws
     const managesBadge = (mailbox) => !!mailbox &&
-        (mailbox.get('role') === 'inbox' || isTriage(mailbox) || isProject(mailbox));
+        (mailbox.get('role') === 'inbox' || isTriage(mailbox) || isProject(mailbox) ||
+            (settings.snoozedCount && isSnoozeMailbox(mailbox)));
 
     // Wrap the two places that read badgeCount when painting a row:
     // draw() for a row appearing for the first time, redrawBadgeCount() after that

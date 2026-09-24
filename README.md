@@ -55,7 +55,7 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
   name ("Work" instead of "Projects/Work"), and the Inbox tag left off rows where every message is in the Inbox anyway;
   on a row, plain tags come before sidebar labels and the paperclip before both
 - 🔻 **Triage icon**: the triage label has its own icon
-- 🔢 **Filtered counts**: counts show the number with the filter applied, and a root label can count only while collapsed
+- 🔢 **Filtered counts**: counts show the number with the filter applied, a root label can count only while collapsed, and Snoozed can show how many conversations are waiting to come back
 - 🎨 **Label colours**: show the full message row in the label color
 - 🔠 **Mailbox title**: the mailbox's name and count in large type above the list, as on the phone, shrinking into the
   list's top row as you scroll
