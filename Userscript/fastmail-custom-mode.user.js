@@ -425,7 +425,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         },
         {
             key: 'swapArchiveExpand', group: 'keyboard',
-            title: 'Swap E and Y',
+            title: 'Also E for archiving',
             hint: 'E archives and Y expands, the reverse of Fastmail’s default. H still archives.'
         },
         {
