@@ -6,8 +6,10 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
 
 **Triage**
 
-- 🏷️ **Inbox triage**: quick add a label to inbox message or archive
-- 📦 **Keep or Archive**: keeping adds a label (also from a message's right-click menu), archiving strips all project labels/pins;
+- 🏷️ **Inbox triage**: quick add a label to inbox message or archive; each decision steps on to the next message still waiting,
+  or back to the list when none is left. Dragging onto a label adds it rather than moving the message, and a project
+  label's list opens filtered to what is still in the Inbox
+- 📦 **Keep or Archive**: keeping adds a label (also from a message's right-click menu), archiving strips all project labels/pins, and Shift-E archives into a label that holds mail rather than queues it;
   the toast after a snooze offers Keep and Archive for the same message, and the one after a keep or an archive offers Snooze, so a second decision needs no search
 - 👥 **Sender to contacts**: filing under a label (keeping, or archiving into one) can add the sender to your contacts, and a specific label adds them to a Contacts group (like Hey.com)
 
@@ -30,7 +32,10 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
 
 **User experience**
 
-- 🪟 **Native UI (macOS) with tabs**: Fastmail runs in a WKWebView (fast, energy-efficient) and supports tabs, with Fastmail's own File and View items in the menu bar
+- 🪟 **Native UI (macOS) with tabs**: Fastmail runs in a WKWebView (fast, energy-efficient) and supports tabs (Command and a number
+  picks one), with Fastmail's own File and View items in the menu bar
+- ⌨️ **Keyboard**: E archives and Y expands (swappable back to Fastmail's default), Shift-J and Shift-K walk the sidebar, and 1, 2, 3…
+  pick a snooze preset
 - ✉️ **Compose inline, window or tab (macOS)**: compose messages without losing focus; new messages carry one or more labels of your choice, ticked in the Labels menu where you can untick them
 - ↗️ **Pop-out windows (macOS)**: open any message or draft in its own window, which loads at once (the offline copy stays with the main window) and has the same keys and settings as the main window
 - 🧰 **Action bar**: choose and order its actions, separately on phone, iPad and Mac
@@ -45,20 +50,26 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
 
 **Appearance**
 
-- 🗂️ **Grouped sidebar**: folders, labels and saved searches kept apart with sections
+- 🗂️ **Grouped sidebar**: folders, labels and saved searches kept apart with sections, a label shown without its parent's
+  name ("Work" instead of "Projects/Work"), and the Inbox tag left off rows where every message is in the Inbox anyway
 - 🔻 **Triage icon**: the triage label has its own icon
 - 🔢 **Filtered counts**: counts show the number with the filter applied, and a root label can count only while collapsed
 - 🎨 **Label colours**: show the full message row in the label color
+- 🔠 **Mailbox title**: the mailbox's name and count in large type above the list, as on the phone, shrinking into the
+  list's top row as you scroll
+- 🧭 **Message navigation (iOS)**: up and down buttons floating above the tab bar, for stepping between messages one-handed
 
 **Notifications**
 
 - 🔔 **Notifications**: on iOS choose Off, Important, All in Inbox or labels of your own per device; a banner carries Archive, Later and Pin
-  (needs the server component, see [Server/](Server/)). Custom can leave out labels too, on the Mac as well as on iOS, and a banner shows the subject above the start of the message, or the subject alone if you switch previews off (both on the Notifications page). On the Mac they show the sender's picture, and clicking one opens the message
+  (needs the server component, see [Server/](Server/)). Custom can leave out labels too, on the Mac as well as on iOS, and a banner shows the subject above the start of the message, or the subject alone if you switch previews off (both on the Notifications page). A notification disappears from the phone once its message is read elsewhere, and the
+  app icon's badge counts the Inbox or a label of your choice. On the Mac they show the sender's picture, and clicking one opens the message
 
 **Scripting support**
 
 - 🤖 **Shortcuts, AppleScript and the menu bar**: get URL / Title or Markdown Link via AppleScript or Shortcuts.
-  Also allow running custom JavaScript to fully customize your experience
+  Also allow running custom JavaScript to fully customize your experience, and attach Safari's Web Inspector (Inspect in the
+  right-click menu and the menu bar)
 
 ## Settings
 
