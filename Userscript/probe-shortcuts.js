@@ -80,7 +80,7 @@
 
     lines.push('list=' + mailbox +
         '  script=' + (mode ? 'running' : 'not running') +
-        '  swapArchiveExpand=' + settings.swapArchiveExpand +
+        '  archiveOnE=' + settings.archiveOnE +
         '  excludedLabels=' + JSON.stringify(settings.excludedLabels) +
         '  triageLabel=' + JSON.stringify(settings.triageLabel));
 

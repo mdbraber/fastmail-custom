@@ -195,7 +195,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // The app icon's badge, for the shell apps: this label's total, Triage
         // is what is left to decide.
         appBadgeLabel: 'Triage',
-        swapArchiveExpand: true,
+        archiveOnE: true,
         sidebarSeparators: true,
         hideLoneExpando: true,
         // The phone's own up/down step sits in the header, a stretch for a
@@ -424,9 +424,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             hint: 'The same for replies you send.'
         },
         {
-            key: 'swapArchiveExpand', group: 'keyboard',
+            key: 'archiveOnE', group: 'keyboard',
             title: 'Also E for archiving',
-            hint: 'E archives and Y expands, the reverse of Fastmail’s default. H still archives.'
+            hint: 'E archives as well as Y and H, in place of expanding the conversation.'
         },
         {
             key: 'bottomBarSlots', group: 'bottomBar',
@@ -7712,36 +7712,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }, true);
     };
 
-    // Fastmail archives with y (and with h, which is left alone) and expands a
-    // thread with e.
-    const SWAPPED_KEYS = { e: 'y', y: 'e' };
-
-    // The key that archives once the two have traded places.
+    // Fastmail archives with y and h and expands a thread with e; with
+    // archiveOnE, e archives too and the expander goes unused underneath.
     const ARCHIVE_KEY = 'e';
 
-    // Fastmail's own archive key, claimed for the same reason and whether or
-    // not the two have traded places.
-    const ARCHIVE_ALT_KEY = 'h';
+    // Fastmail's own archive keys, claimed whether or not e archives too.
+    const ARCHIVE_KEYS = ['y', 'h'];
 
     // Fastmail's own pin key, claimed so that pinning goes through the mode's
     // verb.
     const PIN_KEY = 's';
-
-    // Registrations made before the patch below was installed keep the stock
-    // binding, so move those across once.
-    const swapExistingKeys = (kb, register) => {
-        const moves = Object.keys(SWAPPED_KEYS)
-            .map((key) => {
-                const list = kb._shortcuts[key] || [];
-                const handler = list[list.length - 1];
-                return handler ? [SWAPPED_KEYS[key], handler] : null;
-            })
-            .filter(Boolean);
-
-        moves.forEach(([key, handler]) => {
-            register.call(kb, key, handler[0], handler[1], handler[2]);
-        });
-    };
 
     // The verb keys the mode owns outright. Fastmail's own registrations, the
     // list's star on s, the conversation view's expandAll on Shift-E, land
@@ -7777,11 +7757,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // asks the toolbar what it currently means.
         const archive = () => controller().actions.archive(null);
 
-        // h is Fastmail's own archive key and is claimed either way; e only
-        // while the two have traded places, since without the swap it is
-        // Fastmail's thread expander and stays that way.
-        wanted[ARCHIVE_ALT_KEY] = archive;
-        if (settings.swapArchiveExpand) wanted[ARCHIVE_KEY] = archive;
+        // y and h are Fastmail's own archive keys and are claimed either way;
+        // e only with archiveOnE, since otherwise it is Fastmail's thread
+        // expander and stays that way.
+        ARCHIVE_KEYS.forEach((key) => { wanted[key] = archive; });
+        if (settings.archiveOnE) wanted[ARCHIVE_KEY] = archive;
 
         wanted[PIN_KEY] = () => runVerb('urgent', null);
 
@@ -7837,22 +7817,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         };
 
         kb.register = function (key, target, method, priority) {
-            // Decided as the registration goes in rather than at the keypress,
-            // because the key itself is what dispatches.
-            if (settings.swapArchiveExpand && SWAPPED_KEYS[key]) {
-                const moved = SWAPPED_KEYS[key];
-                const swapped = originalRegister.call(
-                    this, moved, target, method, priority
-                );
-
-                // Ours goes back on top afterwards. The registry answers to
-                // whichever registered last, and the toolbar registers again
-                // every time it enters the document, so without this the
-                // button would shadow the claimed key a redraw later.
-                liftClaimed(moved);
-                return swapped;
-            }
-
             // The tristate picker is opened programmatically for a multi-
             // select verb, so the button that owns it is captured from its
             // registration the way the Move button is
@@ -7885,19 +7849,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             );
         };
 
-        // A view takes its shortcut back off under the key it thinks it holds,
-        // so a registration that moved has to be taken off the key it moved
-        // to, or it is never taken off at all: measured, six handlers on e and
-        // nine on y for two buttons and one thread-expander.
         const originalDeregister = kb.deregister;
 
         kb.deregister = function (key, target, method) {
-            if (settings.swapArchiveExpand && SWAPPED_KEYS[key]) {
-                return originalDeregister.call(
-                    this, SWAPPED_KEYS[key], target, method
-                );
-            }
-
             // Ours went in under a stand-in, so it comes off as one.
             const handler = key === MOVE_SHORTCUT && target && typeof target === 'object'
                 ? moveHandlers.get(target)
@@ -7911,8 +7865,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
             return originalDeregister.apply(this, arguments);
         };
-
-        if (settings.swapArchiveExpand) swapExistingKeys(kb, originalRegister);
 
         // Claim the verb keys last, so they sit on top of anything already
         // registered when the script starts.

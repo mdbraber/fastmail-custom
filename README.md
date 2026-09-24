@@ -35,7 +35,7 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
 
 - 🪟 **Native UI (macOS) with tabs**: Fastmail runs in a WKWebView (fast, energy-efficient) and supports tabs (Command and a number
   picks one), with Fastmail's own File and View items in the menu bar
-- ⌨️ **Keyboard**: E archives and Y expands (swappable back to Fastmail's default), Shift-J and Shift-K walk the sidebar, and 1, 2, 3…
+- ⌨️ **Keyboard**: E archives as well as Y (switchable back to Fastmail's expand), Shift-J and Shift-K walk the sidebar, and 1, 2, 3…
   pick a snooze preset
 - ✉️ **Compose inline, window or tab (macOS)**: compose messages without losing focus; new messages carry one or more labels of your choice, ticked in the Labels menu where you can untick them
 - ↗️ **Pop-out windows (macOS)**: open any message or draft in its own window, which loads at once (the offline copy stays with the main window) and has the same keys and settings as the main window
