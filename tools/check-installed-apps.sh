@@ -24,6 +24,11 @@ problem () {
   failed=1
 }
 
+# Said, but not a failure: something this run cannot see is not missing.
+unchecked () {
+  echo "  ? $*"
+}
+
 # What AppleScript and Shortcuts launch: the copy LaunchServices hands back
 # for an app's name and for its bundle identifier.
 resolved () {
@@ -51,6 +56,17 @@ EOF
 query () {
   sqlite3 -readonly -cmd ".timeout 3000" "$1" "$2" 2>/dev/null
 }
+
+# macOS privacy protection keeps some processes out of both stores (from a
+# Claude session, "Operation not permitted" even without the sandbox), and
+# query swallows the error, so an unreadable store would read as one without
+# the actions. Find that out once, up front, and skip that part of the check.
+readable () {
+  sqlite3 -readonly "$1" "select 1;" >/dev/null 2>&1
+}
+[ ${#LINKD} -gt 0 ] && ! readable "${LINKD[1]}" && LINKD=()
+tools_readable=1
+readable "$TOOLS" || tools_readable=0
 
 for app in "${APPS[@]}"; do
   name=${${app:t}%.app}
@@ -85,6 +101,11 @@ for app in "${APPS[@]}"; do
   declared=(${(f)"$(actions_declared "$metadata/extract.actionsdata")"})
   if [ ${#declared} -eq 0 ]; then
     problem "the app declares no Shortcuts actions"
+    continue
+  fi
+  if [ $tools_readable -eq 0 ]; then
+    unchecked "can't read Shortcuts' list of actions from here, so whether it has these ${#declared} is unchecked: look in Shortcuts"
+    [ $failed -eq 0 ] && echo "  ✓ AppleScript reaches $app"
     continue
   fi
   deadline=$((SECONDS + WAIT))
