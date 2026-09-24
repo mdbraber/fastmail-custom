@@ -1940,6 +1940,61 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         ' { display: none !important; }'
     ];
 
+    // A row's paperclip ahead of its labels rather than after them. Fastmail
+    // places the two independently, each at a fixed offset from the row's
+    // right edge, so no rule can swap them while the labels' width varies.
+    // Instead Fastmail's own icon is hidden where labels share its line, and
+    // the same glyph (its path copied from Fastmail's i-attachment) is drawn
+    // as the first item of the labels' own flex row; the labels then take
+    // the edge a row without an attachment gives them, so both line up. Only
+    // where the two share a line: with previews on, a narrow row puts the
+    // paperclip on the subject's line and the labels on the one below.
+    const ATTACHMENT_ICON_SVG = 'data:image/svg+xml,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path' +
+        ' d="M9.42,13l6.23-6.19c1.13-1.13,2.22-1.2,3-.43.61.61,1.08,1.74-.22,3' +
+        'l-7.94,7.89a3.36,3.36,0,0,1-4.75,0h0a3.33,3.33,0,0,1,0-4.72l6.84-6.8"' +
+        ' fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round"' +
+        ' stroke-linejoin="round"/></svg>');
+    const ATTACHMENT_BESIDE_LABELS = [
+        '.v-Mailbox--short.v-Mailbox--previewOff',
+        '.v-Mailbox--long'
+    ];
+    const ATTACHMENT_ICON_RULES = [
+        ATTACHMENT_BESIDE_LABELS.map(list => list +
+            ' .v-MailboxItem-attachments.s-has-attachment:has(~ .v-MailboxItem-mailboxes)')
+            .join(', ') + ' { visibility: hidden; }',
+        ATTACHMENT_BESIDE_LABELS.map(list => list +
+            ' .v-MailboxItem-attachments.s-has-attachment ~ .v-MailboxItem-mailboxes::before')
+            .join(', ') + ' {' +
+        ' content: ""; flex: none; align-self: center; width: 20px; height: 20px;' +
+        ' margin-right: 2px; background-color: var(--ui-button-subtle-color-fg);' +
+        ' -webkit-mask: url("' + ATTACHMENT_ICON_SVG + '") center / 20px 20px no-repeat;' +
+        ' mask: url("' + ATTACHMENT_ICON_SVG + '") center / 20px 20px no-repeat; }',
+        // Fastmail moves a narrow row's labels left to make room for the
+        // paperclip; they now carry it, so they keep their usual edge.
+        '.v-Mailbox--short.v-Mailbox--previewOff .v-MailboxItem' +
+        ' .v-MailboxItem-attachments.s-has-attachment ~ .v-MailboxItem-mailboxes' +
+        ' { right: 12px; }',
+        // A wide row keeps a fixed column for the paperclip right of the
+        // labels; they move into it, with or without an attachment, so every
+        // row's labels end at the same place.
+        '.v-Mailbox--long .v-MailboxItem .v-MailboxItem-mailboxes { right: 137px; }',
+        '.v-Mailbox--long.v-Mailbox--size .v-MailboxItem .v-MailboxItem-mailboxes { right: 202px; }'
+    ];
+
+    // Plain tags, the labels kept out of the sidebar, ahead of the sidebar's
+    // own on a row: the tag says something particular about the message,
+    // where a sidebar label (Triage above all) is on many rows alike. The
+    // chips are items of a flex row, so order moves them without touching
+    // Fastmail's DOM; each tag is named by its path the same way the label
+    // colours name a chip.
+    const tagsFirstRules = () => {
+        const chips = FastMail.store.getAll(FastMail.classes.Mailbox)
+            .filter(m => isUserLabel(m) && !isSidebarLabel(m))
+            .map(m => `.v-MailboxItem-mailbox:has(span[title="${cssString(mailboxPath(m))}"])`);
+        return chips.length ? [chips.join(', ') + ' { order: -1; }'] : [];
+    };
+
     // The phone's own big list title, colour var(--ui-page-color-fg) and
     // family read off a real one on the phone, since isMobile is a
     // platform read rather than a width one and past phone width
@@ -2180,6 +2235,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             .concat(FLOATING_NAV_RULES)
             .concat(HIDE_MESSAGE_NAV_RULES)
             .concat(MAILBOX_TITLE_RULES)
+            .concat(ATTACHMENT_ICON_RULES)
+            .concat(tagsFirstRules())
             .join('\n');
         const existing = document.getElementById(STYLE_ID);
 
