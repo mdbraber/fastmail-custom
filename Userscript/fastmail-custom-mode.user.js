@@ -1950,7 +1950,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // so the two starts line up rather than merely looking close; the
     // count's own colour is the same subdued one the phone's title and the
     // group headings both already read a count in, var(--ui-page-color-fg
-    // -subtle), measured off one rather than guessed.
+    // -subtle), measured off one rather than guessed. It stays bold like
+    // the name, the colour alone setting it apart.
     const MAILBOX_TITLE_ID = 'custom-mailboxTitle';
     const MAILBOX_TITLE_COUNT_CLASS = 'custom-mailboxTitle-count';
     const MAILBOX_TITLE_COMPACT_ID = 'custom-mailboxTitle-compact';
@@ -2006,7 +2007,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         '#' + MAILBOX_TITLE_COMPACT_ID + '.' + MAILBOX_TITLE_SCROLLED_CLASS + ' {' +
         ' transform: none; opacity: 1; }',
         '.' + MAILBOX_TITLE_COUNT_CLASS + ' {' +
-        ' font-weight: 400;' +
         ' color: var(--ui-page-color-fg-subtle, rgb(91, 100, 108)); }'
     ];
 
