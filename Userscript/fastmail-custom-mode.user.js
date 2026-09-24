@@ -2297,10 +2297,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * Fastmail splits a message list into named groups. The choice lives in
-     * the groupBy of the mailbox's stored splits (it used to be the first
-     * entry of the mailbox's sort; see currentGroupingId); its five are "" for none, isTodayWeekMonth, isPinned,
-     * isUnread and custom, and custom reads a definition stored on the
-     * mailbox. The mode adds two kinds of its own and stores no definition
+     * the groupBy of the mailbox's stored splits; its five are "" for none,
+     * isTodayWeekMonth, isPinned, isUnread and custom, and custom reads a
+     * definition stored on the mailbox. The mode adds two kinds of its own
+     * and stores no definition
      * on the mailbox: "labels", built from the label tree and shaped by
      * settings.labelsGrouping, and one per block of settings.groupings, under
      * the id "split:" and its name — "by age", "pinned first" and "unread
@@ -2684,20 +2684,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return grouping && Object.assign({}, grouping, { id: id });
     };
 
-    // Where a mailbox keeps its grouping. Fastmail used to name it in the
-    // sort's first entry, ahead of the sort field; it now keeps it in the
-    // splits' groupBy, which the controller's groupBy reads, and moves an
-    // old sort over the first time it reads one (its sortSource does). The
-    // new place first, then the old for a record not moved yet; a leading
-    // isPinned was never a grouping, and Fastmail leaves it where it is.
+    // Where a mailbox keeps its grouping: the groupBy of its stored splits,
+    // which the controller's groupBy reads
     const currentGroupingId = () => {
         try {
-            const mailController = controller();
-            const groupBy = mailController.get('groupBy');
-            if (groupBy) return String(groupBy);
-            const sort = mailController.get('sort') || [];
-            return sort.length > 1 && sort[0].property !== 'isPinned'
-                ? String(sort[0].property || '') : '';
+            return String(controller().get('groupBy') || '');
         } catch (error) {
             return '';
         }
@@ -2719,7 +2710,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * Written where Fastmail now keeps it, the splits' groupBy, with the
+     * Written where Fastmail keeps it, the splits' groupBy, with the
      * sort left holding the sort field alone. Into the splits directly
      * rather than through the controller's groupBy, because that setter
      * deletes the collapsed list off the stored splits on its way past;
