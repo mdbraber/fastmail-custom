@@ -4523,13 +4523,29 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
-    const anyGroupOpen = (groups) => groups.offsets.some(entry => entry.count && !entry.collapsed);
+    // Read off the list itself: its folded set changes the moment a group
+    // folds, where the view's offsets wait for the next layout. The last
+    // group (Other) holds whatever the named ones do not.
+    const anyGroupOpen = ({ list, offsets }) => {
+        const counts = list.get('groupByCounts');
+        if (!Array.isArray(counts)) return offsets.some(entry => entry.count && !entry.collapsed);
+        const total = list.get('queryLength');
+        const rest = offsets[counts.length];
+        const other = typeof total === 'number'
+            ? Math.max(0, total - counts.reduce((sum, count) => sum + count, 0))
+            : (rest && rest.count) || 0;
+        return counts.concat(other).some((count, index) => count > 0 && !list.collapsedGroups.has(index));
+    };
 
-    const foldAllGroups = () => {
+    // What the button says it will do, and so what a click does: settled
+    // when the label is, and not worked out again on the click, where a
+    // fold made since could turn Expand into a collapse
+    let foldWillCollapse = true;
+
+    const foldAllGroups = (collapse = foldWillCollapse) => {
         const groups = listGroups();
         if (!groups) return;
         const { list, offsets } = groups;
-        const collapse = anyGroupOpen(groups);
         const before = list.get('length') || 0;
         offsets.forEach((entry, index) => {
             if (collapse) list.collapsedGroups.add(index);
@@ -4538,12 +4554,27 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         list.computedPropertyDidChange('length');
         list.rangeDidChange(0, Math.max(before, list.get('length') || 0));
         if (typeof list.collapsedGroupsDidChange === 'function') list.collapsedGroupsDidChange();
-        setTimeout(updateFoldGroupsButton, 0);
+        // Known without asking the list, which may not have laid out yet
+        updateFoldGroupsButton(!collapse);
     };
 
-    const updateFoldGroupsButton = () => {
+    // A heading's own click folds one group, and the label follows it
+    const watchFolds = (list) => {
+        if (!list || list.customFoldWatch || typeof list.toggleGroup !== 'function') return;
+        list.customFoldWatch = true;
+        const toggleGroup = list.toggleGroup;
+        list.toggleGroup = function () {
+            const result = toggleGroup.apply(this, arguments);
+            setTimeout(() => updateFoldGroupsButton(), 50);
+            return result;
+        };
+    };
+
+    const updateFoldGroupsButton = (willCollapse) => {
         const groups = listGroups();
-        const collapse = !groups || anyGroupOpen(groups);
+        if (groups) watchFolds(groups.list);
+        const collapse = typeof willCollapse === 'boolean' ? willCollapse : !groups || anyGroupOpen(groups);
+        foldWillCollapse = collapse;
         const label = collapse ? 'Collapse all groups' : 'Expand all groups';
         // Only while the list is grouped: a list bar leaves the button out
         // of its names, and the phone's header hides it
@@ -4626,7 +4657,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                     type: String(beside.get('type') || 'v-Button--subtleStandard v-Button--sizeM v-Button--iconOnly v-Button--tooltipLabel'),
                     icon: standardIcon('i-fold-collapse', FOLD_ICON_SHAPES.collapse),
                     label: 'Collapse all groups',
-                    target: { run: foldAllGroups },
+                    target: { run: () => foldAllGroups() },
                     method: 'run'
                 }), true);
                 toolbar.rightConfig = wrapped;
@@ -4664,7 +4695,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 type: 'v-Button--iconOnly',
                 icon: standardIcon('i-fold-collapse', FOLD_ICON_SHAPES.collapse),
                 label: 'Collapse all groups',
-                target: { run: foldAllGroups },
+                target: { run: () => foldAllGroups() },
                 method: 'run'
             });
             const switcher = (header.get('childViews') || []).find(view =>
@@ -8907,7 +8938,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 FOLD_ICON_SHAPES[collapse ? 'collapse' : 'expand']),
             isLastOfSection: true,
             // After the menu has closed, which is when the list redraws
-            target: { run: () => setTimeout(foldAllGroups, 0) },
+            target: { run: () => setTimeout(() => foldAllGroups(collapse), 0) },
             method: 'run'
         });
         option.customFoldAll = true;
