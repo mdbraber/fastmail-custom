@@ -4540,8 +4540,10 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const groups = listGroups();
         const collapse = !groups || anyGroupOpen(groups);
         const label = collapse ? 'Collapse all groups' : 'Expand all groups';
-        toolbarsOnScreen().forEach((toolbar) => {
-            const button = toolbar.customFoldGroups && toolbar.getView(FOLD_GROUPS_VIEW);
+        const buttons = toolbarsOnScreen()
+            .map(toolbar => toolbar.customFoldGroups && toolbar.getView(FOLD_GROUPS_VIEW));
+        if (headerFoldButton) buttons.push(headerFoldButton);
+        buttons.forEach((button) => {
             if (!button) return;
             try {
                 if (button.get('isDisabled') !== !groups) button.set('isDisabled', !groups);
@@ -4598,8 +4600,57 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         updateFoldGroupsButton();
     };
 
+    /*
+     * The phone and the iPad have no list bar. The row above the mailbox's
+     * title is Fastmail's PageHeaderView, drawn once from a fixed list of
+     * buttons that ends in the ⋯ menu holding Filter, Group and Sort; the
+     * button goes in just before that menu. The menu sits in a SwitchView
+     * that swaps it for Cancel while the search field has focus, and the
+     * button joins the menu's list there, so it comes and goes with it.
+     */
+    let headerFoldButton = null;
+
+    // Told apart by what its menu offers: its menuView is the raw computed
+    // function, and the key it hands Group's entries to survives minifying
+    const headerListMenu = () => {
+        const MenuButton = FastMail.classes.MenuButtonView;
+        return Array.from(document.querySelectorAll('.v-PageHeader button'))
+            .map(node => FastMail.getViewFromNode(node))
+            .find(view => view instanceof MenuButton && typeof view.menuView === 'function' &&
+                /\bgroupOptions\b/.test(Function.prototype.toString.call(view.menuView))) || null;
+    };
+
+    const dressPageHeader = () => {
+        if (!isPhoneLayout() && !isTabletLayout()) return;
+        const menu = headerListMenu();
+        const header = menu && menu.get('parentView');
+        if (!header || (headerFoldButton && headerFoldButton.get('parentView') === header)) return;
+        try {
+            const button = new FastMail.classes.ButtonView({
+                type: 'v-Button--iconOnly',
+                icon: standardIcon('i-fold-collapse', FOLD_ICON_SHAPES.collapse),
+                label: 'Collapse all groups',
+                target: { run: foldAllGroups },
+                method: 'run'
+            });
+            const switcher = (header.get('childViews') || []).find(view =>
+                Array.isArray(view.views) && view.views.some(list =>
+                    Array.isArray(list) && list.indexOf(menu) !== -1));
+            if (switcher) {
+                const list = switcher.views.find(one => Array.isArray(one) && one.indexOf(menu) !== -1);
+                list.splice(list.indexOf(menu), 0, button);
+            }
+            header.insertView(button, menu, 'before');
+            headerFoldButton = button;
+        } catch (error) {
+            reportFault('could not add the collapse-all button to the header', error);
+        }
+        updateFoldGroupsButton();
+    };
+
     const refreshToolbar = () => {
         dressListToolbars();
+        dressPageHeader();
         if (modeAppliesHere()) {
             // Every layout that has a message actions bar: along the bottom
             // on a phone, across the top of the message on a tablet and on
@@ -8633,6 +8684,22 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             } catch (error) {
                 // An option whose icon cannot be read is no sample
             }
+            // Fastmail draws each entry's icon off its own isSelected, a
+            // tick when true and the blank otherwise; handed true, that
+            // transform is the tick whatever is chosen right now
+            if (!icons.tick) {
+                try {
+                    const binding = option.__meta__.bindings.icon;
+                    if (binding && binding.fromPath === 'isSelected' && typeof binding.transform === 'function') {
+                        const tick = binding.transform.call(binding, true, true);
+                        const className = tick && typeof tick.getAttribute === 'function'
+                            ? tick.getAttribute('class') || '' : '';
+                        if (/\bi-tick\b/.test(className)) icons.tick = tick;
+                    }
+                } catch (error) {
+                    // Then the older builds' way below
+                }
+            }
             if (!icons.tick && isIconBound) {
                 try {
                     const binding = option.__meta__.bindings.icon;
@@ -8736,17 +8803,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * Collapse or expand every group, on the phone and the iPad. Their list has no bar
-     * beside Filter and Sort: Fastmail puts Filter, Group and Sort in the one
-     * menu next to the search field, which is built as a fixed pair rather
-     * than from a list a button could join. So the phone's is an entry at
-     * the end of that menu's Group section, below Custom…, doing what the
-     * bar's button does; greyed out when the list is not grouped.
+     * Collapse or expand every group from the Group menu, where neither a
+     * list bar nor the page header carries the button (see dressPageHeader):
+     * an entry at the end of the menu's Group section, doing what the
+     * button does; greyed out when the list is not grouped.
      */
     const addFoldAllOption = (options) => {
         // Wherever a list bar carries the button, the menu has no need to;
         // the iPad runs the phone's build and has no such bar either
         if (!isGroupMenu(options) || toolbarsOnScreen().some(toolbar => toolbar.customFoldGroups)) return;
+        if (headerFoldButton && headerFoldButton.get('isInDocument')) return;
         if (options.some(option => option && option.customFoldAll)) return;
 
         let at = -1;
