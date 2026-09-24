@@ -8543,9 +8543,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * Fastmail shows one plain toast at a time and a new one hides the one
      * showing, so a separate toast would hide the verb's Undo, or be hidden
      * by it a moment later. When a toast with Undo is up, or waiting its
-     * turn, the line joins its text instead; otherwise it is a toast of its
-     * own. Checked a moment later, so the verb has put its toast up first.
+     * turn, the line goes under its message as a second, quieter line;
+     * otherwise it is a toast of its own. Checked a moment later, so the
+     * verb has put its toast up first.
      */
+    const noteLine = (message) => FastMail.el('span', {
+        className: 'custom-toastNote',
+        style: 'display:block;font-size:90%;opacity:.75',
+        text: message
+    });
+
     const showToastWithUndo = (message) => {
         setTimeout(() => {
             try {
@@ -8553,13 +8560,20 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 const undoable = container && [container._waiting]
                     .concat(container._showing || [])
                     .find(one => one && one.undoTarget && !one.get('notificationType') &&
-                        !one.customJoined);
+                        !one.customNote);
                 if (undoable) {
-                    const text = undoable.get('text') + ' · ' + message;
-                    undoable.set('text', text);
-                    // Drawn once; a toast still waiting draws the new text
-                    if (undoable._textNode) undoable._textNode.textContent = text;
-                    undoable.customJoined = true;
+                    undoable.customNote = message;
+                    if (undoable._textNode) {
+                        undoable._textNode.appendChild(noteLine(message));
+                    } else {
+                        // Still waiting its turn: drawn later, from its text
+                        const draw = undoable.drawNotification;
+                        undoable.drawNotification = function () {
+                            const parts = draw.apply(this, arguments);
+                            if (this._textNode) this._textNode.appendChild(noteLine(message));
+                            return parts;
+                        };
+                    }
                     return;
                 }
             } catch (error) {
