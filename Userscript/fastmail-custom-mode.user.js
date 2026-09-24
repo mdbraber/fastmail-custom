@@ -2297,8 +2297,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     /*
      * Fastmail splits a message list into named groups. The choice lives in
-     * the mailbox's own sort, whose first entry names it while the last is
-     * the sort field; its five are "" for none, isTodayWeekMonth, isPinned,
+     * the groupBy of the mailbox's stored splits (it used to be the first
+     * entry of the mailbox's sort; see currentGroupingId); its five are "" for none, isTodayWeekMonth, isPinned,
      * isUnread and custom, and custom reads a definition stored on the
      * mailbox. The mode adds two kinds of its own and stores no definition
      * on the mailbox: "labels", built from the label tree and shaped by
@@ -2307,13 +2307,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * first" among them by default, standing in for isTodayWeekMonth,
      * isPinned and isUnread, which the Group menu no longer offers (see
      * addGroupings).
-     * Those three native values are still safe in a mailbox's stored sort:
+     * Those three native values are still safe in a mailbox's groupBy:
      * calculateSplits is only wrapped for "labels" and "split:" ids, so a
      * mailbox already grouped isTodayWeekMonth, isPinned or isUnread keeps
      * grouping that way, Fastmail's own logic and all; there is simply no
      * ticked entry for it any more, and None is the only menu route back.
      *
-     * A value Fastmail does not know is safe in that sort: its own
+     * A value Fastmail does not know is safe there: its own
      * calculateSplits returns null for one, no category sort is built, and
      * the list simply shows ungrouped. So an account opened in the official
      * app loses the grouping and nothing else.
@@ -2684,12 +2684,20 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         return grouping && Object.assign({}, grouping, { id: id });
     };
 
-    // The sort's first entry names the grouping, and there is one only when
-    // the sort has a second entry to be the sort field.
+    // Where a mailbox keeps its grouping. Fastmail used to name it in the
+    // sort's first entry, ahead of the sort field; it now keeps it in the
+    // splits' groupBy, which the controller's groupBy reads, and moves an
+    // old sort over the first time it reads one (its sortSource does). The
+    // new place first, then the old for a record not moved yet; a leading
+    // isPinned was never a grouping, and Fastmail leaves it where it is.
     const currentGroupingId = () => {
         try {
-            const sort = controller().get('sort') || [];
-            return sort.length > 1 ? String(sort[0].property || '') : '';
+            const mailController = controller();
+            const groupBy = mailController.get('groupBy');
+            if (groupBy) return String(groupBy);
+            const sort = mailController.get('sort') || [];
+            return sort.length > 1 && sort[0].property !== 'isPinned'
+                ? String(sort[0].property || '') : '';
         } catch (error) {
             return '';
         }
@@ -2711,10 +2719,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
-     * Written to sort rather than set through groupBy, because that setter
-     * deletes the collapsed list off the mailbox's stored split on its way
-     * past; switching grouping and switching back would quietly unfold a
-     * split somebody had folded.
+     * Written where Fastmail now keeps it, the splits' groupBy, with the
+     * sort left holding the sort field alone. Into the splits directly
+     * rather than through the controller's groupBy, because that setter
+     * deletes the collapsed list off the stored splits on its way past;
+     * switching grouping and switching back would quietly unfold a split
+     * somebody had folded. The controller is then told, as its setter
+     * would have.
      */
     const chooseGrouping = (id) => {
         const mailController = controller();
@@ -2731,8 +2742,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             sortField = { property: 'receivedAt', isAscending: true };
         }
 
-        mailController.set('sort',
-            id ? [{ property: id, isAscending: false }, sortField] : [sortField]);
+        mailController.set('sort', [sortField]);
+        const source = mailController.get('sortSource');
+        const splits = Object.assign({}, source.get('splits') || {});
+        if (id) splits.groupBy = id;
+        else delete splits.groupBy;
+        source.set('splits', Object.keys(splits).length ? splits : null);
+        mailController.computedPropertyDidChange('groupBy');
     };
 
     /*
@@ -8489,6 +8505,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         // A different mailbox may be grouped differently, or not at all
         controller().addObserverForKey('sort', { go: scheduleMidnight }, 'go');
+        controller().addObserverForKey('groupBy', { go: scheduleMidnight }, 'go');
         controller().addObserverForKey('mailbox', { go: scheduleMidnight }, 'go');
 
         // The list is rebuilt whenever the mailbox, the sort or the filter
@@ -8773,9 +8790,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // mode's entries match whatever Fastmail draws; if neither can be found
     // the entries go without, as before.
     //
-    // The blank always turns up this way: Fastmail's own groupBy is a plain
-    // mirror of the mailbox's sort (see currentGroupingId, which reads the
-    // same sort entry Fastmail's setter for groupBy writes), so while one of
+    // The blank always turns up this way: Fastmail's own groupBy is where
+    // the grouping is kept (see currentGroupingId, which reads it), so while one of
     // this mode's own groupings is active groupBy holds this mode's own id,
     // never one of Fastmail's four stock values or the "custom" string its
     // own Custom… entry's icon checks for — none of Fastmail's stock options
