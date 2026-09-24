@@ -5112,16 +5112,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
             pendingGroupAdds = added.length ? added : null;
             if (added.length) {
-                // Fastmail's own toast, and Fastmail's own precedence with it:
-                // a verb's undo toast lands after this one and takes the
-                // corner from it, which is the right way round; the button
-                // that undoes an archive matters more than a line saying a
-                // contact was filed.
+                // Joined to the verb's Undo toast where there is one, so
+                // neither hides the other
                 const who = names.length === 1
                     ? names[0]
                     : names.length + ' senders';
 
-                showToast(made
+                showToastWithUndo(made
                     ? who + ' added to contacts and ' + group.get('name')
                     : who + ' added to ' + group.get('name'));
             }
@@ -5177,7 +5174,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             });
 
             if (names.length) {
-                showToast((names.length === 1 ? names[0] : names.length + ' senders') +
+                showToastWithUndo((names.length === 1 ? names[0] : names.length + ' senders') +
                     ' added to contacts');
             }
         } catch (error) {
@@ -8539,6 +8536,37 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             toast.classList.remove('is-shown');
             setTimeout(() => toast.remove(), 300);
         }, 1800);
+    };
+
+    /*
+     * A line that comes with a verb, such as a sender added to contacts.
+     * Fastmail shows one plain toast at a time and a new one hides the one
+     * showing, so a separate toast would hide the verb's Undo, or be hidden
+     * by it a moment later. When a toast with Undo is up, or waiting its
+     * turn, the line joins its text instead; otherwise it is a toast of its
+     * own. Checked a moment later, so the verb has put its toast up first.
+     */
+    const showToastWithUndo = (message) => {
+        setTimeout(() => {
+            try {
+                const container = notificationContainer();
+                const undoable = container && [container._waiting]
+                    .concat(container._showing || [])
+                    .find(one => one && one.undoTarget && !one.get('notificationType') &&
+                        !one.customJoined);
+                if (undoable) {
+                    const text = undoable.get('text') + ' · ' + message;
+                    undoable.set('text', text);
+                    // Drawn once; a toast still waiting draws the new text
+                    if (undoable._textNode) undoable._textNode.textContent = text;
+                    undoable.customJoined = true;
+                    return;
+                }
+            } catch (error) {
+                // A toast of its own, then
+            }
+            showToast(message);
+        }, 150);
     };
 
     const copyText = (text) => {
