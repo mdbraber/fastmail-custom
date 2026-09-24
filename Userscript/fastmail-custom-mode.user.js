@@ -4482,13 +4482,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // move rather than once.
     /*
      * Collapse or expand every group of the list at once, from the list's
-     * own bar beside Filter and Sort. One button: while any group with
+     * own bar, just before the Actions (⋯) menu. One button: while any group with
      * messages is open it collapses them all, otherwise it opens them all;
-     * greyed out when the list is not grouped.
+     * shown only while the list is grouped.
      *
      * The bar draws from its computed rightConfig, which is wrapped on each
      * list bar the way the message actions bar's list is, to put the button
-     * before Sort; not while a selection has the bar, which then shows the
+     * before that menu (or Sort, on a bar that still has one); not while a selection has the bar, which then shows the
      * selection's own actions. The folds go in the way adoptList puts them
      * in: the set first, then the length recounted and the range redrawn,
      * then collapsedGroupsDidChange, which stores them where a heading's own
@@ -4497,9 +4497,14 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const FOLD_GROUPS_VIEW = 'customFoldGroups';
 
     const FOLD_ICON_SHAPES = {
-        // Chevrons meeting, and parting
-        collapse: [['polyline', { points: '7 4.5 12 9.5 17 4.5' }], ['polyline', { points: '7 19.5 12 14.5 17 19.5' }]],
-        expand: [['polyline', { points: '7 9.5 12 4.5 17 9.5' }], ['polyline', { points: '7 14.5 12 19.5 17 14.5' }]]
+        // Chevrons meeting, and parting, in the ring Filter and Actions
+        // are drawn in beside it, so the three read as one set
+        collapse: [['circle', { cx: '12', cy: '12', r: '7.75' }],
+            ['polyline', { points: '9.5 7.75 12 10.25 14.5 7.75' }],
+            ['polyline', { points: '9.5 16.25 12 13.75 14.5 16.25' }]],
+        expand: [['circle', { cx: '12', cy: '12', r: '7.75' }],
+            ['polyline', { points: '9.5 10.25 12 7.75 14.5 10.25' }],
+            ['polyline', { points: '9.5 13.75 12 16.25 14.5 13.75' }]]
     };
 
     // The open list's groups as the list view lays them out, or null when it
@@ -4540,13 +4545,30 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         const groups = listGroups();
         const collapse = !groups || anyGroupOpen(groups);
         const label = collapse ? 'Collapse all groups' : 'Expand all groups';
+        // Only while the list is grouped: a list bar leaves the button out
+        // of its names, and the phone's header hides it
+        toolbarsOnScreen().forEach((toolbar) => {
+            if (!toolbar.customFoldGroups || toolbar.customFoldShown === !!groups) return;
+            toolbar.customFoldShown = !!groups;
+            try {
+                toolbar.computedPropertyDidChange('rightConfig');
+            } catch (error) {
+                // The bar is going away
+            }
+        });
+        if (headerFoldButton) {
+            try {
+                headerFoldButton.get('layer').style.display = groups ? '' : 'none';
+            } catch (error) {
+                // Not drawn yet; the next pass hides it
+            }
+        }
         const buttons = toolbarsOnScreen()
             .map(toolbar => toolbar.customFoldGroups && toolbar.getView(FOLD_GROUPS_VIEW));
         if (headerFoldButton) buttons.push(headerFoldButton);
         buttons.forEach((button) => {
             if (!button) return;
             try {
-                if (button.get('isDisabled') !== !groups) button.set('isDisabled', !groups);
                 if (button.get('label') !== label) {
                     button.set('label', label);
                     button.set('icon', standardIcon('i-fold-' + (collapse ? 'collapse' : 'expand'),
@@ -4558,17 +4580,35 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         });
     };
 
-    // The mailbox list's bar: the one with Sort, and a rightConfig of its own
+    // Whether a menu button is the one holding Filter, Group and Sort: its
+    // menuView is the raw computed function, and the key it hands Group's
+    // entries to survives minifying
+    const isListMenu = (view) => view instanceof FastMail.classes.MenuButtonView &&
+        typeof view.menuView === 'function' &&
+        /\bgroupOptions\b/.test(Function.prototype.toString.call(view.menuView));
+
+    // What the button goes before: Sort where the bar still has one, else
+    // the Actions (⋯) menu that holds Filter, Group and Sort, as on the phone
+    const listBarAnchor = (toolbar) => {
+        if (toolbar.getView('sort')) return 'sort';
+        const more = toolbar.getView('more');
+        return more && isListMenu(more) ? 'more' : null;
+    };
+
+    // The mailbox list's bar: the one with Sort or the list's Actions menu,
+    // and a rightConfig of its own
     const dressListToolbars = () => {
         toolbarsOnScreen().forEach((toolbar) => {
-            if (toolbar.customFoldGroups || !toolbar.getView('sort') ||
-                    !Object.prototype.hasOwnProperty.call(toolbar, 'rightConfig') ||
+            if (toolbar.customFoldGroups) return;
+            const anchor = listBarAnchor(toolbar);
+            if (!anchor || !Object.prototype.hasOwnProperty.call(toolbar, 'rightConfig') ||
                     typeof toolbar.rightConfig !== 'function') return;
             const original = toolbar.rightConfig;
             const wrapped = function () {
                 const names = original.apply(this, arguments);
+                if (!this.customFoldShown) return names;
                 if (!Array.isArray(names) || names.indexOf('selection') !== -1) return names;
-                const at = names.indexOf('sort');
+                const at = names.indexOf(anchor);
                 if (at === -1 || names.indexOf(FOLD_GROUPS_VIEW) !== -1) return names;
                 return names.slice(0, at).concat(FOLD_GROUPS_VIEW, names.slice(at));
             };
@@ -4581,9 +4621,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 }
             });
             try {
-                const sort = toolbar.getView('sort');
+                const beside = toolbar.getView(anchor);
                 toolbar.registerView(FOLD_GROUPS_VIEW, new FastMail.classes.ButtonView({
-                    type: String(sort.get('type') || 'v-Button--subtleStandard v-Button--sizeM v-Button--iconOnly v-Button--tooltipLabel'),
+                    type: String(beside.get('type') || 'v-Button--subtleStandard v-Button--sizeM v-Button--iconOnly v-Button--tooltipLabel'),
                     icon: standardIcon('i-fold-collapse', FOLD_ICON_SHAPES.collapse),
                     label: 'Collapse all groups',
                     target: { run: foldAllGroups },
@@ -4610,15 +4650,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      */
     let headerFoldButton = null;
 
-    // Told apart by what its menu offers: its menuView is the raw computed
-    // function, and the key it hands Group's entries to survives minifying
-    const headerListMenu = () => {
-        const MenuButton = FastMail.classes.MenuButtonView;
-        return Array.from(document.querySelectorAll('.v-PageHeader button'))
-            .map(node => FastMail.getViewFromNode(node))
-            .find(view => view instanceof MenuButton && typeof view.menuView === 'function' &&
-                /\bgroupOptions\b/.test(Function.prototype.toString.call(view.menuView))) || null;
-    };
+    const headerListMenu = () => Array.from(document.querySelectorAll('.v-PageHeader button'))
+        .map(node => FastMail.getViewFromNode(node))
+        .find(isListMenu) || null;
 
     const dressPageHeader = () => {
         if (!isPhoneLayout() && !isTabletLayout()) return;
@@ -8848,7 +8882,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      * Collapse or expand every group from the Group menu, where neither a
      * list bar nor the page header carries the button (see dressPageHeader):
      * an entry at the end of the menu's Group section, doing what the
-     * button does; greyed out when the list is not grouped.
+     * button does; only while the list is grouped.
      */
     const addFoldAllOption = (options) => {
         // Wherever a list bar carries the button, the menu has no need to;
@@ -8865,12 +8899,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         if (at === -1) return;
 
         const groups = listGroups();
-        const collapse = !groups || anyGroupOpen(groups);
+        if (!groups) return;
+        const collapse = anyGroupOpen(groups);
         const option = new FastMail.classes.ButtonView({
             label: collapse ? 'Collapse all groups' : 'Expand all groups',
             icon: standardIcon('i-fold-' + (collapse ? 'collapse' : 'expand'),
                 FOLD_ICON_SHAPES[collapse ? 'collapse' : 'expand']),
-            isDisabled: !groups,
             isLastOfSection: true,
             // After the menu has closed, which is when the list redraws
             target: { run: () => setTimeout(foldAllGroups, 0) },
