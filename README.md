@@ -51,7 +51,8 @@ A personal set of tools for using Fastmail. I wanted to be able use separate app
 **Appearance**
 
 - 🗂️ **Grouped sidebar**: folders, labels and saved searches kept apart with sections, a label shown without its parent's
-  name ("Work" instead of "Projects/Work"), and the Inbox tag left off rows where every message is in the Inbox anyway
+  name ("Work" instead of "Projects/Work"), and the Inbox tag left off rows where every message is in the Inbox anyway;
+  on a row, plain tags come before sidebar labels and the paperclip before both
 - 🔻 **Triage icon**: the triage label has its own icon
 - 🔢 **Filtered counts**: counts show the number with the filter applied, and a root label can count only while collapsed
 - 🎨 **Label colours**: show the full message row in the label color

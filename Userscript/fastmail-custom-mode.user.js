@@ -209,6 +209,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // one at all past phone width, so this is a standalone element
         // rather than anything Fastmail's own could be un-hidden into.
         showMailboxTitle: false,
+        attachmentBeforeLabels: true,
+        tagsBeforeSidebarLabels: true,
         // A grouping's priorities that name a single keyword (is:unread,
         // is:pinned, keyword:…) as sort entries inside each group rather
         // than as a group of their own ahead of each group. See
@@ -442,6 +444,16 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             key: 'showMailboxTitle', group: 'appearance',
             title: 'Show the mailbox name above the list',
             hint: 'The phone’s own big title, past phone width too, where Fastmail draws none.'
+        },
+        {
+            key: 'attachmentBeforeLabels', group: 'appearance',
+            title: 'Show the paperclip before the labels',
+            hint: 'Where a row shows both on one line; the labels then end in the same place on every row.'
+        },
+        {
+            key: 'tagsBeforeSidebarLabels', group: 'appearance',
+            title: 'Show plain tags before sidebar labels',
+            hint: 'Labels hidden from the sidebar come first on a row, ahead of ones like Triage.'
         }
     ];
 
@@ -1959,7 +1971,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         '.v-Mailbox--short.v-Mailbox--previewOff',
         '.v-Mailbox--long'
     ];
-    const ATTACHMENT_ICON_RULES = [
+    const attachmentIconRules = () => settings.attachmentBeforeLabels ? [
         ATTACHMENT_BESIDE_LABELS.map(list => list +
             ' .v-MailboxItem-attachments.s-has-attachment:has(~ .v-MailboxItem-mailboxes)')
             .join(', ') + ' { visibility: hidden; }',
@@ -1980,7 +1992,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // row's labels end at the same place.
         '.v-Mailbox--long .v-MailboxItem .v-MailboxItem-mailboxes { right: 137px; }',
         '.v-Mailbox--long.v-Mailbox--size .v-MailboxItem .v-MailboxItem-mailboxes { right: 202px; }'
-    ];
+    ] : [];
 
     // Plain tags, the labels kept out of the sidebar, ahead of the sidebar's
     // own on a row: the tag says something particular about the message,
@@ -1989,6 +2001,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // Fastmail's DOM; each tag is named by its path the same way the label
     // colours name a chip.
     const tagsFirstRules = () => {
+        if (!settings.tagsBeforeSidebarLabels) return [];
         const chips = FastMail.store.getAll(FastMail.classes.Mailbox)
             .filter(m => isUserLabel(m) && !isSidebarLabel(m))
             .map(m => `.v-MailboxItem-mailbox:has(span[title="${cssString(mailboxPath(m))}"])`);
@@ -2235,7 +2248,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             .concat(FLOATING_NAV_RULES)
             .concat(HIDE_MESSAGE_NAV_RULES)
             .concat(MAILBOX_TITLE_RULES)
-            .concat(ATTACHMENT_ICON_RULES)
+            .concat(attachmentIconRules())
             .concat(tagsFirstRules())
             .join('\n');
         const existing = document.getElementById(STYLE_ID);
