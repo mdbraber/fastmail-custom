@@ -7644,7 +7644,9 @@ Licensed under the GNU Affero General Public License, version 3 or later.
      *
      * The click that follows the press is swallowed: the button would
      * otherwise archive underneath the picker that just opened, which is the
-     * one outcome a long press must not have.
+     * one outcome a long press must not have. Only that press's own click,
+     * though: a touch held that long ends without one on iOS, and a swallow
+     * left waiting took the first tap in the picker instead.
      */
     const LONG_PRESS_MS = 500;
     const LONG_PRESS_SLOP = 10;
@@ -7676,6 +7678,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
         document.addEventListener('pointerdown', (event) => {
             cancel();
+            swallowClick = false;
             if (!archiveButtonUnder(event.target)) return;
 
             from = { x: event.clientX, y: event.clientY };
