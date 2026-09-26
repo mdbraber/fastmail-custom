@@ -1,6 +1,7 @@
 PROJECT = FastmailShell.xcodeproj
 LSREGISTER = /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
-DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/ available/ {print $$3; exit}')
+# Every paired physical device that answers, unless DEVICE names one
+DEVICES = $(or $(DEVICE),$(shell xcrun devicectl list devices 2>/dev/null | awk '/physical/ && (/available/ || /connected/)' | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f-]{16,27}'))
 
 .PHONY: generate test build-macos install-macos forget-builds check-apps build-ios install-ios build-extension install-extension install deploy clean
 
@@ -49,10 +50,15 @@ build-ios: generate
 	xcodebuild -project $(PROJECT) -scheme Mailto -destination 'generic/platform=iOS' -configuration Release -allowProvisioningUpdates build
 
 install-ios: build-ios
-	@test -n "$(DEVICE)" || { echo "No available iOS device found. Pass DEVICE=<identifier>, see: xcrun devicectl list devices"; exit 1; }
-	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Personal -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/mdbraber.com.app"
-	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Work -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/nexthealth.nl.app"
-	xcrun devicectl device install app --device $(DEVICE) "$$(xcodebuild -project $(PROJECT) -scheme Mailto -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3}')/Mailto.app"
+	@test -n "$(DEVICES)" || { echo "No available iOS device found. Pass DEVICE=<identifier>, see: xcrun devicectl list devices"; exit 1; }
+	@for device in $(DEVICES); do \
+		for app in "Personal mdbraber.com" "Work nexthealth.nl" "Mailto Mailto"; do \
+			scheme=$${app%% *}; name=$${app#* }; \
+			dir=$$(xcodebuild -project $(PROJECT) -scheme $$scheme -destination 'generic/platform=iOS' -configuration Release -showBuildSettings | awk '/ BUILT_PRODUCTS_DIR/ {print $$3; exit}'); \
+			echo "installing $$name on $$device"; \
+			xcrun devicectl device install app --device $$device "$$dir/$$name.app" || exit 1; \
+		done; \
+	done
 
 # The Safari extension ships inside a host app, which Safari only sees once
 # the app is in /Applications. Xcode resolves the extension's symlinks into
@@ -72,11 +78,10 @@ install-extension: build-extension
 
 install: install-macos install-ios install-extension
 
-# install-ios takes DEVICE, which defaults to the first device listed, so
-# `install` reaches one of them and quietly leaves the others behind. deploy
-# is the everywhere version: every paired device that answers within half a
-# minute, naming the ones that do not, and relaunching the macOS shells so
-# they actually load what was just installed.
+# install-ios reaches every device that is available right now, or only
+# DEVICE when one is named. deploy waits for them: every paired device that
+# answers within half a minute, naming the ones that do not, and relaunching
+# the macOS shells so they actually load what was just installed.
 deploy:
 	tools/deploy-apps.sh
 

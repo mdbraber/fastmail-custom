@@ -76,9 +76,11 @@ tools/check-installed-apps.sh || { macos_check=1; echo "MACOS CHECK FAILED"; }
 # listing's own state column rather than from the JSON, whose tunnelState
 # reads disconnected for a device that installs perfectly well. A device
 # installed to a moment ago reads `connected` instead of `available (paired)`,
-# and one missing it waited out every try in silence.
+# and one missing it waited out every try in silence. A running Simulator
+# reads `connected` too, and is left out.
 paired_devices () {
   xcrun devicectl list devices 2>/dev/null \
+    | grep -v simulated \
     | grep -E 'available \(paired\)|connected' \
     | grep -oE "$DEVICE_ID"
 }
