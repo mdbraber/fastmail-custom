@@ -5163,6 +5163,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
             const added = [];
             const names = [];
+            const members = [];
             let made = 0;
 
             messagesFrom(keys).forEach((message) => {
@@ -5183,8 +5184,12 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 if (!contact) return;
 
                 // Already a member: nothing to add, and nothing an undo
-                // should take away either
-                if (group.includes(contact)) return;
+                // should take away either; only said, so the pick doesn't
+                // look like it was ignored
+                if (group.includes(contact)) {
+                    members.push(sender.name || sender.email);
+                    return;
+                }
 
                 group.addContact(contact);
                 added.push({ group: group, contact: contact });
@@ -5193,16 +5198,24 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             });
 
             pendingGroupAdds = added.length ? added : null;
+
+            const whoOf = list => list.length === 1 ? list[0] : list.length + ' senders';
+            const groupName = group.get('name');
+            const already = members.length
+                ? whoOf(members) + ' already in ' + groupName
+                : '';
+
             if (added.length) {
                 // Joined to the verb's Undo toast where there is one, so
                 // neither hides the other
-                const who = names.length === 1
-                    ? names[0]
-                    : names.length + ' senders';
+                const who = whoOf(names);
 
-                showToastWithUndo(made
-                    ? who + ' added to contacts and ' + group.get('name')
-                    : who + ' added to ' + group.get('name'));
+                showToastWithUndo((made
+                    ? who + ' added to contacts and ' + groupName
+                    : who + ' added to ' + groupName) +
+                    (already ? '; ' + whoOf(members) + ' already in it' : ''));
+            } else if (already) {
+                showToastWithUndo(already);
             }
         } catch (error) {
             reportFault('could not file the sender', error);
