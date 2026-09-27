@@ -5779,6 +5779,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                         // Fastmail, and resolving it here would move the focus
                         // afterwards.
                         const advance = takeFilingAdvance();
+                        if (advance) returnHereOnUndo(advance.from, advance.step);
                         const result = original.call(this, storeKeys, adds, merged);
                         // A Keep verb waiting on this pick moves the view on
                         // to the next message.
@@ -5797,6 +5798,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                         });
                     }
                     const advance = takeFilingAdvance();
+                    if (advance) returnHereOnUndo(advance.from, advance.step);
                     let result;
 
                     if (above.length) {
@@ -6811,6 +6813,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // answer to being asked again is the same as the first time: move on.
         if (removes.length) {
             noteFollowUp('kept', keys);
+            returnHereOnUndo(from, step);
             actions.addremove(keys, [], removes);
         }
         addSendersToContacts(keys);
@@ -6881,15 +6884,21 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     /*
      * Undo, with the view following. Fastmail's undo restores the labels
      * but leaves you looking at wherever the verb sent you. So the archive
-     * verbs stamp the message's own URL onto the checkpoint they cut, and
-     * an undo that reverts that checkpoint walks the view back to the
-     * message it just restored.
+     * verbs, keep and filing stamp the message's own URL onto the checkpoint
+     * they cut, and an undo that reverts that checkpoint walks the view back
+     * to the message it just restored.
      */
 
     // Set by the verb the moment before its didAction fires; stamped onto the
     // checkpoint by the wrapper in patchArchive.
     let pendingUndoReturn = null;
     let lastUndoReturn = null;
+
+    // Keep and filing leave a list where it is, so only a decision made on
+    // the open message moved the view, and only that one has a way back.
+    const returnHereOnUndo = (from, step) => {
+        if (step && step.reading) pendingUndoReturn = urlForMessage(from);
+    };
 
     const urlForMessage = (message) => {
         const mailController = controller();
