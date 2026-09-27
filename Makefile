@@ -81,7 +81,8 @@ install: install-macos install-ios install-extension
 # install-ios reaches every device that is available right now, or only
 # DEVICE when one is named. deploy waits for them: every paired device that
 # answers within half a minute, naming the ones that do not, and relaunching
-# the macOS shells so they actually load what was just installed.
+# the macOS shells so they actually load what was just installed. It installs
+# the Safari extension too.
 deploy:
 	tools/deploy-apps.sh
 

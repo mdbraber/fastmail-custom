@@ -1,6 +1,7 @@
 #!/bin/zsh
 # Build and install both shells everywhere: macOS into /Applications, iOS onto
-# every paired device that turns up.
+# every paired device that turns up; and the Safari extension's host app into
+# /Applications with them.
 #
 # Devices are discovered rather than named, so a new phone or an iPad needs no
 # change here; set FASTMAIL_DEVICES to a space-separated list of UDIDs to
@@ -32,6 +33,9 @@ make build-macos || { echo "MACOS BUILD FAILED"; exit 1; }
 echo "=== build iOS ==="
 make build-ios || { echo "IOS BUILD FAILED"; exit 1; }
 
+echo "=== build Safari extension ==="
+make build-extension || { echo "EXTENSION BUILD FAILED"; exit 1; }
+
 products () {
   xcodebuild -project FastmailShell.xcodeproj -scheme "$1" \
     -destination 'generic/platform=iOS' -configuration Release \
@@ -55,6 +59,11 @@ echo "=== install macOS ==="
 # links, AppleScript and Shortcuts reach them rather than a build folder's.
 make install-macos CHECK_APPS= || { echo "MACOS INSTALL FAILED"; exit 1; }
 echo "MACOS OK"
+
+# The extension's host app goes beside the shells; Safari picks it up from
+# /Applications, so there is nothing to relaunch.
+make install-extension || { echo "EXTENSION INSTALL FAILED"; exit 1; }
+echo "EXTENSION OK"
 
 # A running shell reads userscript.js from its bundle at launch, so it keeps
 # serving the old script until restarted. Installing is not deploying.
