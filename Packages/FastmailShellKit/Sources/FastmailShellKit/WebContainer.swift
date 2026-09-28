@@ -115,6 +115,8 @@ public struct WebContainer {
         // mark of Fastmail's own desktop app, and the page then calls
         // window.electron.showNotification, which the harness provides.
         configuration.applicationNameForUserAgent = Self.electronUserAgentToken
+        // New mail keeps arriving with the window in the background
+        BackgroundThrottling.keepRunning(configuration.preferences)
         #endif
 
         configuration.defaultWebpagePreferences.preferredContentMode =
