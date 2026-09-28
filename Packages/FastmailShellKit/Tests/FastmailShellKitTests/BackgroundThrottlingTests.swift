@@ -36,4 +36,18 @@ import WebKit
     #expect(get(view, getter) == false)
     #expect(get(WKWebView(), getter) == true)
 }
+
+@Test @MainActor func theMailPageKeepsItsPriorityInTheBackground() {
+    let preferences = WKPreferences()
+    #expect(BackgroundThrottling.keepPriority(preferences))
+    let getter = Selector(("_pageVisibilityBasedProcessSuppressionEnabled"))
+    guard let method = class_getInstanceMethod(WKPreferences.self, getter) else {
+        Issue.record("WebKit no longer has the setting")
+        return
+    }
+    typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
+    let get = unsafeBitCast(method_getImplementation(method), to: Getter.self)
+    #expect(get(preferences, getter) == false)
+    #expect(get(WKPreferences(), getter) == true)
+}
 #endif

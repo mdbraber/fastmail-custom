@@ -117,6 +117,7 @@ public struct WebContainer {
         configuration.applicationNameForUserAgent = Self.electronUserAgentToken
         // New mail keeps arriving with the window in the background
         BackgroundThrottling.keepRunning(configuration.preferences)
+        BackgroundThrottling.keepPriority(configuration.preferences)
         #endif
 
         configuration.defaultWebpagePreferences.preferredContentMode =

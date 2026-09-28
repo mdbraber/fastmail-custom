@@ -56,6 +56,25 @@ enum BackgroundThrottling {
         return true
     }
 
+    /// Seen and running, the page was still slowed down: some 45 seconds
+    /// after the app left the front WebKit calls the page visually idle and
+    /// lets its process nap, at the lowest priority the system has. New
+    /// mail arriving then took the offline worker 7 to 37 seconds to take
+    /// in, though each of its requests to the server came back within 50
+    /// milliseconds. With this off the process keeps the priority it has
+    /// in front.
+    @discardableResult
+    static func keepPriority(_ preferences: WKPreferences) -> Bool {
+        let setter = Selector(("_setPageVisibilityBasedProcessSuppressionEnabled:"))
+        guard preferences.responds(to: setter),
+              let method = class_getInstanceMethod(WKPreferences.self, setter) else { return false }
+
+        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+        let set = unsafeBitCast(method_getImplementation(method), to: Setter.self)
+        set(preferences, setter, false)
+        return true
+    }
+
     private static func key(of feature: NSObject) -> String? {
         let getter = Selector(("key"))
         guard feature.responds(to: getter) else { return nil }
