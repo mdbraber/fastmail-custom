@@ -2,6 +2,10 @@
 <!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
 <dictionary title="Fastmail Terminology">
     <suite name="Standard Suite" code="core" description="Common terms for the application.">
+        <command name="close" code="coreclos" description="Close a window, the way its close button does.">
+            <cocoa class="NSCloseCommand"/>
+            <direct-parameter type="specifier" description="The window to close."/>
+        </command>
         <class name="application" code="capp" description="The application.">
             <cocoa class="NSApplication"/>
             <element type="window" access="r">
@@ -12,7 +16,7 @@
                 <cocoa key="isActive"/>
             </property>
         </class>
-        <class name="window" code="cwin" description="A mail window.">
+        <class name="window" code="cwin" description="A Fastmail window: a mail window, a message popped out of one, or a compose window.">
             <cocoa class="NSWindow"/>
             <property name="name" code="pnam" type="text" access="r">
                 <cocoa key="fmName"/>
@@ -26,13 +30,28 @@
             <property name="index" code="pidx" type="integer" access="r">
                 <cocoa key="orderedIndex"/>
             </property>
+            <property name="kind" code="FMwk" type="window kind" access="r" description="What the window is for.">
+                <cocoa key="fmKind"/>
+            </property>
+            <property name="visible" code="pvis" type="boolean" access="r" description="Whether the window is on screen; the compose window kept ready is not.">
+                <cocoa key="isVisible"/>
+            </property>
+            <responds-to command="close">
+                <cocoa method="fmClose:"/>
+            </responds-to>
         </class>
+        <enumeration name="window kind" code="FMwK">
+            <enumerator name="main" code="FKma" description="A mail window."/>
+            <enumerator name="pop out" code="FKpo" description="A message opened in a window of its own."/>
+            <enumerator name="compose" code="FKco" description="A window for writing a message."/>
+            <enumerator name="other" code="FKot" description="One of the app's own windows, such as Downloads."/>
+        </enumeration>
     </suite>
     <suite name="Fastmail Suite" code="FMsh" description="Fastmail control.">
         <command name="do JavaScript" code="FMshDoJS" description="Run JavaScript in a window's mail view and return the result as text.">
             <cocoa class="FMShellDoJavaScriptCommand"/>
             <direct-parameter type="text" description="The JavaScript function body to run."/>
-            <parameter name="in" code="Wndw" type="window" optional="yes" description="The window to run it in; the front window when omitted.">
+            <parameter name="in" code="Wndw" type="window" optional="yes" description="The window to run it in, of any kind; the front mail window when omitted.">
                 <cocoa key="Window"/>
             </parameter>
             <result type="text"/>
