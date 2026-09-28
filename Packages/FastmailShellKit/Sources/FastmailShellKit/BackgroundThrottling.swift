@@ -37,6 +37,25 @@ enum BackgroundThrottling {
         return true
     }
 
+    /// Not suspended is not enough: while the window is covered WebKit
+    /// still runs the page at background priority, and the offline worker's
+    /// sync then crawled, holding the offline copy for close to a minute
+    /// while the page's own requests waited behind it. The same message came
+    /// through in five seconds with the window uncovered. So the page is
+    /// told nothing about the window being covered; a minimised window, or
+    /// the app hidden, still counts as out of sight.
+    @discardableResult
+    static func ignoreCovering(_ view: WKWebView) -> Bool {
+        let setter = Selector(("_setWindowOcclusionDetectionEnabled:"))
+        guard view.responds(to: setter),
+              let method = class_getInstanceMethod(WKWebView.self, setter) else { return false }
+
+        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+        let set = unsafeBitCast(method_getImplementation(method), to: Setter.self)
+        set(view, setter, false)
+        return true
+    }
+
     private static func key(of feature: NSObject) -> String? {
         let getter = Selector(("key"))
         guard feature.responds(to: getter) else { return nil }

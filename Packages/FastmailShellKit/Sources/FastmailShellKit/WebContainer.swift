@@ -320,6 +320,9 @@ public struct WebContainer {
 
         let webView = makeView(configuration)
         WebViewRegistry.shared.register(webView)
+        #if os(macOS)
+        BackgroundThrottling.ignoreCovering(webView)
+        #endif
         // Always on the Mac; on iPhone and iPad, the Enable remote debugging
         // switch on the Backend page.
         webView.isInspectable = WebInspection.isAllowed()
