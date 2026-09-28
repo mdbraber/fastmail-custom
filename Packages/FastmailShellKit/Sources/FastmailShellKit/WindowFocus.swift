@@ -27,6 +27,7 @@ public enum WindowFocus {
     /// Shown, in the Dock, or a tab behind another; not a pool window waiting
     /// out of sight, whose page Fastmail has not been told about.
     static func isOnScreen(_ window: NSWindow) -> Bool {
+        if window is CompanyWindow { return false }
         if window.isVisible || window.isMiniaturized { return true }
         guard let group = window.tabGroup else { return false }
         return group.windows.count > 1 && group.windows.contains(window)

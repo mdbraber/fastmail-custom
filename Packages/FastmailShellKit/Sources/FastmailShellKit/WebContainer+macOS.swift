@@ -56,6 +56,8 @@ extension WebContainer: NSViewRepresentable {
                 view.onDidMoveToWindow = { [weak view, model] in
                     guard let view, let window = view.window else { return }
                     configureWindow(window)
+                    // New mail keeps arriving with the app hidden
+                    BackgroundCompany.shared.keep(view)
                     observeFullScreen(window, webView: view, model: model)
                 }
                 return view

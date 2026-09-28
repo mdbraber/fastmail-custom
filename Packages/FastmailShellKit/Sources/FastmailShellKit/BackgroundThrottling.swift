@@ -81,4 +81,63 @@ enum BackgroundThrottling {
         return feature.perform(getter)?.takeUnretainedValue() as? String
     }
 }
+
+/// Keeps the mail page at its priority while the app is hidden or its window
+/// minimised.
+///
+/// A page nobody can see is run at the lowest priority the system has, and
+/// nothing WebKit offers changes that: with the app hidden, two new messages
+/// in three raised no notification at all, and no request left the offline
+/// worker for minutes. What WebKit does count is any page of the same
+/// process that is in sight. So the app keeps one window that hiding leaves
+/// alone, a single clear point nobody can click, holding an empty page that
+/// shares the mail page's process.
+@MainActor
+final class BackgroundCompany {
+    static let shared = BackgroundCompany()
+
+    private(set) var window: NSWindow?
+
+    @discardableResult
+    func keep(_ mail: WKWebView) -> Bool {
+        if window != nil { return true }
+
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = mail.configuration.websiteDataStore
+        let setter = Selector(("_setRelatedWebView:"))
+        guard configuration.responds(to: setter) else { return false }
+        configuration.perform(setter, with: mail)
+        BackgroundThrottling.keepRunning(configuration.preferences)
+        BackgroundThrottling.keepPriority(configuration.preferences)
+
+        let frame = NSRect(x: 0, y: 0, width: 1, height: 1)
+        let view = WKWebView(frame: frame, configuration: configuration)
+        BackgroundThrottling.ignoreCovering(view)
+
+        let window = CompanyWindow(
+            contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false
+        )
+        window.canHide = false
+        window.isReleasedWhenClosed = false
+        window.ignoresMouseEvents = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = false
+        window.isExcludedFromWindowsMenu = true
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        window.contentView = view
+        window.orderBack(nil)
+        self.window = window
+
+        view.loadHTMLString("", baseURL: nil)
+        return true
+    }
+}
+
+/// Not a window of the user's: whoever goes through the app's windows looking
+/// for one to bring forward passes this one by.
+final class CompanyWindow: NSWindow {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
 #endif

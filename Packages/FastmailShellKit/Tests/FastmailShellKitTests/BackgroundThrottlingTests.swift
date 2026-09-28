@@ -50,4 +50,27 @@ import WebKit
     #expect(get(preferences, getter) == false)
     #expect(get(WKPreferences(), getter) == true)
 }
+
+@Test @MainActor func aHiddenAppKeepsAWindowTheMailPageSharesItsProcessWith() {
+    let mail = WKWebView()
+    let company = BackgroundCompany()
+    #expect(company.keep(mail))
+    guard let window = company.window, let view = window.contentView as? WKWebView else {
+        Issue.record("No window was made")
+        return
+    }
+    #expect(window.canHide == false)
+    #expect(window.isVisible)
+    #expect(window.ignoresMouseEvents)
+    #expect(window.canBecomeKey == false)
+    #expect(window.canBecomeMain == false)
+    let related = view.configuration.perform(Selector(("_relatedWebView")))?.takeUnretainedValue()
+    #expect(related === mail)
+    // One window for the app, however many mail windows ask
+    #expect(company.keep(WKWebView()))
+    #expect(company.window === window)
+    #expect(WindowFocus.isOnScreen(window) == false)
+    window.orderOut(nil)
+    window.close()
+}
 #endif

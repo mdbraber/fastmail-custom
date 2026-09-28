@@ -112,7 +112,8 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
 
     public func showWindow() {
         NSApp.activate()
-        (NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
+        (NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible && !($0 is CompanyWindow) })?
+            .makeKeyAndOrderFront(nil)
     }
 
     /// The page's own idea of window.Notification.permission: read fresh
