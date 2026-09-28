@@ -681,6 +681,49 @@
         })();
     }
 
+    // New mail without the wait while another window is open. Fastmail's
+    // page handles a push at once only when it is focused or the only
+    // Fastmail window; otherwise it waits a random zero to twenty seconds,
+    // so that windows do not all ask the server at the same moment. It
+    // skips that wait in its own phone apps. A compose window counts as
+    // another window, so the mailbox list lagged new mail for as long as one
+    // was open. The mailbox window handles every push straight away; compose
+    // and pop-out windows, which ask the server directly and have little to
+    // update, keep the wait. With offline mail off, Fastmail also spaces
+    // pushes five seconds apart to spare the server, and the wait is left
+    // alone there.
+    function skipPushHold() {
+        var fm = window.FastMail;
+        var push = fm && fm.push;
+        var auth = fm && fm.auth;
+        if (!push || !auth || typeof push.onState !== 'function' ||
+            typeof push._processState !== 'function') return false;
+        if (push.__fmshellNoHold) return true;
+
+        var original = push.onState;
+        push.onState = function () {
+            var result = original.apply(this, arguments);
+            try {
+                if (this._timer && this._state && auth.get('enableOffline')) this._processState();
+            } catch (error) {
+                report(error);
+            }
+            return result;
+        };
+        push.__fmshellNoHold = true;
+        return true;
+    }
+
+    function watchPushHold() {
+        if (window.opener || window.__fmshellComposeWindow) return;
+        var attempts = 0;
+        (function poll() {
+            if (skipPushHold() || attempts >= 240) return;
+            attempts += 1;
+            window.setTimeout(poll, 250);
+        })();
+    }
+
     // The shell's own settings live in Fastmail's Settings screen, as a Device
     // settings row right after Custom options, or between Custom swipes and
     // Offline while Custom options has no row.
@@ -1861,5 +1904,6 @@
     watchEditDraft();
     watchDragRegions();
     watchMenus();
+    watchPushHold();
     watchSettingsList();
 })();
