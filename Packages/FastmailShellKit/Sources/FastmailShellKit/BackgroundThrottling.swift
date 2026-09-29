@@ -223,6 +223,23 @@ final class ClosedWindowKeeper: NSObject, NSWindowDelegate {
         otherMailWindowsOpen == 0 && !fullScreen
     }
 
+    /// The mail window closing put out of sight, if there is one
+    @MainActor
+    static func kept(among windows: [NSWindow]) -> NSWindow? {
+        windows.first { !$0.isVisible && !$0.isMiniaturized }
+    }
+
+    /// Shows the kept window in place of a new one, which would have been a
+    /// second page taking in the same mail.
+    @MainActor
+    static func showKept() -> Bool {
+        let windows = WebViewRegistry.shared.views.compactMap(\.window)
+        guard let kept = kept(among: windows) else { return false }
+        NSApp.unhide(nil)
+        kept.makeKeyAndOrderFront(nil)
+        return true
+    }
+
     @MainActor
     static func watch(_ window: NSWindow, otherMailWindowsOpen: @escaping @MainActor () -> Int) {
         guard !(window.delegate is ClosedWindowKeeper) else { return }

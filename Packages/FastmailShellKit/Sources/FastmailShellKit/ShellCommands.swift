@@ -140,12 +140,14 @@ public struct ShellCommands: Commands {
             }
             .keyboardShortcut("n", modifiers: [.command, .option])
             Button("New Tab") {
+                guard !ClosedWindowKeeper.showKept() else { return }
                 ShellWindows.openAsTab(host: NSApplication.shared.keyWindow) {
                     openWindow(id: "main")
                 }
             }
             .keyboardShortcut("t", modifiers: .command)
             Button("New Window") {
+                guard !ClosedWindowKeeper.showKept() else { return }
                 openWindow(id: "main")
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])

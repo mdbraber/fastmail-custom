@@ -131,4 +131,23 @@ import WebKit
     window.delegate = nil
     window.close()
 }
+
+@Test @MainActor func aNewWindowIsTheOneKeptOutOfSight() {
+    func window() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 200),
+            styleMask: [.titled, .closable], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.tabbingMode = .disallowed
+        return window
+    }
+    let shown = window()
+    let kept = window()
+    shown.orderFront(nil)
+    #expect(ClosedWindowKeeper.kept(among: [shown, kept]) === kept)
+    #expect(ClosedWindowKeeper.kept(among: [shown]) == nil)
+    #expect(ClosedWindowKeeper.kept(among: []) == nil)
+    shown.close()
+}
 #endif
