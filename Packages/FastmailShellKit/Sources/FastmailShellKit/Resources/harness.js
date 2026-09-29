@@ -303,6 +303,57 @@
     }
 
     /*
+     * A double-click on a message row, given longer than the system's.
+     *
+     * Fastmail opens the message in a window of its own on the page's
+     * dblclick, which WebKit fires only for two presses within the macOS
+     * double-click speed: half a second unless changed. Two clicks on the
+     * same row a little slower than that are taken as a double-click all the
+     * same, and the dblclick Fastmail would have had is sent to the row.
+     * Faster ones already get WebKit's own, which is left alone.
+     */
+    var ROW_DOUBLE_CLICK_MS = 800;
+
+    function watchRowDoubleClick() {
+        var lastRow = null;
+        var lastClick = -Infinity;
+
+        window.addEventListener('click', function (event) {
+            var target = event.target;
+            var row = target && target.closest ? target.closest('.v-MailboxItem') : null;
+            if (!row || event.button || event.metaKey || event.ctrlKey ||
+                event.shiftKey || event.altKey) {
+                lastRow = null;
+                return;
+            }
+            // WebKit counted this one as the second of a pair, and fires its
+            // own dblclick for it
+            if (event.detail !== 1) {
+                lastRow = null;
+                return;
+            }
+            var slowSecond = row === lastRow && event.timeStamp - lastClick <= ROW_DOUBLE_CLICK_MS;
+            lastRow = slowSecond ? null : row;
+            lastClick = event.timeStamp;
+            if (!slowSecond) return;
+            // After Fastmail has had the click itself, as with a real one
+            setTimeout(function () {
+                if (!target.isConnected) return;
+                target.dispatchEvent(new MouseEvent('dblclick', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    detail: 2,
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                    screenX: event.screenX,
+                    screenY: event.screenY
+                }));
+            }, 0);
+        }, true);
+    }
+
+    /*
      * Carrying on with a draft, where the compose setting says.
      *
      * Fastmail decides this for itself: in the page, in the thread under the
@@ -1901,6 +1952,7 @@
     installRouteHooks();
     watchTheme();
     watchComposeKey();
+    watchRowDoubleClick();
     watchEditDraft();
     watchDragRegions();
     watchMenus();
