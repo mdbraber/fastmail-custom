@@ -18,6 +18,14 @@ public enum AttachmentOpener {
         UTType("com.apple.ical.ics") ?? .calendarEvent
     ]
 
+    // Office and iWork documents are zip archives inside, so their content
+    // alone can't tell them from any other archive. A zip passes only under
+    // one of these extensions; the macro-enabled Office ones (.xlsm, .docm)
+    // are left out and keep previewing.
+    static let zipDocumentExtensions: Set<String> = [
+        "docx", "xlsx", "pptx", "pages", "numbers", "key"
+    ]
+
     nonisolated static func sniffedType(of data: Data) -> UTType? {
         func starts(with bytes: [UInt8], at offset: Int = 0) -> Bool {
             guard data.count >= offset + bytes.count else { return false }
@@ -50,8 +58,18 @@ public enum AttachmentOpener {
         return String(data: sample, encoding: .utf8) != nil
     }
 
-    nonisolated static func shouldAutoOpen(data: Data, enabled: Bool) -> Bool {
-        guard enabled, let type = sniffedType(of: data) else { return false }
+    nonisolated static func isZip(_ data: Data) -> Bool {
+        data.count >= 4 && Array(data.prefix(4)) == [0x50, 0x4B, 0x03, 0x04]
+    }
+
+    nonisolated static func shouldAutoOpen(
+        data: Data, pathExtension: String = "", enabled: Bool
+    ) -> Bool {
+        guard enabled else { return false }
+        if isZip(data) {
+            return zipDocumentExtensions.contains(pathExtension.lowercased())
+        }
+        guard let type = sniffedType(of: data) else { return false }
         return allowed.contains { type.conforms(to: $0) }
     }
 
@@ -62,7 +80,7 @@ public enum AttachmentOpener {
         if enabled,
             let handle = try? FileHandle(forReadingFrom: fileURL),
             let data = try? handle.read(upToCount: 1024),
-            shouldAutoOpen(data: data, enabled: enabled) {
+            shouldAutoOpen(data: data, pathExtension: fileURL.pathExtension, enabled: enabled) {
             try? handle.close()
             NSWorkspace.shared.open(fileURL)
             return

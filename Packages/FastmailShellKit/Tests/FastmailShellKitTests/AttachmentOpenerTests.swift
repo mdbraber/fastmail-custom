@@ -33,6 +33,26 @@ private func bytes(_ text: String) -> Data { Data(text.utf8) }
     #expect(!AttachmentOpener.shouldAutoOpen(data: zipPretendingToBePDF, enabled: true))
 }
 
+@Test func officeAndIWorkDocumentsOpenThoughTheyAreZips() {
+    let zip = Data([0x50, 0x4B, 0x03, 0x04]) + bytes("[Content_Types].xml")
+    for ext in ["xlsx", "DOCX", "pptx", "pages", "numbers", "key"] {
+        #expect(AttachmentOpener.shouldAutoOpen(data: zip, pathExtension: ext, enabled: true))
+    }
+    #expect(!AttachmentOpener.shouldAutoOpen(data: zip, pathExtension: "xlsx", enabled: false))
+}
+
+@Test func otherZipsStillPreviewWhateverTheirExtension() {
+    let zip = Data([0x50, 0x4B, 0x03, 0x04, 0, 0])
+    for ext in ["zip", "xlsm", "docm", "app", "pdf", ""] {
+        #expect(!AttachmentOpener.shouldAutoOpen(data: zip, pathExtension: ext, enabled: true))
+    }
+}
+
+@Test func anOfficeExtensionDoesNotAdmitNonZipContent() {
+    let macho = Data([0xCF, 0xFA, 0xED, 0xFE, 0, 0])
+    #expect(!AttachmentOpener.shouldAutoOpen(data: macho, pathExtension: "xlsx", enabled: true))
+}
+
 @Test func binaryGarbageIsNotPlausibleText() {
     #expect(!AttachmentOpener.isPlausibleText(Data([0x00, 0x01, 0x02])))
     #expect(AttachmentOpener.isPlausibleText(bytes("just some notes\n")))
