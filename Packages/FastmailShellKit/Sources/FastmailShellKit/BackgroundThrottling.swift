@@ -149,38 +149,46 @@ final class CompanyWindow: NSWindow {
 ///
 /// The system brings a window back only when it finds none in sight, and it
 /// counts the company window as one, so the click did nothing. The app
-/// looks again, leaving that window out, and does what the system would
-/// have done.
+/// looks again, leaving that window out: a minimised window is brought
+/// back, a closed one shown again.
 public final class DockClick: NSObject, NSApplicationDelegate {
     enum Answer: Equatable {
         case asUsual
         case bringBack
+        case showAgain
         case askAgainWithoutCompany
     }
 
-    static func answer(othersInSight: Bool, minimised: Bool) -> Answer {
+    static func answer(othersInSight: Bool, minimised: Bool, closed: Bool) -> Answer {
         if othersInSight { return .asUsual }
-        return minimised ? .bringBack : .askAgainWithoutCompany
+        if minimised { return .bringBack }
+        return closed ? .showAgain : .askAgainWithoutCompany
     }
 
     public func applicationShouldHandleReopen(
         _ sender: NSApplication, hasVisibleWindows flag: Bool
     ) -> Bool {
-        guard flag, let company = BackgroundCompany.shared.window, company.isVisible else {
-            return true
-        }
+        let company = BackgroundCompany.shared.window
         let others = sender.windows.filter { !($0 is CompanyWindow) }
         let minimised = others.first { $0.isMiniaturized }
+        // A closed mail window is kept, page and all, which is what lets
+        // new mail still raise a notification
+        let closed = WebViewRegistry.shared.views.compactMap(\.window).first
         switch Self.answer(
             othersInSight: others.contains { $0.isVisible },
-            minimised: minimised != nil
+            minimised: minimised != nil,
+            closed: closed != nil
         ) {
         case .asUsual:
             return true
         case .bringBack:
             minimised?.deminiaturize(nil)
             return false
+        case .showAgain:
+            closed?.makeKeyAndOrderFront(nil)
+            return false
         case .askAgainWithoutCompany:
+            guard flag, let company, company.isVisible else { return true }
             // With nothing in sight the system opens a window itself, and
             // the mail page in it puts the company window back.
             company.orderOut(nil)
