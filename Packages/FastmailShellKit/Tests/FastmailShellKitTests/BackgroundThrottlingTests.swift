@@ -1,4 +1,5 @@
 #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+import AppKit
 import Testing
 import WebKit
 @testable import FastmailShellKit
@@ -85,5 +86,49 @@ import WebKit
         DockClick.answer(othersInSight: false, minimised: false, closed: false)
             == .askAgainWithoutCompany
     )
+}
+
+@Test func onlyTheLastMailWindowIsKeptWhenClosed() {
+    #expect(ClosedWindowKeeper.keeps(otherMailWindowsOpen: 0, fullScreen: false))
+    // Another mail window carries on taking in mail
+    #expect(ClosedWindowKeeper.keeps(otherMailWindowsOpen: 1, fullScreen: false) == false)
+    // A full screen window has a space of its own to give back
+    #expect(ClosedWindowKeeper.keeps(otherMailWindowsOpen: 0, fullScreen: true) == false)
+}
+
+@MainActor private final class WindowDelegateStub: NSObject, NSWindowDelegate {
+    var resized = 0
+    var closed = 0
+    func windowDidResize(_ notification: Notification) { resized += 1 }
+    func windowWillClose(_ notification: Notification) { closed += 1 }
+}
+
+@Test @MainActor func aClosedMailWindowGoesOutOfSightWithItsPage() {
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 200, height: 200),
+        styleMask: [.titled, .closable], backing: .buffered, defer: false
+    )
+    window.isReleasedWhenClosed = false
+    // Not one for the tests that fold windows into tabs to pick up
+    window.tabbingMode = .disallowed
+    let view = WKWebView()
+    window.contentView = view
+    let theirs = WindowDelegateStub()
+    window.delegate = theirs
+    ClosedWindowKeeper.watch(window, otherMailWindowsOpen: { 0 })
+    // Putting it in twice changes nothing
+    ClosedWindowKeeper.watch(window, otherMailWindowsOpen: { 0 })
+    window.orderFront(nil)
+
+    window.performClose(nil)
+    #expect(window.isVisible == false)
+    #expect(theirs.closed == 0)
+    #expect(view.window === window)
+
+    // Whatever else the window has to say still reaches its own delegate
+    window.setContentSize(NSSize(width: 300, height: 300))
+    #expect(theirs.resized > 0)
+    window.delegate = nil
+    window.close()
 }
 #endif

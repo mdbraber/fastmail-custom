@@ -58,6 +58,12 @@ extension WebContainer: NSViewRepresentable {
                     configureWindow(window)
                     // New mail keeps arriving with the app hidden
                     BackgroundCompany.shared.keep(view)
+                    // And with the window closed
+                    ClosedWindowKeeper.watch(window) { [weak window] in
+                        WebViewRegistry.shared.views.compactMap(\.window).filter {
+                            $0 !== window && ($0.isVisible || $0.isMiniaturized)
+                        }.count
+                    }
                     observeFullScreen(window, webView: view, model: model)
                 }
                 return view

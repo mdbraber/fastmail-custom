@@ -203,4 +203,63 @@ public final class DockClick: NSObject, NSApplicationDelegate {
         }
     }
 }
+
+/// Closing the last mail window puts it out of sight and keeps its page.
+///
+/// The page is what hears of new mail and raises the notification, and a
+/// closed window took it along: nothing was heard until a window was opened
+/// again. So the window is kept, as a mail app's is, and a click in the Dock
+/// or on a notification shows it again as it was left. With another mail
+/// window open, or in full screen, closing is closing.
+///
+/// The window has a delegate of its own already, SwiftUI's. This one stands
+/// in front of it, answers the one question and passes everything else on.
+final class ClosedWindowKeeper: NSObject, NSWindowDelegate {
+    private weak var theirs: NSWindowDelegate?
+    private let otherMailWindowsOpen: @MainActor () -> Int
+    nonisolated(unsafe) private static var key = 0
+
+    static func keeps(otherMailWindowsOpen: Int, fullScreen: Bool) -> Bool {
+        otherMailWindowsOpen == 0 && !fullScreen
+    }
+
+    @MainActor
+    static func watch(_ window: NSWindow, otherMailWindowsOpen: @escaping @MainActor () -> Int) {
+        guard !(window.delegate is ClosedWindowKeeper) else { return }
+        let keeper = ClosedWindowKeeper(
+            theirs: window.delegate, otherMailWindowsOpen: otherMailWindowsOpen
+        )
+        // The window holds its delegate weakly
+        objc_setAssociatedObject(window, &key, keeper, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        window.delegate = keeper
+    }
+
+    private init(theirs: NSWindowDelegate?, otherMailWindowsOpen: @escaping @MainActor () -> Int) {
+        self.theirs = theirs
+        self.otherMailWindowsOpen = otherMailWindowsOpen
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        MainActor.assumeIsolated {
+            guard Self.keeps(
+                otherMailWindowsOpen: otherMailWindowsOpen(),
+                fullScreen: sender.styleMask.contains(.fullScreen)
+            ) else {
+                return theirs?.windowShouldClose?(sender) ?? true
+            }
+            // Messages being written in its tabs stay where they are
+            sender.tabGroup?.removeWindow(sender)
+            sender.orderOut(nil)
+            return false
+        }
+    }
+
+    override func responds(to selector: Selector!) -> Bool {
+        super.responds(to: selector) || (theirs?.responds(to: selector) ?? false)
+    }
+
+    override func forwardingTarget(for selector: Selector!) -> Any? {
+        theirs
+    }
+}
 #endif

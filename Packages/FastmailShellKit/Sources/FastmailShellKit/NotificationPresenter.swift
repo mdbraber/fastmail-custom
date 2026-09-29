@@ -112,7 +112,11 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
 
     public func showWindow() {
         NSApp.activate()
-        (NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible && !($0 is CompanyWindow) })?
+        let inSight = NSApp.keyWindow ?? NSApp.windows.first {
+            $0.isVisible && !($0 is CompanyWindow)
+        }
+        // A closed mail window is kept out of sight
+        (inSight ?? WebViewRegistry.shared.views.compactMap(\.window).first)?
             .makeKeyAndOrderFront(nil)
     }
 
