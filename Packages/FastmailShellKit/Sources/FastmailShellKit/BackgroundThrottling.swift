@@ -1,4 +1,5 @@
 #if !canImport(UIKit)
+import AppKit
 import WebKit
 
 /// Keeps a mail window's page running while the window is in the background.
@@ -100,7 +101,10 @@ final class BackgroundCompany {
 
     @discardableResult
     func keep(_ mail: WKWebView) -> Bool {
-        if window != nil { return true }
+        if let window {
+            if !window.isVisible { window.orderBack(nil) }
+            return true
+        }
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = mail.configuration.websiteDataStore
@@ -139,5 +143,56 @@ final class BackgroundCompany {
 final class CompanyWindow: NSWindow {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+}
+
+/// A click on the app in the Dock, with the mail window minimised or closed.
+///
+/// The system brings a window back only when it finds none in sight, and it
+/// counts the company window as one, so the click did nothing. The app
+/// looks again, leaving that window out, and does what the system would
+/// have done.
+public final class DockClick: NSObject, NSApplicationDelegate {
+    enum Answer: Equatable {
+        case asUsual
+        case bringBack
+        case askAgainWithoutCompany
+    }
+
+    static func answer(othersInSight: Bool, minimised: Bool) -> Answer {
+        if othersInSight { return .asUsual }
+        return minimised ? .bringBack : .askAgainWithoutCompany
+    }
+
+    public func applicationShouldHandleReopen(
+        _ sender: NSApplication, hasVisibleWindows flag: Bool
+    ) -> Bool {
+        guard flag, let company = BackgroundCompany.shared.window, company.isVisible else {
+            return true
+        }
+        let others = sender.windows.filter { !($0 is CompanyWindow) }
+        let minimised = others.first { $0.isMiniaturized }
+        switch Self.answer(
+            othersInSight: others.contains { $0.isVisible },
+            minimised: minimised != nil
+        ) {
+        case .asUsual:
+            return true
+        case .bringBack:
+            minimised?.deminiaturize(nil)
+            return false
+        case .askAgainWithoutCompany:
+            // With nothing in sight the system opens a window itself, and
+            // the mail page in it puts the company window back.
+            company.orderOut(nil)
+            _ = try? NSAppleEventDescriptor(
+                eventClass: AEEventClass(kCoreEventClass),
+                eventID: AEEventID(kAEReopenApplication),
+                targetDescriptor: .currentProcess(),
+                returnID: AEReturnID(kAutoGenerateReturnID),
+                transactionID: AETransactionID(kAnyTransactionID)
+            ).sendEvent(options: .noReply, timeout: 1)
+            return false
+        }
+    }
 }
 #endif

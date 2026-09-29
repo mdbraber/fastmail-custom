@@ -73,4 +73,13 @@ import WebKit
     window.orderOut(nil)
     window.close()
 }
+
+@Test func aDockClickLooksPastTheCompanyWindow() {
+    // A window of the user's is in sight: the system's own answer stands
+    #expect(DockClick.answer(othersInSight: true, minimised: false) == .asUsual)
+    #expect(DockClick.answer(othersInSight: true, minimised: true) == .asUsual)
+    // Only the company window is, and the system took it for one of theirs
+    #expect(DockClick.answer(othersInSight: false, minimised: true) == .bringBack)
+    #expect(DockClick.answer(othersInSight: false, minimised: false) == .askAgainWithoutCompany)
+}
 #endif

@@ -7,6 +7,9 @@ struct PersonalApp: App {
     #if os(iOS)
     @UIApplicationDelegateAdaptor(PushRegistrar.self) private var pushRegistrar
     #endif
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor(DockClick.self) private var dockClick
+    #endif
 
     init() {
         // One for the whole app, before its first window: Fastmail Custom's
