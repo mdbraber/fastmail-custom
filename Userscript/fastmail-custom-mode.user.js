@@ -3076,6 +3076,57 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     };
 
     /*
+     * New mail in the list while a message that was unread stays open.
+     *
+     * READ THIS BEFORE CHASING A LIST THAT LAGS NEW MAIL. A push marks the
+     * list obsolete, and Fastmail's mailboxMessageListStatusDidChange then
+     * refetches it, with one exception: when the list "uses unread" (its
+     * filter or its sort mentions $seen) and the open conversation was
+     * unread when opened but is read now, Fastmail puts the refetch off
+     * until another message is opened. That keeps the open row from
+     * vanishing from an is:unread list as it is read. But it holds back
+     * every push, however long the message stays open, and a grouping
+     * whose group asks for unread mail (Triage here is "unread or in
+     * Triage") makes every Inbox list use unread. The result, found live on
+     * 2026-09-29: the notification shows, the push arrives and is handled,
+     * the list is marked obsolete (status READY|OBSOLETE) and nothing
+     * fetches it, for as long as the message read last stays open.
+     *
+     * So the hold is kept only where Fastmail meant it, a list whose
+     * filter asks about read state, where the row would disappear. Where
+     * only the grouping does, the list refetches as usual: the conversation
+     * just read may move to another group, but it stays open, and new mail
+     * shows. Fastmail's check compares the open conversation's unread state
+     * with the one it noted on opening, so noting the current one first is
+     * enough for the refetch to go ahead; the next message opened notes its
+     * own again.
+     */
+    const listFilterUsesUnread = (where) => JSON.stringify(where || {}).indexOf('"$seen"') !== -1;
+
+    const patchListRefreshHold = () => {
+        const mailController = controller();
+        if (mailController.customNoUnreadHold) return;
+        const original = mailController.mailboxMessageListStatusDidChange;
+        if (typeof original !== 'function') return;
+        mailController.customNoUnreadHold = true;
+
+        // Fastmail calls this observer by name, so the replacement is the one run
+        mailController.mailboxMessageListStatusDidChange = function () {
+            try {
+                const list = this.get('mailboxMessageList');
+                if (list && !listFilterUsesUnread(list.get('where'))) {
+                    let focused = this.get('message');
+                    if (focused && list.get('collapseThreads')) focused = focused.get('thread');
+                    if (focused) this._focusedAsUnread = focused.get('isUnread');
+                }
+            } catch (error) {
+                reportFault('could not refresh the list for new mail', error);
+            }
+            return original.apply(this, arguments);
+        };
+    };
+
+    /*
      * A day boundary moves under a grouping that names one.
      *
      * Fastmail arms its own midnight refresh only for its by-age grouping and
@@ -12445,6 +12496,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         patchRowContextMenu();
         patchSplits();
         patchListSort();
+        patchListRefreshHold();
         guardListRedraw();
         patchShortcuts();
         updateStyles();
