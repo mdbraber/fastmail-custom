@@ -356,7 +356,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         {
             key: 'labelsShortcut', group: 'labelsFiling',
             title: 'Keep instead of move',
-            hint: 'Keeps the message under a project label and leaves it in the Inbox; one already kept just loses its triage label. Shift-V keeps it somewhere else, Option-V moves.'
+            hint: 'Keeps the message under a project label and leaves it in the Inbox. One already kept is offered another label; picking the one it has keeps it there. Option-V moves. Off, v is Fastmail’s Move and Shift-V keeps.'
         },
         {
             key: 'labelsSidebarOnly', group: 'labelsFiling', parent: 'labelsShortcut',
@@ -5812,7 +5812,15 @@ Licensed under the GNU Affero General Public License, version 3 or later.
                 // Set only by the call this one is nested inside, so an add
                 // that arrives on its own is just an add
                 const removes = replacedBy(keys, adds, pendingFiling);
-                if (!removes.length && !above.length) return original.apply(this, arguments);
+                if (!removes.length && !above.length) {
+                    // Keeping a conversation under the label it already has,
+                    // with nothing left to take off, changes nothing, but it
+                    // is still a decision made, and the view moves on.
+                    const advance = takeFilingAdvance();
+                    const result = original.apply(this, arguments);
+                    if (advance) advanceAfterDecision(advance.from, advance.step);
+                    return result;
+                }
 
                 applyingLabelRules = true;
                 try {
@@ -5924,23 +5932,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     const triageAmong = (storeKeys) =>
         Array.from(mailboxesAmong(storeKeys)).filter(isTriage);
 
-    // The excluded labels the selection carries; Later and its kind; which
-    // come off with Triage when a conversation is kept
-    const excludedAmong = (storeKeys) =>
-        Array.from(mailboxesAmong(storeKeys)).filter(isExcludedLabel);
-
     // The keep rule's question: does every selected conversation carry a
     // destination, a project or a hold label?
     const unfiledAmong = (storeKeys) => messagesFrom(storeKeys)
         .filter(message => !threadOf(message).some(other =>
             toArray(other.get('mailboxes')).some(isDestination)));
-
-    // Those with no project at all; held under Later, or filed nowhere; for
-    // the keep rule's tie-break: a hold label comes off with Triage only where
-    // every conversation also carries a project, which then wins.
-    const withoutProject = (storeKeys) => messagesFrom(storeKeys)
-        .filter(message => !threadOf(message).some(other =>
-            toArray(other.get('mailboxes')).some(isProject)));
 
     /*
      * Keeping the open list honest after a change.
@@ -6740,15 +6736,17 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     // riding on this picker knows whether there is a menu to hand it to.
     // With a placement it opens there, built for exactly these conversations,
     // rather than from whichever button is on screen.
-    const openProjectPicker = (keys, placement) => {
+    // Plain keeps to the Move-shaped list, never the tristate, whatever the
+    // selection's size and whichever buttons are on screen.
+    const openProjectPicker = (keys, placement, plain) => {
         // Where to go after the pick, read now because the pick may take the
         // row out of the list. The menu about to open takes it; what marks the
         // pick a filing is not set here at all, the pick itself sets that.
         armAdvance(messagesFrom(keys)[0]);
         if (placement && buildPicker(keys, placement)) return true;
         const single = keys.length === 1;
-        const order = single
-            ? [moveButton, labelsButton]
+        const order = plain ? [moveButton]
+            : single ? [moveButton, labelsButton]
             : [labelsButton, moveButton];
         const captured = order.filter(capturedIsLive)[0];
 
@@ -6764,7 +6762,7 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // is the Labels one opened by Keep, and it carries the same mark the
         // captured button's route gives it: without that it is indistinguishable
         // from someone pressing Labels, and Keep would stop filing.
-        const drawn = drawnPickerView();
+        const drawn = plain ? null : drawnPickerView();
         if (drawn) {
             wantOurFile = true;
             if (pressButtonView(drawn)) return true;
@@ -6848,31 +6846,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
     };
 
-    // keep; `v`. A thread that already has a destination is kept by taking
-    // Triage off it.
-    const runKeep = (actions, keys) => {
-        const projectWins = !withoutProject(keys).length;
-        const removes = triageAmong(keys)
-            .concat(projectWins ? excludedAmong(keys) : []);
-        const from = messagesFrom(keys)[0];
-        // Read first: in the Inbox the row stays put, but in the triage
-        // label's own view taking Triage off takes the row out of the list,
-        // and the neighbours would be gone by the line after this one.
-        const step = stepFrom(from);
-        // Nothing to take off is not nothing to do. A message already filed
-        // and already past Triage is a decision that has been made, and the
-        // answer to being asked again is the same as the first time: move on.
-        if (removes.length) {
-            noteFollowUp('kept', keys);
-            returnHereOnUndo(from, step);
-            actions.addremove(keys, [], removes);
-        }
-        addSendersToContacts(keys);
-        // Kept in place; the view moves on to where the setting says, or back
-        // to the list, with nothing selected, when there is nothing that way.
-        advanceAfterDecision(from, step);
-    };
-
     // pin; `s`. A toggle over the selection: all pinned, unpin; else pin.
     const runUrgent = (actions, keys) => {
         if (allFlagged(keys)) actions.unflag(keys);
@@ -6925,11 +6898,13 @@ Licensed under the GNU Affero General Public License, version 3 or later.
             return;
         }
 
-        if (unfiledAmong(keys).length) {
-            openProjectPicker(keys, placement);
-        } else {
-            runKeep(actions, keys);
-        }
+        // A conversation already filed is offered the chance to be filed
+        // somewhere else rather than kept where it is unasked. Picking the
+        // label it carries is still the old keep: Triage comes off by rule 2
+        // and the view moves on. Only the plain list will do for that: in
+        // the tristate, the label every conversation carries is ticked, and
+        // picking it again would take it off.
+        openProjectPicker(keys, placement, !unfiledAmong(keys).length);
     };
 
     /*
@@ -7649,9 +7624,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const ourMoveWanted = () => settings.labelsShortcut;
 
-    // v is keep: on a filed selection it takes Triage off directly, and only
-    // an unfiled one opens the picker; the same narrowed menu, opened with
-    // nothing waiting on it.
+    // v is keep: the narrowed picker, whether the selection is filed or not;
+    // a filed one keeps its label by picking it again.
     const openMove = () => {
         if (!ourMoveWanted()) {
             if (!moveButton) return;
@@ -7661,15 +7635,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         }
 
         runVerb('keep', null);
-    };
-
-    // Shift-V: the picker, whatever the selection carries; the same menu v
-    // opens for an unfiled conversation.
-    const openLabelPicker = () => {
-        const actions = controller().actions;
-        const keys = resolveKeys(actions, null);
-        if (!keys) return;
-        openProjectPicker(keys);
     };
 
     // The hold labels this account has, by the same names the setting gives.
@@ -7811,7 +7776,6 @@ Licensed under the GNU Affero General Public License, version 3 or later.
 
     const wantedClaims = () => {
         const wanted = {
-            'Shift-V': () => openLabelPicker(),
             // Archive into a hold label, over Fastmail's expandAll.
             'Shift-E': () => openArchiveIntoPicker(),
 
@@ -7838,6 +7802,11 @@ Licensed under the GNU Affero General Public License, version 3 or later.
         // expander and stays that way.
         ARCHIVE_KEYS.forEach((key) => { wanted[key] = archive; });
         if (settings.archiveOnE) wanted[ARCHIVE_KEY] = archive;
+
+        // Shift-V keeps only while v is Fastmail's Move; with Keep instead
+        // of move on, v already opens the same picker, and Shift-V is left
+        // to Fastmail.
+        if (!settings.labelsShortcut) wanted['Shift-V'] = () => runVerb('keep', null);
 
         wanted[PIN_KEY] = () => runVerb('urgent', null);
 
@@ -9011,8 +8980,8 @@ Licensed under the GNU Affero General Public License, version 3 or later.
     /*
      * Keep in a message row's right-click menu, in Move to's place, while
      * Keep instead of move is on: the verb the bar's Keep and v run, so a
-     * conversation still to be filed opens the limited picker and one
-     * already filed only loses its triage label. Move to itself stays behind
+     * conversation opens the limited picker, and one already filed can be
+     * given another label there or keep its own. Move to itself stays behind
      * Option-V and the bar.
      *
      * The conversations are read as the entry is pressed, while the menu is
