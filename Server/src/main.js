@@ -8,7 +8,14 @@ import { loadState } from './state.js';
 import { AccountWatcher } from './watcher.js';
 import { createServer } from './http.js';
 
-const stamp = () => new Date().toISOString();
+// ISO 8601 in local time (TZ) with offset; toISOString() is always UTC
+const stamp = () => {
+    const now = new Date();
+    const offset = -now.getTimezoneOffset();
+    const pad = (n) => String(Math.floor(Math.abs(n))).padStart(2, '0');
+    const local = new Date(now.getTime() + offset * 60 * 1000).toISOString().slice(0, -1);
+    return `${local}${offset < 0 ? '-' : '+'}${pad(offset / 60)}:${pad(offset % 60)}`;
+};
 const log = {
     info: (message) => console.log(`${stamp()} ${message}`),
     warn: (message) => console.warn(`${stamp()} warn: ${message}`),
