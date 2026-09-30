@@ -104,6 +104,95 @@
         window.addEventListener('resize', scheduleDragRegions);
     }
 
+    // A popover opening from the header, the search field's suggestions or a
+    // header button's menu, starts where the header ends; with a tab bar in
+    // the window that is under the tabs, which the window draws over the
+    // page. The app is told where such a popover lies and opens the tab bar
+    // up there, so the popover shows over it as Safari's suggestions do.
+    // Where it cannot, the popover is marked and chrome-macos.css moves it
+    // below the tab bar instead. Popovers are laid on the page's root, one
+    // container each, and set their place in the container's top margin.
+    var lastHeaderPopOver = 'null';
+
+    function headerBottom() {
+        var list = document.querySelectorAll('.v-PageHeader');
+        var bottom = 0;
+        for (var i = 0; i < list.length; i += 1) {
+            var box = list[i].getBoundingClientRect();
+            if (box.height > 0 && box.top <= 8) bottom = Math.max(bottom, box.bottom);
+        }
+        return bottom;
+    }
+
+    function markHeaderPopOver(container, bottom) {
+        var top = parseFloat(container.style.marginTop);
+        container.classList.toggle('fmshell-from-header', bottom > 0 && top > 0 && top <= bottom);
+    }
+
+    function reportHeaderPopOver() {
+        var popOver = document.querySelector('.fmshell-from-header .v-PopOver');
+        var box = popOver && popOver.getBoundingClientRect();
+        var payload = box && box.width > 0 && box.height > 0
+            ? {
+                rect: [box.left, box.top, box.width, box.height],
+                radius: parseFloat(window.getComputedStyle(popOver).borderTopLeftRadius) || 0
+            }
+            : null;
+        var encoded = JSON.stringify(payload);
+        if (encoded === lastHeaderPopOver) return;
+        lastHeaderPopOver = encoded;
+        post('headerPopOver', payload || { rect: null }).then(function (shown) {
+            if (payload) document.body.classList.toggle('fmshell-popover-below-tabs', shown !== 'true');
+        });
+    }
+
+    function concernsPopOver(node) {
+        var element = node && node.nodeType === 1 ? node : node && node.parentElement;
+        return !!(element && element.closest && element.closest('.v-PopOverContainer'));
+    }
+
+    // Marked and reported as the popover is placed, before it is drawn, so
+    // it does not show under the tabs first. The same when its contents
+    // change its size, as the suggestions do while typing; most of what the
+    // observer hears is something else, and is passed over.
+    function watchHeaderPopOvers() {
+        if (!document.body) {
+            document.addEventListener('DOMContentLoaded', watchHeaderPopOvers, { once: true });
+            return;
+        }
+        new MutationObserver(function (mutations) {
+            var bottom = -1;
+            var changed = false;
+            for (var i = 0; i < mutations.length; i += 1) {
+                var mutation = mutations[i];
+                if (mutation.type === 'childList' && mutation.target === document.body) {
+                    for (var j = 0; j < mutation.addedNodes.length; j += 1) {
+                        var node = mutation.addedNodes[j];
+                        if (!node.classList || !node.classList.contains('v-PopOverContainer')) continue;
+                        if (bottom < 0) bottom = headerBottom();
+                        markHeaderPopOver(node, bottom);
+                    }
+                    changed = true;
+                } else if (concernsPopOver(mutation.target)) {
+                    var target = mutation.target;
+                    if (mutation.type === 'attributes' && target.classList &&
+                        target.classList.contains('v-PopOverContainer')) {
+                        if (bottom < 0) bottom = headerBottom();
+                        markHeaderPopOver(target, bottom);
+                    }
+                    changed = true;
+                }
+            }
+            if (changed) reportHeaderPopOver();
+        }).observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style']
+        });
+        window.addEventListener('resize', reportHeaderPopOver);
+    }
+
     function paintedColor(element) {
         var node = element;
         while (node) {
@@ -1955,6 +2044,7 @@
     watchRowDoubleClick();
     watchEditDraft();
     watchDragRegions();
+    watchHeaderPopOvers();
     watchMenus();
     watchPushHold();
     watchSettingsList();

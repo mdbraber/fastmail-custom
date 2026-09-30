@@ -14,3 +14,10 @@ body.fmshell-fullscreen {
 body.fmshell-tabbed .v-Page-main {
     margin-top: var(--fmshell-tab-inset, 0px) !important;
 }
+
+/* A popover opening from the header, marked by the harness, would drop under
+   the tab bar; the app opens the tab bar up to show it, and where it could
+   not, the popover opens below the tabs instead. */
+body.fmshell-tabbed.fmshell-popover-below-tabs .v-PopOverContainer.fmshell-from-header {
+    top: var(--fmshell-tab-inset, 0px) !important;
+}

@@ -602,3 +602,30 @@ private func replyObject(_ reply: BridgeReply) throws -> [String: Any] {
     #expect(closed == 1)
     #expect(reply.error == nil)
 }
+
+// A popover from the header is handed to the app, which opens the tab bar up
+// over it; its closing is handed on too, and the page is told whether the
+// app could, so it can move the popover below the tabs when not.
+@Test @MainActor func headerPopOverIsPassedToTheAppWithItsCorners() async {
+    var seen: [(CGRect?, CGFloat)] = []
+    let bridge = NativeBridge(
+        expectedHost: "app.fastmail.com",
+        onLog: { _ in },
+        onError: { _ in },
+        onHeaderPopOver: { rect, radius, _ in
+            seen.append((rect, radius))
+            return rect != nil
+        }
+    )
+    let open = await bridge.handle(body: [
+        "action": "headerPopOver",
+        "payload": ["rect": [660.0, 44, 480, 440], "radius": 8.0]
+    ])
+    let closed = await bridge.handle(body: ["action": "headerPopOver", "payload": ["rect": NSNull()]])
+    #expect(seen.count == 2)
+    #expect(seen[0].0 == CGRect(x: 660, y: 44, width: 480, height: 440))
+    #expect(seen[0].1 == 8)
+    #expect(seen[1].0 == nil)
+    #expect(open.value == "true")
+    #expect(closed.value == "false")
+}

@@ -66,6 +66,11 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     private let onFocusWindow: @MainActor (String) async -> Bool
     /// The page closing its own window, which WebKit leaves undone.
     private let onCloseWindow: @MainActor (WKWebView?) -> Void
+    /// Where a popover opening from the page's header lies, in the page's
+    /// own coordinates, and its corner radius; nothing once it has closed.
+    /// Answers whether the window's chrome was opened up to show it, which
+    /// leaves the page to move it clear of the tab bar when it was not.
+    private let onHeaderPopOver: @MainActor (CGRect?, CGFloat, WKWebView?) -> Bool
 
     public init(
         expectedHost: String,
@@ -98,7 +103,8 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         onPrint: @escaping @MainActor (WKWebView?) async -> Void = { _ in },
         onPrintToPDF: @escaping @MainActor (WKWebView?) async -> Void = { _ in },
         onFocusWindow: @escaping @MainActor (String) async -> Bool = { _ in false },
-        onCloseWindow: @escaping @MainActor (WKWebView?) -> Void = { _ in }
+        onCloseWindow: @escaping @MainActor (WKWebView?) -> Void = { _ in },
+        onHeaderPopOver: @escaping @MainActor (CGRect?, CGFloat, WKWebView?) -> Bool = { _, _, _ in false }
     ) {
         self.expectedHost = expectedHost
         self.onLog = onLog
@@ -130,6 +136,7 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         self.onPrintToPDF = onPrintToPDF
         self.onFocusWindow = onFocusWindow
         self.onCloseWindow = onCloseWindow
+        self.onHeaderPopOver = onHeaderPopOver
     }
 
     static func rect(from values: [Double]) -> CGRect? {
@@ -361,6 +368,11 @@ public final class NativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "closeWindow":
             onCloseWindow(webView)
             return BridgeReply(value: nil, error: nil)
+        case "headerPopOver":
+            let rect = (payload["rect"] as? [Double]).flatMap(Self.rect(from:))
+            let radius = (payload["radius"] as? Double) ?? 0
+            let shown = onHeaderPopOver(rect, CGFloat(radius), webView)
+            return BridgeReply(value: shown ? "true" : "false", error: nil)
         default:
             return BridgeReply(value: nil, error: "unknown action: \(action)")
         }

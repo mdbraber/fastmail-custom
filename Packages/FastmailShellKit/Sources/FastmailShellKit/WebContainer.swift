@@ -283,6 +283,14 @@ public struct WebContainer {
                 #else
                 return false
                 #endif
+            },
+            onHeaderPopOver: { rect, radius, view in
+                #if os(macOS)
+                guard let view else { return false }
+                return TitlebarCutout.show(rect, radius: radius, of: view)
+                #else
+                return false
+                #endif
             }
         )
         configuration.userContentController.addScriptMessageHandler(
