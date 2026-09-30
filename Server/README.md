@@ -8,7 +8,9 @@ as the badge. The choices are the app's: Off; Important (a VIP outside Junk
 and Trash, or a conversation you follow); All in inbox; and Custom (chosen
 labels, from everyone, your contacts or your VIPs). An app build from before
 the choices registers with its on/off switch, which reads as All in inbox or
-Off.
+Off. A message a Fastmail filter's "Notify me" action picked out alerts
+under every choice but Off, wherever it is filed: the action leaves the
+`$notify` keyword on the message, and nothing else.
 
 ## Banners for mail read elsewhere
 

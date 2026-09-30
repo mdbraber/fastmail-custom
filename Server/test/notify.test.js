@@ -62,6 +62,18 @@ test('off never matches', () => {
     assert.equal(matchesChoice(choice('off'), email({ keywords: { $followed: true } }), context()), false);
 });
 
+// Fastmail's "Notify me" filter action leaves `$notify` on the delivered
+// message and nothing else (measured 2026-09-30)
+test('a message a filter asked to notify about matches every choice but off', () => {
+    const asked = email({ from: from('stranger@example.net'), mailboxIds: { [OTHER_LABEL]: true }, keywords: { $notify: true } });
+    assert.equal(matchesChoice(choice('inbox'), asked, context()), true);
+    assert.equal(matchesChoice(choice('important'), asked, context()), true);
+    assert.equal(matchesChoice(choice('custom'), asked, context()), true);
+    assert.equal(matchesChoice(choice('custom', { mailboxIds: [LABEL], excludedMailboxIds: [OTHER_LABEL], senders: 'vips' }), asked, context()), true);
+    assert.equal(matchesChoice(choice('off'), asked, context()), false);
+    assert.equal(matchesChoice({ mode: 'loud' }, asked, context()), false);
+});
+
 test('an unknown or missing choice matches nothing', () => {
     assert.equal(matchesChoice({ mode: 'loud' }, email(), context()), false);
     assert.equal(matchesChoice(undefined, email(), context()), false);

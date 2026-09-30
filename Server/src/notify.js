@@ -1,6 +1,8 @@
 // Which of the emails a notice brought deserve a banner, and what it says.
 // Pure: no clock, no network, so every rule here is a plain test.
 
+import { MODES } from './choice.js';
+
 // The messages worth putting to each device's choice: unread, not a draft,
 // and not announced before. Where they are is the choice's business.
 export function selectFresh(emails, { notified }) {
@@ -27,8 +29,13 @@ const carries = (email, id) => Boolean(id) && email.mailboxIds?.[id] === true;
  * and `trashId` (null when the account has none), the sets `vips` and
  * `contacts` of lowercased addresses, and `followedThreadIds`, the threads
  * in which some message carries `$followed`.
+ *
+ * A message carrying `$notify` was asked for by a Fastmail filter's "Notify
+ * me" action, which leaves that keyword and nothing else; every choice but
+ * Off honours it, wherever the message is and whoever sent it.
  */
 export function matchesChoice(notify, email, context) {
+    if (email.keywords?.$notify && MODES.includes(notify?.mode) && notify.mode !== 'off') return true;
     const sender = senderAddress(email);
     switch (notify?.mode) {
     case 'inbox':
