@@ -275,11 +275,10 @@ public struct AppShell: View {
             // whatever the Compose button is set to do.
             ComposeWindows.shared.compose(
                 mailto: taken.payload.mailto, profile: live, attachments: taken.attachments
-            ) { notAttached in
+            ) { _ in
                 // The page holds the files now, or never will; either way
                 // the copies have done their work.
                 SharedPayload.remove(id: id, in: root)
-                ComposeAttachments.report(notAttached: notAttached)
             }
             #else
             PageToast.show("Sharing is not available here.")

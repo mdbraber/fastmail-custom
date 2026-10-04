@@ -619,7 +619,8 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     ///
     /// `attachments` are files to hand to the page once the message is open,
     /// as the share extension leaves them; `attached` hears the names of any
-    /// that could not be.
+    /// that could not be. Those are named in the page's own toast, in the
+    /// message's window.
     public func compose(
         mailto: String,
         profile: Profile,
@@ -629,6 +630,7 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     ) {
         configure(profile: profile)
         guard let pool else {
+            ComposeAttachments.report(notAttached: attachments.map(\.name))
             attached?(attachments.map(\.name))
             return
         }
@@ -643,12 +645,15 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
             let id = ObjectIdentifier(window)
             let count = givenUp[id, default: 0]
             Task { @MainActor [weak self] in
-                attached?(await ComposeAttachments.load(
+                let names = await ComposeAttachments.load(
                     request, attaching: attachments, in: view,
                     stillWanted: { self?.givenUp[id, default: 0] == count }
-                ))
+                )
+                ComposeAttachments.report(notAttached: names, in: view)
+                attached?(names)
             }
         } else {
+            ComposeAttachments.report(notAttached: attachments.map(\.name))
             attached?(attachments.map(\.name))
         }
         if let host {

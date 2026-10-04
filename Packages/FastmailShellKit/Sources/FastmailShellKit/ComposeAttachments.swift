@@ -1,5 +1,4 @@
 #if canImport(AppKit) && !targetEnvironment(macCatalyst)
-import AppKit
 import WebKit
 
 /// Hands files to Fastmail's compose page. A file dropped on a message ends
@@ -162,19 +161,30 @@ public enum ComposeAttachments {
         }
     }
 
-    /// Says which files did not make it. The message itself is open, with
-    /// its subject and text, and the files are still where they were shared
-    /// from, so they can be attached by hand.
-    public static func report(notAttached names: [String]) {
-        guard !names.isEmpty else { return }
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = names.count == 1
-            ? "A file could not be attached"
-            : "\(names.count) files could not be attached"
-        alert.informativeText = names.joined(separator: "\n")
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+    /// What the toast says about files that did not make it; nothing when
+    /// they all did. The names are the point, so they are all given.
+    static func notAttachedMessage(_ names: [String]) -> String? {
+        switch names.count {
+        case 0: return nil
+        case 1: return "Could not attach \(names[0])."
+        default: return "Could not attach \(names.count) files: \(names.joined(separator: ", "))"
+        }
+    }
+
+    /// Says which files did not make it, in Fastmail's own toast on the
+    /// message they were shared into, so it is seen where they were wanted.
+    /// The message itself is open, with its subject and text, and the files
+    /// are still where they were shared from, so they can be attached by
+    /// hand. Given no view (no compose page was there to ask) it falls back
+    /// to the page that is showing. The names take longer to read than a
+    /// confirmation, so the toast stays up longer.
+    public static func report(notAttached names: [String], in view: WKWebView? = nil) {
+        guard let message = notAttachedMessage(names) else { return }
+        if let view {
+            PageToast.show(message, in: view, duration: 8)
+        } else {
+            PageToast.show(message, duration: 8)
+        }
     }
 }
 #endif
