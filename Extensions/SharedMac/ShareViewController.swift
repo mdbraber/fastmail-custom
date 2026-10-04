@@ -83,7 +83,11 @@ final class ShareViewController: NSViewController {
         for provider in providers {
             if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier),
                let url = await Self.url(from: provider, type: .fileURL), url.isFileURL {
-                let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+                // Measured where a link leads: what is stored is the file it
+                // points to, under the link's own name, so a link to a folder
+                // is a folder and a link to a large file is as large as that.
+                let values = try? url.resolvingSymlinksInPath()
+                    .resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
                 if values?.isDirectory == true {
                     throw Refusal(message: "Folders can't be shared; share the files inside instead.")
                 }
