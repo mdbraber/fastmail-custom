@@ -116,6 +116,15 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     private var pool: ComposePool<NSWindow>?
     private var opened: [NSWindow] = []
     private var configuredURL: URL?
+    /// How many times each pool window has been given up: sent back to the
+    /// pool with a fresh page, or closed for good. Files shared into a
+    /// message are only that message's, so a hand-over notes the count when
+    /// it starts and stops once the count has moved on. Whether the window
+    /// can be seen would not do: a message in a tab behind another cannot be,
+    /// and is still the message. Counts are kept after a window is gone, a
+    /// number each, so that one made later at the same address does not start
+    /// again from a count an old hand-over still holds.
+    private var givenUp: [ObjectIdentifier: Int] = [:]
     private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
 
     // Called again when the backend changes. A pooled window has already been
@@ -131,7 +140,8 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
         Self.overlayName = profile.overlayScriptName
         pool = ComposePool(
             create: { [weak self] in self?.makeWindow() ?? NSWindow() },
-            prepare: { window in
+            prepare: { [weak self] window in
+                self?.givenUp[ObjectIdentifier(window), default: 0] += 1
                 ComposeWindows.readyForPool(window)
                 guard let view = ComposeWindows.webView(of: window) else { return }
                 // A page loaded to wait unseen must not count as an open
@@ -630,8 +640,13 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
             Self.webView(of: window)?.load(request)
             attached?([])
         } else if let view = Self.webView(of: window) {
-            Task { @MainActor in
-                attached?(await ComposeAttachments.load(request, attaching: attachments, in: view))
+            let id = ObjectIdentifier(window)
+            let count = givenUp[id, default: 0]
+            Task { @MainActor [weak self] in
+                attached?(await ComposeAttachments.load(
+                    request, attaching: attachments, in: view,
+                    stillWanted: { self?.givenUp[id, default: 0] == count }
+                ))
             }
         } else {
             attached?(attachments.map(\.name))
@@ -954,6 +969,13 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
             return false
         }
         return true
+    }
+
+    /// A pool window closing for good, the pool being full already, is given
+    /// up as much as one that goes back to it.
+    public func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        givenUp[ObjectIdentifier(window), default: 0] += 1
     }
 }
 #endif

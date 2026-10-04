@@ -32,8 +32,34 @@ final class ComposeAttachmentsTests: XCTestCase {
     </script></body></html>
     """
 
-    private func load(_ html: String) async throws {
-        webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+    /// Hears from a page that it was marked stale. The page is gone by the
+    /// time a test could ask it, so it says so as it happens.
+    private final class StaleMarks: NSObject, WKScriptMessageHandler {
+        var count = 0
+
+        func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            count += 1
+        }
+    }
+
+    /// A compose page that reports being marked stale, and still reads as
+    /// marked afterwards.
+    private static let reportingComposePage = composePage.replacingOccurrences(
+        of: "window.attached = [];",
+        with: """
+        window.attached = [];
+        var stale = false;
+        Object.defineProperty(window, '__fmshellStale', {
+            get: function () { return stale; },
+            set: function (value) { stale = value; window.webkit.messageHandlers.stale.postMessage(true); }
+        });
+        """
+    )
+
+    private func load(_ html: String, hearing marks: StaleMarks? = nil) async throws {
+        let configuration = WKWebViewConfiguration()
+        if let marks { configuration.userContentController.add(marks, name: "stale") }
+        webView = WKWebView(frame: .zero, configuration: configuration)
         webView.loadHTMLString(html, baseURL: URL(string: "https://app.fastmail.com/")!)
         // The window's first, empty page is "complete" too; only the page
         // loaded here has the base URL's host.
@@ -160,5 +186,64 @@ final class ComposeAttachmentsTests: XCTestCase {
         XCTAssertEqual(failed, ["gone.txt"])
         let files = try await attached()
         XCTAssertEqual(files.map { $0["name"] as? String }, ["here.txt"])
+    }
+
+    func testNothingIsAttachedOnceTheMessageIsNoLongerWanted() async throws {
+        try await load(Self.composePage)
+        let failed = await ComposeAttachments.attach(
+            [try file(named: "a.txt", type: "text/plain", bytes: Data([1]))],
+            to: webView,
+            stillWanted: { false }
+        )
+        XCTAssertEqual(failed, [])
+        let files = try await attached()
+        XCTAssertEqual(files.count, 0)
+    }
+
+    func testAHandOverStopsWhenThePageIsReplacedMidway() async throws {
+        try await load(Self.composePage)
+        let bytes = pattern(ComposeAttachments.chunkSize * 4)
+        // Asked before each thing sent to the page: the ready check, the
+        // start of the file, then each chunk. The fourth is the second chunk.
+        var asked = 0
+        let failed = await ComposeAttachments.attach(
+            [
+                try file(named: "big.bin", type: "application/octet-stream", bytes: bytes),
+                try file(named: "after.txt", type: "text/plain", bytes: Data([1])),
+            ],
+            to: webView,
+            stillWanted: {
+                asked += 1
+                return asked <= 3
+            }
+        )
+        XCTAssertEqual(failed, [])
+        XCTAssertEqual(asked, 4, "nothing is asked, or sent, after the answer was no")
+        let files = try await attached()
+        XCTAssertEqual(files.count, 0)
+    }
+
+    func testLoadAttachesOnlyToThePageItBrings() async throws {
+        let marks = StaleMarks()
+        try await load(Self.reportingComposePage, hearing: marks)
+        // The second page comes from a file: a request cannot carry a page's
+        // text, and a file is a different place from the first page's, as the
+        // message's page is a different document from the pooled one.
+        let second = folder.appendingPathComponent("second.html")
+        try Self.composePage.write(to: second, atomically: true, encoding: .utf8)
+        let bytes = Data([1, 2, 3])
+        let failed = await ComposeAttachments.load(
+            URLRequest(url: second),
+            attaching: [try file(named: "a.txt", type: "text/plain", bytes: bytes)],
+            in: webView,
+            stillWanted: { true }
+        )
+        XCTAssertEqual(failed, [])
+        XCTAssertGreaterThanOrEqual(marks.count, 1, "the first page was marked stale")
+        let isSecond = try await webView.evaluateJavaScript("location.protocol === 'file:'") as? Bool
+        XCTAssertEqual(isSecond, true)
+        let files = try await attached()
+        XCTAssertEqual(files.map { $0["name"] as? String }, ["a.txt"])
+        XCTAssertEqual(files.first?["sum"] as? Int, sum(bytes))
     }
 }

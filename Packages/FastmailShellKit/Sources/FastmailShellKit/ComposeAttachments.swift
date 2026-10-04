@@ -60,31 +60,66 @@ public enum ComposeAttachments {
     /// Loads the message, then attaches. The page already in the window is a
     /// compose page too, with a controller of its own, so it is marked first:
     /// only the page that the load brings is attached to.
+    ///
+    /// `stillWanted` answers whether the window still holds the message the
+    /// files were shared into. It is asked before anything is sent to the
+    /// page, and once it says no the hand-over stops: a window closed early
+    /// goes back to the pool with a fresh compose page in this same view, and
+    /// the files are not that page's. Stopping is not a failure, so the names
+    /// returned are then none at all; there is nothing to tell anyone.
     static func load(
-        _ request: URLRequest, attaching files: [SharedPayload.Attachment], in view: WKWebView
+        _ request: URLRequest, attaching files: [SharedPayload.Attachment], in view: WKWebView,
+        stillWanted: @MainActor () -> Bool
     ) async -> [String] {
+        guard stillWanted() else { return [] }
         _ = try? await view.callAsyncJavaScript(staleScript, contentWorld: .page)
+        guard stillWanted() else { return [] }
         view.load(request)
-        return await attach(files, to: view)
+        // Marked again, with nothing in between. A window fresh from the
+        // pool may still have been loading its blank compose page, and the
+        // first mark then fell on the empty document before it; that page
+        // could arrive while the mark was on its way back. The page takes
+        // what it is sent in order: either the blank compose page is there
+        // by now and this marks it, or it was still on its way and the load
+        // above has called it off. The page the load brings cannot be the
+        // one marked, as no page arrives without first asking here whether
+        // it may. This does not lean on what address the page ends up at.
+        _ = try? await view.callAsyncJavaScript(staleScript, contentWorld: .page)
+        return await attach(files, to: view, stillWanted: stillWanted)
     }
 
-    /// The names of the files that could not be handed to the page.
+    /// The names of the files that could not be handed to the page; none
+    /// when `stillWanted` said no along the way, as `load` explains, whatever
+    /// had or had not been handed over by then.
     static func attach(
-        _ files: [SharedPayload.Attachment], to view: WKWebView, timeout: TimeInterval = 15
+        _ files: [SharedPayload.Attachment], to view: WKWebView, timeout: TimeInterval = 15,
+        stillWanted: @MainActor () -> Bool = { true }
     ) async -> [String] {
-        guard await waitForController(in: view, timeout: timeout) else {
-            return files.map(\.name)
+        do {
+            guard try await waitForController(in: view, timeout: timeout, stillWanted: stillWanted) else {
+                // A page that never became ready because its window was
+                // closed meanwhile is a stop, not a failure.
+                return stillWanted() ? files.map(\.name) : []
+            }
+            var failed: [String] = []
+            for file in files {
+                if !(try await attach(file, to: view, stillWanted: stillWanted)) { failed.append(file.name) }
+            }
+            return failed
+        } catch {
+            return []
         }
-        var failed: [String] = []
-        for file in files {
-            if !(await attach(file, to: view)) { failed.append(file.name) }
-        }
-        return failed
     }
 
-    private static func waitForController(in view: WKWebView, timeout: TimeInterval) async -> Bool {
+    /// Thrown to leave a hand-over that is no longer wanted.
+    private struct NoLongerWanted: Error {}
+
+    private static func waitForController(
+        in view: WKWebView, timeout: TimeInterval, stillWanted: @MainActor () -> Bool
+    ) async throws -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
+            guard stillWanted() else { throw NoLongerWanted() }
             if (try? await view.callAsyncJavaScript(readyScript, contentWorld: .page)) as? Bool == true {
                 return true
             }
@@ -93,20 +128,28 @@ public enum ComposeAttachments {
         return false
     }
 
-    private static func attach(_ file: SharedPayload.Attachment, to view: WKWebView) async -> Bool {
+    /// Whether the file was handed over. Throws only NoLongerWanted; a page
+    /// that refuses what it is sent is a file that failed, unless the window
+    /// was closed under it, which is why it refused.
+    private static func attach(
+        _ file: SharedPayload.Attachment, to view: WKWebView, stillWanted: @MainActor () -> Bool
+    ) async throws -> Bool {
         guard let data = try? Data(contentsOf: file.url, options: .mappedIfSafe) else { return false }
         let key = UUID().uuidString
         do {
+            guard stillWanted() else { throw NoLongerWanted() }
             _ = try await view.callAsyncJavaScript(beginScript, arguments: ["key": key], contentWorld: .page)
             var offset = 0
             while offset < data.count {
                 let end = min(offset + chunkSize, data.count)
                 let chunk = data.subdata(in: offset..<end).base64EncodedString()
+                guard stillWanted() else { throw NoLongerWanted() }
                 _ = try await view.callAsyncJavaScript(
                     appendScript, arguments: ["key": key, "chunk": chunk], contentWorld: .page
                 )
                 offset = end
             }
+            guard stillWanted() else { throw NoLongerWanted() }
             let handed = try await view.callAsyncJavaScript(
                 finishScript,
                 arguments: ["key": key, "name": file.name, "type": file.type],
@@ -114,6 +157,7 @@ public enum ComposeAttachments {
             )
             return handed as? Bool == true
         } catch {
+            guard !(error is NoLongerWanted), stillWanted() else { throw NoLongerWanted() }
             return false
         }
     }
