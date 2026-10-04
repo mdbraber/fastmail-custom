@@ -204,3 +204,38 @@ private func fields(of mailto: String) -> [String: String] {
     let taken = try #require(SharedPayload.take(id: id, in: root))
     #expect(taken.attachments.isEmpty)
 }
+
+@Test func aPageSharedWithOnlyItsTitleAsTextGetsThatAsItsSubject() {
+    let m = SharedPayload.message(title: nil, texts: ["A page"], link: "https://example.com/a", fileNames: [])
+    #expect(m.subject == "A page")
+    #expect(m.text == "")
+}
+
+@Test func aTitleRepeatedAsTextIsNotRepeatedInTheBody() {
+    let m = SharedPayload.message(title: "A page", texts: [" A page\n", "A selection"], link: "https://example.com/a", fileNames: [])
+    #expect(m.subject == "A page")
+    #expect(m.text == "A selection")
+}
+
+@Test func textSharedWithoutALinkStaysInTheBody() {
+    let m = SharedPayload.message(title: nil, texts: ["Just one line"], link: nil, fileNames: [])
+    #expect(m.subject == "")
+    #expect(m.text == "Just one line")
+}
+
+@Test func aSelectionOfSeveralLinesBesideALinkStaysInTheBody() {
+    let m = SharedPayload.message(title: nil, texts: ["line one\nline two"], link: "https://example.com/a", fileNames: [])
+    #expect(m.subject == "")
+    #expect(m.text == "line one\nline two")
+}
+
+@Test func textsThatDifferOnlyByWhitespaceAreSaidOnce() {
+    let m = SharedPayload.message(title: "T", texts: ["Same", "Same\n", "  ", "Other"], link: nil, fileNames: [])
+    #expect(m.text == "Same\n\nOther")
+}
+
+@Test func filesAloneTakeTheFirstNameAsSubject() {
+    let m = SharedPayload.message(title: nil, texts: [], link: nil, fileNames: ["a.pdf", "b.pdf"])
+    #expect(m.subject == "a.pdf")
+    #expect(m.text == "")
+}

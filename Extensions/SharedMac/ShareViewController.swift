@@ -11,23 +11,23 @@ final class ShareViewController: NSViewController {
     private var handled = false
 
     /// A file as it was shared: somewhere on disk, or only as bytes, which
-    /// is how an image comes from an app that has not saved it.
+    /// is how an image comes from an app that has not saved it. The size is
+    /// settled when the item is gathered, so one that cannot be read is
+    /// refused there instead of counting as nothing.
     private enum Item {
-        case file(URL)
+        case file(URL, size: Int)
         case data(Data, name: String)
 
         var size: Int {
             switch self {
-            case .file(let url):
-                return (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
-            case .data(let data, _):
-                return data.count
+            case .file(_, let size): return size
+            case .data(let data, _): return data.count
             }
         }
 
         var name: String {
             switch self {
-            case .file(let url): return url.lastPathComponent
+            case .file(let url, _): return url.lastPathComponent
             case .data(_, let name): return name
             }
         }
@@ -62,42 +62,56 @@ final class ShareViewController: NSViewController {
             throw Refusal(message: "\(Self.appName) has nowhere to receive this.")
         }
         let inputs = context.inputItems.compactMap { $0 as? NSExtensionItem }
-        var title = inputs.compactMap { $0.attributedTitle?.string }.first { !$0.isEmpty }
-        var texts = inputs.compactMap { $0.attributedContentText?.string }.filter { !$0.isEmpty }
+        let title = inputs.compactMap { $0.attributedTitle?.string }.first { !$0.isEmpty }
+        var texts = inputs.compactMap { $0.attributedContentText?.string }
         var link: URL?
         var items: [Item] = []
+        var total = 0
 
-        for provider in inputs.flatMap({ $0.attachments ?? [] }) {
+        // An extension has little memory to spare, so what is too many or too
+        // large is refused before it is read, not after.
+        let providers = inputs.flatMap { $0.attachments ?? [] }
+        let carried = providers.filter {
+            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+                || $0.hasItemConformingToTypeIdentifier(UTType.image.identifier)
+        }
+        guard carried.count <= SharedPayload.itemLimit else {
+            throw Refusal(message: "No more than \(SharedPayload.itemLimit) files can be shared at once.")
+        }
+        let tooLarge = Refusal(message: "These files are larger than the 50 MB a message can carry.")
+
+        for provider in providers {
             if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier),
                let url = await Self.url(from: provider, type: .fileURL), url.isFileURL {
-                items.append(.file(url))
+                let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+                if values?.isDirectory == true {
+                    throw Refusal(message: "Folders can't be shared; share the files inside instead.")
+                }
+                guard let size = values?.fileSize else {
+                    throw Refusal(message: "\(url.lastPathComponent) could not be read.")
+                }
+                total += size
+                guard total <= SharedPayload.sizeLimit else { throw tooLarge }
+                items.append(.file(url, size: size))
             } else if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier),
                       let url = await Self.url(from: provider, type: .url), !url.isFileURL {
                 if link == nil { link = url }
             } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier),
                       let data = await Self.data(from: provider, type: .image) {
+                total += data.count
+                guard total <= SharedPayload.sizeLimit else { throw tooLarge }
                 items.append(.data(data, name: Self.imageName(for: provider, index: items.count)))
             } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier),
-                      let text = await Self.text(from: provider), !text.isEmpty, !texts.contains(text) {
+                      let text = await Self.text(from: provider) {
                 texts.append(text)
             }
         }
 
-        // Safari gives the page's title as the text of a shared page; a
-        // title said twice is a subject, not a body.
-        if title == nil, link != nil, texts.count == 1, !texts[0].contains("\n") {
-            title = texts.removeFirst()
-        }
-        let text = texts.joined(separator: "\n\n")
-
-        guard link != nil || !text.isEmpty || !items.isEmpty else {
+        let message = SharedPayload.message(
+            title: title, texts: texts, link: link?.absoluteString, fileNames: items.map(\.name)
+        )
+        guard link != nil || !message.text.isEmpty || !message.subject.isEmpty || !items.isEmpty else {
             throw Refusal(message: "Nothing shareable arrived.")
-        }
-        guard items.count <= SharedPayload.itemLimit else {
-            throw Refusal(message: "No more than \(SharedPayload.itemLimit) files can be shared at once.")
-        }
-        guard items.reduce(0, { $0 + $1.size }) <= SharedPayload.sizeLimit else {
-            throw Refusal(message: "These files are larger than the 50 MB a message can carry.")
         }
 
         let id = UUID().uuidString
@@ -105,7 +119,7 @@ final class ShareViewController: NSViewController {
             var files: [SharedPayload.File] = []
             for (index, item) in items.enumerated() {
                 switch item {
-                case .file(let url):
+                case .file(let url, _):
                     let scoped = url.startAccessingSecurityScopedResource()
                     defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                     files.append(try SharedPayload.store(url, index: index, id: id, in: root))
@@ -114,8 +128,8 @@ final class ShareViewController: NSViewController {
                 }
             }
             let payload = SharedPayload(
-                subject: SharedPayload.subject(title: title, fileNames: items.map(\.name)),
-                text: text,
+                subject: message.subject,
+                text: message.text,
                 url: link?.absoluteString,
                 files: files
             )

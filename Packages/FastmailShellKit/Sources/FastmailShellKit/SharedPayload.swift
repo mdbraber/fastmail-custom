@@ -79,6 +79,28 @@ public struct SharedPayload: Codable, Equatable, Sendable {
         return fileNames.first ?? ""
     }
 
+    /// What a share's subject and body are, from what the sharing app gave.
+    /// Apps often give the same words as a title and as text, or the same text
+    /// twice with different trailing whitespace, so those are said once.
+    public static func message(
+        title: String?, texts: [String], link: String?, fileNames: [String]
+    ) -> (subject: String, text: String) {
+        var title = (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        var kept: [String] = []
+        for text in texts {
+            let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if text.isEmpty || text == title || kept.contains(text) { continue }
+            kept.append(text)
+        }
+        // Safari gives a shared page's title as its text; a title said twice
+        // is a subject, not a body.
+        if title.isEmpty, let link, !link.isEmpty, kept.count == 1,
+           !kept[0].contains(where: \.isNewline) {
+            title = kept.removeFirst()
+        }
+        return (subject(title: title, fileNames: fileNames), kept.joined(separator: "\n\n"))
+    }
+
     /// Copies a file into the share. The index in front of the name keeps two
     /// files with one name apart. If the source is a symlink, the real file is
     /// copied instead so nothing outside the share can be read through it.
