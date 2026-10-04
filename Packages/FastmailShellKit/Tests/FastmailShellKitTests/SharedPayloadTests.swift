@@ -165,3 +165,42 @@ private func fields(of mailto: String) -> [String: String] {
     #expect(parsed["subject"] == "R&D + Q#3 = 100% 🎉")
     #expect(parsed["body"] == "one\r\ntwo\r\nthree")
 }
+
+@Test func storingASymlinkStoresWhatItPointsTo() throws {
+    let root = try temporaryRoot()
+    let id = UUID().uuidString
+    let realFile = try sourceFile(named: "real.txt", in: "a", contents: "content", under: root)
+    let symlinkPath = root.appendingPathComponent("sources/b/link.txt")
+    try FileManager.default.createDirectory(at: symlinkPath.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(at: symlinkPath, withDestinationURL: realFile)
+    let file = try SharedPayload.store(symlinkPath, index: 0, id: id, in: root)
+    let payload = SharedPayload(subject: "", text: "", url: nil, files: [file])
+    try payload.write(id: id, in: root)
+
+    let taken = try #require(SharedPayload.take(id: id, in: root))
+    #expect(taken.attachments.count == 1)
+    #expect(taken.attachments[0].name == "link.txt")
+    #expect(try Data(contentsOf: taken.attachments[0].url) == Data("content".utf8))
+    let isSymlink = try taken.attachments[0].url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink ?? false
+    #expect(!isSymlink)
+}
+
+@Test func takeDropsASymlinkThatLeavesTheFolder() throws {
+    let root = try temporaryRoot()
+    let id = UUID().uuidString
+    try Data("secret".utf8).write(to: root.appendingPathComponent("outside.txt"))
+    let payload = SharedPayload(
+        subject: "", text: "", url: nil,
+        files: [SharedPayload.File(path: "files/0-link.txt", name: "link.txt", type: "text/plain")]
+    )
+    try payload.write(id: id, in: root)
+    let folder = root.appendingPathComponent(id)
+    let filesFolder = folder.appendingPathComponent("files", isDirectory: true)
+    try FileManager.default.createDirectory(at: filesFolder, withIntermediateDirectories: true)
+    let linkPath = filesFolder.appendingPathComponent("0-link.txt")
+    let outsidePath = root.appendingPathComponent("outside.txt")
+    try FileManager.default.createSymbolicLink(at: linkPath, withDestinationURL: outsidePath)
+
+    let taken = try #require(SharedPayload.take(id: id, in: root))
+    #expect(taken.attachments.isEmpty)
+}

@@ -80,10 +80,11 @@ public struct SharedPayload: Codable, Equatable, Sendable {
     }
 
     /// Copies a file into the share. The index in front of the name keeps two
-    /// files with one name apart.
+    /// files with one name apart. If the source is a symlink, the real file is
+    /// copied instead so nothing outside the share can be read through it.
     public static func store(_ source: URL, index: Int, id: String, in root: URL) throws -> File {
         let file = try slot(named: source.lastPathComponent, index: index, id: id, in: root)
-        try FileManager.default.copyItem(at: source, to: file.url)
+        try FileManager.default.copyItem(at: source.resolvingSymlinksInPath(), to: file.url)
         return file.entry
     }
 
@@ -115,7 +116,7 @@ public struct SharedPayload: Codable, Equatable, Sendable {
 
     /// Reads a share without removing it: the files are still needed until
     /// they have been handed to the compose page. A file whose path leads
-    /// out of the share's folder is left out.
+    /// out of the share's folder, or which is a symbolic link, is left out.
     public static func take(id: String, in root: URL) -> Taken? {
         guard
             let folder = folder(id: id, in: root),
@@ -124,10 +125,13 @@ public struct SharedPayload: Codable, Equatable, Sendable {
         else {
             return nil
         }
-        let base = folder.standardizedFileURL.path + "/"
+        let baseResolved = folder.resolvingSymlinksInPath().path + "/"
         let attachments = payload.files.compactMap { file -> Attachment? in
-            let url = folder.appendingPathComponent(file.path).standardizedFileURL
-            guard url.path.hasPrefix(base), FileManager.default.fileExists(atPath: url.path) else { return nil }
+            let url = folder.appendingPathComponent(file.path)
+            let isSymlink = (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) ?? false
+            guard !isSymlink else { return nil }
+            let resolvedURL = url.resolvingSymlinksInPath()
+            guard resolvedURL.path.hasPrefix(baseResolved), FileManager.default.fileExists(atPath: resolvedURL.path) else { return nil }
             return Attachment(url: url, name: file.name, type: file.type)
         }
         return Taken(payload: payload, attachments: attachments)
