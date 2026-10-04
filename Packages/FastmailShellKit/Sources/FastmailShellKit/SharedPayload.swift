@@ -1,10 +1,10 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// What a share extension hands to its app. The extension is sandboxed and
-/// the files it is given cannot be read by the app, so it copies them into a
-/// folder both can reach, in an App Group container, beside a manifest that
-/// says what was shared. Foundation only: the extensions compile this file
+/// What a share extension hands to its app. The extension is sandboxed, and
+/// its access to the files it is given is its own and ends with it, so it
+/// copies them into a folder that outlasts it and that both can reach, in an
+/// App Group container, beside a manifest that says what was shared. Foundation only: the extensions compile this file
 /// on its own rather than link the whole kit.
 public struct SharedPayload: Codable, Equatable, Sendable {
     public struct File: Codable, Equatable, Sendable {
@@ -49,8 +49,8 @@ public struct SharedPayload: Codable, Equatable, Sendable {
     public static let sizeLimit = 50 * 1024 * 1024
     public static let itemLimit = 20
 
-    /// Where shares live, or nothing when the bundle names no group or was
-    /// not signed into it.
+    /// Where shares live, or nothing when the bundle names no group or the
+    /// system gives no container for it.
     public static func root(bundle: Bundle = .main) -> URL? {
         guard
             let group = bundle.object(forInfoDictionaryKey: groupInfoKey) as? String,

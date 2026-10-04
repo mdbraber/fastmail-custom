@@ -2,7 +2,9 @@ import Combine
 import Foundation
 
 /// A link handed in from outside the view tree, a tapped notification,
-/// for AppShell to route as if it had arrived through onOpenURL. A mail
+/// for AppShell to route as if it had arrived through onOpenURL. On the Mac
+/// every link from outside comes this way, via the app delegate, as the
+/// window group there does not deliver them to onOpenURL. A mail
 /// notification also carries `message`, the EmailPush that Fastmail's own
 /// `openMessage` reads, so the tap opens through its goMessage rather than a
 /// step that an idle window's stale store cannot show.

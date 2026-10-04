@@ -5,8 +5,9 @@
     <!-- A share extension on the Mac only loads sandboxed. -->
     <key>com.apple.security.app-sandbox</key>
     <true/>
-    <!-- The folder the app reads what was shared from; the app cannot read
-         the files this extension was given, so they are copied there. -->
+    <!-- The folder the app reads what was shared from. Access to the files
+         this extension was given is its own and ends with it, so they are
+         copied there, where they outlast it. -->
     <key>com.apple.security.application-groups</key>
     <array>
         <string>$(TeamIdentifierPrefix)com.mdbraber.fastmail-custom.share</string>

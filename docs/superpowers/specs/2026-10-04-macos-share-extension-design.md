@@ -47,7 +47,7 @@ Share menu ─▶ extension (sandboxed)
                 │  opens   <scheme>://share?id=<id>
                 ▼
              app ─▶ LinkRouter .share(id)
-                     ─▶ SharedPayload.take(id)      reads, then deletes folder
+                     ─▶ SharedPayload.take(id)      reads; the folder is removed after the hand-over
                      ─▶ ComposeWindows.compose(mailto:attachments:)
                           ─▶ compose page loads from the existing mailto path
                           ─▶ injection script calls controller.attachFiles
@@ -111,6 +111,11 @@ a plain source file so both sides share one definition of the manifest:
 - `AppShell.route` handles `.share` on macOS by taking the payload and calling
   `ComposeWindows.shared.compose(mailto:profile:attachments:)`. On iOS the
   route is refused; nothing sends it there.
+
+On macOS, links from outside are received by the app delegate
+(`DockClick.application(_:open:)`) and passed through `PendingLinks`, because
+on macOS 27 SwiftUI's window group does not deliver them to `onOpenURL`; the
+window group is told to take no external events.
 
 ### Attaching in the compose window
 

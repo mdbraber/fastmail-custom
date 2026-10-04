@@ -209,7 +209,8 @@ public struct AppShell: View {
             ComposeWindows.shared.configure(profile: live)
         }
         .onChange(of: pendingLinks.url) {
-            // A tapped notification, routed exactly as a link from outside
+            // Every link from outside, handed on by the app delegate, and a
+            // tapped notification, routed the same way
             if let taken = pendingLinks.take() { route(live.backend.rehost(taken.url), message: taken.message) }
         }
         // Links from outside come through the app delegate, not the window
