@@ -109,7 +109,7 @@ over JMAP so the API tokens live on the server rather than on the phone. See
 | `Userscript/` | Fastmail Custom itself |
 | `SafariExtension/` | The extension that runs it, and its host app |
 | `Apps/` | The macOS and iOS apps |
-| `Extensions/` | The share extensions |
+| `Extensions/` | The share extensions: on iPhone and iPad they open a Fastmail link in the app, on the Mac they start a message from what was shared |
 | `Packages/FastmailShellKit/` | The shared shell: web view, windows, links, settings |
 | `Server/` | The push server |
 | `Tests/` | Integration tests that run the real scripts in a web view |

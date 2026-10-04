@@ -49,6 +49,9 @@ targets:
       - target: PersonalShare
         embed: true
         destinationFilters: [iOS]
+      - target: PersonalShareMac
+        embed: true
+        destinationFilters: [macOS]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail-custom.personal
@@ -66,6 +69,9 @@ targets:
       - target: WorkShare
         embed: true
         destinationFilters: [iOS]
+      - target: WorkShareMac
+        embed: true
+        destinationFilters: [macOS]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail-custom.work
@@ -119,6 +125,43 @@ targets:
         PRODUCT_NAME: WorkShare
         INFOPLIST_FILE: Extensions/WorkShare/Info.plist
         GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+
+  # The Mac's share menu: what was shared becomes a new message in the app
+  # the extension sits in. SharedPayload is compiled in as a file, not through
+  # the package, which links far more than an extension may use.
+  PersonalShareMac:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Extensions/PersonalShareMac
+      - path: Extensions/SharedMac
+      - path: Packages/FastmailShellKit/Sources/FastmailShellKit/SharedPayload.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail-custom.personal.share-mac
+        PRODUCT_NAME: PersonalShareMac
+        INFOPLIST_FILE: Extensions/PersonalShareMac/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Extensions/SharedMac/ShareMac.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
+
+  WorkShareMac:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Extensions/WorkShareMac
+      - path: Extensions/SharedMac
+      - path: Packages/FastmailShellKit/Sources/FastmailShellKit/SharedPayload.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mdbraber.fastmail-custom.work.share-mac
+        PRODUCT_NAME: WorkShareMac
+        INFOPLIST_FILE: Extensions/WorkShareMac/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Extensions/SharedMac/ShareMac.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
         SKIP_INSTALL: YES
 
   IntegrationTests:

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- A share extension on the Mac only loads sandboxed. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <!-- The folder the app reads what was shared from; the app cannot read
+         the files this extension was given, so they are copied there. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>$(TeamIdentifierPrefix)com.mdbraber.fastmail-custom.share</string>
+    </array>
+</dict>
+</plist>
