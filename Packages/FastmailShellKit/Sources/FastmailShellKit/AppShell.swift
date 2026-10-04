@@ -249,6 +249,8 @@ public struct AppShell: View {
             PageToast.show(message)
         case .handoff(let target):
             openInOtherApp(target)
+        case .share:
+            PageToast.show("Sharing is not available here.")
         case .compose(let mailto):
             #if canImport(AppKit) && !targetEnvironment(macCatalyst)
             // Where compose opens says where the message goes: a window of

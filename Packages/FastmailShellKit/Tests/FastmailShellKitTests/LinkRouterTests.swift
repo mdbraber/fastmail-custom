@@ -262,3 +262,16 @@ private func fastmailComposeFields(of composeURL: URL) -> [String: String] {
     #expect(moved.handoffScheme == base.handoffScheme)
     #expect(moved.urlScheme == base.urlScheme)
 }
+
+@Test func shareCarriesTheIDOfWhatWasShared() {
+    let id = "3F2504E0-4F89-11D3-9A0C-0305E82C3301"
+    #expect(LinkRouter.route(url("fastmail-personal://share?id=\(id)"), profile: profile()) == .share(id))
+}
+
+@Test func shareWithoutAUsableIDIsRefused() {
+    let refused = LinkRouter.Route.refuse("The link had nothing to share.")
+    #expect(LinkRouter.route(url("fastmail-personal://share"), profile: profile()) == refused)
+    #expect(LinkRouter.route(url("fastmail-personal://share?id="), profile: profile()) == refused)
+    #expect(LinkRouter.route(url("fastmail-personal://share?id=..%2F..%2FDocuments"), profile: profile()) == refused)
+    #expect(LinkRouter.route(url("fastmail-personal://share?id=abc"), profile: profile()) == refused)
+}

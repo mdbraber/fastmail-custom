@@ -6,6 +6,9 @@ public enum LinkRouter {
         /// A message to write, carried as the mailto it arrived as.
         case compose(String)
         case handoff(URL)
+        /// Something handed over by the share extension, named by the id of
+        /// the folder it was left in.
+        case share(String)
         case refuse(String)
     }
 
@@ -53,8 +56,16 @@ public enum LinkRouter {
                 return .refuse("The link had no message to compose.")
             }
             return .compose(raw)
+        case "share":
+            guard
+                let id = items.first(where: { $0.name == "id" })?.value,
+                SharedPayload.isValid(id: id)
+            else {
+                return .refuse("The link had nothing to share.")
+            }
+            return .share(id)
         default:
-            return .refuse("Unknown link command “\(command)”.")
+            return .refuse("Unknown link command \"\(command)\".")
         }
     }
 
