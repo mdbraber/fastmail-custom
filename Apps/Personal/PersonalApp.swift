@@ -22,6 +22,9 @@ struct PersonalApp: App {
             AppShell(profile: profile)
         }
         #if os(macOS)
+        // Links from outside go to the app delegate, DockClick, which says
+        // why; a window group that took them would open a window for each.
+        .handlesExternalEvents(matching: [])
         .windowStyle(.hiddenTitleBar)
         .commands { ShellCommands() }
         #endif

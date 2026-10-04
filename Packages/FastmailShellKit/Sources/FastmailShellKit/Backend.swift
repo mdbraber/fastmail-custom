@@ -48,11 +48,15 @@ public enum Backend: String, CaseIterable, Sendable {
     /// The same address on this server. Both halves of the start URL go
     /// through here; the profile's own default and whatever is typed into the
     /// setting; so the backend decides the host and the start URL is left to
-    /// say only which view to open.
+    /// say only which view to open. A link in the app's own scheme names a
+    /// command where a web link names a server (`share`, `compose`, `open`),
+    /// and is left as it is.
     public func rehost(_ url: URL) -> URL {
         guard
             var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-            components.host != nil
+            components.host != nil,
+            let scheme = components.scheme?.lowercased(),
+            scheme == "https" || scheme == "http"
         else { return url }
         components.host = host
         return components.url ?? url

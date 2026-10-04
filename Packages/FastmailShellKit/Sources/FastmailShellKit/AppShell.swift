@@ -196,6 +196,9 @@ public struct AppShell: View {
                     }
                 }
             }
+            // A link that launched the app arrived before there was a shell
+            // to hear of it
+            if let taken = pendingLinks.take() { route(live.backend.rehost(taken.url), message: taken.message) }
         }
         .onChange(of: backendName) {
             ComposeWindows.shared.configure(profile: live)

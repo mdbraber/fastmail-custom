@@ -150,8 +150,18 @@ final class CompanyWindow: NSWindow {
 /// The system brings a window back only when it finds none in sight, and it
 /// counts the company window as one, so the click did nothing. The app
 /// looks again, leaving that window out: a minimised window is brought
-/// back, a closed one shown again.
+/// back, a closed one shown again. It also receives the links that come from
+/// outside the app.
 public final class DockClick: NSObject, NSApplicationDelegate {
+    /// A link from outside: a mailto, or one in the app's own scheme. The
+    /// window group is told to take none of them, because on macOS 27 it
+    /// answers each with a new mail window that is never shown and hands the
+    /// link to no window at all. So they come here, and go on to the shell
+    /// the way a clicked notification does.
+    public func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { PendingLinks.shared.open(url) }
+    }
+
     enum Answer: Equatable {
         case asUsual
         case bringBack

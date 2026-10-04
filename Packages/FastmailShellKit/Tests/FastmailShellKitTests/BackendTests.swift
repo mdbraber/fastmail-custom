@@ -57,6 +57,17 @@ import Testing
     #expect(Backend.beta.rehost(hostless) == hostless)
 }
 
+@Test func rehostLeavesALinkInTheAppsOwnSchemeAlone() {
+    let share = URL(string: "fastmail-personal://share?id=3F2504E0-4F89-11D3-9A0C-0305E82C3301")!
+    let compose = URL(string: "fastmail-personal://compose?mailto=mailto%3Aa%40example.com")!
+    let mailto = URL(string: "mailto:a@example.com?subject=Hi")!
+    for backend in [Backend.production, Backend.beta] {
+        #expect(backend.rehost(share) == share)
+        #expect(backend.rehost(compose) == compose)
+        #expect(backend.rehost(mailto) == mailto)
+    }
+}
+
 // A link that leaves the app names the production host whatever server this
 // shell is talking to.
 @Test func canonicalNamesTheProductionHost() {
