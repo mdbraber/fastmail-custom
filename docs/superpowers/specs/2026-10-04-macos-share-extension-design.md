@@ -147,11 +147,8 @@ scripts do, and runs in the page's own content world, since it needs
   it cannot open, and no compose window.
 - Compose controller or `attachFiles` not found within the limit, or a file
   fails to hand over: the compose window stays open with subject and body, and
-  Fastmail's own page toast, shown in the compose window, names the files that
-  were not attached. The payload folder is still deleted; the originals are
-  untouched where they were shared from.
-- The extension's own alerts above stay alerts: it has no page to ask, which is
-  the one case the no-native-alerts convention accepts.
+  an alert names the files that were not attached. The payload folder is still
+  deleted; the originals are untouched where they were shared from.
 
 ## Open point to verify first
 

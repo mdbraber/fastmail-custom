@@ -52,12 +52,6 @@ public final class ShellModel: ObservableObject {
 public enum PageToast {
     public static func show(_ message: String, duration: TimeInterval = 4) {
         guard let view = WebViewRegistry.shared.active else { return }
-        show(message, in: view, duration: duration)
-    }
-
-    /// The same toast, on a given page rather than the active one: a message
-    /// that belongs to a compose window is shown in that window.
-    public static func show(_ message: String, in view: WKWebView, duration: TimeInterval = 4) {
         let script = """
         window.__fmshell && window.__fmshell.toast(\(Self.jsonString(message)), \(Int(duration * 1000)));
         """
