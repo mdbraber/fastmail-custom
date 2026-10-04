@@ -91,9 +91,14 @@ public struct AppShell: View {
         }
         .animation(.default, value: model.banner)
         .animation(.default, value: downloads.items)
+        // On the Mac links from outside come through the app delegate and
+        // PendingLinks; heard here as well, one would be routed twice on a
+        // system that delivers it both ways.
+        #if canImport(UIKit)
         .onOpenURL { url in
             route(url)
         }
+        #endif
         .onChange(of: model.pageURL) {
             // Remember last page: saved as it changes, while the switch is on
             DevicePreferences.recordPage(model.pageURL)
@@ -207,9 +212,10 @@ public struct AppShell: View {
             // A tapped notification, routed exactly as a link from outside
             if let taken = pendingLinks.take() { route(live.backend.rehost(taken.url), message: taken.message) }
         }
-        // Without this the window group treats every URL handed to the app as
-        // grounds for a new window, so a mailto arrived with a second copy of
-        // the whole shell behind it.
+        // Links from outside come through the app delegate, not the window
+        // group. This keeps the group from answering the other things handed
+        // to the app from outside, a continued activity for one, with a
+        // second copy of the whole shell.
         .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         #endif
     }
