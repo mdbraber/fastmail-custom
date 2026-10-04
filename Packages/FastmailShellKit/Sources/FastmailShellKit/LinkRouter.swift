@@ -65,7 +65,7 @@ public enum LinkRouter {
             }
             return .share(id)
         default:
-            return .refuse("Unknown link command \"\(command)\".")
+            return .refuse("Unknown link command “\(command)”.")
         }
     }
 
