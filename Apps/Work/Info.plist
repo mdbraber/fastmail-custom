@@ -60,5 +60,7 @@
     <true/>
     <key>OSAScriptingDefinition</key>
     <string>Fastmail.sdef</string>
+    <key>FMShareGroup</key>
+    <string>$(DEVELOPMENT_TEAM).com.mdbraber.fastmail-custom.share</string>
 </dict>
 </plist>

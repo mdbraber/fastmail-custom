@@ -15,5 +15,12 @@
          each Fastmail account apart by key. -->
     <key>com.apple.developer.ubiquity-kvstore-identifier</key>
     <string>$(TeamIdentifierPrefix)com.mdbraber.fastmail-custom.personal</string>
+    <!-- Where the share extension leaves what was shared with this app.
+         The extension is sandboxed, and files it was given cannot be read
+         from here, so it copies them into this group's container. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>$(TeamIdentifierPrefix)com.mdbraber.fastmail-custom.share</string>
+    </array>
 </dict>
 </plist>

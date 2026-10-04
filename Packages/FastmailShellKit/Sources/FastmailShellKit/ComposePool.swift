@@ -606,14 +606,36 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     /// The same window, opened on a message someone asked to write, a mailto
     /// link clicked anywhere on the Mac: a window of its own, or a tab of the
     /// mailbox window in front when that is where messages are written.
-    public func compose(mailto: String, profile: Profile, mode: ComposeMode = .window) {
+    ///
+    /// `attachments` are files to hand to the page once the message is open,
+    /// as the share extension leaves them; `attached` hears the names of any
+    /// that could not be.
+    public func compose(
+        mailto: String,
+        profile: Profile,
+        mode: ComposeMode = .window,
+        attachments: [SharedPayload.Attachment] = [],
+        attached: (@MainActor ([String]) -> Void)? = nil
+    ) {
         configure(profile: profile)
-        guard let pool else { return }
+        guard let pool else {
+            attached?(attachments.map(\.name))
+            return
+        }
         // A link from another app finds this one inactive, with no key window
         let host = mode == .tab ? Self.tabHost(NSApp.keyWindow) ?? Self.mailboxWindow() : nil
         let window = pool.take()
-        Self.webView(of: window)?
-            .load(URLRequest(url: ComposeURL.url(for: profile, mailto: mailto)))
+        let request = URLRequest(url: ComposeURL.url(for: profile, mailto: mailto))
+        if attachments.isEmpty {
+            Self.webView(of: window)?.load(request)
+            attached?([])
+        } else if let view = Self.webView(of: window) {
+            Task { @MainActor in
+                attached?(await ComposeAttachments.load(request, attaching: attachments, in: view))
+            }
+        } else {
+            attached?(attachments.map(\.name))
+        }
         if let host {
             window.tabbingMode = .preferred
             Self.dress(window, like: host)

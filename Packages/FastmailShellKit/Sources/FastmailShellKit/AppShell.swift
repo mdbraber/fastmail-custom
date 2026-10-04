@@ -159,6 +159,9 @@ public struct AppShell: View {
         #else
         .onAppear {
             ComposeWindows.shared.configure(profile: live)
+            // Shares that never arrived: the link was not opened, or the app
+            // quit before it took them.
+            if let root = SharedPayload.root() { SharedPayload.sweep(in: root) }
             NotificationPresenter.shared.install()
             TabSwitcher.install()
             NotificationPresenter.shared.onClick = { data, url in
@@ -249,8 +252,28 @@ public struct AppShell: View {
             PageToast.show(message)
         case .handoff(let target):
             openInOtherApp(target)
-        case .share:
+        case .share(let id):
+            #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+            guard
+                let root = SharedPayload.root(),
+                let taken = SharedPayload.take(id: id, in: root)
+            else {
+                PageToast.show("What was shared could not be read.")
+                return
+            }
+            // Always a window of its own: what was shared is a new message,
+            // whatever the Compose button is set to do.
+            ComposeWindows.shared.compose(
+                mailto: taken.payload.mailto, profile: live, attachments: taken.attachments
+            ) { notAttached in
+                // The page holds the files now, or never will; either way
+                // the copies have done their work.
+                SharedPayload.remove(id: id, in: root)
+                ComposeAttachments.report(notAttached: notAttached)
+            }
+            #else
             PageToast.show("Sharing is not available here.")
+            #endif
         case .compose(let mailto):
             #if canImport(AppKit) && !targetEnvironment(macCatalyst)
             // Where compose opens says where the message goes: a window of
