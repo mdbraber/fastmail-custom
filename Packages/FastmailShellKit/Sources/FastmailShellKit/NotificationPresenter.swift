@@ -112,10 +112,11 @@ public final class NotificationPresenter: NSObject, UNUserNotificationCenterDele
 
     public func showWindow() {
         NSApp.activate()
-        let inSight = NSApp.keyWindow ?? NSApp.windows.first {
-            $0.isVisible && !($0 is CompanyWindow)
-        }
-        // A closed mail window is kept out of sight
+        // Nothing is hidden away to keep a page running any more, so a
+        // notification tapped with no window in sight means the page outlived
+        // its window by a moment: ask that window, if there is one, to come
+        // back. Normally there is a key window already.
+        let inSight = NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible }
         (inSight ?? WebViewRegistry.shared.views.compactMap(\.window).first)?
             .makeKeyAndOrderFront(nil)
     }

@@ -16,18 +16,19 @@ public enum WindowFocus {
             guard let view = webView(in: window.contentView) else { continue }
             let pageName = try? await view.evaluateJavaScript("window.name") as? String
             guard pageName == name else { continue }
+            FocusProbe.note("focus named \"\(name)\": found in \(type(of: window)) \"\(window.title)\"")
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.tabGroup?.selectedWindow = window
             ComposeWindows.bringForward(window)
             return true
         }
+        FocusProbe.note("focus named \"\(name)\": no window answering")
         return false
     }
 
     /// Shown, in the Dock, or a tab behind another; not a pool window waiting
     /// out of sight, whose page Fastmail has not been told about.
     static func isOnScreen(_ window: NSWindow) -> Bool {
-        if window is CompanyWindow { return false }
         if window.isVisible || window.isMiniaturized { return true }
         guard let group = window.tabGroup else { return false }
         return group.windows.count > 1 && group.windows.contains(window)

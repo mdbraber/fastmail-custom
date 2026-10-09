@@ -82,77 +82,33 @@ enum BackgroundThrottling {
         return feature.perform(getter)?.takeUnretainedValue() as? String
     }
 }
-
-/// Keeps the mail page at its priority while the app is hidden or its window
-/// minimised.
-///
-/// A page nobody can see is run at the lowest priority the system has, and
-/// nothing WebKit offers changes that: with the app hidden, two new messages
-/// in three raised no notification at all, and no request left the offline
-/// worker for minutes. What WebKit does count is any page of the same
-/// process that is in sight. So the app keeps one window that hiding leaves
-/// alone, a single clear point nobody can click, holding an empty page that
-/// shares the mail page's process.
-@MainActor
-final class BackgroundCompany {
-    static let shared = BackgroundCompany()
-
-    private(set) var window: NSWindow?
-
-    @discardableResult
-    func keep(_ mail: WKWebView) -> Bool {
-        if let window {
-            if !window.isVisible { window.orderBack(nil) }
-            return true
-        }
-
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = mail.configuration.websiteDataStore
-        let setter = Selector(("_setRelatedWebView:"))
-        guard configuration.responds(to: setter) else { return false }
-        configuration.perform(setter, with: mail)
-        BackgroundThrottling.keepRunning(configuration.preferences)
-        BackgroundThrottling.keepPriority(configuration.preferences)
-
-        let frame = NSRect(x: 0, y: 0, width: 1, height: 1)
-        let view = WKWebView(frame: frame, configuration: configuration)
-        BackgroundThrottling.ignoreCovering(view)
-
-        let window = CompanyWindow(
-            contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false
-        )
-        window.canHide = false
-        window.isReleasedWhenClosed = false
-        window.ignoresMouseEvents = true
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.hasShadow = false
-        window.isExcludedFromWindowsMenu = true
-        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        window.contentView = view
-        window.orderBack(nil)
-        self.window = window
-
-        view.loadHTMLString("", baseURL: nil)
-        return true
-    }
-}
-
-/// Not a window of the user's: whoever goes through the app's windows looking
-/// for one to bring forward passes this one by.
-final class CompanyWindow: NSWindow {
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
-}
-
-/// A click on the app in the Dock, with the mail window minimised or closed.
-///
-/// The system brings a window back only when it finds none in sight, and it
-/// counts the company window as one, so the click did nothing. The app
-/// looks again, leaving that window out: a minimised window is brought
-/// back, a closed one shown again. It also receives the links that come from
+/// What the app does when the windows run out, and the links that come from
 /// outside the app.
+///
+/// New mail reaches the shell through the mail page, and a page with no window
+/// to run in is put to sleep whatever the preferences say. The app answered
+/// that with windows nobody could see: a 1×1 clear one holding a page sharing
+/// the mail page's process, and, after Command-W, the mail window itself kept
+/// ordered out of sight with its page in it. Banners kept coming, and the
+/// system's window bookkeeping stopped being the truth about where this app's UI
+/// is. It counts both of them as windows in sight, yet neither can become key,
+/// so activating the app — Command-Tab, a click in the Dock — found nothing to
+/// bring forward. That is the likeliest cause of the switcher appearing to do
+/// nothing, and of a Dock click sending the app backwards instead of out.
+///
+/// Decided 2026-10-05: mail keeps arriving while the app runs, which the
+/// throttling switches above do without inventing a window, and the app ends
+/// with its last window, as every other app does. Reopening is AppKit's
+/// business again, so what is left here is only what an app delegate alone can
+/// hear.
 public final class DockClick: NSObject, NSApplicationDelegate {
+    public override init() {
+        super.init()
+        // The delegate both Mac apps install, and the earliest place there is
+        // to hear activation from
+        FocusProbe.installFromOutsideMainActor()
+    }
+
     /// A link from outside: a mailto, or one in the app's own scheme. The
     /// window group is told to take none of them, because on macOS 27 it
     /// answers each with a new mail window that is never shown and hands the
@@ -162,131 +118,26 @@ public final class DockClick: NSObject, NSApplicationDelegate {
         for url in urls { PendingLinks.shared.open(url) }
     }
 
-    enum Answer: Equatable {
-        case asUsual
-        case bringBack
-        case showAgain
-        case askAgainWithoutCompany
+    /// Closing the last window quits the app, and new mail stops with it.
+    public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        let stays = Self.staysOpen(sender.windows)
+        FocusProbe.note("window closed; \(stays ? "another window still open" : "the last one, quitting")")
+        return !stays
     }
 
-    static func answer(othersInSight: Bool, minimised: Bool, closed: Bool) -> Answer {
-        if othersInSight { return .asUsual }
-        if minimised { return .bringBack }
-        return closed ? .showAgain : .askAgainWithoutCompany
-    }
-
-    public func applicationShouldHandleReopen(
-        _ sender: NSApplication, hasVisibleWindows flag: Bool
-    ) -> Bool {
-        let company = BackgroundCompany.shared.window
-        let others = sender.windows.filter { !($0 is CompanyWindow) }
-        let minimised = others.first { $0.isMiniaturized }
-        // A closed mail window is kept, page and all, which is what lets
-        // new mail still raise a notification
-        let closed = WebViewRegistry.shared.views.compactMap(\.window).first
-        switch Self.answer(
-            othersInSight: others.contains { $0.isVisible },
-            minimised: minimised != nil,
-            closed: closed != nil
-        ) {
-        case .asUsual:
-            return true
-        case .bringBack:
-            minimised?.deminiaturize(nil)
-            return false
-        case .showAgain:
-            closed?.makeKeyAndOrderFront(nil)
-            return false
-        case .askAgainWithoutCompany:
-            guard flag, let company, company.isVisible else { return true }
-            // With nothing in sight the system opens a window itself, and
-            // the mail page in it puts the company window back.
-            company.orderOut(nil)
-            _ = try? NSAppleEventDescriptor(
-                eventClass: AEEventClass(kCoreEventClass),
-                eventID: AEEventID(kAEReopenApplication),
-                targetDescriptor: .currentProcess(),
-                returnID: AEReturnID(kAutoGenerateReturnID),
-                transactionID: AETransactionID(kAnyTransactionID)
-            ).sendEvent(options: .noReply, timeout: 1)
-            return false
-        }
-    }
-}
-
-/// Closing the last mail window puts it out of sight and keeps its page.
-///
-/// The page is what hears of new mail and raises the notification, and a
-/// closed window took it along: nothing was heard until a window was opened
-/// again. So the window is kept, as a mail app's is, and a click in the Dock
-/// or on a notification shows it again as it was left. With another mail
-/// window open, or in full screen, closing is closing.
-///
-/// The window has a delegate of its own already, SwiftUI's. This one stands
-/// in front of it, answers the one question and passes everything else on.
-final class ClosedWindowKeeper: NSObject, NSWindowDelegate {
-    private weak var theirs: NSWindowDelegate?
-    private let otherMailWindowsOpen: @MainActor () -> Int
-    nonisolated(unsafe) private static var key = 0
-
-    static func keeps(otherMailWindowsOpen: Int, fullScreen: Bool) -> Bool {
-        otherMailWindowsOpen == 0 && !fullScreen
-    }
-
-    /// The mail window closing put out of sight, if there is one
-    @MainActor
-    static func kept(among windows: [NSWindow]) -> NSWindow? {
-        windows.first { !$0.isVisible && !$0.isMiniaturized }
-    }
-
-    /// Shows the kept window in place of a new one, which would have been a
-    /// second page taking in the same mail.
-    @MainActor
-    static func showKept() -> Bool {
-        let windows = WebViewRegistry.shared.views.compactMap(\.window)
-        guard let kept = kept(among: windows) else { return false }
-        NSApp.unhide(nil)
-        kept.makeKeyAndOrderFront(nil)
-        return true
-    }
-
-    @MainActor
-    static func watch(_ window: NSWindow, otherMailWindowsOpen: @escaping @MainActor () -> Int) {
-        guard !(window.delegate is ClosedWindowKeeper) else { return }
-        let keeper = ClosedWindowKeeper(
-            theirs: window.delegate, otherMailWindowsOpen: otherMailWindowsOpen
-        )
-        // The window holds its delegate weakly
-        objc_setAssociatedObject(window, &key, keeper, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        window.delegate = keeper
-    }
-
-    private init(theirs: NSWindowDelegate?, otherMailWindowsOpen: @escaping @MainActor () -> Int) {
-        self.theirs = theirs
-        self.otherMailWindowsOpen = otherMailWindowsOpen
-    }
-
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        MainActor.assumeIsolated {
-            guard Self.keeps(
-                otherMailWindowsOpen: otherMailWindowsOpen(),
-                fullScreen: sender.styleMask.contains(.fullScreen)
-            ) else {
-                return theirs?.windowShouldClose?(sender) ?? true
-            }
-            // Messages being written in its tabs stay where they are
-            sender.tabGroup?.removeWindow(sender)
-            sender.orderOut(nil)
-            return false
-        }
-    }
-
-    override func responds(to selector: Selector!) -> Bool {
-        super.responds(to: selector) || (theirs?.responds(to: selector) ?? false)
-    }
-
-    override func forwardingTarget(for selector: Selector!) -> Any? {
-        theirs
+    /// Whether anything of the user's is left to keep the app up: a window in
+    /// sight or in the Dock. A message being written and a message popped out
+    /// count, and so does a file picker while it is open — being in sight is
+    /// what makes it the user's, and what makes it count is the same thing.
+    /// The compose pool's spare waits ordered out, so it does not.
+    ///
+    /// Do not add `is NSPanel` here to let pickers count: AppKit asks this
+    /// question once the closing window has gone, and AppKit's own windows are
+    /// in the list too — a tooltip, seen while this was first written, is an
+    /// `NSToolTipPanel` sitting at level 103 with `vis=0`, and counting panels
+    /// by class meant a hover over the toolbar kept the app up forever.
+    static func staysOpen(_ windows: [NSWindow]) -> Bool {
+        windows.contains { $0.isVisible || $0.isMiniaturized }
     }
 }
 #endif
