@@ -102,13 +102,6 @@ enum BackgroundThrottling {
 /// business again, so what is left here is only what an app delegate alone can
 /// hear.
 public final class DockClick: NSObject, NSApplicationDelegate {
-    public override init() {
-        super.init()
-        // The delegate both Mac apps install, and the earliest place there is
-        // to hear activation from
-        FocusProbe.installFromOutsideMainActor()
-    }
-
     /// A link from outside: a mailto, or one in the app's own scheme. The
     /// window group is told to take none of them, because on macOS 27 it
     /// answers each with a new mail window that is never shown and hands the
@@ -120,9 +113,7 @@ public final class DockClick: NSObject, NSApplicationDelegate {
 
     /// Closing the last window quits the app, and new mail stops with it.
     public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        let stays = Self.staysOpen(sender.windows)
-        FocusProbe.note("window closed; \(stays ? "another window still open" : "the last one, quitting")")
-        return !stays
+        !Self.staysOpen(sender.windows)
     }
 
     /// Whether anything of the user's is left to keep the app up: a window in

@@ -16,13 +16,11 @@ public enum WindowFocus {
             guard let view = webView(in: window.contentView) else { continue }
             let pageName = try? await view.evaluateJavaScript("window.name") as? String
             guard pageName == name else { continue }
-            FocusProbe.note("focus named \"\(name)\": found in \(type(of: window)) \"\(window.title)\"")
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.tabGroup?.selectedWindow = window
             ComposeWindows.bringForward(window)
             return true
         }
-        FocusProbe.note("focus named \"\(name)\": no window answering")
         return false
     }
 

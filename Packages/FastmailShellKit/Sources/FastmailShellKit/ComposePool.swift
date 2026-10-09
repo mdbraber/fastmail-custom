@@ -605,14 +605,10 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     /// app activates this one after the window was ordered in, and
     /// activating brings the window that was last in front back over it.
     static func bringForward(_ window: NSWindow) {
-        FocusProbe.note("bringForward \(window.title.isEmpty ? "-" : window.title)")
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async {
-            guard window.isVisible else {
-                FocusProbe.note("bringForward: window gone by the time activation settled")
-                return
-            }
+            guard window.isVisible else { return }
             window.makeKeyAndOrderFront(nil)
         }
     }
@@ -969,7 +965,6 @@ public final class ComposeWindows: NSObject, NSWindowDelegate, WKScriptMessageHa
     public func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard let pool, sender.delegate === self else { return true }
         if pool.shouldRecycle(sender) {
-            FocusProbe.note("compose window back to the pool, out of sight")
             sender.orderOut(nil)
             return false
         }
